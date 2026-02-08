@@ -1,0 +1,92 @@
+﻿@model ManageCustomerModel
+
+<!-- Fournisseur Card -->
+<div class="fancy-card p-5 mt-5">
+    
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-5">
+        <div>
+            <h2 class="h3 fw-bold m-0" style="color: #2d3748;">Gestion des Fournisseurs</h2>
+            <p class="text-muted small mb-0">Ajoutez ou modifiez vos partenaires</p>
+        </div>
+        
+        <button type="button" class="btn btn-primary btn-gradient shadow-sm rounded-pill px-4 fw-bold border-dark border" data-bs-toggle="modal" data-bs-target="#addFournisseurModal">
+            <i class="bi bi-person-plus-fill me-2"></i> Nouveau Fournisseur
+        </button>
+    </div>
+
+    <form method="post" id="manageFournisseurForm">
+        
+        <!-- 1. Selection -->
+        <div class="mb-5">
+            <label class="form-label text-uppercase text-muted fw-bold small ms-1">1. Sélectionner un fournisseur</label>
+            <div class="input-group">
+                <span class="input-group-text bg-white border-0"><i class="bi bi-shop text-primary fs-4"></i></span>
+                <select asp-for="SelectedFournisseurName" asp-items="Model.FournisseurSelectList" class="form-select form-select-lg bg-light border border-dark fw-bold text-dark" id="fournisseurSelect" required>
+                    <option value="">-- Choisir un fournisseur --</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- 2. Action Buttons -->
+        <div id="fournisseurActions" class="d-grid gap-3 d-md-flex justify-content-md-center">
+            <button type="button" id="btnShowFournisseurUpdate" class="btn btn-outline-primary border-dark text-dark rounded-pill px-4 fw-bold shadow-sm">
+                <i class="bi bi-pencil-square me-2"></i> Modifier
+            </button>
+            
+            <button type="submit" asp-page-handler="DeleteFournisseur" 
+                    class="btn btn-outline-danger border-dark text-danger rounded-pill px-4 fw-bold shadow-sm" 
+                    onclick="return confirm('Attention: Voulez-vous vraiment supprimer ce fournisseur ?');">
+                <i class="bi bi-trash-fill me-2"></i> Supprimer
+            </button>
+        </div>
+
+        <!-- 3. Update Section (Directly shows Name Input) -->
+        <div id="fournisseurUpdateSection" class="d-none bg-light p-4 rounded-4 mt-4 border border-dark">
+            <h5 class="text-primary fw-bold mb-3 border-bottom pb-2 border-dark">
+                <i class="bi bi-pencil-fill me-2"></i>Modification
+            </h5>
+
+            <!-- Hidden input to tell backend we are updating 'Name' -->
+            <input type="hidden" name="FournisseurFieldToUpdate" value="Name" />
+
+            <div class="mb-4">
+                <label class="form-label small text-muted text-uppercase fw-bold">Nouveau Nom</label>
+                <!-- Fancy Input -->
+                <input asp-for="NewFournisseurName" class="form-control fancy-input border-dark" id="inputNewFournisseurName" placeholder="Entrez le nouveau nom" />
+                <span asp-validation-for="NewFournisseurName" class="text-danger small"></span>
+            </div>
+
+            <div class="d-flex justify-content-end gap-2 border-top border-dark pt-3">
+                <button type="button" onclick="location.reload();" class="btn btn-light border border-dark rounded-pill fw-bold">Annuler</button>
+                <button type="submit" asp-page-handler="UpdateFournisseur" class="btn btn-success border border-dark rounded-pill px-4 fw-bold shadow-sm">
+                    <i class="bi bi-check-lg me-1"></i> Confirmer
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Add Modal (Unchanged) -->
+<div class="modal fade" id="addFournisseurModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header text-white p-4" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                <h5 class="modal-title fw-bold"><i class="bi bi-shop me-2"></i>Nouveau Fournisseur</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" asp-page-handler="CreateFournisseur">
+                <div class="modal-body p-4 bg-light">
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-bold text-uppercase">Nom</label>
+                        <input asp-for="NewFournisseur.Name" class="form-control fancy-input border-dark" required />
+                    </div>
+                </div>
+                <div class="modal-footer bg-white border-top border-dark p-3">
+                    <button type="button" class="btn btn-light border border-dark rounded-pill fw-bold" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-success border border-dark rounded-pill px-4 fw-bold shadow-sm">Enregistrer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

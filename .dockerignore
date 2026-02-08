@@ -1,0 +1,62 @@
+# ============================================
+# Docker Ignore - Backend (.NET)
+# ============================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.vs/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build outputs
+**/bin/
+**/obj/
+**/out/
+
+# NuGet
+*.nupkg
+**/packages/
+
+# Test results
+**/TestResults/
+**/*.trx
+
+# Logs (we create fresh ones in container)
+Logs/
+
+# Documentation
+*.md
+!README.md
+
+# Docker files (we don't need to copy these into the image)
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Frontend (built separately)
+ClientApp/
+
+# Mobile (not needed for API)
+ResourceManager.Mobile/
+
+# Tests (optional - remove if you want tests in image)
+# ResourceManager.Tests/
+
+# Environment files (secrets)
+.env
+.env.*
+*.env
+
+# Misc
+*.log
+*.tmp
+*.temp
+Thumbs.db
+.DS_Store

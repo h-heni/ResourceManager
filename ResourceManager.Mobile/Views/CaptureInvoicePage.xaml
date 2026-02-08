@@ -1,0 +1,324 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="ResourceManager.Mobile.Views.CaptureInvoicePage"
+             Title="Scan Invoice"
+             BackgroundColor="#F8FAFC">
+
+    <ContentPage.Resources>
+        <Style x:Key="ActionButton" TargetType="Button">
+            <Setter Property="BackgroundColor" Value="#764ba2"/>
+            <Setter Property="TextColor" Value="White"/>
+            <Setter Property="FontAttributes" Value="Bold"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="HeightRequest" Value="48"/>
+            <Setter Property="FontSize" Value="15"/>
+        </Style>
+        <Style x:Key="SecondaryButton" TargetType="Button">
+            <Setter Property="BackgroundColor" Value="#E2E8F0"/>
+            <Setter Property="TextColor" Value="#334155"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="HeightRequest" Value="44"/>
+            <Setter Property="FontSize" Value="14"/>
+        </Style>
+        <Style x:Key="ToolButton" TargetType="Button">
+            <Setter Property="BackgroundColor" Value="White"/>
+            <Setter Property="TextColor" Value="#475569"/>
+            <Setter Property="CornerRadius" Value="10"/>
+            <Setter Property="HeightRequest" Value="40"/>
+            <Setter Property="WidthRequest" Value="40"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="BorderColor" Value="#CBD5E1"/>
+            <Setter Property="BorderWidth" Value="1"/>
+        </Style>
+    </ContentPage.Resources>
+
+    <Grid RowDefinitions="Auto,*,Auto" Padding="0">
+
+        <!-- Header -->
+        <Frame Grid.Row="0" BackgroundColor="#764ba2" CornerRadius="0" Padding="16,12"
+               HasShadow="False" BorderColor="Transparent">
+            <Grid ColumnDefinitions="*,Auto">
+                <Label Text="📷 Scan Invoice" FontSize="20" FontAttributes="Bold"
+                       TextColor="White" VerticalOptions="Center"/>
+                <Label x:Name="StatusLabel" Grid.Column="1" FontSize="13"
+                       TextColor="#E2D8F0" VerticalOptions="Center"/>
+            </Grid>
+        </Frame>
+
+        <!-- Main Content Area -->
+        <ScrollView Grid.Row="1" Padding="16,8">
+            <VerticalStackLayout Spacing="12">
+
+                <!-- Empty State (no image yet) -->
+                <Frame x:Name="EmptyStateFrame" IsVisible="True"
+                       BackgroundColor="White" CornerRadius="16" Padding="32"
+                       HasShadow="True" BorderColor="#E2E8F0">
+                    <VerticalStackLayout Spacing="16" HorizontalOptions="Center">
+                        <Label Text="📄" FontSize="64" HorizontalOptions="Center"/>
+                        <Label Text="Capture or Import Invoice"
+                               FontSize="18" FontAttributes="Bold"
+                               TextColor="#1E293B" HorizontalOptions="Center"/>
+                        <Label Text="Take a photo of a supplier invoice or pick one from your gallery. The image will be auto-enhanced for best OCR accuracy."
+                               FontSize="13" TextColor="#64748B"
+                               HorizontalTextAlignment="Center" LineBreakMode="WordWrap"/>
+
+                        <Grid ColumnDefinitions="*,*" ColumnSpacing="12" Margin="0,8,0,0">
+                            <Button Text="📷 Camera" Style="{StaticResource ActionButton}"
+                                    Clicked="OnCaptureClicked"/>
+                            <Button Grid.Column="1" Text="🖼️ Gallery"
+                                    Style="{StaticResource SecondaryButton}"
+                                    Clicked="OnPickFromGalleryClicked"/>
+                        </Grid>
+                    </VerticalStackLayout>
+                </Frame>
+
+                <!-- Image Preview (shown after capture) -->
+                <Frame x:Name="PreviewFrame" IsVisible="False"
+                       BackgroundColor="White" CornerRadius="16" Padding="0"
+                       HasShadow="True" BorderColor="#E2E8F0">
+                    <VerticalStackLayout Spacing="0">
+                        <!-- Image -->
+                        <Border StrokeShape="RoundRectangle 16,16,0,0"
+                                BackgroundColor="#F1F5F9" MinimumHeightRequest="300">
+                            <Image x:Name="PreviewImage" Aspect="AspectFit"
+                                   VerticalOptions="Center" HorizontalOptions="Center"/>
+                        </Border>
+
+                        <!-- Image Info Bar -->
+                        <Grid Padding="12,8" BackgroundColor="#F8FAFC"
+                              ColumnDefinitions="*,Auto">
+                            <Label x:Name="ImageInfoLabel" FontSize="12"
+                                   TextColor="#64748B" VerticalOptions="Center"/>
+                            <Label x:Name="FileSizeLabel" Grid.Column="1"
+                                   FontSize="12" TextColor="#64748B"
+                                   VerticalOptions="Center"/>
+                        </Grid>
+                    </VerticalStackLayout>
+                </Frame>
+
+                <!-- Processing Tools (shown after capture) -->
+                <Frame x:Name="ToolsFrame" IsVisible="False"
+                       BackgroundColor="White" CornerRadius="16" Padding="16"
+                       HasShadow="True" BorderColor="#E2E8F0">
+                    <VerticalStackLayout Spacing="12">
+                        <Label Text="Image Processing" FontSize="16"
+                               FontAttributes="Bold" TextColor="#1E293B"/>
+
+                        <!-- Quick Actions -->
+                        <FlexLayout Wrap="Wrap" JustifyContent="Start"
+                                    AlignItems="Center" Direction="Row">
+                            <Button Text="✨ Auto-Enhance" Style="{StaticResource SecondaryButton}"
+                                    Margin="0,0,8,8" Clicked="OnAutoEnhanceClicked"
+                                    WidthRequest="145"/>
+                            <Button Text="🔲 Grayscale" Style="{StaticResource SecondaryButton}"
+                                    Margin="0,0,8,8" Clicked="OnGrayscaleClicked"
+                                    WidthRequest="130"/>
+                            <Button Text="◐ Threshold" Style="{StaticResource SecondaryButton}"
+                                    Margin="0,0,8,8" Clicked="OnThresholdClicked"
+                                    WidthRequest="125"/>
+                            <Button Text="✂️ Auto-Crop" Style="{StaticResource SecondaryButton}"
+                                    Margin="0,0,8,8" Clicked="OnAutoCropClicked"
+                                    WidthRequest="125"/>
+                            <Button Text="↩️ Reset" Style="{StaticResource SecondaryButton}"
+                                    Margin="0,0,8,8" Clicked="OnResetClicked"
+                                    WidthRequest="95"/>
+                        </FlexLayout>
+
+                        <!-- Brightness Slider -->
+                        <Grid ColumnDefinitions="80,*,40" ColumnSpacing="8">
+                            <Label Text="Brightness" FontSize="13" TextColor="#475569"
+                                   VerticalOptions="Center"/>
+                            <Slider x:Name="BrightnessSlider" Grid.Column="1"
+                                    Minimum="-100" Maximum="100" Value="0"
+                                    MinimumTrackColor="#764ba2"
+                                    MaximumTrackColor="#CBD5E1"
+                                    ValueChanged="OnBrightnessChanged"/>
+                            <Label x:Name="BrightnessLabel" Grid.Column="2"
+                                   Text="0" FontSize="12" TextColor="#64748B"
+                                   HorizontalOptions="End" VerticalOptions="Center"/>
+                        </Grid>
+
+                        <!-- Contrast Slider -->
+                        <Grid ColumnDefinitions="80,*,40" ColumnSpacing="8">
+                            <Label Text="Contrast" FontSize="13" TextColor="#475569"
+                                   VerticalOptions="Center"/>
+                            <Slider x:Name="ContrastSlider" Grid.Column="1"
+                                    Minimum="0.5" Maximum="3.0" Value="1.0"
+                                    MinimumTrackColor="#764ba2"
+                                    MaximumTrackColor="#CBD5E1"
+                                    ValueChanged="OnContrastChanged"/>
+                            <Label x:Name="ContrastLabel" Grid.Column="2"
+                                   Text="1.0" FontSize="12" TextColor="#64748B"
+                                   HorizontalOptions="End" VerticalOptions="Center"/>
+                        </Grid>
+
+                        <!-- Rotation Slider -->
+                        <Grid ColumnDefinitions="80,*,40" ColumnSpacing="8">
+                            <Label Text="Rotation" FontSize="13" TextColor="#475569"
+                                   VerticalOptions="Center"/>
+                            <Slider x:Name="RotationSlider" Grid.Column="1"
+                                    Minimum="-15" Maximum="15" Value="0"
+                                    MinimumTrackColor="#764ba2"
+                                    MaximumTrackColor="#CBD5E1"
+                                    ValueChanged="OnRotationChanged"/>
+                            <Label x:Name="RotationLabel" Grid.Column="2"
+                                   Text="0°" FontSize="12" TextColor="#64748B"
+                                   HorizontalOptions="End" VerticalOptions="Center"/>
+                        </Grid>
+
+                        <!-- Apply Manual Adjustments -->
+                        <Button Text="Apply Adjustments" Style="{StaticResource SecondaryButton}"
+                                Clicked="OnApplyAdjustmentsClicked" HorizontalOptions="End"/>
+                    </VerticalStackLayout>
+                </Frame>
+
+                <!-- Extraction Results (shown after upload) -->
+                <Frame x:Name="ResultsFrame" IsVisible="False"
+                       BackgroundColor="White" CornerRadius="16" Padding="16"
+                       HasShadow="True" BorderColor="#E2E8F0">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="📋 Extraction Results" FontSize="16"
+                               FontAttributes="Bold" TextColor="#1E293B"/>
+
+                        <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+                              ColumnSpacing="12" RowSpacing="8">
+                            <Frame Grid.Row="0" Grid.Column="0"
+                                   BackgroundColor="#F0FDF4" CornerRadius="8"
+                                   Padding="10" HasShadow="False"
+                                   BorderColor="#BBF7D0">
+                                <VerticalStackLayout>
+                                    <Label Text="Supplier" FontSize="11" TextColor="#15803D"/>
+                                    <Label x:Name="ExtSupplierLabel" FontSize="14"
+                                           FontAttributes="Bold" TextColor="#166534"/>
+                                </VerticalStackLayout>
+                            </Frame>
+
+                            <Frame Grid.Row="0" Grid.Column="1"
+                                   BackgroundColor="#EFF6FF" CornerRadius="8"
+                                   Padding="10" HasShadow="False"
+                                   BorderColor="#BFDBFE">
+                                <VerticalStackLayout>
+                                    <Label Text="Invoice #" FontSize="11" TextColor="#1D4ED8"/>
+                                    <Label x:Name="ExtInvoiceNumLabel" FontSize="14"
+                                           FontAttributes="Bold" TextColor="#1E40AF"/>
+                                </VerticalStackLayout>
+                            </Frame>
+
+                            <Frame Grid.Row="1" Grid.Column="0"
+                                   BackgroundColor="#FEF3C7" CornerRadius="8"
+                                   Padding="10" HasShadow="False"
+                                   BorderColor="#FDE68A">
+                                <VerticalStackLayout>
+                                    <Label Text="Total TTC" FontSize="11" TextColor="#92400E"/>
+                                    <Label x:Name="ExtTotalLabel" FontSize="14"
+                                           FontAttributes="Bold" TextColor="#78350F"/>
+                                </VerticalStackLayout>
+                            </Frame>
+
+                            <Frame Grid.Row="1" Grid.Column="1"
+                                   BackgroundColor="#F5F3FF" CornerRadius="8"
+                                   Padding="10" HasShadow="False"
+                                   BorderColor="#DDD6FE">
+                                <VerticalStackLayout>
+                                    <Label Text="Date" FontSize="11" TextColor="#6D28D9"/>
+                                    <Label x:Name="ExtDateLabel" FontSize="14"
+                                           FontAttributes="Bold" TextColor="#5B21B6"/>
+                                </VerticalStackLayout>
+                            </Frame>
+
+                            <Frame Grid.Row="2" Grid.Column="0"
+                                   BackgroundColor="#FEF2F2" CornerRadius="8"
+                                   Padding="10" HasShadow="False"
+                                   BorderColor="#FECACA">
+                                <VerticalStackLayout>
+                                    <Label Text="Total HT" FontSize="11" TextColor="#991B1B"/>
+                                    <Label x:Name="ExtTotalHTLabel" FontSize="14"
+                                           FontAttributes="Bold" TextColor="#7F1D1D"/>
+                                </VerticalStackLayout>
+                            </Frame>
+
+                            <Frame Grid.Row="2" Grid.Column="1"
+                                   BackgroundColor="#ECFDF5" CornerRadius="8"
+                                   Padding="10" HasShadow="False"
+                                   BorderColor="#A7F3D0">
+                                <VerticalStackLayout>
+                                    <Label Text="TVA" FontSize="11" TextColor="#065F46"/>
+                                    <Label x:Name="ExtTVALabel" FontSize="14"
+                                           FontAttributes="Bold" TextColor="#064E3B"/>
+                                </VerticalStackLayout>
+                            </Frame>
+
+                            <Frame Grid.Row="3" Grid.ColumnSpan="2"
+                                   BackgroundColor="#F8FAFC" CornerRadius="8"
+                                   Padding="10" HasShadow="False"
+                                   BorderColor="#E2E8F0">
+                                <VerticalStackLayout>
+                                    <Label Text="Confidence" FontSize="11" TextColor="#475569"/>
+                                    <ProgressBar x:Name="ConfidenceBar" Progress="0"
+                                                 ProgressColor="#764ba2"/>
+                                    <Label x:Name="ConfidenceLabel" FontSize="12"
+                                           TextColor="#64748B" HorizontalOptions="End"/>
+                                </VerticalStackLayout>
+                            </Frame>
+
+                            <Frame Grid.Row="4" Grid.ColumnSpan="2"
+                                   BackgroundColor="#F8FAFC" CornerRadius="8"
+                                   Padding="10" HasShadow="False"
+                                   BorderColor="#E2E8F0" IsVisible="False"
+                                   x:Name="ItemsCountFrame">
+                                <Label x:Name="ExtItemsLabel" FontSize="13"
+                                       TextColor="#475569"/>
+                            </Frame>
+                        </Grid>
+
+                        <Button Text="✅ Confirm on Web" Style="{StaticResource ActionButton}"
+                                Clicked="OnConfirmOnWebClicked" Margin="0,8,0,0"/>
+                        <Label Text="Review and confirm the extracted data in the web app."
+                               FontSize="11" TextColor="#94A3B8"
+                               HorizontalTextAlignment="Center"/>
+                    </VerticalStackLayout>
+                </Frame>
+
+                <!-- Bottom Spacer -->
+                <BoxView HeightRequest="20"/>
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <!-- Bottom Action Bar -->
+        <Frame Grid.Row="2" BackgroundColor="White" CornerRadius="0"
+               Padding="16,12" HasShadow="True" BorderColor="#E2E8F0">
+            <Grid ColumnDefinitions="*,12,*,12,*">
+                <Button Text="📷 Capture" Style="{StaticResource ActionButton}"
+                        Clicked="OnCaptureClicked"/>
+                <Button Grid.Column="2" Text="🖼️ Gallery"
+                        Style="{StaticResource SecondaryButton}"
+                        Clicked="OnPickFromGalleryClicked"/>
+                <Button x:Name="UploadButton" Grid.Column="4"
+                        Text="⬆️ Upload" Style="{StaticResource ActionButton}"
+                        IsEnabled="False" Clicked="OnUploadClicked"
+                        BackgroundColor="#059669"/>
+            </Grid>
+        </Frame>
+
+        <!-- Loading Overlay -->
+        <Grid x:Name="LoadingOverlay" Grid.RowSpan="3"
+              BackgroundColor="#80000000" IsVisible="False">
+            <Frame BackgroundColor="White" CornerRadius="16"
+                   Padding="32" HasShadow="True"
+                   VerticalOptions="Center" HorizontalOptions="Center"
+                   MinimumWidthRequest="250">
+                <VerticalStackLayout Spacing="16" HorizontalOptions="Center">
+                    <ActivityIndicator IsRunning="True" Color="#764ba2"
+                                       HeightRequest="48" WidthRequest="48"/>
+                    <Label x:Name="LoadingLabel" Text="Processing..."
+                           FontSize="16" TextColor="#1E293B"
+                           HorizontalOptions="Center"/>
+                </VerticalStackLayout>
+            </Frame>
+        </Grid>
+
+    </Grid>
+
+</ContentPage>

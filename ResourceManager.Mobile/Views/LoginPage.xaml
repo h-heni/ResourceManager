@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="ResourceManager.Mobile.Views.LoginPage"
+             BackgroundColor="#eef2f5"
+             Title="Login">
+    <VerticalStackLayout Spacing="25" Padding="30" VerticalOptions="Center">
+        
+        <Label Text="Moovma Crea"
+               FontSize="32"
+               FontAttributes="Bold"
+               HorizontalOptions="Center"
+               TextColor="#764ba2"/>
+
+        <Entry Placeholder="API URL (e.g. http://10.0.2.2:5276/api/)"
+               x:Name="UrlEntry"
+               Text="http://localhost:5276/api/"
+               TextColor="#2d3748"
+               PlaceholderColor="#a0aec0"
+               BackgroundColor="White" />
+        
+        <Entry Placeholder="Email"
+               x:Name="EmailEntry"
+               Keyboard="Email"
+               TextColor="#2d3748"
+               PlaceholderColor="#a0aec0"
+               BackgroundColor="White" />
+        
+        <Entry Placeholder="Password"
+               x:Name="PasswordEntry"
+               IsPassword="True"
+               TextColor="#2d3748"
+               PlaceholderColor="#a0aec0"
+               BackgroundColor="White"/>
+               
+        <Button Text="Login"
+                Clicked="OnLoginClicked"
+                BackgroundColor="#667eea"
+                TextColor="White"
+                CornerRadius="25"
+                HeightRequest="50"
+                FontAttributes="Bold"/>
+        
+        <Button Text="Use FaceID / Fingerprint"
+                Clicked="OnBiometricClicked"
+                BackgroundColor="Transparent"
+                TextColor="#764ba2"
+                FontAttributes="Bold"
+                BorderColor="Transparent"/>
+
+        <ActivityIndicator x:Name="LoadingSpinner"
+                           IsRunning="False"
+                           Color="#764ba2"/>
+    </VerticalStackLayout>
+</ContentPage>

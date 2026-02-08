@@ -1,0 +1,193 @@
+﻿@page
+@model CreateDevisModel
+@{
+    ViewData["Title"] = "Creation de Devis";
+}
+
+<!-- CUSTOM FANCY STYLES -->
+
+
+<div class="container py-5">
+
+    <!-- Fancy Header -->
+    <div class="text-center mb-5">
+        <h1>Nouveau Devis</h1>
+        <div style="height: 4px; width: 60px; background: #764ba2; margin: 10px auto; border-radius: 2px;"></div>
+        <p class="text-muted">Remplissez les informations ci-dessous</p>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success fancy-card border-start border-success border-5 mb-4 d-flex align-items-center">
+            <i class="bi bi-check-circle-fill text-success fs-4 me-3"></i>
+            <div>@TempData["SuccessMessage"]</div>
+        </div>
+    }
+    @if (TempData["FailedMessage"] != null)
+    {
+        <div class="alert alert-danger fancy-card border-start border-danger border-5 mb-4 d-flex align-items-center">
+            <i class="bi bi-x-circle-fill text-danger fs-4 me-3"></i>
+            <div>@TempData["FailedMessage"]</div>
+        </div>
+    }
+
+    <form method="post" id="invoiceForm">
+
+        <div class="fancy-card p-5">
+
+            <!-- Client Section -->
+            <div class="mb-5">
+                <label class="form-label text-uppercase text-muted fw-bold small ms-1">Client</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-white border-0"><i class="bi bi-person-fill text-primary fs-4"></i></span>
+                    <select asp-for="ClientName" asp-items="Model.ClientSelectList" class="form-select fancy-input">
+                        <option value="">-- Sélectionner un client --</option>
+                    </select>
+                </div>
+                <span asp-validation-for="ClientName" class="text-danger small ms-2"></span>
+            </div>
+
+            <!-- Items Table -->
+            <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-end mb-3">
+                    <label class="form-label text-uppercase text-muted fw-bold small ms-1 mb-0">Détails de la facture</label>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-borderless align-middle fancy-table" id="itemsTable">
+                        <thead>
+                            <tr>
+                                <th style="width: 40%;">Description</th>
+                                <th style="width: 15%;">Quantité</th>
+                                <th style="width: 20%; text-align:center;">TVA</th>
+                                <th style="width: 20%;">Prix</th>
+                                <th style="width: 5%;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (int i = 0; i < Model.Items.Count; i++)
+                            {
+                                <tr>
+                                    <td class="p-2">
+                                        <input asp-for="Items[i].Description" class="form-control fancy-input" placeholder="Description..." />
+                                        <span asp-validation-for="Items[i].Description" class="text-danger small"></span>
+                                    </td>
+                                    <td class="p-2">
+                                        <input asp-for="Items[i].Quantity" type="number" class="form-control fancy-input" placeholder="0" />
+                                        <span asp-validation-for="Items[i].Quantity" class="text-danger small"></span>
+                                    </td>
+                                    <td class="p-2 text-center">
+                                        <div class="btn-group" role="group">
+                                            <input type="radio" class="btn-check" asp-for="Items[i].Tva" value="true" id="btnradio_yes_@i" autocomplete="off" checked>
+                                            <label class="btn btn-outline-primary btn-sm rounded-start-pill" for="btnradio_yes_@i">Oui</label>
+
+                                            <input type="radio" class="btn-check" asp-for="Items[i].Tva" value="false" id="btnradio_no_@i" autocomplete="off">
+                                            <label class="btn btn-outline-primary btn-sm rounded-end-pill" for="btnradio_no_@i">Non</label>
+                                        </div>
+                                    </td>
+                                    <td class="p-2">
+                                        <div class="input-group">
+                                            <input asp-for="Items[i].Price" type="number" step="0.001" class="form-control fancy-input" placeholder="0.000" style="border-top-right-radius: 0; border-bottom-right-radius: 0;" />
+                                            <span class="input-group-text fancy-input border-start-0 text-muted" style="border-top-left-radius: 0; border-bottom-left-radius: 0;">DT</span>
+                                        </div>
+                                        <span asp-validation-for="Items[i].Price" class="text-danger small"></span>
+                                    </td>
+                                    <td class="p-2 text-end">
+                                        <button type="button" class="btn btn-light text-danger rounded-circle shadow-sm" onclick="removeRow(this)">
+                                            <i class="bi bi-trash-fill"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="text-center mt-3">
+                    <button type="button" class="btn btn-light text-primary fw-bold rounded-pill px-4 shadow-sm border" onclick="addItemRow()">
+                        <i class="bi bi-plus-lg me-1"></i> Ajouter une ligne
+                    </button>
+                </div>
+            </div>
+
+            <!-- Footer Action -->
+            <div class="mt-5 pt-4 border-top text-end">
+                <button type="submit" id="btnSubmit" class="btn btn-gradient btn-lg rounded-pill px-5 py-3 shadow">
+                    Générer & Sauvegarder <i class="bi bi-arrow-right ms-2"></i>
+                </button>
+            </div>
+
+        </div>
+    </form>
+</div>
+
+<!-- Auto Download Script -->
+@if (TempData["TriggerDownload"] as bool? == true)
+{
+    <script>
+        window.onload = function() { setTimeout(function() { window.location.href = '?handler=DownloadFile'; }, 1000); };
+    </script>
+}
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+
+    <script>
+        // 1. Smart Submit Logic
+        $(document).ready(function () {
+            $("#invoiceForm").on("submit", function (e) {
+                if ($(this).valid()) {
+                    var btn = $("#btnSubmit");
+                    btn.prop("disabled", true);
+                    btn.html('<span class="spinner-border spinner-border-sm me-2"></span> Traitement...');
+                }
+            });
+        });
+
+        // 2. Add Row Logic (Updated with Fancy Classes)
+        function addItemRow() {
+            var table = document.getElementById("itemsTable").getElementsByTagName('tbody')[0];
+            var rowCount = table.rows.length;
+            var row = table.insertRow(rowCount);
+            var uniqueId = Date.now();
+
+            // Using 'fancy-input' class here ensures new rows match the design
+            row.innerHTML = `
+                <td class="p-2">
+                    <input name="Items[${rowCount}].Description" class="form-control fancy-input" placeholder="Description..." />
+                </td>
+                <td class="p-2">
+                    <input name="Items[${rowCount}].Quantity" type="number" class="form-control fancy-input" placeholder="0" />
+                </td>
+                <td class="p-2 text-center">
+                    <div class="btn-group" role="group">
+                        <input type="radio" class="btn-check" name="Items[${rowCount}].Tva" value="true" id="btnradio_yes_${uniqueId}" autocomplete="off" checked>
+                        <label class="btn btn-outline-primary btn-sm rounded-start-pill" for="btnradio_yes_${uniqueId}">Oui</label>
+
+                        <input type="radio" class="btn-check" name="Items[${rowCount}].Tva" value="false" id="btnradio_no_${uniqueId}" autocomplete="off">
+                        <label class="btn btn-outline-primary btn-sm rounded-end-pill" for="btnradio_no_${uniqueId}">Non</label>
+                    </div>
+                </td>
+                <td class="p-2">
+                    <div class="input-group">
+                        <input name="Items[${rowCount}].Price" type="number" step="0.001" class="form-control fancy-input" placeholder="0.000" style="border-top-right-radius: 0; border-bottom-right-radius: 0;" />
+                        <span class="input-group-text fancy-input border-start-0 text-muted" style="border-top-left-radius: 0; border-bottom-left-radius: 0;">DT</span>
+                    </div>
+                </td>
+                <td class="p-2 text-end">
+                    <button type="button" class="btn btn-light text-danger rounded-circle shadow-sm" onclick="removeRow(this)">
+                        <i class="bi bi-trash-fill"></i>
+                    </button>
+                </td>
+            `;
+
+            if (window.jQuery && $.validator && $.validator.unobtrusive) {
+                $.validator.unobtrusive.parse($('#invoiceForm'));
+            }
+        }
+
+        function removeRow(button) {
+            button.closest('tr').remove();
+        }
+    </script>
+}

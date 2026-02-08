@@ -1,0 +1,277 @@
+﻿@page
+@model ManageCustomerModel
+@{
+    ViewData["Title"] = "Ajouter, Modifier ou Supprimer un client";
+}
+
+<div class="container py-5">
+
+    <!-- Fancy Header -->
+    <div class="text-center mb-5">
+        <h1>Gestion Clients</h1>
+        <div style="height: 4px; width: 60px; background: #764ba2; margin: 10px auto; border-radius: 2px;"></div>
+        <p class="text-muted">Gérez votre base de données clients et fournisseurs</p>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success fancy-card border-start border-success border-5 mb-4 d-flex align-items-center">
+            <i class="bi bi-check-circle-fill text-success fs-4 me-3"></i>
+            <div>@TempData["SuccessMessage"]</div>
+        </div>
+    }
+    @if (TempData["FailedMessage"] != null)
+    {
+        <div class="alert alert-danger fancy-card border-start border-danger border-5 mb-4 d-flex align-items-center">
+            <i class="bi bi-x-circle-fill text-danger fs-4 me-3"></i>
+            <div>@TempData["FailedMessage"]</div>
+        </div>
+    }
+
+    <div class="row justify-content-center">
+        <div class="col-lg-8">           
+
+            <form method="post" id="manageClientForm">
+                <!-- MAIN CARD -->
+                <div class="fancy-card p-5 mb-5">
+                    <div class="d-flex justify-content-between align-items-center mb-5">
+                        <div>
+                            <h2 class="h3 fw-bold m-0" style="color: #2d3748;">Gestion des Clients</h2>
+                            <p class="text-muted small mb-0">Ajoutez ou modifiez un client</p>
+                        </div>
+
+                        <!-- Add Button -->
+                        <button type="button" class="btn btn-success btn-gradient shadow-sm rounded-pill px-4 fw-bold border-dark border" data-bs-toggle="modal" data-bs-target="#addClientModal">
+                            <i class="bi bi-person-plus-fill me-2"></i> Nouveau Client
+                        </button>
+                    </div>
+                    <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+                    <!-- STEP 1: Select Client -->
+                    <div class="mb-5">
+                        <label class="form-label text-uppercase text-muted fw-bold small ms-1">1. Sélectionner un client existant</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white border-0"><i class="bi bi-search text-primary fs-4"></i></span>
+                            <!-- Style: bg-light + border-dark -->
+                            <select asp-for="SelectedClientName" asp-items="Model.ClientSelectList" class="form-select form-select-lg bg-light border border-dark fw-bold text-dark" id="clientSelect" required>
+                                <option value="">-- Choisir un client --</option>
+                            </select>
+                        </div>
+                        <span asp-validation-for="SelectedClientName" class="text-danger small ms-2"></span>
+                    </div>
+
+                    <!-- ACTION BUTTONS (Initial State) -->
+                    <div id="initialActions" class="d-grid gap-3 d-md-flex justify-content-md-center">
+                        <button type="button" id="btnShowUpdate" class="btn btn-outline-primary border-dark text-dark rounded-pill px-4 fw-bold shadow-sm">
+                            <i class="bi bi-pencil-square me-2"></i> Modifier
+                        </button>
+
+                        <button type="submit"
+                                asp-page-handler="Delete"
+                                formnovalidate
+                                class="btn btn-outline-danger border-dark text-danger rounded-pill px-4 fw-bold shadow-sm"
+                                onclick="return confirm('Attention: Voulez-vous vraiment supprimer ce client ? Cette action est irréversible.');">
+                            <i class="bi bi-trash-fill me-2"></i> Supprimer
+                        </button>
+                    </div>
+
+                    <!-- STEP 2: Update Section (Hidden by default) -->
+                    <div id="updateSection" class="d-none bg-light p-4 rounded-4 mt-4 border border-dark">
+                        <h5 class="text-primary fw-bold mb-3 border-bottom pb-2 border-dark">
+                            <i class="bi bi-pencil-fill me-2"></i>Détails de la modification
+                        </h5>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-uppercase">Champ à modifier</label>
+                            <select asp-for="FieldToUpdate" class="form-select fancy-input border-dark" id="fieldSelect">
+                                <option value="">-- Choisir le champ --</option>
+                                <option value="Name">Nom</option>
+                                <option value="Address">Adresse</option>
+                                <option value="MatriculeFiscal">Matricule Fiscal</option>
+                                <option value="Phone">Numéro de Téléphone</option>
+                            </select>
+                            <span asp-validation-for="FieldToUpdate" class="text-danger small"></span>
+                        </div>
+
+                        <div id="inputsContainer" class="mb-4">
+                            <!-- Dynamic Inputs -->
+                            <div id="input_Name" class="update-input d-none">
+                                <label class="form-label small text-muted text-uppercase fw-bold">Nouveau Nom</label>
+                                <input asp-for="NewName" class="form-control fancy-input border-dark" placeholder="Entrez le nouveau nom" />
+                                <span asp-validation-for="NewName" class="text-danger small"></span>
+                            </div>
+
+                            <div id="input_Address" class="update-input d-none">
+                                <label class="form-label small text-muted text-uppercase fw-bold">Nouvelle Adresse</label>
+                                <input asp-for="NewAddress" class="form-control fancy-input border-dark" placeholder="Entrez la nouvelle adresse" />
+                                <span asp-validation-for="NewAddress" class="text-danger small"></span>
+                            </div>
+
+                            <div id="input_MatriculeFiscal" class="update-input d-none">
+                                <label class="form-label small text-muted text-uppercase fw-bold">Nouveau Matricule</label>
+                                <input asp-for="NewMatriculeFiscal" class="form-control fancy-input border-dark" placeholder="Ex: 1234567/A/M/000" />
+                                <span asp-validation-for="NewMatriculeFiscal" class="text-danger small"></span>
+                            </div>
+
+                            <div id="input_Phone" class="update-input d-none">
+                                <label class="form-label small text-muted text-uppercase fw-bold">Nouveau Téléphone</label>
+                                <input asp-for="NewPhone" class="form-control fancy-input border-dark" placeholder="Ex: +216 ..." />
+                                <span asp-validation-for="NewPhone" class="text-danger small"></span>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-end gap-2 border-top border-dark pt-3">
+                            <button type="button" onclick="window.location.reload();" class="btn btn-light border border-dark rounded-pill fw-bold">Annuler</button>
+                            <button type="submit" class="btn btn-success border border-dark rounded-pill px-4 fw-bold shadow-sm">
+                                <i class="bi bi-check-lg me-1"></i> Confirmer
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Fournisseur Section -->
+    <div class="row justify-content-center mt-4">
+        <div class="col-lg-8">
+            <partial name="_FournisseurManagement" model="Model" />
+        </div>
+    </div>
+</div>
+
+<!-- ADD CLIENT MODAL -->
+<div class="modal fade" id="addClientModal" tabindex="-1" aria-labelledby="addClientModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header bg-gradient-primary text-white p-4" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                <h5 class="modal-title fw-bold" id="addClientModalLabel"><i class="bi bi-person-plus-fill me-2"></i>Nouveau Client</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" asp-page-handler="Create">
+                <div class="modal-body p-4 bg-light">
+
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-bold text-uppercase" asp-for="Client.Name">Nom du Client</label>
+                        <input asp-for="Client.Name" class="form-control fancy-input border-dark" placeholder="Nom de l'entreprise ou personne" required />
+                        <span asp-validation-for="Client.Name" class="text-danger small"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label text-muted small fw-bold text-uppercase" asp-for="Client.Address">Adresse</label>
+                        <input asp-for="Client.Address" class="form-control fancy-input border-dark" placeholder="Adresse complète" required />
+                        <span asp-validation-for="Client.Address" class="text-danger small"></span>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label text-muted small fw-bold text-uppercase" asp-for="Client.MatriculeFiscal">Matricule</label>
+                            <input asp-for="Client.MatriculeFiscal" class="form-control fancy-input border-dark" placeholder="1234567/A/M/000" />
+                            <span asp-validation-for="Client.MatriculeFiscal" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label text-muted small fw-bold text-uppercase" asp-for="Client.Phone">Téléphone</label>
+                            <input asp-for="Client.Phone" class="form-control fancy-input border-dark" placeholder="+216..." />
+                            <span asp-validation-for="Client.Phone" class="text-danger small"></span>
+                        </div>
+                    </div>
+
+                </div>
+                <div class="modal-footer bg-white border-top border-dark p-3">
+                    <button type="button" class="btn btn-light border border-dark rounded-pill fw-bold" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-success border border-dark rounded-pill px-4 fw-bold shadow-sm">Enregistrer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // Elements
+            const btnShowUpdate = document.getElementById('btnShowUpdate');
+            const updateSection = document.getElementById('updateSection');
+            const initialActions = document.getElementById('initialActions');
+            const clientSelect = document.getElementById('clientSelect');
+            const fieldSelect = document.getElementById('fieldSelect');
+            const updateInputs = document.querySelectorAll('.update-input');
+
+            // 1. Logic to show the Update Section
+            btnShowUpdate.addEventListener('click', function () {
+                if (!clientSelect.value) {
+                    // Modern alert replacement (optional, keeping alert for simplicity)
+                    alert("Veuillez d'abord sélectionner un client.");
+                    clientSelect.focus();
+                    return;
+                }
+
+                // Toggle sections with animation classes (optional)
+                initialActions.classList.add('d-none');
+                updateSection.classList.remove('d-none');
+
+                // Add required attribute dynamically to field select
+                fieldSelect.setAttribute('required', 'required');
+            });
+
+            // 2. Logic to show specific input based on Field selection
+            fieldSelect.addEventListener('change', function () {
+                const selectedValue = this.value;
+
+                // Hide all inputs and clear values
+                updateInputs.forEach(div => {
+                    div.classList.add('d-none');
+                    const input = div.querySelector('input');
+                    if (input) {
+                        input.value = '';
+                        input.removeAttribute('required');
+                    }
+                });
+
+                // Show the selected one
+                if (selectedValue) {
+                    const targetDiv = document.getElementById('input_' + selectedValue);
+                    if (targetDiv) {
+                        targetDiv.classList.remove('d-none');
+                        const targetInput = targetDiv.querySelector('input');
+                        if (targetInput) targetInput.setAttribute('required', 'required');
+                    }
+                }
+            });
+        });
+
+                // ==========================================
+        // 2. FOURNISSEUR (SUPPLIER) LOGIC -- SIMPLIFIED
+        // ==========================================
+
+        const btnShowF_Update = document.getElementById('btnShowFournisseurUpdate');
+        const sectionF_Update = document.getElementById('fournisseurUpdateSection');
+        const actionsF_Initial = document.getElementById('fournisseurActions');
+        const selectF_Main = document.getElementById('fournisseurSelect');
+        const inputF_Name = document.getElementById('inputNewFournisseurName');
+
+        if (btnShowF_Update) {
+            btnShowF_Update.addEventListener('click', function () {
+                // 1. Check if a supplier is selected
+                if (!selectF_Main.value) {
+                    alert("Veuillez d'abord sélectionner un fournisseur.");
+                    selectF_Main.focus();
+                    return;
+                }
+
+                // 2. Hide buttons, Show Update Panel
+                actionsF_Initial.classList.add('d-none');
+                sectionF_Update.classList.remove('d-none');
+
+                // 3. Focus on the input and make it required
+                if(inputF_Name) {
+                    inputF_Name.setAttribute('required', 'required');
+                    inputF_Name.focus();
+                }
+            });
+        }
+    </script>
+}

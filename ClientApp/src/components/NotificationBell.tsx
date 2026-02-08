@@ -1,0 +1,468 @@
+import { useState, useEffect, useRef } from 'react';
+import { Bell, Check, X, Clock, DollarSign, CalendarPlus, Banknote } from 'lucide-react';
+import api from '../services/api';
+
+interface Notification {
+    id: number;
+    paymentId: number;
+    invoiceId: number;
+    message: string;
+    createdAt: string;
+    isRead: boolean;
+    readAt?: string;
+}
+
+interface DuePayment {
+    id: number;
+    amount: number;
+    paymentDate: string;
+    invoiceId: number;
+    invoiceNumber: string;
+    clientName: string;
+    invoiceTotal: number;
+    notes?: string;
+}
+
+export default function NotificationBell() {
+    const [notifications, setNotifications] = useState<Notification[]>([]);
+    const [duePayments, setDuePayments] = useState<DuePayment[]>([]);
+    const [unreadCount, setUnreadCount] = useState(0);
+    const [isOpen, setIsOpen] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [activeTab, setActiveTab] = useState<'notifications' | 'due'>('notifications');
+    const [extendingPaymentId, setExtendingPaymentId] = useState<number | null>(null);
+    const [extendDate, setExtendDate] = useState('');
+    const [extendNotes, setExtendNotes] = useState('');
+    const [confirmingId, setConfirmingId] = useState<number | null>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    // Fetch notification count periodically
+    useEffect(() => {
+        fetchNotificationCount();
+        const interval = setInterval(fetchNotificationCount, 60000); // Check every minute
+        return () => clearInterval(interval);
+    }, []);
+
+    const fetchNotificationCount = async () => {
+        try {
+            const [countRes, dueRes] = await Promise.allSettled([
+                api.get('/Notifications/count'),
+                api.get('/Notifications/due-payments')
+            ]);
+            
+            const notifCount = countRes.status === 'fulfilled' ? (countRes.value.data.count || 0) : 0;
+            const duePaymentsList = dueRes.status === 'fulfilled' ? (dueRes.value.data || []) : [];
+            
+            setUnreadCount(notifCount + duePaymentsList.length);
+            setDuePayments(duePaymentsList);
+        } catch (error) {
+            console.error('Error fetching notification count:', error);
+        }
+    };
+
+    const fetchNotifications = async () => {
+        setLoading(true);
+        try {
+            const [notifRes, dueRes] = await Promise.allSettled([
+                api.get('/Notifications'),
+                api.get('/Notifications/due-payments')
+            ]);
+            
+            setNotifications(notifRes.status === 'fulfilled' ? (notifRes.value.data || []) : []);
+            setDuePayments(dueRes.status === 'fulfilled' ? (dueRes.value.data || []) : []);
+        } catch (error) {
+            console.error('Error fetching notifications:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleOpen = () => {
+        setIsOpen(!isOpen);
+        if (!isOpen) {
+            fetchNotifications();
+        }
+    };
+
+    const markAsRead = async (id: number) => {
+        try {
+            await api.post(`/Notifications/${id}/read`);
+            setNotifications(prev =>
+                prev.map(n => n.id === id ? { ...n, isRead: true, readAt: new Date().toISOString() } : n)
+            );
+            setUnreadCount(prev => Math.max(0, prev - 1));
+        } catch (error) {
+            console.error('Error marking notification as read:', error);
+        }
+    };
+
+    const markAllAsRead = async () => {
+        try {
+            await api.post('/Notifications/read-all');
+            setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+            fetchNotificationCount();
+        } catch (error) {
+            console.error('Error marking all as read:', error);
+        }
+    };
+
+    const deleteNotification = async (id: number) => {
+        try {
+            await api.delete(`/Notifications/${id}`);
+            setNotifications(prev => prev.filter(n => n.id !== id));
+            fetchNotificationCount();
+        } catch (error) {
+            console.error('Error deleting notification:', error);
+        }
+    };
+
+    const handleConfirmPayment = async (notificationId: number) => {
+        setConfirmingId(notificationId);
+        try {
+            await api.post(`/Notifications/${notificationId}/confirm-payment`);
+            setNotifications(prev => prev.filter(n => n.id !== notificationId));
+            fetchNotificationCount();
+            fetchNotifications();
+        } catch (error) {
+            console.error('Error confirming payment:', error);
+        } finally {
+            setConfirmingId(null);
+        }
+    };
+
+    const handleExtendPayment = async (notificationId: number) => {
+        if (!extendDate) return;
+        
+        try {
+            await api.post(`/Notifications/${notificationId}/extend-payment`, {
+                newDate: new Date(extendDate).toISOString(),
+                notes: extendNotes || undefined
+            });
+            setNotifications(prev => prev.filter(n => n.id !== notificationId));
+            setExtendingPaymentId(null);
+            setExtendDate('');
+            setExtendNotes('');
+            fetchNotificationCount();
+            fetchNotifications();
+        } catch (error) {
+            console.error('Error extending payment:', error);
+        }
+    };
+
+    const formatTime = (dateString: string) => {
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        if (diffDays < 7) return `${diffDays}d ago`;
+        return date.toLocaleDateString();
+    };
+
+    const isDuePaymentNotification = (n: Notification) => {
+        return n.message.includes('Is the money received') || n.message.includes('is now due');
+    };
+
+    return (
+        <div className="relative" ref={dropdownRef}>
+            <button
+                onClick={handleOpen}
+                className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors"
+            >
+                <Bell size={22} />
+                {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center animate-pulse">
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                )}
+            </button>
+
+            {isOpen && (
+                <div className="absolute right-0 mt-2 w-96 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden animate-scale-up">
+                    {/* Header */}
+                    <div className="px-4 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                            <Bell size={18} />
+                            <span className="font-semibold">Notifications</span>
+                        </div>
+                        {unreadCount > 0 && (
+                            <button
+                                onClick={markAllAsRead}
+                                className="text-xs bg-white/20 hover:bg-white/30 px-2 py-1 rounded-lg transition-colors"
+                            >
+                                Mark all read
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Tabs */}
+                    <div className="flex border-b border-gray-200">
+                        <button
+                            onClick={() => setActiveTab('notifications')}
+                            className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                                activeTab === 'notifications'
+                                    ? 'text-indigo-600 border-b-2 border-indigo-600'
+                                    : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                        >
+                            All ({notifications.length})
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('due')}
+                            className={`flex-1 py-2 text-sm font-medium transition-colors relative ${
+                                activeTab === 'due'
+                                    ? 'text-amber-600 border-b-2 border-amber-600'
+                                    : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                        >
+                            Due Payments ({duePayments.length})
+                            {duePayments.length > 0 && (
+                                <span className="ml-1 w-2 h-2 bg-amber-500 rounded-full inline-block animate-pulse" />
+                            )}
+                        </button>
+                    </div>
+
+                    {/* Content */}
+                    <div className="max-h-96 overflow-y-auto">
+                        {loading ? (
+                            <div className="p-6 text-center text-gray-500">
+                                <div className="animate-spin w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full mx-auto mb-2"></div>
+                                Loading...
+                            </div>
+                        ) : activeTab === 'due' ? (
+                            duePayments.length === 0 ? (
+                                <div className="p-6 text-center text-gray-500">
+                                    <Banknote size={32} className="mx-auto mb-2 opacity-30" />
+                                    <p className="text-sm">No pending payments due</p>
+                                </div>
+                            ) : (
+                                duePayments.map(payment => {
+                                    const matchingNotif = notifications.find(n => n.paymentId === payment.id);
+                                    return (
+                                        <div key={payment.id} className="px-4 py-3 border-b border-gray-100 bg-amber-50/50">
+                                            <div className="flex items-start gap-3">
+                                                <div className="p-2 rounded-full bg-amber-100">
+                                                    <Clock size={16} className="text-amber-600" />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium text-gray-900">
+                                                        Invoice #{payment.invoiceNumber} - {payment.clientName}
+                                                    </p>
+                                                    <p className="text-sm text-amber-700 font-semibold mt-0.5">
+                                                        {payment.amount.toLocaleString(undefined, { minimumFractionDigits: 3 })} TND
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 mt-0.5">
+                                                        Due: {new Date(payment.paymentDate).toLocaleDateString()}
+                                                    </p>
+                                                    <p className="text-xs text-amber-800 mt-1 font-medium">
+                                                        Is the money received in the bank?
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            
+                                            {matchingNotif && (
+                                                <div className="mt-2 ml-9 space-y-2">
+                                                    {extendingPaymentId === matchingNotif.id ? (
+                                                        <div className="bg-white p-3 rounded-lg border border-gray-200 space-y-2">
+                                                            <label className="block text-xs font-medium text-gray-700">New payment date:</label>
+                                                            <input
+                                                                type="date"
+                                                                value={extendDate}
+                                                                onChange={e => setExtendDate(e.target.value)}
+                                                                min={new Date().toISOString().split('T')[0]}
+                                                                className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm"
+                                                            />
+                                                            <input
+                                                                type="text"
+                                                                value={extendNotes}
+                                                                onChange={e => setExtendNotes(e.target.value)}
+                                                                placeholder="Reason (optional)"
+                                                                className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm"
+                                                            />
+                                                            <div className="flex gap-2">
+                                                                <button
+                                                                    onClick={() => handleExtendPayment(matchingNotif.id)}
+                                                                    disabled={!extendDate}
+                                                                    className="flex-1 px-2 py-1 bg-amber-600 text-white text-xs rounded hover:bg-amber-700 disabled:opacity-50"
+                                                                >
+                                                                    Extend
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => { setExtendingPaymentId(null); setExtendDate(''); setExtendNotes(''); }}
+                                                                    className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded hover:bg-gray-200"
+                                                                >
+                                                                    Cancel
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                onClick={() => handleConfirmPayment(matchingNotif.id)}
+                                                                disabled={confirmingId === matchingNotif.id}
+                                                                className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 bg-emerald-600 text-white text-xs rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                                                            >
+                                                                <DollarSign size={14} />
+                                                                {confirmingId === matchingNotif.id ? 'Confirming...' : 'Yes, Received'}
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setExtendingPaymentId(matchingNotif.id)}
+                                                                className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 bg-amber-100 text-amber-800 text-xs rounded-lg hover:bg-amber-200 transition-colors"
+                                                            >
+                                                                <CalendarPlus size={14} />
+                                                                No, Extend
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })
+                            )
+                        ) : (
+                            notifications.length === 0 ? (
+                                <div className="p-6 text-center text-gray-500">
+                                    <Bell size={32} className="mx-auto mb-2 opacity-30" />
+                                    <p className="text-sm">No notifications yet</p>
+                                </div>
+                            ) : (
+                                notifications.map(notification => (
+                                    <div
+                                        key={notification.id}
+                                        className={`px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors ${
+                                            !notification.isRead ? 'bg-indigo-50/50' : ''
+                                        }`}
+                                    >
+                                        <div className="flex items-start gap-3">
+                                            <div className={`p-2 rounded-full ${
+                                                isDuePaymentNotification(notification) 
+                                                    ? 'bg-amber-100' 
+                                                    : notification.isRead ? 'bg-gray-100' : 'bg-indigo-100'
+                                            }`}>
+                                                {isDuePaymentNotification(notification) ? (
+                                                    <Banknote size={16} className="text-amber-600" />
+                                                ) : (
+                                                    <Clock size={16} className={
+                                                        notification.isRead ? 'text-gray-500' : 'text-indigo-600'
+                                                    } />
+                                                )}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className={`text-sm ${!notification.isRead ? 'font-medium text-gray-900' : 'text-gray-700'}`}>
+                                                    {notification.message}
+                                                </p>
+                                                <p className="text-xs text-gray-500 mt-1">
+                                                    {formatTime(notification.createdAt)}
+                                                </p>
+                                                
+                                                {isDuePaymentNotification(notification) && !notification.isRead && (
+                                                    <div className="mt-2 space-y-2">
+                                                        {extendingPaymentId === notification.id ? (
+                                                            <div className="bg-gray-50 p-2 rounded-lg space-y-2">
+                                                                <input
+                                                                    type="date"
+                                                                    value={extendDate}
+                                                                    onChange={e => setExtendDate(e.target.value)}
+                                                                    min={new Date().toISOString().split('T')[0]}
+                                                                    className="w-full px-2 py-1 border border-gray-200 rounded text-xs"
+                                                                />
+                                                                <input
+                                                                    type="text"
+                                                                    value={extendNotes}
+                                                                    onChange={e => setExtendNotes(e.target.value)}
+                                                                    placeholder="Reason (optional)"
+                                                                    className="w-full px-2 py-1 border border-gray-200 rounded text-xs"
+                                                                />
+                                                                <div className="flex gap-1">
+                                                                    <button
+                                                                        onClick={() => handleExtendPayment(notification.id)}
+                                                                        disabled={!extendDate}
+                                                                        className="flex-1 px-2 py-1 bg-amber-600 text-white text-xs rounded hover:bg-amber-700 disabled:opacity-50"
+                                                                    >
+                                                                        Extend
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => { setExtendingPaymentId(null); setExtendDate(''); }}
+                                                                        className="px-2 py-1 bg-gray-200 text-gray-600 text-xs rounded"
+                                                                    >
+                                                                        Cancel
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex gap-2">
+                                                                <button
+                                                                    onClick={() => handleConfirmPayment(notification.id)}
+                                                                    disabled={confirmingId === notification.id}
+                                                                    className="flex items-center gap-1 px-2 py-1 bg-emerald-600 text-white text-xs rounded hover:bg-emerald-700 disabled:opacity-50"
+                                                                >
+                                                                    <DollarSign size={12} />
+                                                                    {confirmingId === notification.id ? '...' : 'Yes, Received'}
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setExtendingPaymentId(notification.id)}
+                                                                    className="flex items-center gap-1 px-2 py-1 bg-amber-100 text-amber-800 text-xs rounded hover:bg-amber-200"
+                                                                >
+                                                                    <CalendarPlus size={12} />
+                                                                    No, Extend
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                {!notification.isRead && !isDuePaymentNotification(notification) && (
+                                                    <button
+                                                        onClick={() => markAsRead(notification.id)}
+                                                        className="p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                                                        title="Mark as read"
+                                                    >
+                                                        <Check size={14} />
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={() => deleteNotification(notification.id)}
+                                                    className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                                    title="Delete"
+                                                >
+                                                    <X size={14} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            )
+                        )}
+                    </div>
+
+                    {/* Footer */}
+                    {(notifications.length > 0 || duePayments.length > 0) && (
+                        <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 text-center">
+                            <span className="text-xs text-gray-500">
+                                {notifications.filter(n => !n.isRead).length} unread · {duePayments.length} due payment(s)
+                            </span>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}

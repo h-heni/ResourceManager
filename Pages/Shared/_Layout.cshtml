@@ -1,0 +1,96 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Moovma Crea</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="~/images/logo.png" />
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+
+    <!-- Bootstrap Icons (Required for the trash/check icons) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <!-- Your Global "Fancy" CSS -->
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+
+    <!-- HEADER / NAVIGATION -->
+    <header>
+        <nav class="navbar navbar-expand-lg sticky-top p-0">
+            <div class="container">
+                <!-- Logo -->
+                <a class="navbar-brand" asp-area="" asp-page="/Index">
+                    <img src="~/images/logo.png" alt="Moovma Crea" style="height: 100px; width: auto;" />
+                </a>
+
+                <!-- Mobile Toggle Button -->
+                <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <!-- Links -->
+                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-end">
+                    <ul class="navbar-nav">
+                        <li class="nav-item">
+                            <a class="nav-link" asp-page="/Index"><i class="bi bi-file-earmark-plus me-1"></i> Devis</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" asp-page="/DeliveryNote"><i class="bi bi-truck me-1"></i> Livraison</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" asp-page="/Facture"><i class="bi bi-receipt me-1"></i> Facture</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" asp-page="/Fournisseur"><i class="bi bi-shop me-1"></i> Fournisseurs</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" asp-page="/ManageCustomer"><i class="bi bi-people-fill me-1"></i> Clients</a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <div class="container mb-5">
+        <main role="main" class="pb-3">
+            @RenderBody()
+        </main>
+    </div>
+
+    <!-- FOOTER -->
+    <footer class="footer text-muted text-center small">
+        <div class="container">
+            &copy; 2026 - <strong>Moovma Crea</strong> - <a asp-page="/Privacy" class="text-decoration-none text-muted">Privacy Policy</a>
+        </div>
+    </footer>
+
+    <!-- SCRIPTS -->
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <script>
+            $(document).ready(function() {
+                confetti({
+                    particleCount: 150,
+                    spread: 80,
+                    origin: { y: 0.6 },
+                    colors: ['#667eea', '#764ba2', '#2d3748']
+                });
+            });
+        </script>
+    }
+
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

@@ -1,0 +1,13 @@
+@model List<ResourceManager.Models.Invoice>
+
+<div class="form-group mt-3">
+    <label class="fw-bold">Factures Client correspondantes :</label>
+    <select name="SelectedInvoiceId" class="form-select border-primary">
+        <option value="">-- Liste des factures associées --</option>
+        @foreach (var inv in Model)
+        {
+            <option value="@inv.Id">Facture: @inv.Number | Date: @inv.Date.ToString("dd/MM/yyyy") | Prix Total: @inv.TotalAmount.ToString()</option>
+        }
+    </select>
+    <small class="text-muted">Résultats trouvés : @Model.Count</small>
+</div>
