@@ -76,14 +76,14 @@ export default function DeliveryNoteCreatePage() {
     // Calculate already delivered quantities per description
     const deliveredQuantitiesByDescription = useMemo(() => {
         const quantityMap: Record<string, number> = {};
-        
+
         existingDeliveryNotes.forEach(dn => {
             dn.deliveryNoteItems?.forEach(item => {
                 const key = item.description.toLowerCase().trim();
                 quantityMap[key] = (quantityMap[key] || 0) + (item.quantity || 0);
             });
         });
-        
+
         return quantityMap;
     }, [existingDeliveryNotes]);
 
@@ -124,7 +124,7 @@ export default function DeliveryNoteCreatePage() {
             newErrors.items = 'At least one item with description is required';
         }
 
-        const hasInvalidItems = items.some(item => 
+        const hasInvalidItems = items.some(item =>
             (item.description.trim() && item.quantity <= 0)
         );
         if (hasInvalidItems) {
@@ -155,7 +155,7 @@ export default function DeliveryNoteCreatePage() {
         try {
             const res = await api.get('/Devis');
             const allDevis = Array.isArray(res.data) ? res.data : (res.data.data || []);
-            const draftDevis = allDevis.filter((d: any) => 
+            const draftDevis = allDevis.filter((d: any) =>
                 (d.status === 'Draft' || d.status === 'Accepted') && !d.isDeleted && !d.treated
             );
             setPendingDevis(draftDevis);
@@ -207,7 +207,7 @@ export default function DeliveryNoteCreatePage() {
     const handleDevisSelection = async (devisId: string) => {
         setSelectedDevisId(devisId);
         setTouched(prev => ({ ...prev, devisId: true }));
-        
+
         if (!devisId) {
             setSelectedDevis(null);
             setExistingDeliveryNotes([]);
@@ -220,10 +220,10 @@ export default function DeliveryNoteCreatePage() {
             const res = await api.get(`/Devis/${devisId}`);
             const devis = res.data;
             setSelectedDevis(devis);
-            
+
             // Fetch existing delivery notes for this devis
             await fetchExistingDeliveryNotes(devisId);
-            
+
         } catch (error) {
             console.error("Error fetching devis details", error);
         }
@@ -236,7 +236,7 @@ export default function DeliveryNoteCreatePage() {
                 const key = item.description.toLowerCase().trim();
                 const alreadyDelivered = deliveredQuantitiesByDescription[key] || 0;
                 const remaining = Math.max(0, (item.quantity || 0) - alreadyDelivered);
-                
+
                 return {
                     description: item.description,
                     quantity: remaining, // Default to remaining quantity
@@ -244,7 +244,7 @@ export default function DeliveryNoteCreatePage() {
                     remainingQuantity: remaining
                 };
             });
-            
+
             // Filter out items with 0 remaining, but keep at least one
             const itemsToDeliver = newItems.filter(item => item.remainingQuantity > 0);
             setItems(itemsToDeliver.length > 0 ? itemsToDeliver : [{ description: '', quantity: 1, quotedQuantity: 0, remainingQuantity: 0 }]);
@@ -268,7 +268,7 @@ export default function DeliveryNoteCreatePage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        
+
         // Mark form as submitted for error display
         setSubmitted(true);
 
@@ -411,9 +411,8 @@ export default function DeliveryNoteCreatePage() {
                             value={selectedDevisId}
                             onChange={e => handleDevisSelection(e.target.value)}
                             onBlur={() => handleBlur('devisId')}
-                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none ${
-                                errors.devisId && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
-                            }`}
+                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none ${errors.devisId && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                                }`}
                             required
                         >
                             <option value="">-- Select a Quote --</option>
@@ -430,7 +429,7 @@ export default function DeliveryNoteCreatePage() {
                             <p className="text-sm text-amber-600 mt-2">No quotes available. Create a quote first.</p>
                         )}
                     </div>
-                    
+
                     {/* Show selected quote info - Enhanced compact format */}
                     {selectedDevis && (
                         <div className="md:col-span-2 p-4 bg-[#065F46]/5 border border-[#065F46]/20 rounded-xl">
@@ -442,7 +441,7 @@ export default function DeliveryNoteCreatePage() {
                                         {selectedDevis.createdByUser && (
                                             <span className="text-xs text-[#065F46] flex items-center">
                                                 <User size={12} className="mr-1" />
-                                                {(selectedDevis.createdByUser.firstName || selectedDevis.createdByUser.lastName) 
+                                                {(selectedDevis.createdByUser.firstName || selectedDevis.createdByUser.lastName)
                                                     ? `${selectedDevis.createdByUser.firstName || ''} ${selectedDevis.createdByUser.lastName || ''}`.trim()
                                                     : selectedDevis.createdByUser.email}
                                             </span>
@@ -458,13 +457,12 @@ export default function DeliveryNoteCreatePage() {
                                                     const delivered = deliveredQuantitiesByDescription[key] || 0;
                                                     const remaining = Math.max(0, (item.quantity || 0) - delivered);
                                                     const fullyDelivered = remaining === 0;
-                                                    
+
                                                     return (
-                                                        <div 
-                                                            key={idx} 
-                                                            className={`flex items-center justify-between text-sm px-2 py-1 rounded ${
-                                                                fullyDelivered ? 'bg-green-100 text-green-800' : 'bg-[#065F46]/10 text-[#065F46]'
-                                                            }`}
+                                                        <div
+                                                            key={idx}
+                                                            className={`flex items-center justify-between text-sm px-2 py-1 rounded ${fullyDelivered ? 'bg-green-100 text-green-800' : 'bg-[#065F46]/10 text-[#065F46]'
+                                                                }`}
                                                         >
                                                             <span className="truncate">{item.description}</span>
                                                             <span className="font-semibold ml-2 whitespace-nowrap">
@@ -500,7 +498,7 @@ export default function DeliveryNoteCreatePage() {
                             </div>
                         </div>
                     )}
-                    
+
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                             BL Date <span className="text-red-500">*</span>
@@ -510,9 +508,8 @@ export default function DeliveryNoteCreatePage() {
                             value={date}
                             onChange={e => setDate(e.target.value)}
                             onBlur={() => handleBlur('date')}
-                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none ${
-                                errors.date && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
-                            }`}
+                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none ${errors.date && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                                }`}
                         />
                         {errors.date && submitted && (
                             <p className="text-xs text-red-600 mt-1">{errors.date}</p>
@@ -543,7 +540,7 @@ export default function DeliveryNoteCreatePage() {
                                             {dn.createdByUser && (
                                                 <span className="flex items-center">
                                                     <User size={14} className="mr-1" />
-                                                    {(dn.createdByUser.firstName || dn.createdByUser.lastName) 
+                                                    {(dn.createdByUser.firstName || dn.createdByUser.lastName)
                                                         ? `${dn.createdByUser.firstName || ''} ${dn.createdByUser.lastName || ''}`.trim()
                                                         : dn.createdByUser.email}
                                                 </span>
@@ -588,22 +585,21 @@ export default function DeliveryNoteCreatePage() {
                     <div className="space-y-4">
                         {items.map((item, index) => {
                             const exceedsRemaining = item.quantity > item.remainingQuantity && item.remainingQuantity > 0;
-                            
+
                             return (
-                                <div key={index} className="grid grid-cols-12 gap-4 items-end">
-                                    <div className="col-span-7 md:col-span-8">
+                                <div key={index} className="grid grid-cols-2 md:grid-cols-12 gap-4 items-end p-4 md:p-0 bg-gray-50 md:bg-white rounded-xl md:rounded-none border border-gray-100 md:border-0 mb-4 md:mb-0">
+                                    <div className="col-span-2 md:col-span-8">
                                         <label className="text-xs font-semibold text-gray-500 mb-1 block">Description</label>
                                         <input
                                             type="text"
                                             value={item.description}
                                             onChange={e => updateItem(index, 'description', e.target.value)}
                                             onBlur={() => handleBlur('items')}
-                                            className={`w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-[#065F46] ${
-                                                item.description.trim() === '' && touched.items ? 'border-amber-400' : 'border-gray-200'
-                                            }`}
+                                            className={`w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-[#065F46] ${item.description.trim() === '' && touched.items ? 'border-amber-400' : 'border-gray-200'
+                                                }`}
                                         />
                                     </div>
-                                    <div className="col-span-2">
+                                    <div className="col-span-1 md:col-span-2">
                                         <label className="text-xs font-semibold text-gray-500 mb-1 block">
                                             Qty {item.remainingQuantity > 0 && (
                                                 <span className="text-[#065F46]">(quoted: {item.remainingQuantity})</span>
@@ -614,24 +610,23 @@ export default function DeliveryNoteCreatePage() {
                                             min="1"
                                             value={item.quantity}
                                             onChange={e => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
-                                            className={`w-full px-3 py-2 border rounded-lg text-right focus:ring-2 focus:ring-[#065F46] ${
-                                                exceedsRemaining ? 'border-amber-400 bg-amber-50' : 
-                                                item.quantity <= 0 ? 'border-red-500 bg-red-50' : 'border-gray-200'
-                                            }`}
+                                            className={`w-full px-3 py-2 border rounded-lg text-right focus:ring-2 focus:ring-[#065F46] ${exceedsRemaining ? 'border-amber-400 bg-amber-50' :
+                                                    item.quantity <= 0 ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                                                }`}
                                         />
                                         {exceedsRemaining && (
                                             <p className="text-xs text-amber-600 mt-1">Exceeds quoted qty</p>
                                         )}
                                     </div>
-                                    <div className="col-span-2 md:col-span-1 text-center">
+                                    <div className="col-span-1 md:col-span-1 text-center flex items-center justify-center h-full pb-3">
                                         {item.quotedQuantity > 0 && (
-                                            <span className="text-xs text-gray-500">
-                                                of {item.quotedQuantity}
+                                            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                                                / {item.quotedQuantity}
                                             </span>
                                         )}
                                     </div>
-                                    <div className="col-span-1 flex justify-end">
-                                        <button onClick={() => removeItem(index)} className="p-2 text-gray-400 hover:text-red-500">
+                                    <div className="col-span-2 md:col-span-1 flex justify-end">
+                                        <button onClick={() => removeItem(index)} className="p-2 text-gray-400 hover:text-red-500 border md:border-0 rounded-lg md:rounded-none bg-white md:bg-transparent w-full md:w-auto flex justify-center">
                                             <Trash2 size={18} />
                                         </button>
                                     </div>

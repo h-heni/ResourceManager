@@ -86,18 +86,21 @@ export default function DataManagementPage() {
             const params = new URLSearchParams();
             if (exportDateFrom) params.set('from', exportDateFrom);
             if (exportDateTo) params.set('to', exportDateTo);
-            const query = params.toString() ? `?${params.toString()}` : '';
+            params.set('format', 'xlsx');
+            const query = `?${params.toString()}`;
 
             const response = await api.get(`/DataManagement/export/${type}${query}`, {
                 responseType: 'blob',
             });
 
             // Download the file
-            const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
+            const blob = new Blob([response.data], {
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            });
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `${type}_${new Date().toISOString().slice(0, 10)}.csv`;
+            link.download = `${type}_${new Date().toISOString().slice(0, 10)}.xlsx`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -155,15 +158,38 @@ export default function DataManagementPage() {
         return result;
     };
 
-    // ═══ FILE UPLOAD ═══
+    // ═══ FILE UPLOAD (CSV and XLSX) ═══
     const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file) return;
 
-        const text = await file.text();
-        const rows = parseCsv(text);
+        const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+        let rows: Record<string, string>[] = [];
+
+        if (isExcel) {
+            // Parse Excel server-side for robust header-based reading
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const res = await api.post('/DataManagement/import/parse-excel', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' },
+                });
+                rows = res.data.rows ?? [];
+            } catch (error: any) {
+                const msg = error?.response?.data?.message || 'Failed to parse Excel file';
+                setImportResult({ success: false, message: msg });
+                if (fileInputRef.current) fileInputRef.current.value = '';
+                return;
+            }
+        } else {
+            // Parse CSV client-side
+            const text = await file.text();
+            rows = parseCsv(text);
+        }
+
         if (rows.length === 0) {
             setImportResult({ success: false, message: 'File is empty or has invalid format' });
+            if (fileInputRef.current) fileInputRef.current.value = '';
             return;
         }
 
@@ -279,7 +305,7 @@ export default function DataManagementPage() {
                         <Download size={18} className="text-emerald-600" />
                         <h2 className="text-lg font-semibold text-gray-900">{t('dataManagement.export', 'Data Export')}</h2>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">{t('dataManagement.exportDesc', 'Export clean, Excel-ready CSV files with payment-based data')}</p>
+                    <p className="text-xs text-gray-500 mt-1">{t('dataManagement.exportDesc', 'Export clean, well-formatted Excel files with payment-based data')}</p>
                 </div>
 
                 <div className="p-5 space-y-4">
@@ -320,7 +346,7 @@ export default function DataManagementPage() {
                                 <div className="text-left">
                                     <p className="text-sm font-medium text-gray-900">{exp.label}</p>
                                     <p className="text-xs text-gray-500">
-                                        {exportLoading === exp.key ? t('common.downloading', 'Downloading...') : 'CSV'}
+                                        {exportLoading === exp.key ? t('common.downloading', 'Downloading...') : 'Excel (.xlsx)'}
                                     </p>
                                 </div>
                             </button>
@@ -392,11 +418,11 @@ export default function DataManagementPage() {
                     {importStep === 'upload' && (
                         <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center hover:border-blue-300 transition-colors">
                             <FileSpreadsheet size={40} className="mx-auto mb-3 text-gray-300" />
-                            <p className="text-sm text-gray-600 mb-3">{t('dataManagement.dropOrSelect', 'Select a CSV file to import')}</p>
+                            <p className="text-sm text-gray-600 mb-3">{t('dataManagement.dropOrSelect', 'Select a CSV or Excel (.xlsx) file to import')}</p>
                             <input
                                 ref={fileInputRef}
                                 type="file"
-                                accept=".csv"
+                                accept=".csv,.xlsx,.xls"
                                 onChange={handleFileUpload}
                                 className="hidden"
                             />
@@ -404,7 +430,7 @@ export default function DataManagementPage() {
                                 onClick={() => fileInputRef.current?.click()}
                                 className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
                             >
-                                {t('dataManagement.selectFile', 'Select CSV File')}
+                                {t('dataManagement.selectFile', 'Select File (CSV or XLSX)')}
                             </button>
                         </div>
                     )}

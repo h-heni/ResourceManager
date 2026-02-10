@@ -202,7 +202,7 @@ public class AdminController : BaseApiController
                 UserId = s.Email, // frontend uses email as identifier
                 s.Email,
                 s.Role,
-                IpAddress = "—", // not tracked in LiveUserInfo
+                IpAddress = s.IpAddress ?? "unknown",
                 s.LastActivity,
                 SessionDurationMinutes = (DateTime.UtcNow - s.LastActivity).TotalMinutes
             }),
@@ -280,7 +280,7 @@ public class AdminController : BaseApiController
                 UserId = s.Email,
                 s.Email,
                 s.Role,
-                IpAddress = "—",
+                IpAddress = s.IpAddress ?? "unknown",
                 s.LastActivity,
                 SessionDurationMinutes = (DateTime.UtcNow - s.LastActivity).TotalMinutes
             }),

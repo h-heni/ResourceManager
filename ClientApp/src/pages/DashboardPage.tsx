@@ -4,7 +4,7 @@ import { DollarSign, FileText, Users, TrendingUp, AlertTriangle, ArrowRight, Che
 import { useNavigate } from 'react-router-dom';
 import {
     BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid,
-    Tooltip as RechartsTooltip, ResponsiveContainer, Legend,
+    Tooltip as RechartsTooltip, ResponsiveContainer,
 } from 'recharts';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -422,21 +422,19 @@ export default function DashboardPage() {
                         <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
                             <button
                                 onClick={() => handleModeChange('single')}
-                                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                                    dashboardMode === 'single'
-                                        ? 'bg-white text-gray-900 shadow-sm'
-                                        : 'text-gray-500 hover:text-gray-700'
-                                }`}
+                                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${dashboardMode === 'single'
+                                    ? 'bg-white text-gray-900 shadow-sm'
+                                    : 'text-gray-500 hover:text-gray-700'
+                                    }`}
                             >
                                 {t('dashboard.perCurrency', 'Per Currency')}
                             </button>
                             <button
                                 onClick={() => handleModeChange('mixed')}
-                                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1 ${
-                                    dashboardMode === 'mixed'
-                                        ? 'bg-white text-gray-900 shadow-sm'
-                                        : 'text-gray-500 hover:text-gray-700'
-                                }`}
+                                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1 ${dashboardMode === 'mixed'
+                                    ? 'bg-white text-gray-900 shadow-sm'
+                                    : 'text-gray-500 hover:text-gray-700'
+                                    }`}
                             >
                                 <Globe size={12} />
                                 {t('dashboard.mixed', 'Mixed')}
@@ -451,8 +449,8 @@ export default function DashboardPage() {
                                     key={c}
                                     onClick={() => handleCurrencyChange(c)}
                                     className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${cur === c
-                                            ? 'bg-white text-gray-900 shadow-sm'
-                                            : 'text-gray-500 hover:text-gray-700'
+                                        ? 'bg-white text-gray-900 shadow-sm'
+                                        : 'text-gray-500 hover:text-gray-700'
                                         }`}
                                 >
                                     {c}
@@ -535,9 +533,9 @@ export default function DashboardPage() {
             {/* Auto-recovery status banner */}
             {recoveryStatus && (
                 <div className={`p-3 rounded-lg flex items-center justify-between text-sm ${recoveryStatus.type === 'running' ? 'bg-blue-50 border border-blue-200 text-blue-800' :
-                        recoveryStatus.type === 'success' ? 'bg-green-50 border border-green-200 text-green-800' :
-                            recoveryStatus.type === 'warning' ? 'bg-amber-50 border border-amber-200 text-amber-800' :
-                                'bg-red-50 border border-red-200 text-red-800'
+                    recoveryStatus.type === 'success' ? 'bg-green-50 border border-green-200 text-green-800' :
+                        recoveryStatus.type === 'warning' ? 'bg-amber-50 border border-amber-200 text-amber-800' :
+                            'bg-red-50 border border-red-200 text-red-800'
                     }`}>
                     <div className="flex items-center gap-2">
                         {recoveryStatus.type === 'running' && <RefreshCw size={16} className="animate-spin" />}
@@ -645,145 +643,81 @@ export default function DashboardPage() {
                 </div>
             </div>
 
-            {/* Revenue vs Expenses Chart (Recharts BarChart) */}
-            <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-semibold text-gray-900">
-                        {t('dashboard.revenueVsExpenses', 'Revenue vs Expenses')}
-                    </h3>
+            {/* Charts Row: Revenue, Expenses, Growth */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* Revenue Chart */}
+                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('dashboard.revenueLabel', 'Revenue')}</h3>
+                    {revenueExpenseChartData.length > 0 ? (
+                        <div className="h-[250px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={revenueExpenseChartData}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94A3B8' }} />
+                                    <YAxis hide />
+                                    <RechartsTooltip content={<ChartTooltipContent />} />
+                                    <Bar dataKey="revenue" name={t('dashboard.revenueLabel', 'Revenue')} fill={CHART_COLORS.revenue} radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    ) : (
+                        <div className="h-[250px] flex items-center justify-center text-gray-400 text-sm">{t('common.noData')}</div>
+                    )}
                 </div>
-                {revenueExpenseChartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={280}>
-                        <BarChart data={revenueExpenseChartData} barGap={2} barCategoryGap="20%">
-                            <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                            <XAxis
-                                dataKey="name"
-                                axisLine={false}
-                                tickLine={false}
-                                tick={{ fontSize: 12, fill: '#94A3B8' }}
-                            />
-                            <YAxis
-                                axisLine={false}
-                                tickLine={false}
-                                tick={{ fontSize: 11, fill: '#94A3B8' }}
-                                tickFormatter={(v: number) => formatNumber(v)}
-                                width={60}
-                            />
-                            <RechartsTooltip content={<ChartTooltipContent />} />
-                            <Legend
-                                iconType="square"
-                                iconSize={10}
-                                wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
-                            />
-                            <Bar
-                                dataKey="revenue"
-                                name={t('dashboard.revenueLabel', 'Revenue')}
-                                fill={CHART_COLORS.revenue}
-                                radius={[4, 4, 0, 0]}
-                                maxBarSize={32}
-                            />
-                            <Bar
-                                dataKey="expenses"
-                                name={t('expense.totalExpenses', 'Expenses')}
-                                fill={CHART_COLORS.expenses}
-                                radius={[4, 4, 0, 0]}
-                                maxBarSize={32}
-                            />
-                        </BarChart>
-                    </ResponsiveContainer>
-                ) : (
-                    <div className="h-64 flex items-center justify-center text-gray-400 text-sm">
-                        {t('common.noData')}
-                    </div>
-                )}
-            </div>
 
-            {/* Growth Trajectory (Recharts AreaChart) */}
-            <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                    <div>
-                        <h3 className="text-sm font-semibold text-gray-900">
-                            {t('dashboard.growthTrajectory', 'Growth Trajectory')}
-                        </h3>
-                        <p className="text-xs text-gray-400 mt-0.5">
-                            {t('dashboard.yearToDate', 'Year to date')}: <span className={`font-semibold ${netResult >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{netResult >= 0 ? '+' : ''}{fmt(netResult)}</span>
-                        </p>
-                    </div>
+                {/* Expenses Chart */}
+                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('expense.totalExpenses', 'Expenses')}</h3>
+                    {revenueExpenseChartData.length > 0 ? (
+                        <div className="h-[250px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={revenueExpenseChartData}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94A3B8' }} />
+                                    <YAxis hide />
+                                    <RechartsTooltip content={<ChartTooltipContent />} />
+                                    <Bar dataKey="expenses" name={t('expense.totalExpenses', 'Expenses')} fill={CHART_COLORS.expenses} radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    ) : (
+                        <div className="h-[250px] flex items-center justify-center text-gray-400 text-sm">{t('common.noData')}</div>
+                    )}
                 </div>
-                {growthTrajectoryData.filter(d => d.revenue > 0 || d.expenses > 0).length > 0 ? (
-                    <ResponsiveContainer width="100%" height={260}>
-                        <AreaChart data={growthTrajectoryData.map(d => ({
-                            name: monthNames[d.month - 1],
-                            revenue: d.revenue,
-                            expenses: d.expenses,
-                            net: d.net,
-                        }))}>
-                            <defs>
-                                <linearGradient id="gradRevenue" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor={CHART_COLORS.revenue} stopOpacity={0.15} />
-                                    <stop offset="95%" stopColor={CHART_COLORS.revenue} stopOpacity={0} />
-                                </linearGradient>
-                                <linearGradient id="gradExpenses" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor={CHART_COLORS.expenses} stopOpacity={0.15} />
-                                    <stop offset="95%" stopColor={CHART_COLORS.expenses} stopOpacity={0} />
-                                </linearGradient>
-                                <linearGradient id="gradNet" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor={CHART_COLORS.net} stopOpacity={0.2} />
-                                    <stop offset="95%" stopColor={CHART_COLORS.net} stopOpacity={0} />
-                                </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                            <XAxis
-                                dataKey="name"
-                                axisLine={false}
-                                tickLine={false}
-                                tick={{ fontSize: 12, fill: '#94A3B8' }}
-                            />
-                            <YAxis
-                                axisLine={false}
-                                tickLine={false}
-                                tick={{ fontSize: 11, fill: '#94A3B8' }}
-                                tickFormatter={(v: number) => formatNumber(v)}
-                                width={60}
-                            />
-                            <RechartsTooltip content={<ChartTooltipContent />} />
-                            <Legend
-                                iconType="circle"
-                                iconSize={8}
-                                wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
-                            />
-                            <Area
-                                type="monotone"
-                                dataKey="revenue"
-                                name={t('dashboard.revenueLabel', 'Revenue')}
-                                stroke={CHART_COLORS.revenue}
-                                strokeWidth={2}
-                                fill="url(#gradRevenue)"
-                            />
-                            <Area
-                                type="monotone"
-                                dataKey="expenses"
-                                name={t('expense.totalExpenses', 'Expenses')}
-                                stroke={CHART_COLORS.expenses}
-                                strokeWidth={2}
-                                fill="url(#gradExpenses)"
-                            />
-                            <Area
-                                type="monotone"
-                                dataKey="net"
-                                name={t('dashboard.netLabel', 'Net')}
-                                stroke={CHART_COLORS.net}
-                                strokeWidth={2.5}
-                                fill="url(#gradNet)"
-                                strokeDasharray="5 3"
-                            />
-                        </AreaChart>
-                    </ResponsiveContainer>
-                ) : (
-                    <div className="h-64 flex items-center justify-center text-gray-400 text-sm">
-                        {t('common.noData')}
+
+                {/* Growth Trajectory Chart */}
+                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm md:col-span-2 lg:col-span-1">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-sm font-semibold text-gray-900">{t('dashboard.growthTrajectory', 'Growth')}</h3>
+                        <span className={`text-xs font-semibold ${netResult >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                            {netResult >= 0 ? '+' : ''}{fmt(netResult)}
+                        </span>
                     </div>
-                )}
+                    {growthTrajectoryData.filter(d => d.revenue > 0 || d.expenses > 0).length > 0 ? (
+                        <div className="h-[250px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={growthTrajectoryData.map(d => ({
+                                    name: monthNames[d.month - 1],
+                                    net: d.net
+                                }))}>
+                                    <defs>
+                                        <linearGradient id="gradNet" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor={CHART_COLORS.net} stopOpacity={0.2} />
+                                            <stop offset="95%" stopColor={CHART_COLORS.net} stopOpacity={0} />
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94A3B8' }} />
+                                    <YAxis hide />
+                                    <RechartsTooltip content={<ChartTooltipContent />} />
+                                    <Area type="monotone" dataKey="net" name={t('dashboard.netLabel', 'Net')} stroke={CHART_COLORS.net} strokeWidth={2.5} fill="url(#gradNet)" />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+                    ) : (
+                        <div className="h-[250px] flex items-center justify-center text-gray-400 text-sm">{t('common.noData')}</div>
+                    )}
+                </div>
             </div>
 
             {/* Bottom Row: Status Breakdown + Top Clients */}

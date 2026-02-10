@@ -1,9 +1,12 @@
+using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ResourceManager.Data;
+using ResourceManager.Dtos;
 using ResourceManager.Models;
+using ResourceManager.Services;
 using System.Globalization;
 using System.Text;
 
@@ -35,7 +38,7 @@ namespace ResourceManager.Controllers
         // ═══════════════════════════════════════════════════════════
 
         /// <summary>
-        /// Export paid revenues as CSV. Payment-based only.
+        /// Export paid revenues as Excel/CSV. Payment-based only.
         /// </summary>
         [HttpGet("export/revenues")]
         public async Task<IActionResult> ExportRevenues(
@@ -95,29 +98,41 @@ namespace ResourceManager.Controllers
                 .OrderBy(r => r.Date)
                 .ToList();
 
-            var csv = BuildCsv(
-                new[] { "Date", "Client Name", "Amount Paid", "Currency", "Payment Method", "Reference" },
-                allRows.Select(r => new[] {
-                    r.Date.ToString("yyyy-MM-dd"),
-                    r.ClientName,
-                    r.AmountPaid.ToString("F2", CultureInfo.InvariantCulture),
-                    r.Currency,
-                    r.PaymentMethod,
-                    r.Reference
-                }));
+            var headers = new[] { "Date", "Client Name", "Amount Paid", "Currency", "Payment Method", "Reference" };
+            var dataRows = allRows.Select(r => new object[] {
+                r.Date,
+                r.ClientName,
+                r.AmountPaid,
+                r.Currency,
+                r.PaymentMethod,
+                r.Reference
+            }).ToList();
 
+            if (format?.Equals("xlsx", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                var bytes = BuildExcel("Revenues", headers, dataRows);
+                return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    $"revenues_{DateTime.UtcNow:yyyyMMdd}.xlsx");
+            }
+
+            var csv = BuildCsv(headers, dataRows.Select(r => new[] {
+                ((DateTime)r[0]).ToString("yyyy-MM-dd"),
+                r[1].ToString()!, r[2] is decimal d2 ? d2.ToString("F2", CultureInfo.InvariantCulture) : r[2].ToString()!,
+                r[3].ToString()!, r[4].ToString()!, r[5].ToString()!
+            }));
             return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray(),
                 "text/csv; charset=utf-8",
                 $"revenues_{DateTime.UtcNow:yyyyMMdd}.csv");
         }
 
         /// <summary>
-        /// Export paid expenses as CSV. Payment-based only.
+        /// Export paid expenses as Excel/CSV. Payment-based only.
         /// </summary>
         [HttpGet("export/expenses")]
         public async Task<IActionResult> ExportExpenses(
             [FromQuery] DateTime? from,
-            [FromQuery] DateTime? to)
+            [FromQuery] DateTime? to,
+            [FromQuery] string format = "csv")
         {
             var fromDate = from ?? DateTime.MinValue;
             var toDate = to ?? DateTime.MaxValue;
@@ -185,63 +200,94 @@ namespace ResourceManager.Controllers
                 .OrderBy(r => r.Date)
                 .ToList();
 
-            var csv = BuildCsv(
-                new[] { "Date", "Supplier", "Amount Paid", "Currency", "Category", "Reference" },
-                allRows.Select(r => new[] {
-                    r.Date.ToString("yyyy-MM-dd"),
-                    r.Supplier,
-                    r.AmountPaid.ToString("F2", CultureInfo.InvariantCulture),
-                    r.Currency,
-                    r.Category,
-                    r.Reference
-                }));
+            var headers = new[] { "Date", "Supplier", "Amount Paid", "Currency", "Category", "Reference" };
+            var dataRows = allRows.Select(r => new object[] {
+                r.Date, r.Supplier, r.AmountPaid, r.Currency, r.Category, r.Reference
+            }).ToList();
 
+            if (format?.Equals("xlsx", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                var bytes = BuildExcel("Expenses", headers, dataRows);
+                return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    $"expenses_{DateTime.UtcNow:yyyyMMdd}.xlsx");
+            }
+
+            var csv = BuildCsv(headers, dataRows.Select(r => new[] {
+                ((DateTime)r[0]).ToString("yyyy-MM-dd"),
+                r[1].ToString()!, r[2] is decimal d2 ? d2.ToString("F2", CultureInfo.InvariantCulture) : r[2].ToString()!,
+                r[3].ToString()!, r[4].ToString()!, r[5].ToString()!
+            }));
             return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray(),
                 "text/csv; charset=utf-8",
                 $"expenses_{DateTime.UtcNow:yyyyMMdd}.csv");
         }
 
         /// <summary>
-        /// Export clients as CSV.
+        /// Export clients as Excel/CSV.
         /// </summary>
         [HttpGet("export/clients")]
-        public async Task<IActionResult> ExportClients()
+        public async Task<IActionResult> ExportClients([FromQuery] string format = "csv")
         {
             var clients = await _context.Clients.OrderBy(c => c.Name).ToListAsync();
 
-            var csv = BuildCsv(
-                new[] { "Name", "Matricule Fiscal", "Phone Number", "Address", "Email" },
-                clients.Select(c => new[] {
-                    c.Name,
-                    c.MatriculeFiscal,
-                    c.Phone,
-                    c.Address,
-                    c.Email ?? ""
-                }));
+            var headers = new[] { "Name", "Matricule Fiscal", "Phone Number", "Address", "Email" };
+            var dataRows = clients.Select(c => new object[] {
+                c.Name, c.MatriculeFiscal ?? "", c.Phone ?? "", c.Address ?? "", c.Email ?? ""
+            }).ToList();
 
+            if (format?.Equals("xlsx", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                var bytes = BuildExcel("Clients", headers, dataRows);
+                return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    $"clients_{DateTime.UtcNow:yyyyMMdd}.xlsx");
+            }
+
+            var csv = BuildCsv(headers, dataRows.Select(r => r.Select(v => v.ToString()!).ToArray()));
             return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray(),
                 "text/csv; charset=utf-8",
                 $"clients_{DateTime.UtcNow:yyyyMMdd}.csv");
         }
 
         /// <summary>
-        /// Export products as CSV.
+        /// Export products/services as Excel/CSV.
         /// </summary>
         [HttpGet("export/products")]
-        public async Task<IActionResult> ExportProducts()
+        public async Task<IActionResult> ExportProducts([FromQuery] string format = "csv")
         {
+            var userId = _userManager.GetUserId(User);
+            string defaultCurrency = "TND";
+            if (userId != null)
+            {
+                var user = await _userManager.FindByIdAsync(userId);
+                if (user != null)
+                {
+                    var settings = await _context.CompanySettings
+                        .FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
+                    if (settings != null)
+                        defaultCurrency = settings.Currency ?? "TND";
+                }
+            }
+
             var products = await _context.ProductServices.OrderBy(p => p.Name).ToListAsync();
 
-            var csv = BuildCsv(
-                new[] { "Name", "Description", "Price", "Currency", "TVA Rate" },
-                products.Select(p => new[] {
-                    p.Name,
-                    p.Description ?? "",
-                    p.DefaultUnitPrice.ToString("F2", CultureInfo.InvariantCulture),
-                    "TND", // Products don't have per-item currency yet
-                    p.TvaRate.ToString("F0", CultureInfo.InvariantCulture)
-                }));
+            var headers = new[] { "Name", "Description", "Price", "Currency", "TVA Rate" };
+            var dataRows = products.Select(p => new object[] {
+                p.Name, p.Description ?? "", p.DefaultUnitPrice, defaultCurrency, p.TvaRate
+            }).ToList();
 
+            if (format?.Equals("xlsx", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                var bytes = BuildExcel("Products", headers, dataRows);
+                return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    $"products_{DateTime.UtcNow:yyyyMMdd}.xlsx");
+            }
+
+            var csv = BuildCsv(headers, dataRows.Select(r => new[] {
+                r[0].ToString()!, r[1].ToString()!,
+                r[2] is decimal d ? d.ToString("F2", CultureInfo.InvariantCulture) : r[2].ToString()!,
+                r[3].ToString()!,
+                r[4] is decimal t ? t.ToString("F0", CultureInfo.InvariantCulture) : r[4].ToString()!
+            }));
             return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray(),
                 "text/csv; charset=utf-8",
                 $"products_{DateTime.UtcNow:yyyyMMdd}.csv");
@@ -252,7 +298,7 @@ namespace ResourceManager.Controllers
         // ═══════════════════════════════════════════════════════════
 
         /// <summary>
-        /// Validate imported CSV data WITHOUT saving. Returns preview + errors.
+        /// Validate imported Excel/CSV data WITHOUT saving. Returns preview + errors.
         /// </summary>
         [HttpPost("import/validate")]
         public IActionResult ValidateImport([FromBody] ImportRequest request)
@@ -436,7 +482,8 @@ namespace ResourceManager.Controllers
             for (int i = 0; i < rows.Count; i++)
             {
                 var row = NormalizeKeys(rows[i]);
-                var rowNum = i + 1; // 1-based for user display
+                // Use i + 2 to map to Excel row number (Row 1 = Headers, Row 2 = Data Row 0)
+                var rowNum = i + 2;
                 var rowErrors = new List<string>();
 
                 // Validate required fields are non-empty
@@ -520,6 +567,290 @@ namespace ResourceManager.Controllers
                 return $"\"{field.Replace("\"", "\"\"")}\"";
             }
             return field;
+        }
+
+        /// <summary>
+        /// Build a well-formatted Excel workbook.
+        /// Types are auto-detected from data values — NO hardcoded column indices.
+        /// DateTime → date cell, decimal/double → right-aligned number, else → left-aligned text.
+        /// </summary>
+        private static byte[] BuildExcel(
+            string sheetName,
+            string[] headers,
+            List<object[]> rows)
+        {
+            using var workbook = new XLWorkbook();
+            var ws = workbook.Worksheets.Add(sheetName);
+
+            // ── Consistent base font across the whole sheet ──
+            ws.Style.Font.FontName = "Calibri";
+            ws.Style.Font.FontSize = 11;
+            ws.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center; // Align all vertically centered
+
+            // ── Detect column types from first non-null value in each column ──
+            var colIsNumber = new bool[headers.Length];
+            for (int col = 0; col < headers.Length; col++)
+            {
+                foreach (var row in rows)
+                {
+                    if (col < row.Length && row[col] != null)
+                    {
+                        if (row[col] is decimal or double or float or int or long)
+                            colIsNumber[col] = true;
+                        break; // first non-null determines type
+                    }
+                }
+            }
+
+            // ── Header row ──
+            for (int col = 0; col < headers.Length; col++)
+            {
+                var cell = ws.Cell(1, col + 1);
+                cell.Value = headers[col];
+                cell.Style.Font.Bold = true;
+                cell.Style.Font.FontSize = 12;
+                cell.Style.Fill.BackgroundColor = XLColor.FromHtml("#F3F4F6"); // Light gray background
+                cell.Style.Border.BottomBorder = XLBorderStyleValues.Medium;
+                cell.Style.Border.BottomBorderColor = XLColor.FromHtml("#9CA3AF");
+                cell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+                cell.Style.Border.OutsideBorderColor = XLColor.FromHtml("#E5E7EB");
+                
+                // Right-align numeric column headers for visual consistency
+                cell.Style.Alignment.Horizontal = colIsNumber[col]
+                    ? XLAlignmentHorizontalValues.Right
+                    : XLAlignmentHorizontalValues.Left;
+            }
+
+            // ── Data rows — type auto-detected per value ──
+            for (int row = 0; row < rows.Count; row++)
+            {
+                var data = rows[row];
+                for (int col = 0; col < data.Length; col++)
+                {
+                    var cell = ws.Cell(row + 2, col + 1);
+                    var value = data[col];
+
+                    // Set thin borders for every cell
+                    cell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+                    cell.Style.Border.OutsideBorderColor = XLColor.FromHtml("#E5E7EB");
+
+                    if (value is DateTime dt)
+                    {
+                        cell.Value = dt;
+                        cell.Style.DateFormat.Format = "yyyy-MM-dd";
+                        cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+                    }
+                    else if (value is decimal dec)
+                    {
+                        cell.Value = (double)dec;
+                        cell.Style.NumberFormat.Format = "#,##0.00";
+                        cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+                    }
+                    else if (value is double dbl)
+                    {
+                        cell.Value = dbl;
+                        cell.Style.NumberFormat.Format = "#,##0.00";
+                        cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+                    }
+                    else if (value is int or long)
+                    {
+                        cell.Value = Convert.ToDouble(value);
+                        cell.Style.NumberFormat.Format = "#,##0";
+                        cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+                    }
+                    else
+                    {
+                        cell.Value = value?.ToString() ?? "";
+                        cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+                    }
+                }
+
+                // Alternate row shading for readability
+                if (row % 2 == 1)
+                {
+                    ws.Range(row + 2, 1, row + 2, headers.Length)
+                      .Style.Fill.BackgroundColor = XLColor.FromHtml("#F9FAFB");
+                }
+            }
+
+            // ── Auto-fit columns with dynamic padding ──
+            for (int col = 1; col <= headers.Length; col++)
+            {
+                ws.Column(col).AdjustToContents();
+                var currentWidth = ws.Column(col).Width;
+                // Ensure column is at least as wide as its header + padding
+                var headerMinWidth = Math.Max(headers[col - 1].Length + 4, 12);
+                ws.Column(col).Width = Math.Max(currentWidth + 3, headerMinWidth);
+            }
+
+            // ── Freeze header row for scrollable data ──
+            ws.SheetView.FreezeRows(1);
+
+            // ── Page layout ──
+            ws.PageSetup.PageOrientation = XLPageOrientation.Landscape;
+            ws.PageSetup.Margins.Left = 0.5;
+            ws.PageSetup.Margins.Right = 0.5;
+
+            using var ms = new MemoryStream();
+            workbook.SaveAs(ms);
+            return ms.ToArray();
+        }
+
+        /// <summary>
+        /// POST: api/DataManagement/import/parse-excel — Parse an uploaded XLSX file
+        /// and return the rows as JSON (same shape as CSV frontend parsing).
+        /// This ensures server-side Excel parsing with header-based column reading.
+        /// </summary>
+        [HttpPost("import/parse-excel")]
+        public IActionResult ParseExcelUpload(IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+                return BadRequest(new { message = "No file uploaded" });
+
+            if (file.Length > 10 * 1024 * 1024) // 10 MB limit
+                return BadRequest(new { message = "File is too large. Max 10 MB." });
+
+            try
+            {
+                using var stream = file.OpenReadStream();
+                using var workbook = new XLWorkbook(stream);
+                var ws = workbook.Worksheet(1); // Read first sheet
+
+                var lastRow = ws.LastRowUsed()?.RowNumber() ?? 0;
+                var lastCol = ws.LastColumnUsed()?.ColumnNumber() ?? 0;
+
+                if (lastRow < 2 || lastCol < 1)
+                    return BadRequest(new { message = "File is empty or has no data rows" });
+
+                // Read headers from first row — by name, NOT by index.
+                // Supports non-contiguous columns (empty columns are skipped).
+                var headers = new List<string>();
+                var headerColMap = new List<int>(); // original 1-based column positions
+                for (int col = 1; col <= lastCol; col++)
+                {
+                    var header = ws.Cell(1, col).GetString().Trim();
+                    if (!string.IsNullOrEmpty(header))
+                    {
+                        headers.Add(header);
+                        headerColMap.Add(col);
+                    }
+                    // Skip empty columns without stopping
+                }
+
+                if (headers.Count == 0)
+                    return BadRequest(new { message = "No headers found in first row" });
+
+                // Read data rows — mapped by header name, not column index
+                var rows = new List<Dictionary<string, string>>();
+                for (int row = 2; row <= lastRow; row++)
+                {
+                    var rowData = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    bool hasData = false;
+
+                    for (int col = 0; col < headers.Count; col++)
+                    {
+                        var cell = ws.Cell(row, headerColMap[col]);
+                        string value;
+
+                        // Preserve date format as yyyy-MM-dd for round-trip
+                        if (cell.DataType == XLDataType.DateTime)
+                        {
+                            value = cell.GetDateTime().ToString("yyyy-MM-dd");
+                        }
+                        else if (cell.DataType == XLDataType.Number)
+                        {
+                            // Use InvariantCulture to avoid locale decimal separators
+                            value = cell.GetDouble().ToString(CultureInfo.InvariantCulture);
+                        }
+                        else
+                        {
+                            value = cell.GetString().Trim();
+                        }
+
+                        rowData[headers[col]] = value;
+                        if (!string.IsNullOrWhiteSpace(value)) hasData = true;
+                    }
+
+                    if (hasData) rows.Add(rowData);
+                }
+
+                return Ok(new { headers, rows, rowCount = rows.Count });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to parse uploaded Excel file");
+                return BadRequest(new { message = "Unable to read file. Ensure it is a valid .xlsx Excel file." });
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // STRICT POSITIONAL UPLOAD (MiniExcel — no header row)
+        // ═══════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// Upload an Excel file with strict positional columns (no header row).
+        /// Uses MiniExcel index-based parsing. Atomic: if ANY cell fails, the
+        /// entire file is rejected with a precise error location.
+        ///
+        /// Column layout: [0] Date, [1] Client Name, [2] Amount Paid, [3] Currency, [4] Payment Method
+        /// </summary>
+        [HttpPost("import/strict-upload")]
+        public async Task<IActionResult> StrictPositionalUpload(IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+                return BadRequest(new { message = "No file uploaded." });
+
+            if (file.Length > 10 * 1024 * 1024)
+                return BadRequest(new { message = "File is too large. Max 10 MB." });
+
+            // 1. Parse & validate — atomic, all-or-nothing
+            StrictExcelValidationResult validation;
+            using (var stream = file.OpenReadStream())
+            {
+                validation = StrictExcelUploadService.Parse(stream);
+            }
+
+            if (!validation.IsValid)
+            {
+                return BadRequest(new
+                {
+                    message = validation.ErrorMessage,
+                    row = validation.ErrorRow,
+                    column = validation.ErrorColumn
+                });
+            }
+
+            // 2. Persist as HistoricalRevenue records
+            var userId = _userManager.GetUserId(User);
+            int imported = 0;
+
+            foreach (var dto in validation.Rows)
+            {
+                _context.HistoricalRevenues.Add(new HistoricalRevenue
+                {
+                    Date = dto.Date.ToUniversalTime(),
+                    ClientName = dto.ClientName,
+                    AmountPaid = dto.AmountPaid,
+                    Currency = dto.Currency,
+                    PaymentMethod = dto.PaymentMethod,
+                    IsHistorical = true,
+                    CreatedAt = DateTime.UtcNow
+                });
+                imported++;
+            }
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "Strict positional upload: {Count} revenue records imported by user {User}",
+                imported, userId);
+
+            return Ok(new
+            {
+                message = $"Successfully imported {imported} payment records.",
+                imported,
+                totalRows = validation.TotalRows
+            });
         }
 
         // ═══════════════════════════════════════════════════════════

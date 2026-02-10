@@ -93,7 +93,7 @@ export default function DevisCreatePage() {
                     vatRates = JSON.parse(res.data.availableVatRates);
                 }
             } catch { /* keep defaults */ }
-            
+
             const defaultRate = res.data.defaultVatRate ?? 0.19;
             const defaultRateInt = Math.round(defaultRate * 100);
             // Sort so default rate appears first in dropdown
@@ -153,7 +153,7 @@ export default function DevisCreatePage() {
             newErrors.items = 'At least one item with description is required';
         }
 
-        const hasInvalidItems = items.some(item => 
+        const hasInvalidItems = items.some(item =>
             (item.description.trim() && (item.quantity <= 0 || item.price < 0))
         );
         if (hasInvalidItems) {
@@ -295,7 +295,7 @@ export default function DevisCreatePage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        
+
         // Mark form as submitted for error display
         setSubmitted(true);
 
@@ -418,9 +418,8 @@ export default function DevisCreatePage() {
                             value={clientId}
                             onChange={e => setClientId(e.target.value)}
                             onBlur={() => handleBlur('clientId')}
-                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none ${
-                                errors.clientId && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
-                            }`}
+                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none ${errors.clientId && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                                }`}
                         >
                             <option value="">Select a client...</option>
                             {clients.map(client => (
@@ -440,9 +439,8 @@ export default function DevisCreatePage() {
                             value={date}
                             onChange={e => setDate(e.target.value)}
                             onBlur={() => handleBlur('date')}
-                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none ${
-                                errors.date && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
-                            }`}
+                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none ${errors.date && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                                }`}
                         />
                         {errors.date && submitted && (
                             <p className="text-xs text-red-600 mt-1">{errors.date}</p>
@@ -467,8 +465,8 @@ export default function DevisCreatePage() {
 
                     <div className="space-y-4">
                         {items.map((item, index) => (
-                            <div key={index} className="grid grid-cols-12 gap-4 items-end">
-                                <div className="col-span-12 md:col-span-5 relative">
+                            <div key={index} className="grid grid-cols-2 md:grid-cols-12 gap-4 items-end p-4 md:p-0 bg-gray-50 md:bg-white rounded-xl md:rounded-none border border-gray-100 md:border-0 mb-4 md:mb-0">
+                                <div className="col-span-2 md:col-span-5 relative">
                                     <label className="text-xs font-semibold text-gray-500 mb-1 block">Description</label>
                                     <input
                                         type="text"
@@ -478,9 +476,8 @@ export default function DevisCreatePage() {
                                             searchProducts(e.target.value, index);
                                         }}
                                         onBlur={() => { handleBlur('items'); dismissSuggestions(); }}
-                                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#065F46] outline-none ${
-                                            item.description.trim() === '' && touched.items ? 'border-amber-400' : 'border-gray-200'
-                                        }`}
+                                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#065F46] outline-none ${item.description.trim() === '' && touched.items ? 'border-amber-400' : 'border-gray-200'
+                                            }`}
                                         placeholder={t('devis.descriptionPlaceholder', 'Type to search products...')}
                                         autoComplete="off"
                                     />
@@ -530,19 +527,18 @@ export default function DevisCreatePage() {
                                         </div>
                                     )}
                                 </div>
-                                <div className="col-span-3 md:col-span-2">
+                                <div className="col-span-1 md:col-span-2">
                                     <label className="text-xs font-semibold text-gray-500 mb-1 block">Qty</label>
                                     <input
                                         type="number"
                                         min="1"
                                         value={item.quantity}
                                         onChange={e => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
-                                        className={`w-full px-3 py-2 border rounded-lg text-right focus:ring-2 focus:ring-[#065F46] outline-none ${
-                                            item.quantity <= 0 && item.description.trim() ? 'border-red-500 bg-red-50' : 'border-gray-200'
-                                        }`}
+                                        className={`w-full px-3 py-2 border rounded-lg text-right focus:ring-2 focus:ring-[#065F46] outline-none ${item.quantity <= 0 && item.description.trim() ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                                            }`}
                                     />
                                 </div>
-                                <div className="col-span-4 md:col-span-2">
+                                <div className="col-span-1 md:col-span-2">
                                     <label className="text-xs font-semibold text-gray-500 mb-1 block">Price</label>
                                     <input
                                         type="number"
@@ -550,12 +546,12 @@ export default function DevisCreatePage() {
                                         step="0.001"
                                         value={item.price}
                                         onChange={e => updateItem(index, 'price', parseFloat(e.target.value) || 0)}
-                                        className={`w-full px-3 py-2 border rounded-lg text-right focus:ring-2 focus:ring-[#065F46] outline-none ${
-                                            item.price < 0 && item.description.trim() ? 'border-red-500 bg-red-50' : 'border-gray-200'
-                                        }`}
+                                        className={`w-full px-3 py-2 border rounded-lg text-right focus:ring-2 focus:ring-[#065F46] outline-none ${item.price < 0 && item.description.trim() ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                                            }`}
                                     />
                                 </div>
-                                <div className="col-span-3 md:col-span-2 flex items-center space-x-2">
+                                <div className="col-span-1 md:col-span-2 flex items-center space-x-2">
+                                    <label className="md:hidden text-xs font-semibold text-gray-500 mb-1 block">Tax</label>
                                     <select
                                         value={item.tva ? item.vatRate : 0}
                                         onChange={e => {
@@ -574,8 +570,8 @@ export default function DevisCreatePage() {
                                         ))}
                                     </select>
                                 </div>
-                                <div className="col-span-2 md:col-span-1 flex justify-end">
-                                    <button onClick={() => removeItem(index)} className="p-2 text-gray-400 hover:text-red-500">
+                                <div className="col-span-1 md:col-span-1 flex justify-end">
+                                    <button onClick={() => removeItem(index)} className="p-2 text-gray-400 hover:text-red-500 border md:border-0 rounded-lg md:rounded-none bg-white md:bg-transparent">
                                         <Trash2 size={18} />
                                     </button>
                                 </div>

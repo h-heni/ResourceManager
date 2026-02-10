@@ -55,11 +55,36 @@ api.interceptors.request.use(
     (error) => Promise.reject(error)
 );
 
-// Response Interceptor: Auto-refresh on 401
+// ═══════════════════════════════════════════════════════════════
+// Auth endpoints that should NEVER trigger auto-refresh.
+// If login returns 401, we want the error to reach the login form,
+// NOT get swallowed by a refresh attempt that then redirects.
+// ═══════════════════════════════════════════════════════════════
+const AUTH_ENDPOINTS = ['/auth/login', '/auth/signup', '/auth/refresh', '/auth/logout'];
+
+function isAuthEndpoint(url: string | undefined): boolean {
+    if (!url) return false;
+    const lower = url.toLowerCase();
+    return AUTH_ENDPOINTS.some(ep => lower.includes(ep));
+}
+
+// Response Interceptor: Auto-refresh on 401 (skips auth endpoints)
 api.interceptors.response.use(
     (response) => response,
     async (error: AxiosError) => {
         const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+
+        // ─── CRITICAL: Never intercept auth endpoints ───
+        // Login 401 = wrong credentials → user needs to see the error.
+        // Refresh 401 = expired session → handled below separately.
+        if (isAuthEndpoint(originalRequest?.url)) {
+            return Promise.reject(error);
+        }
+
+        // If 429 (rate limited), reject immediately with the server's message
+        if (error.response?.status === 429) {
+            return Promise.reject(error);
+        }
 
         // If 401 and we haven't retried yet, attempt silent refresh
         if (error.response?.status === 401 && !originalRequest._retry) {

@@ -546,7 +546,7 @@ export default function InvoiceCreatePage() {
                         quantity: item.quantity,
                         price: item.price,
                         tva: item.tva,
-                        vatRate: item.tva ? item.vatRate / 100 : 0
+                        vatRate: item.tva ? item.vatRate : 0
                     }))
             };
 
@@ -832,10 +832,10 @@ export default function InvoiceCreatePage() {
                     )}
 
                     <div className="overflow-x-auto">
-                        <div className="space-y-4 min-w-[600px]">
+                        <div className="space-y-4">
                             {items.map((item, index) => (
-                                <div key={index} className="grid grid-cols-12 gap-4 items-end animate-slide-up">
-                                    <div className="col-span-5 md:col-span-5 relative">
+                                <div key={index} className="grid grid-cols-2 md:grid-cols-12 gap-4 items-end p-4 md:p-0 bg-gray-50 md:bg-white rounded-xl md:rounded-none border border-gray-100 md:border-0 mb-4 md:mb-0">
+                                    <div className="col-span-2 md:col-span-5 relative">
                                         <label className="text-xs font-semibold text-gray-500 mb-1 block">Description</label>
                                         <input
                                             type="text"
@@ -845,10 +845,10 @@ export default function InvoiceCreatePage() {
                                                 searchProducts(e.target.value, index);
                                             }}
                                             onBlur={() => { handleBlur('items'); dismissProdSuggestions(); }}
-                                            placeholder="Type to search products..."
-                                            autoComplete="off"
                                             className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#065F46] outline-none ${item.description.trim() === '' && touched.items ? 'border-amber-400' : 'border-gray-200'
                                                 }`}
+                                            placeholder={t('createPage.enterDescription', 'Description or search product...')}
+                                            autoComplete="off"
                                         />
                                         {/* Product suggestions dropdown */}
                                         {activeItemIdx === index && prodSuggestions.length > 0 && (
@@ -874,7 +874,7 @@ export default function InvoiceCreatePage() {
                                             </div>
                                         )}
                                     </div>
-                                    <div className="col-span-2">
+                                    <div className="col-span-1 md:col-span-2">
                                         <label className="text-xs font-semibold text-gray-500 mb-1 block">Qty</label>
                                         <input
                                             type="number"
@@ -885,7 +885,7 @@ export default function InvoiceCreatePage() {
                                                 }`}
                                         />
                                     </div>
-                                    <div className="col-span-2 md:col-span-2">
+                                    <div className="col-span-1 md:col-span-2">
                                         <label className="text-xs font-semibold text-gray-500 mb-1 block">Price</label>
                                         <input
                                             type="number"
@@ -897,8 +897,8 @@ export default function InvoiceCreatePage() {
                                                 }`}
                                         />
                                     </div>
-                                    <div className="col-span-2 md:col-span-2">
-                                        <label className="text-xs font-semibold text-gray-500 mb-1 block">TVA</label>
+                                    <div className="col-span-1 md:col-span-2 flex items-center space-x-2">
+                                        <label className="md:hidden text-xs font-semibold text-gray-500 mb-1 block">Tax</label>
                                         <select
                                             value={item.tva ? item.vatRate : -1}
                                             onChange={e => {
@@ -919,10 +919,10 @@ export default function InvoiceCreatePage() {
                                             ))}
                                         </select>
                                     </div>
-                                    <div className="col-span-1 flex justify-end pb-2">
+                                    <div className="col-span-1 md:col-span-1 flex justify-end">
                                         <button
                                             onClick={() => removeItem(index)}
-                                            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                            className="p-2 text-gray-400 hover:text-red-500 border md:border-0 rounded-lg md:rounded-none bg-white md:bg-transparent"
                                         >
                                             <Trash2 size={18} />
                                         </button>
@@ -930,31 +930,31 @@ export default function InvoiceCreatePage() {
                                 </div>
                             ))}
                         </div>
+
+                        <button
+                            onClick={addItem}
+                            className="mt-4 flex items-center text-sm font-semibold text-[#065F46] hover:text-[#065F46] transition-colors"
+                        >
+                            <Plus size={18} className="mr-1" />
+                            Add Item
+                        </button>
                     </div>
 
-                    <button
-                        onClick={addItem}
-                        className="mt-4 flex items-center text-sm font-semibold text-[#065F46] hover:text-[#065F46] transition-colors"
-                    >
-                        <Plus size={18} className="mr-1" />
-                        Add Item
-                    </button>
-                </div>
-
-                {/* Totals */}
-                <div className="border-t border-gray-100 pt-6 flex justify-end">
-                    <div className="w-full md:w-1/3 space-y-3">
-                        <div className="flex justify-between text-gray-600">
-                            <span>Subtotal:</span>
-                            <span>{calculateSubtotal().toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}</span>
-                        </div>
-                        <div className="flex justify-between text-gray-600">
-                            <span>Tax (Approx):</span>
-                            <span>{(calculateTotal() - calculateSubtotal()).toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}</span>
-                        </div>
-                        <div className="border-t border-gray-200 pt-3 flex justify-between text-xl font-bold text-gray-900">
-                            <span>Total:</span>
-                            <span className="text-[#065F46]">{calculateTotal().toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}</span>
+                    {/* Totals */}
+                    <div className="border-t border-gray-100 pt-6 flex justify-end">
+                        <div className="w-full md:w-1/3 space-y-3">
+                            <div className="flex justify-between text-gray-600">
+                                <span>Subtotal:</span>
+                                <span>{calculateSubtotal().toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}</span>
+                            </div>
+                            <div className="flex justify-between text-gray-600">
+                                <span>Tax (Approx):</span>
+                                <span>{(calculateTotal() - calculateSubtotal()).toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}</span>
+                            </div>
+                            <div className="border-t border-gray-200 pt-3 flex justify-between text-xl font-bold text-gray-900">
+                                <span>Total:</span>
+                                <span className="text-[#065F46]">{calculateTotal().toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}</span>
+                            </div>
                         </div>
                     </div>
                 </div>

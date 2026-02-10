@@ -34,6 +34,7 @@
 
 	<ItemGroup>
 		<!-- Use EF Core 8.x for a net8.0 app -->
+		<PackageReference Include="ClosedXML" Version="0.104.2" />
 		<PackageReference Include="Google.Apis.Gmail.v1" Version="1.73.0.4029" />
 		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.23" />
 		<PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.23" />
@@ -43,6 +44,7 @@
 		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
 		<PackageReference Include="MimeKit" Version="4.14.0" />
+		<PackageReference Include="MiniExcel" Version="1.42.0" />
 
 		<!-- Add runtime/provider and design packages (8.x) -->
 		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.*" />

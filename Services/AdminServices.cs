@@ -260,6 +260,7 @@ public class SessionTrackerService
             {
                 Email = s.Email,
                 Role = s.Role,
+                IpAddress = s.IpAddress,
                 LastActivity = s.LastActivity
             }).OrderByDescending(s => s.LastActivity).ToList()
         };
@@ -280,6 +281,7 @@ public class LiveUserInfo
 {
     public string Email { get; set; } = string.Empty;
     public string Role { get; set; } = string.Empty;
+    public string? IpAddress { get; set; }
     public DateTime LastActivity { get; set; }
 }
 
@@ -305,7 +307,12 @@ public class SessionTrackingMiddleware
                      ?? context.User.FindFirst("email")?.Value
                      ?? "unknown";
             var role = context.User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "Unknown";
-            var ip = context.Connection.RemoteIpAddress?.ToString();
+
+            // ── IP Resolution: prefer X-Forwarded-For (proxy), then RemoteIpAddress ──
+            var ip = context.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0]?.Trim()
+                  ?? context.Request.Headers["X-Real-IP"].FirstOrDefault()
+                  ?? context.Connection.RemoteIpAddress?.ToString()
+                  ?? "unknown";
 
             if (!string.IsNullOrEmpty(userId))
             {
