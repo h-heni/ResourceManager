@@ -58,7 +58,10 @@ namespace ResourceManager.Controllers
             {
                 var user = await _userManager.FindByEmailAsync(loginDto.Email);
 
-                var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+                var ip = HttpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0]?.Trim()
+                      ?? HttpContext.Request.Headers["X-Real-IP"].FirstOrDefault()
+                      ?? HttpContext.Connection.RemoteIpAddress?.ToString()
+                      ?? "unknown";
 
                 if (user == null)
                 {
@@ -375,7 +378,10 @@ namespace ResourceManager.Controllers
 
             if (oldToken.IsExpired)
             {
-                var refreshIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+                var refreshIp = HttpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0]?.Trim()
+                             ?? HttpContext.Request.Headers["X-Real-IP"].FirstOrDefault()
+                             ?? HttpContext.Connection.RemoteIpAddress?.ToString()
+                             ?? "unknown";
                 _logger.LogWarning("Expired refresh token used for user {UserId}", oldToken.UserId);
                 _securityAlerts.RecordExpiredRefreshAttempt(oldToken.UserId, refreshIp);
                 ClearRefreshTokenCookie();

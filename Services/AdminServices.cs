@@ -488,7 +488,11 @@ public class SecurityMonitoringMiddleware
 
     public async Task InvokeAsync(HttpContext context, SecurityAlertService securityService)
     {
-        var ip = context.Connection.RemoteIpAddress?.ToString();
+        // Resolve real client IP (proxy-aware)
+        var ip = context.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0]?.Trim()
+              ?? context.Request.Headers["X-Real-IP"].FirstOrDefault()
+              ?? context.Connection.RemoteIpAddress?.ToString();
+
         if (!string.IsNullOrEmpty(ip))
         {
             securityService.CheckRequestRate(ip);
