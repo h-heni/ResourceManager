@@ -464,11 +464,15 @@ namespace ResourceManager.Controllers
                     return new ValidationResult(errors, validRows);
             }
 
-            // Check first row for required columns (normalize keys to strip BOM / whitespace)
+            // Check first row for required columns (normalize keys + apply aliases)
             if (rows.Count > 0)
             {
                 var firstRowKeys = rows[0].Keys
-                    .Select(k => k.Trim().TrimStart('\uFEFF', '\u200B', '\u200C', '\u200D'))
+                    .Select(k =>
+                    {
+                        var clean = k.Trim().TrimStart('\uFEFF', '\u200B', '\u200C', '\u200D');
+                        return ColumnAliases.TryGetValue(clean, out var canonical) ? canonical : clean;
+                    })
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
                 foreach (var col in requiredColumns)
                 {
@@ -509,10 +513,25 @@ namespace ResourceManager.Controllers
                     }
                     if (row.ContainsKey("Amount Paid") && !string.IsNullOrWhiteSpace(row["Amount Paid"]))
                     {
-                        if (TryParseAmount(row["Amount Paid"], out var amt) && amt > 0)
-                            row["Amount Paid"] = amt.ToString(CultureInfo.InvariantCulture); // normalise
+                        if (TryParseAmount(row["Amount Paid"], out var amt) && amt >= 0)
+                        {
+                            // If Amount Paid is 0 but a "Payment Method" column has a numeric
+                            // value (aliased from "Payment"), use that as the actual amount.
+                            if (amt == 0 && row.TryGetValue("Payment Method", out var pmVal)
+                                         && TryParseAmount(pmVal, out var pmAmt) && pmAmt > 0)
+                            {
+                                amt = pmAmt;
+                            }
+
+                            if (amt > 0)
+                                row["Amount Paid"] = amt.ToString(CultureInfo.InvariantCulture);
+                            else
+                                rowErrors.Add("'Amount Paid' must be a positive number (or provide a value in the Payment column)");
+                        }
                         else
-                            rowErrors.Add("'Amount Paid' must be a positive number");
+                        {
+                            rowErrors.Add("'Amount Paid' must be a valid positive number");
+                        }
                     }
                 }
 
@@ -548,6 +567,44 @@ namespace ResourceManager.Controllers
             return new ValidationResult(errors, validRows);
         }
 
+        /// <summary>
+        /// Common column aliases → canonical name mapping.
+        /// Users may have slightly different header names in their CSV/Excel files.
+        /// </summary>
+        private static readonly Dictionary<string, string> ColumnAliases = new(StringComparer.OrdinalIgnoreCase)
+        {
+            // Revenue aliases
+            { "Payment", "Payment Method" },
+            { "Method", "Payment Method" },
+            { "Paiement", "Payment Method" },        // French
+            { "Mode de paiement", "Payment Method" },
+            { "Client", "Client Name" },
+            { "Nom Client", "Client Name" },          // French
+            { "Montant", "Amount Paid" },
+            { "Montant Payé", "Amount Paid" },
+            { "Amount", "Amount Paid" },
+            { "Devise", "Currency" },
+            { "Ref", "Reference" },
+            { "Référence", "Reference" },
+            // Expense aliases
+            { "Fournisseur", "Supplier" },
+            { "Supplier Name", "Supplier" },
+            { "Catégorie", "Category" },
+            // Client aliases
+            { "Nom", "Name" },
+            { "Téléphone", "Phone Number" },
+            { "Phone", "Phone Number" },
+            { "Tel", "Phone Number" },
+            { "Adresse", "Address" },
+            { "Matricule", "Matricule Fiscal" },
+            // Product aliases
+            { "Prix", "Price" },
+            { "Taux TVA", "TVA Rate" },
+            { "TVA", "TVA Rate" },
+            { "VAT Rate", "TVA Rate" },
+            { "VAT", "TVA Rate" },
+        };
+
         private static Dictionary<string, string> NormalizeKeys(Dictionary<string, string> row)
         {
             var normalized = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -555,6 +612,14 @@ namespace ResourceManager.Controllers
             {
                 // Strip BOM (\uFEFF), zero-width spaces, and trim whitespace
                 var key = kvp.Key.Trim().TrimStart('\uFEFF', '\u200B', '\u200C', '\u200D');
+
+                // Apply alias mapping if this key isn't already a canonical name
+                if (ColumnAliases.TryGetValue(key, out var canonical) &&
+                    !normalized.ContainsKey(canonical))
+                {
+                    key = canonical;
+                }
+
                 normalized[key] = kvp.Value?.Trim() ?? "";
             }
             return normalized;
