@@ -1,8 +1,11 @@
 import axios, { AxiosError } from 'axios';
 import type { InternalAxiosRequestConfig } from 'axios';
 
-// Use environment variable for API URL
-const API_URL = import.meta.env.VITE_API_URL || 'https://localhost:7175';
+// Use environment variable for API URL.
+// In production the frontend is served by nginx which reverse-proxies /api
+// to the backend container, so we use a relative URL (empty string).
+// In development Vite's proxy handles /api → https://localhost:7175.
+const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 // ═══════════════════════════════════════════════════════════════
 // IN-MEMORY TOKEN STORE — Never stored in localStorage (XSS-safe)
