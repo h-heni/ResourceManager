@@ -1,7 +1,4 @@
-﻿using Google;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.OpenIdConnect;
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -24,7 +21,6 @@ namespace ResourceManager.Controllers
     [EnableRateLimiting("AuthStrict")]
     public class AuthController : ControllerBase
     {
-        private readonly Supabase.Client _supabase;
         private readonly ILogger<AuthController> _logger;
         private readonly IConfiguration _configuration;
         private readonly AppDbContext _context;
@@ -39,9 +35,8 @@ namespace ResourceManager.Controllers
         private const int RefreshTokenDays = 7;
 
 
-        public AuthController(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager, Supabase.Client supabase, AppDbContext context, ILogger<AuthController> logger, IConfiguration configuration, TimeProvider time, SecurityAlertService securityAlerts, UserCountryService countryService)
+        public AuthController(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager, AppDbContext context, ILogger<AuthController> logger, IConfiguration configuration, TimeProvider time, SecurityAlertService securityAlerts, UserCountryService countryService)
         {
-            _supabase = supabase;
             _logger = logger;
             _configuration = configuration;
             _context = context;
@@ -343,91 +338,8 @@ namespace ResourceManager.Controllers
         }
 
         // ==========================================
-        // 4. GOOGLE SIGN-IN
-        // ==========================================
-        [HttpPost("google-login")]
-        [AllowAnonymous]
-        public async Task<IActionResult> GoogleLogin([FromBody] GoogleLoginDto dto)
-        {
-            try
-            {
-                var payload = await Google.Apis.Auth.GoogleJsonWebSignature.ValidateAsync(dto.IdToken);
-                
-                if (payload == null)
-                    return Unauthorized(new { error = "Invalid Google token" });
-
-                var email = payload.Email;
-                var user = await _userManager.FindByEmailAsync(email);
-
-                bool needsCompanySetup = false;
-
-                if (user == null)
-                {
-                    var company = new Company
-                    {
-                        Name = $"{payload.Name ?? email}'s Company",
-                        CreatedAt = DateTime.UtcNow
-                    };
-                    _context.Companies.Add(company);
-                    await _context.SaveChangesAsync();
-
-                    user = new ApplicationUser
-                    {
-                        UserName = email,
-                        Email = email,
-                        EmailConfirmed = true,
-                        CompanyId = company.Id,
-                        Profile = new UserProfile
-                        {
-                            FirstName = payload.GivenName ?? "",
-                            LastName = payload.FamilyName ?? "",
-                            CreatedAt = DateTime.UtcNow
-                        }
-                    };
-
-                    var result = await _userManager.CreateAsync(user);
-                    if (!result.Succeeded)
-                        return BadRequest(result.Errors);
-
-                    await _userManager.AddToRoleAsync(user, "FreeUser");
-                    needsCompanySetup = true;
-                }
-                else
-                {
-                    needsCompanySetup = user.CompanyId == 0;
-                }
-
-                var roles = await _userManager.GetRolesAsync(user);
-                var role = roles.FirstOrDefault() ?? "FreeUser";
-                var accessToken = GenerateAccessToken(user.Id.ToString(), user.Email!, role, user.CompanyId);
-
-                var refreshToken = await CreateRefreshTokenAsync(user.Id);
-                SetRefreshTokenCookie(refreshToken.Token);
-
-                _logger.LogInformation("Google login for {Email}", email);
-
-                // Record login for country tracking
-                var googleIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-                await RecordUserLoginAsync(user.Id, googleIp);
-
-                return Ok(new
-                {
-                    AccessToken = accessToken,
-                    ExpiresInMinutes = AccessTokenMinutes,
-                    User = new { user.Id, user.Email, Role = role },
-                    NeedsCompanySetup = needsCompanySetup
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Google login failed");
-                return StatusCode(500, new { error = "Google authentication failed." });
-            }
-        }
-
-        // ═══════════════════════════════════════════════════════════════
         // REFRESH TOKEN ENDPOINTS
-        // ═══════════════════════════════════════════════════════════════
+        // ==========================================
 
         /// <summary>
         /// POST: api/auth/refresh — Exchange a valid refresh token for a new access + refresh token pair.
@@ -663,8 +575,8 @@ namespace ResourceManager.Controllers
             var cookieOptions = new CookieOptions
             {
                 HttpOnly = true,
-                Secure = true,
-                SameSite = SameSiteMode.Strict,
+                Secure = false, // Temporarily disabled for HTTP deployment
+                SameSite = SameSiteMode.Lax, // Lax required for HTTP cross-site
                 Expires = DateTime.UtcNow.AddDays(RefreshTokenDays),
                 Path = "/api/auth"  // Only sent to auth endpoints
             };
@@ -676,8 +588,8 @@ namespace ResourceManager.Controllers
             Response.Cookies.Delete("refreshToken", new CookieOptions
             {
                 HttpOnly = true,
-                Secure = true,
-                SameSite = SameSiteMode.Strict,
+                Secure = false,
+                SameSite = SameSiteMode.Lax,
                 Path = "/api/auth"
             });
         }
@@ -698,258 +610,5 @@ namespace ResourceManager.Controllers
 
             return Ok(new { Message = "Password changed successfully" });
         }
-
-        /// <summary>
-        /// Initiates Auth0 login flow. Redirects to Auth0 for authentication.
-        /// </summary>
-        [HttpGet("auth0/login")]
-        [AllowAnonymous]
-        public IActionResult Auth0Login([FromQuery] string? returnUrl = "/")
-        {
-            var properties = new AuthenticationProperties
-            {
-                RedirectUri = Url.Action(nameof(Auth0Callback), new { returnUrl }),
-                Items = { { "scheme", "Auth0" } }
-            };
-            return Challenge(properties, "Auth0");
-        }
-
-        /// <summary>
-        /// Auth0 callback endpoint. Handles the response from Auth0 and issues a JWT token.
-        /// </summary>
-        [HttpGet("auth0/callback")]
-        [AllowAnonymous]
-        public async Task<IActionResult> Auth0Callback([FromQuery] string? returnUrl = "/")
-        {
-            try
-            {
-                // Authenticate using Auth0 scheme
-                var authenticateResult = await HttpContext.AuthenticateAsync("Auth0");
-                
-                if (!authenticateResult.Succeeded || authenticateResult.Principal == null)
-                {
-                    _logger.LogWarning("Auth0 authentication failed");
-                    return Redirect($"{returnUrl}?error=auth_failed");
-                }
-
-                var email = authenticateResult.Principal.FindFirstValue(ClaimTypes.Email) 
-                    ?? authenticateResult.Principal.FindFirstValue("email");
-                var name = authenticateResult.Principal.FindFirstValue(ClaimTypes.Name)
-                    ?? authenticateResult.Principal.FindFirstValue("name");
-                var auth0Id = authenticateResult.Principal.FindFirstValue(ClaimTypes.NameIdentifier)
-                    ?? authenticateResult.Principal.FindFirstValue("sub");
-
-                if (string.IsNullOrEmpty(email))
-                {
-                    _logger.LogWarning("Auth0 login: No email claim found");
-                    return Redirect($"{returnUrl}?error=no_email");
-                }
-
-                // Find or create user
-                var user = await _userManager.FindByEmailAsync(email);
-                
-                if (user == null)
-                {
-                    // Create new user with Auth0 as external provider
-                    // First create a company for the new user
-                    var company = new Company
-                    {
-                        Name = $"{name ?? email}'s Company",
-                        CreatedAt = DateTime.UtcNow
-                    };
-                    _context.Companies.Add(company);
-                    await _context.SaveChangesAsync();
-
-                    user = new ApplicationUser
-                    {
-                        UserName = email,
-                        Email = email,
-                        EmailConfirmed = true, // Auth0 handles verification
-                        CompanyId = company.Id,
-                        Profile = new UserProfile
-                        {
-                            FirstName = name?.Split(' ').FirstOrDefault() ?? "",
-                            LastName = name?.Split(' ').Skip(1).FirstOrDefault() ?? ""
-                        }
-                    };
-
-                    var createResult = await _userManager.CreateAsync(user);
-                    if (!createResult.Succeeded)
-                    {
-                        _logger.LogError("Failed to create user from Auth0: {Errors}", 
-                            string.Join(", ", createResult.Errors.Select(e => e.Description)));
-                        return Redirect($"{returnUrl}?error=user_creation_failed");
-                    }
-
-                    await _userManager.AddToRoleAsync(user, "FreeUser");
-
-                    // Link Auth0 login
-                    await _userManager.AddLoginAsync(user, new UserLoginInfo("Auth0", auth0Id!, "Auth0"));
-                }
-
-                // Get user roles
-                var roles = await _userManager.GetRolesAsync(user);
-                var role = roles.FirstOrDefault() ?? "FreeUser";
-
-                // Issue tokens — access token set in a short-lived cookie for the SPA to read once
-                var accessToken = GenerateAccessToken(user.Id.ToString(), user.Email!, role, user.CompanyId);
-                var refreshToken = await CreateRefreshTokenAsync(user.Id);
-                SetRefreshTokenCookie(refreshToken.Token);
-
-                // Set access token in a temporary cookie the SPA reads and clears
-                Response.Cookies.Append("auth_callback_token", accessToken, new CookieOptions
-                {
-                    HttpOnly = false, // SPA needs to read it
-                    Secure = true,
-                    SameSite = SameSiteMode.Strict,
-                    MaxAge = TimeSpan.FromMinutes(2), // Very short-lived
-                    Path = "/"
-                });
-
-                return Redirect(returnUrl ?? "/");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Auth0 callback failed");
-                return Redirect($"{returnUrl}?error=callback_failed");
-            }
-        }
-
-        /// <summary>
-        /// Initiates Auth0 logout flow.
-        /// </summary>
-        [HttpGet("auth0/logout")]
-        [AllowAnonymous]
-        public async Task<IActionResult> Auth0Logout([FromQuery] string? returnUrl = "/")
-        {
-            await HttpContext.SignOutAsync("Auth0");
-            
-            var auth0Domain = _configuration["Auth0:Domain"];
-            var clientId = _configuration["Auth0:ClientId"];
-            var logoutUrl = $"https://{auth0Domain}/v2/logout?" +
-                $"client_id={clientId}&" +
-                $"returnTo={Uri.EscapeDataString(Request.Scheme + "://" + Request.Host + returnUrl)}";
-            
-            return Redirect(logoutUrl);
-        }
-
-        /// <summary>
-        /// Exchange Auth0 access token for local JWT (for SPA flow).
-        /// VALIDATES the Auth0 token via OIDC userinfo before issuing a local JWT.
-        /// </summary>
-        [HttpPost("auth0/token-exchange")]
-        [AllowAnonymous]
-        public async Task<IActionResult> Auth0TokenExchange([FromBody] Auth0TokenExchangeDto dto)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(dto.AccessToken))
-                    return BadRequest(new { error = "Access token is required." });
-
-                // Validate the Auth0 token by calling Auth0's userinfo endpoint
-                var auth0Domain = _configuration["Auth0:Domain"];
-                if (string.IsNullOrEmpty(auth0Domain))
-                    return StatusCode(500, new { error = "Auth0 not configured." });
-
-                using var httpClient = new HttpClient();
-                httpClient.DefaultRequestHeaders.Authorization =
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", dto.AccessToken);
-
-                var userinfoResponse = await httpClient.GetAsync($"https://{auth0Domain}/userinfo");
-                if (!userinfoResponse.IsSuccessStatusCode)
-                {
-                    _logger.LogWarning("Auth0 token exchange: invalid token (userinfo returned {StatusCode})", userinfoResponse.StatusCode);
-                    return Unauthorized(new { error = "Invalid Auth0 token." });
-                }
-
-                var userinfoJson = await userinfoResponse.Content.ReadAsStringAsync();
-                var userinfo = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(userinfoJson);
-
-                var email = userinfo.TryGetProperty("email", out var emailProp) ? emailProp.GetString() : null;
-                if (string.IsNullOrEmpty(email))
-                {
-                    _logger.LogWarning("Auth0 token exchange: no email in userinfo response");
-                    return Unauthorized(new { error = "No email associated with Auth0 account." });
-                }
-
-                // Now we have a validated email from Auth0 — find or create user
-                var user = await _userManager.FindByEmailAsync(email);
-                bool needsCompanySetup = false;
-
-                if (user == null)
-                {
-                    var name = userinfo.TryGetProperty("name", out var nameProp) ? nameProp.GetString() : null;
-
-                    var company = new Company
-                    {
-                        Name = $"{name ?? email}'s Company",
-                        CreatedAt = DateTime.UtcNow
-                    };
-                    _context.Companies.Add(company);
-                    await _context.SaveChangesAsync();
-
-                    user = new ApplicationUser
-                    {
-                        UserName = email,
-                        Email = email,
-                        EmailConfirmed = true,
-                        CompanyId = company.Id,
-                        Profile = new UserProfile
-                        {
-                            FirstName = name?.Split(' ').FirstOrDefault() ?? "",
-                            LastName = name?.Split(' ').Skip(1).FirstOrDefault() ?? "",
-                            CreatedAt = DateTime.UtcNow
-                        }
-                    };
-
-                    var result = await _userManager.CreateAsync(user);
-                    if (!result.Succeeded)
-                        return BadRequest(new { error = "Failed to create user account." });
-
-                    await _userManager.AddToRoleAsync(user, "FreeUser");
-                    needsCompanySetup = true;
-                }
-                else
-                {
-                    needsCompanySetup = user.CompanyId == 0;
-                }
-
-                var roles = await _userManager.GetRolesAsync(user);
-                var role = roles.FirstOrDefault() ?? "FreeUser";
-                var accessToken = GenerateAccessToken(user.Id.ToString(), user.Email!, role, user.CompanyId);
-
-                var refreshToken = await CreateRefreshTokenAsync(user.Id);
-                SetRefreshTokenCookie(refreshToken.Token);
-
-                // Record login for country tracking
-                var auth0Ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-                await RecordUserLoginAsync(user.Id, auth0Ip);
-
-                return Ok(new
-                {
-                    AccessToken = accessToken,
-                    ExpiresInMinutes = AccessTokenMinutes,
-                    User = new { user.Id, user.Email, Role = role },
-                    NeedsCompanySetup = needsCompanySetup
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Auth0 token exchange failed");
-                return StatusCode(500, new { error = "Auth0 token exchange failed." });
-            }
-        }
-    }
-
-    public class Auth0TokenExchangeDto
-    {
-        public string AccessToken { get; set; } = string.Empty;
-        public string Email { get; set; } = string.Empty;
-        public string? Name { get; set; }
-    }
-
-    public class GoogleLoginDto
-    {
-        public string IdToken { get; set; } = string.Empty;
     }
 } 

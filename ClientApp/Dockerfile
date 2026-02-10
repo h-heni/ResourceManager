@@ -21,11 +21,10 @@ COPY . .
 # Build arguments for environment variables
 # VITE_API_URL is empty — nginx proxies /api to the backend at runtime
 ARG VITE_API_URL=""
-ARG VITE_GOOGLE_CLIENT_ID=""
 
 # Set environment variables for build
 ENV VITE_API_URL=$VITE_API_URL
-ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
+# VITE_GOOGLE_CLIENT_ID removed — Google OAuth temporarily disabled
 
 # Build production bundle
 RUN npm run build

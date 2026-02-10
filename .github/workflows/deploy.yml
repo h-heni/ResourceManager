@@ -75,7 +75,6 @@ jobs:
             ${{ env.WEB_IMAGE }}:${{ github.sha }}
           build-args: |
             VITE_API_URL=
-            VITE_GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

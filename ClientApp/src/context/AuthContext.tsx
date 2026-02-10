@@ -4,22 +4,6 @@ import { setAccessToken } from '../services/api';
 import api from '../services/api';
 import { setAppLanguage } from '../i18n/index';
 
-// Google Identity Services global type (shared with LoginPage)
-declare global {
-    interface Window {
-        google?: {
-            accounts: {
-                id: {
-                    initialize: (config: any) => void;
-                    renderButton: (element: HTMLElement, config: any) => void;
-                    prompt: () => void;
-                    disableAutoSelect: () => void;
-                    revoke: (email: string, callback: () => void) => void;
-                };
-            };
-        };
-    }
-}
 interface User {
     email: string;
     roles: string[];
@@ -101,17 +85,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setLoading(false);
         };
 
-        // Also check for auth_callback_token cookie (set by Auth0 OIDC callback)
-        const callbackToken = document.cookie
-            .split('; ')
-            .find(row => row.startsWith('auth_callback_token='));
-        if (callbackToken) {
-            const token = callbackToken.split('=')[1];
-            setAccessToken(token);
-            // Clear the temporary cookie
-            document.cookie = 'auth_callback_token=; Max-Age=0; Path=/';
-        }
-
         restoreSession();
     }, []);
 
@@ -136,12 +109,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const logout = useCallback(async () => {
         // Dispatch logout event BEFORE clearing state so components can clean up
         window.dispatchEvent(new Event('auth:logout'));
-
-        try {
-            if (window.google?.accounts?.id) {
-                window.google.accounts.id.disableAutoSelect();
-            }
-        } catch (_) { /* Google SDK not loaded */ }
 
         // Call server to revoke refresh token and clear the cookie
         try {

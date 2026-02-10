@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Mail, Lock, User, Building, ArrowRight, Loader } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import api from '../services/api';
 import { cn } from '../lib/utils';
 
 export default function SignUpPage() {
+    const { t } = useTranslation();
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -82,8 +84,8 @@ export default function SignUpPage() {
                                     value={formData.companyName}
                                     onChange={handleChange}
                                     required
-                                    className="fancy-input w-full pl-10"
-                                    placeholder="Your company name"
+                                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
+                                    placeholder={t('auth.placeholders.companyName')}
                                 />
                             </div>
                         </div>
@@ -99,8 +101,8 @@ export default function SignUpPage() {
                                         value={formData.userFirstName}
                                         onChange={handleChange}
                                         required
-                                        className="fancy-input w-full pl-10"
-                                        placeholder="First name"
+                                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
+                                        placeholder={t('auth.placeholders.firstName')}
                                     />
                                 </div>
                             </div>
@@ -113,8 +115,8 @@ export default function SignUpPage() {
                                         value={formData.userLastName}
                                         onChange={handleChange}
                                         required
-                                        className="fancy-input w-full pl-10"
-                                        placeholder="Last name"
+                                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
+                                        placeholder={t('auth.placeholders.lastName')}
                                     />
                                 </div>
                             </div>
@@ -131,8 +133,8 @@ export default function SignUpPage() {
                                     value={formData.userEmail}
                                     onChange={handleChange}
                                     required
-                                    className="fancy-input w-full pl-10"
-                                    placeholder="you@company.com"
+                                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
+                                    placeholder={t('auth.placeholders.email')}
                                 />
                             </div>
                         </div>
@@ -149,8 +151,8 @@ export default function SignUpPage() {
                                     onChange={handleChange}
                                     required
                                     minLength={6}
-                                    className="fancy-input w-full pl-10"
-                                    placeholder="Min. 6 characters"
+                                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
+                                    placeholder={t('auth.placeholders.password')}
                                 />
                             </div>
                         </div>
@@ -167,8 +169,8 @@ export default function SignUpPage() {
                                     onChange={handleChange}
                                     required
                                     minLength={6}
-                                    className="fancy-input w-full pl-10"
-                                    placeholder="Re-enter password"
+                                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
+                                    placeholder={t('auth.placeholders.confirmPassword')}
                                 />
                             </div>
                         </div>

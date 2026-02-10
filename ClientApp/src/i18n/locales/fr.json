@@ -59,7 +59,15 @@
     "loginSuccess": "Connexion réussie",
     "loginError": "Échec de la connexion",
     "signupSuccess": "Compte créé avec succès",
-    "signupError": "Échec de l'inscription"
+    "signupError": "Échec de l'inscription",
+    "placeholders": {
+      "companyName": "Entrez le nom légal de votre entreprise",
+      "firstName": "Votre prénom",
+      "lastName": "Votre nom",
+      "email": "nom@entreprise.com",
+      "password": "Créez un mot de passe (min. 6 car.)",
+      "confirmPassword": "Confirmez votre mot de passe"
+    }
   },
   "nav": {
     "dashboard": "Tableau de bord",

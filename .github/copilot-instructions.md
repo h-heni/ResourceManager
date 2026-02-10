@@ -8,8 +8,8 @@
 | Component | Status | Location |
 |-----------|--------|----------|
 | API Controllers | Complete | [Controllers/](Controllers/) - 10 controllers with full CRUD |
-| JWT Authentication | Complete | [AuthController.cs](Controllers/AuthController.cs) with login, signup, Google OAuth, Auth0 |
-| Auth0 OIDC | Complete | [Program.cs](Program.cs) - OpenID Connect + [AuthController.cs](Controllers/AuthController.cs) |
+| JWT Authentication | Complete | [AuthController.cs](Controllers/AuthController.cs) with login, signup (email/password only) |
+| Auth0 OIDC | **TEMPORARILY DISABLED** | Removed for HTTP deployment — will re-enable when HTTPS is available |
 | Multi-Tenancy | Complete | [AppDbContext.cs](Data/AppDbContext.cs) - global query filters + auto-stamping |
 | Domain Models | Complete | [Models/Models.cs](Models/Models.cs) - all entities defined |
 | Clean Architecture | Complete | Domain/Application/Infrastructure layers with interfaces |
@@ -76,32 +76,33 @@ function InvoicesPage() {
 
 ---
 
-### Phase 3: Auth0 OpenID Connect ✅ COMPLETE
+### Phase 3: Auth0 OpenID Connect — ⏸️ TEMPORARILY DISABLED
 
-**What was done**:
-- Added `Microsoft.AspNetCore.Authentication.OpenIdConnect` package
-- Updated `Program.cs` with `.AddOpenIdConnect("Auth0", ...)` configuration
-- Added Auth0 endpoints in `AuthController.cs`: `/auth0/login`, `/auth0/callback`, `/auth0/logout`
-- Added Auth0 config section in `appsettings.json`
-- Updated `LoginPage.tsx` with Auth0 login button and callback handling
+**Status**: Removed for HTTP-only production deployment. Will re-enable when HTTPS is configured.
 
-**Key Files**:
-- [Program.cs](Program.cs) - Auth0 OIDC configuration (lines 42-130)
-- [Controllers/AuthController.cs](Controllers/AuthController.cs) - Auth0 endpoints
-- [ClientApp/src/pages/LoginPage.tsx](ClientApp/src/pages/LoginPage.tsx) - Auth0 button
+**What was removed**:
+- `Microsoft.AspNetCore.Authentication.OpenIdConnect` NuGet package
+- Auth0 OIDC configuration from `Program.cs`
+- Auth0 endpoints from `AuthController.cs` (auth0/login, auth0/callback, auth0/token-exchange, auth0/logout)
+- Google OAuth endpoint from `AuthController.cs` (google-login)
+- `@auth0/auth0-react` npm package and `Auth0Provider` wrapper from `main.tsx`
+- Google Sign-In SDK and social login buttons from `LoginPage.tsx`
+- Auth0 sections from `appsettings.json`, `appsettings.Staging.json`, `appsettings.Production.json`
+- `VITE_GOOGLE_CLIENT_ID` build arg from Docker files
 
-**Configuration Required** (in appsettings.json or secrets):
-```json
-{
-  "Auth0": {
-    "Domain": "YOUR_AUTH0_DOMAIN.auth0.com",
-    "ClientId": "YOUR_AUTH0_CLIENT_ID", 
-    "ClientSecret": "YOUR_AUTH0_CLIENT_SECRET",
-    "Audience": "YOUR_AUTH0_API_AUDIENCE",
-    "CallbackPath": "/callback"
-  }
-}
-```
+**HTTP compatibility changes**:
+- Cookie `Secure = false`, `SameSite = Lax` in AuthController
+- `UseHttpsRedirection()` and `UseHsts()` commented out in Program.cs
+
+**Current auth**: JWT Bearer only (email/password login → JWT token + HttpOnly refresh cookie)
+
+**To re-enable** (when HTTPS is available):
+1. Re-add `Microsoft.AspNetCore.Authentication.OpenIdConnect` package
+2. Restore Auth0 OIDC config in Program.cs
+3. Restore Auth0 + Google endpoints in AuthController.cs
+4. Re-add `@auth0/auth0-react` and Auth0Provider in main.tsx
+5. Re-add social login buttons to LoginPage.tsx
+6. Set cookie `Secure = true`, uncomment HTTPS redirect
 
 ---
 
@@ -122,11 +123,8 @@ function InvoicesPage() {
 - [ClientApp/Dockerfile](ClientApp/Dockerfile) - Frontend container
 - [docker-compose.yml](docker-compose.yml) - Local dev orchestration
 - Existing JWT generation in `GenerateJwtToken()`
-- Existing login/signup flow
+- Existing login/signup flow (email/password only — Auth0/Google temporarily disabled)
 - Multi-tenancy claim injection (`CompanyId`)
-
-**Auth0 Config Required** (store in secrets):
-- `Auth0__Domain`, `Auth0__ClientId`, `Auth0__ClientSecret`, `Auth0__Audience`
 
 ---
 

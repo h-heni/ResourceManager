@@ -67,7 +67,15 @@
     "loginSuccess": "Login successful",
     "loginError": "Login failed",
     "signupSuccess": "Account created successfully",
-    "signupError": "Registration failed"
+    "signupError": "Registration failed",
+    "placeholders": {
+      "companyName": "Enter your company's full legal name",
+      "firstName": "Your first name",
+      "lastName": "Your last name",
+      "email": "name@company.com",
+      "password": "Create a password (min. 6 chars)",
+      "confirmPassword": "Confirm your password"
+    }
   },
   "nav": {
     "dashboard": "Dashboard",

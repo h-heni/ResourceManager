@@ -48,7 +48,7 @@ services:
       dockerfile: Dockerfile
       args:
         - VITE_API_URL=http://api:8080
-        - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-test}
+        # VITE_GOOGLE_CLIENT_ID removed — Google OAuth temporarily disabled
     container_name: ResourceManager-web-ci
     ports:
       - "80:80"

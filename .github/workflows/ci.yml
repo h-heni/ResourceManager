@@ -80,7 +80,6 @@ jobs:
         run: npm run build
         env:
           VITE_API_URL: ${{ vars.VITE_API_URL || 'https://localhost:7175' }}
-          VITE_GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

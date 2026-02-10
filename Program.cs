@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -52,7 +51,7 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
 
-// 5. AUTHENTICATION (Hybrid: JWT Bearer + Auth0 OIDC)
+// 5. AUTHENTICATION (JWT Bearer only — Auth0 temporarily disabled)
 builder.Services.AddAuthentication(options =>
 {
     // Default to JWT Bearer for API requests
@@ -73,82 +72,6 @@ builder.Services.AddAuthentication(options =>
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured"))),
     };
 });
-
-// Auth0 OpenID Connect Configuration (only register if Auth0 credentials are configured)
-var auth0ClientId = builder.Configuration["Auth0:ClientId"];
-if (!string.IsNullOrEmpty(auth0ClientId) && auth0ClientId != "YOUR_AUTH0_CLIENT_ID")
-{
-    builder.Services.AddAuthentication()
-    .AddOpenIdConnect("Auth0", options =>
-    {
-        var auth0Config = builder.Configuration.GetSection("Auth0");
-        
-        options.Authority = $"https://{auth0Config["Domain"]}";
-        options.ClientId = auth0Config["ClientId"];
-        options.ClientSecret = auth0Config["ClientSecret"];
-        
-        options.ResponseType = "code";
-        options.CallbackPath = new PathString(auth0Config["CallbackPath"] ?? "/callback");
-        options.ClaimsIssuer = "Auth0";
-        
-        options.SaveTokens = true;
-        options.GetClaimsFromUserInfoEndpoint = true;
-
-        // Configure scopes
-        options.Scope.Clear();
-        options.Scope.Add("openid");
-        options.Scope.Add("profile");
-        options.Scope.Add("email");
-
-        // Map Auth0 claims to standard claims
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            NameClaimType = ClaimTypes.Name,
-            RoleClaimType = ClaimTypes.Role
-        };
-
-        options.Events = new OpenIdConnectEvents
-        {
-            // Handle token validation to add CompanyId claim for multi-tenancy
-            OnTokenValidated = async context =>
-            {
-                if (context.Principal?.Identity is ClaimsIdentity identity)
-                {
-                    var email = identity.FindFirst(ClaimTypes.Email)?.Value;
-                    if (!string.IsNullOrEmpty(email))
-                    {
-                        // Look up user in database and add CompanyId claim
-                        var userManager = context.HttpContext.RequestServices
-                            .GetRequiredService<UserManager<ApplicationUser>>();
-                        var user = await userManager.FindByEmailAsync(email);
-                        if (user != null)
-                        {
-                            identity.AddClaim(new Claim("CompanyId", user.CompanyId.ToString()));
-                            var roles = await userManager.GetRolesAsync(user);
-                            foreach (var role in roles)
-                            {
-                                identity.AddClaim(new Claim(ClaimTypes.Role, role));
-                            }
-                        }
-                    }
-                }
-            },
-            OnRedirectToIdentityProviderForSignOut = context =>
-            {
-                var logoutUri = $"https://{builder.Configuration["Auth0:Domain"]}/v2/logout?" +
-                    $"client_id={builder.Configuration["Auth0:ClientId"]}&" +
-                    $"returnTo={Uri.EscapeDataString(context.Request.Scheme + "://" + context.Request.Host)}";
-                context.Response.Redirect(logoutUri);
-                context.HandleResponse();
-                return Task.CompletedTask;
-            }
-        };
-    });
-}
-else
-{
-    Console.WriteLine("⚠️  Auth0 not configured — OIDC login disabled. Set Auth0:ClientId to enable.");
-}
 
 // 6. MVC & API
 builder.Services.AddControllers()
@@ -210,19 +133,6 @@ builder.Services.AddScoped<ResourceManager.Services.IDuePaymentProcessor, Resour
 // Background Service for Scheduled Payments (safety net — runs every 15 min)
 builder.Services.AddHostedService<ResourceManager.Services.ScheduledPaymentService>();
 
-// Supabase Client Configuration
-builder.Services.AddScoped<Supabase.Client>(provider =>
-{
-    var config = provider.GetRequiredService<IConfiguration>();
-    return new Supabase.Client(
-        config["Supabase:Url"] ?? throw new InvalidOperationException("Supabase URL not configured"), 
-        config["Supabase:Key"], 
-        new Supabase.SupabaseOptions
-        {
-            AutoRefreshToken = true,
-            AutoConnectRealtime = false
-        });
-});
 // This registers the system's real clock as the default
 builder.Services.AddSingleton(TimeProvider.System);
 
@@ -372,12 +282,12 @@ app.UseMiddleware<MetricsMiddleware>();
 // Security monitoring middleware (rate + IP anomaly detection)
 app.UseMiddleware<SecurityMonitoringMiddleware>();
 
-// HTTPS redirection
-if (!app.Environment.IsDevelopment())
-{
-    app.UseHttpsRedirection();
-    app.UseHsts();
-}
+// HTTPS redirection disabled temporarily for HTTP production deployment
+// if (!app.Environment.IsDevelopment())
+// {
+//     app.UseHttpsRedirection();
+//     app.UseHsts();
+// }
 
 // Security headers middleware
 app.Use(async (context, next) =>

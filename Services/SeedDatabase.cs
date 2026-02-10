@@ -69,7 +69,7 @@ public static class SeedDatabase
                     }
                 };
 
-                var result = await userManager.CreateAsync(newAdmin, "AdminPassword123!");
+                var result = await userManager.CreateAsync(newAdmin, "April14@2024.ThingtoRemember@"); // Use a strong password in production!
 
                 if (result.Succeeded)
                 {
