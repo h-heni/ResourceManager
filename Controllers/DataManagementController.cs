@@ -464,10 +464,12 @@ namespace ResourceManager.Controllers
                     return new ValidationResult(errors, validRows);
             }
 
-            // Check first row for required columns
+            // Check first row for required columns (normalize keys to strip BOM / whitespace)
             if (rows.Count > 0)
             {
-                var firstRowKeys = rows[0].Keys.Select(k => k.Trim()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var firstRowKeys = rows[0].Keys
+                    .Select(k => k.Trim().TrimStart('\uFEFF', '\u200B', '\u200C', '\u200D'))
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
                 foreach (var col in requiredColumns)
                 {
                     if (!firstRowKeys.Contains(col))
@@ -543,7 +545,9 @@ namespace ResourceManager.Controllers
             var normalized = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var kvp in row)
             {
-                normalized[kvp.Key.Trim()] = kvp.Value?.Trim() ?? "";
+                // Strip BOM (\uFEFF), zero-width spaces, and trim whitespace
+                var key = kvp.Key.Trim().TrimStart('\uFEFF', '\u200B', '\u200C', '\u200D');
+                normalized[key] = kvp.Value?.Trim() ?? "";
             }
             return normalized;
         }

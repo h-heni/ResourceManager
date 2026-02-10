@@ -113,27 +113,20 @@ export default function DataManagementPage() {
     }, [exportDateFrom, exportDateTo]);
 
     // ═══ CSV PARSING ═══
-    const parseCsv = useCallback((text: string): Record<string, string>[] => {
-        const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
-        if (lines.length < 2) return [];
 
-        // Parse header
-        const headers = parseCsvLine(lines[0]);
-        const rows: Record<string, string>[] = [];
-
-        for (let i = 1; i < lines.length; i++) {
-            const values = parseCsvLine(lines[i]);
-            const row: Record<string, string> = {};
-            headers.forEach((h, idx) => {
-                row[h.trim()] = (values[idx] ?? '').trim();
-            });
-            rows.push(row);
+    /** Auto-detect delimiter from the header line: try `;`, `,`, `\t` */
+    const detectDelimiter = (headerLine: string): string => {
+        // Strip BOM if present
+        const clean = headerLine.replace(/^\uFEFF/, '');
+        // Count occurrences of each candidate outside quoted fields
+        for (const delim of [';', ',', '\t']) {
+            // Quick heuristic: if splitting by this delimiter gives ≥2 fields, use it
+            if (parseCsvLineWith(clean, delim).length >= 2) return delim;
         }
+        return ','; // fallback
+    };
 
-        return rows;
-    }, []);
-
-    const parseCsvLine = (line: string): string[] => {
+    const parseCsvLineWith = (line: string, delimiter: string): string[] => {
         const result: string[] = [];
         let current = '';
         let inQuotes = false;
@@ -147,7 +140,7 @@ export default function DataManagementPage() {
                 } else {
                     inQuotes = !inQuotes;
                 }
-            } else if (char === ',' && !inQuotes) {
+            } else if (char === delimiter && !inQuotes) {
                 result.push(current);
                 current = '';
             } else {
@@ -157,6 +150,31 @@ export default function DataManagementPage() {
         result.push(current);
         return result;
     };
+
+    const parseCsv = useCallback((text: string): Record<string, string>[] => {
+        // Strip BOM
+        const clean = text.replace(/^\uFEFF/, '');
+        const lines = clean.split(/\r?\n/).filter(l => l.trim().length > 0);
+        if (lines.length < 2) return [];
+
+        // Auto-detect delimiter from the header row
+        const delimiter = detectDelimiter(lines[0]);
+
+        // Parse header
+        const headers = parseCsvLineWith(lines[0], delimiter);
+        const rows: Record<string, string>[] = [];
+
+        for (let i = 1; i < lines.length; i++) {
+            const values = parseCsvLineWith(lines[i], delimiter);
+            const row: Record<string, string> = {};
+            headers.forEach((h, idx) => {
+                row[h.trim()] = (values[idx] ?? '').trim();
+            });
+            rows.push(row);
+        }
+
+        return rows;
+    }, []);
 
     // ═══ FILE UPLOAD (CSV and XLSX) ═══
     const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
