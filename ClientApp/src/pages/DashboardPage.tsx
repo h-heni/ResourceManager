@@ -11,6 +11,7 @@ import { useAuth } from '../context/AuthContext';
 import { CHART_COLORS, DEFAULT_CURRENCY } from '../lib/currencyUtils';
 import { formatCurrency, formatNumber } from '../lib/formatNumber';
 import SuperAdminDashboard from '../components/SuperAdminDashboard';
+import ErrorBoundary from '../components/ErrorBoundary';
 
 /* ─── Types ─── */
 interface StatusBreakdown {
@@ -367,7 +368,11 @@ export default function DashboardPage() {
     ];
 
     // SuperAdmin sees a completely different dashboard (placed after all hooks)
-    if (isSuperAdmin) return <SuperAdminDashboard />;
+    if (isSuperAdmin) return (
+        <ErrorBoundary scope="SuperAdminDashboard">
+            <SuperAdminDashboard />
+        </ErrorBoundary>
+    );
 
     /* ─── Loading skeleton ─── */
     if (loading) {

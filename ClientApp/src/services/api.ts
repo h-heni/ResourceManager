@@ -89,15 +89,23 @@ api.interceptors.response.use(
                 processQueue(null, newToken);
                 originalRequest.headers.Authorization = `Bearer ${newToken}`;
                 return api(originalRequest);
-            } catch (refreshError) {
+            } catch (refreshError: any) {
                 processQueue(refreshError, null);
-                setAccessToken(null);
-                // Clear user data and redirect to login
-                localStorage.removeItem('user_email');
-                localStorage.removeItem('user_roles');
-                localStorage.removeItem('user_firstName');
-                localStorage.removeItem('user_lastName');
-                window.location.href = '/login';
+
+                // Only clear session on REAL auth failures (server explicitly rejected refresh).
+                // Network errors, timeouts, 5xx — keep session intact so user isn't kicked out.
+                const refreshStatus = refreshError?.response?.status;
+                const isRealAuthFailure = refreshStatus === 401 || refreshStatus === 403;
+
+                if (isRealAuthFailure) {
+                    setAccessToken(null);
+                    localStorage.removeItem('user_email');
+                    localStorage.removeItem('user_roles');
+                    localStorage.removeItem('user_firstName');
+                    localStorage.removeItem('user_lastName');
+                    window.location.href = '/login';
+                }
+
                 return Promise.reject(refreshError);
             } finally {
                 isRefreshing = false;

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '../services/api';
+import ErrorBoundary from './ErrorBoundary';
 import {
     Building2, Users, TrendingUp, TrendingDown, DollarSign,
     FileText, AlertTriangle, Globe, BarChart3, Briefcase,
@@ -238,7 +239,34 @@ export default function SuperAdminDashboard() {
     const fetchOverview = useCallback(async () => {
         try {
             const res = await api.get('/admin/overview');
-            setOverview(res.data);
+            const raw = res.data;
+            // Normalize health object fields to frontend HealthData interface
+            const h = raw?.health ?? {};
+            const normalizedHealth: HealthData = {
+                status: h.status ?? 'Unknown',
+                uptimeSeconds: h.uptimeSeconds ?? 0,
+                totalRequests: h.totalRequests ?? 0,
+                averageResponseTimeMs: h.averageResponseTimeMs ?? 0,
+                errorRate: h.errorRate ?? h.errorRate24h ?? 0,
+                errors24h: h.errors24h ?? h.errorCount24h ?? 0,
+                databaseConnected: typeof h.databaseConnected === 'boolean' ? h.databaseConnected : h.databaseStatus === 'Healthy',
+                timestamp: h.timestamp ?? h.serverStartedAt ?? new Date().toISOString()
+            };
+            // Normalize liveUsers
+            const lu = raw?.liveUsers ?? {};
+            const normalizedLive: LiveUsersData = {
+                activeCount: lu.activeCount ?? lu.totalConnected ?? 0,
+                users: Array.isArray(lu.users) ? lu.users : (Array.isArray(lu.sessions) ? lu.sessions : []),
+                byRole: lu.byRole ?? {}
+            };
+            setOverview({
+                health: normalizedHealth,
+                liveUsers: normalizedLive,
+                recentLogs: Array.isArray(raw?.recentLogs) ? raw.recentLogs : [],
+                recentAlerts: Array.isArray(raw?.recentAlerts) ? raw.recentAlerts : [],
+                totalLogCount: raw?.totalLogCount ?? 0,
+                totalAlertCount: raw?.totalAlertCount ?? 0
+            });
             setError(null);
         } catch {
             setError('Failed to fetch admin overview.');
@@ -248,7 +276,17 @@ export default function SuperAdminDashboard() {
     const fetchHealth = useCallback(async () => {
         try {
             const res = await api.get('/admin/health');
-            setHealth(res.data);
+            const h = res.data ?? {};
+            setHealth({
+                status: h.status ?? 'Unknown',
+                uptimeSeconds: h.uptimeSeconds ?? 0,
+                totalRequests: h.totalRequests ?? 0,
+                averageResponseTimeMs: h.averageResponseTimeMs ?? 0,
+                errorRate: h.errorRate ?? h.errorRate24h ?? 0,
+                errors24h: h.errors24h ?? h.errorCount24h ?? 0,
+                databaseConnected: typeof h.databaseConnected === 'boolean' ? h.databaseConnected : h.databaseStatus === 'Healthy',
+                timestamp: h.timestamp ?? h.serverStartedAt ?? new Date().toISOString()
+            });
         } catch { /* silent */ }
     }, []);
 
@@ -257,21 +295,44 @@ export default function SuperAdminDashboard() {
             const params = new URLSearchParams({ page: String(logPage), pageSize: '20' });
             if (logLevel) params.set('level', logLevel);
             const res = await api.get(`/admin/logs?${params}`);
-            setLogs(res.data);
+            const raw = res.data;
+            // Normalize: backend may use 'data' or 'items' key
+            setLogs({
+                items: Array.isArray(raw?.items) ? raw.items : (Array.isArray(raw?.data) ? raw.data : []),
+                page: raw?.page ?? 1,
+                pageSize: raw?.pageSize ?? 20,
+                totalCount: raw?.totalCount ?? 0,
+                totalPages: raw?.totalPages ?? 1
+            });
         } catch { /* silent */ }
     }, [logPage, logLevel]);
 
     const fetchCountries = useCallback(async () => {
         try {
             const res = await api.get('/admin/users-by-country');
-            setCountries(res.data);
+            const raw = res.data;
+            // Normalize: backend should return { countries, totalLogins } but guard against plain array
+            if (Array.isArray(raw)) {
+                setCountries({ countries: raw, totalLogins: raw.reduce((s: number, c: any) => s + (c.count ?? 0), 0) });
+            } else {
+                setCountries({
+                    countries: Array.isArray(raw?.countries) ? raw.countries : [],
+                    totalLogins: raw?.totalLogins ?? 0
+                });
+            }
         } catch { /* silent */ }
     }, []);
 
     const fetchLiveUsers = useCallback(async () => {
         try {
             const res = await api.get('/admin/live-users');
-            setLiveUsers(res.data);
+            const raw = res.data;
+            // Normalize to LiveUsersData shape
+            setLiveUsers({
+                activeCount: raw?.activeCount ?? raw?.totalConnected ?? 0,
+                users: Array.isArray(raw?.users) ? raw.users : (Array.isArray(raw?.sessions) ? raw.sessions : []),
+                byRole: raw?.byRole ?? {}
+            });
         } catch { /* silent */ }
     }, []);
 
@@ -280,7 +341,15 @@ export default function SuperAdminDashboard() {
             const params = new URLSearchParams({ page: String(alertPage), pageSize: '20' });
             if (alertSeverity) params.set('severity', alertSeverity);
             const res = await api.get(`/admin/security-alerts?${params}`);
-            setAlerts(res.data);
+            const raw = res.data;
+            // Normalize: backend may use 'data' or 'items' key
+            setAlerts({
+                items: Array.isArray(raw?.items) ? raw.items : (Array.isArray(raw?.data) ? raw.data : []),
+                page: raw?.page ?? 1,
+                pageSize: raw?.pageSize ?? 20,
+                totalCount: raw?.totalCount ?? 0,
+                totalPages: raw?.totalPages ?? 1
+            });
         } catch { /* silent */ }
     }, [alertPage, alertSeverity]);
 
@@ -357,7 +426,7 @@ export default function SuperAdminDashboard() {
 
     const renderOverviewTab = () => {
         if (!overview) return <LoadingSkeleton />;
-        const h = overview.health;
+        const h = overview.health ?? {} as HealthData;
         return (
             <div className="space-y-6">
                 {/* Quick health strip */}
@@ -366,28 +435,28 @@ export default function SuperAdminDashboard() {
                         value={h.databaseConnected ? 'Healthy' : 'Degraded'}
                         accent={h.databaseConnected ? 'emerald' : 'red'} />
                     <KpiCard icon={<Clock size={20} />} label="Uptime"
-                        value={formatUptime(h.uptimeSeconds)} accent="blue" />
+                        value={formatUptime(h.uptimeSeconds ?? 0)} accent="blue" />
                     <KpiCard icon={<BarChart3 size={20} />} label="Requests"
-                        value={h.totalRequests.toLocaleString()} accent="purple" />
+                        value={(h.totalRequests ?? 0).toLocaleString()} accent="purple" />
                     <KpiCard icon={<AlertTriangle size={20} />} label="Error Rate"
-                        value={`${(h.errorRate * 100).toFixed(2)}%`}
-                        accent={h.errorRate > 0.05 ? 'red' : 'emerald'} />
+                        value={`${((h.errorRate ?? 0) * 100).toFixed(2)}%`}
+                        accent={(h.errorRate ?? 0) > 0.05 ? 'red' : 'emerald'} />
                 </div>
 
                 {/* Live users strip */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <KpiCard icon={<Wifi size={20} />} label="Live Users"
-                        value={String(overview.liveUsers.activeCount)} accent="cyan" />
+                        value={String(overview.liveUsers?.activeCount ?? 0)} accent="cyan" />
                     <KpiCard icon={<Shield size={20} />} label="Security Alerts"
-                        value={String(overview.totalAlertCount)} accent={overview.totalAlertCount > 0 ? 'amber' : 'emerald'} />
+                        value={String(overview.totalAlertCount ?? 0)} accent={(overview.totalAlertCount ?? 0) > 0 ? 'amber' : 'emerald'} />
                     <KpiCard icon={<ScrollText size={20} />} label="Log Entries"
-                        value={String(overview.totalLogCount)} accent="gray" />
+                        value={String(overview.totalLogCount ?? 0)} accent="gray" />
                     <KpiCard icon={<Building2 size={20} />} label="Tenants"
                         value={String(totalCompanies)} accent="emerald" />
                 </div>
 
                 {/* Recent alerts */}
-                {overview.recentAlerts.length > 0 && (
+                {(overview.recentAlerts?.length ?? 0) > 0 && (
                     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
                         <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
                             <Shield size={16} className="text-amber-600" /> Recent Security Alerts
@@ -407,7 +476,7 @@ export default function SuperAdminDashboard() {
                 )}
 
                 {/* Recent logs */}
-                {overview.recentLogs.length > 0 && (
+                {(overview.recentLogs?.length ?? 0) > 0 && (
                     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
                         <h3 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
                             <ScrollText size={16} className="text-gray-500" /> Recent Logs
@@ -447,19 +516,19 @@ export default function SuperAdminDashboard() {
                             icon={h.databaseConnected ? <CheckCircle className="text-emerald-500" size={28} /> : <XCircle className="text-red-500" size={28} />} />
                         <HealthMetric label="Database" value={h.databaseConnected ? 'Connected' : 'Disconnected'}
                             icon={h.databaseConnected ? <CheckCircle className="text-emerald-500" size={28} /> : <XCircle className="text-red-500" size={28} />} />
-                        <HealthMetric label="Uptime" value={formatUptime(h.uptimeSeconds)}
+                        <HealthMetric label="Uptime" value={formatUptime(h.uptimeSeconds ?? 0)}
                             icon={<Clock className="text-blue-500" size={28} />} />
-                        <HealthMetric label="Total Requests" value={h.totalRequests.toLocaleString()}
+                        <HealthMetric label="Total Requests" value={(h.totalRequests ?? 0).toLocaleString()}
                             icon={<BarChart3 className="text-purple-500" size={28} />} />
-                        <HealthMetric label="Avg Response Time" value={`${h.averageResponseTimeMs.toFixed(1)} ms`}
+                        <HealthMetric label="Avg Response Time" value={`${(h.averageResponseTimeMs ?? 0).toFixed(1)} ms`}
                             icon={<Activity className="text-blue-500" size={28} />} />
-                        <HealthMetric label="Error Rate (24h)" value={`${(h.errorRate * 100).toFixed(2)}%`}
-                            subtitle={`${h.errors24h} errors`}
-                            icon={<AlertTriangle className={h.errorRate > 0.05 ? 'text-red-500' : 'text-emerald-500'} size={28} />} />
+                        <HealthMetric label="Error Rate (24h)" value={`${((h.errorRate ?? 0) * 100).toFixed(2)}%`}
+                            subtitle={`${h.errors24h ?? 0} errors`}
+                            icon={<AlertTriangle className={(h.errorRate ?? 0) > 0.05 ? 'text-red-500' : 'text-emerald-500'} size={28} />} />
                     </div>
                 </div>
                 <div className="text-xs text-gray-400 text-right">
-                    Last checked: {new Date(h.timestamp).toLocaleString()}
+                    Last checked: {h.timestamp ? new Date(h.timestamp).toLocaleString() : 'N/A'}
                 </div>
             </div>
         );
@@ -539,6 +608,8 @@ export default function SuperAdminDashboard() {
 
     const renderCountriesTab = () => {
         if (!countries) return <LoadingSkeleton />;
+        const countryList = Array.isArray(countries.countries) ? countries.countries : [];
+        const totalLogins = countries.totalLogins ?? 0;
         return (
             <div className="space-y-4">
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
@@ -546,14 +617,14 @@ export default function SuperAdminDashboard() {
                         <Globe size={20} className="text-[#065F46]" /> Users by Country
                     </h3>
                     <p className="text-sm text-gray-500 mb-4">
-                        Based on {countries.totalLogins.toLocaleString()} login records (IP geolocation)
+                        Based on {totalLogins.toLocaleString()} login records (IP geolocation)
                     </p>
 
-                    {countries.countries.length === 0 ? (
+                    {countryList.length === 0 ? (
                         <p className="text-gray-400 text-center py-8">No login records yet.</p>
                     ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                            {countries.countries.map(c => (
+                            {countryList.map(c => (
                                 <div key={c.countryCode || c.country}
                                     className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-3 border border-gray-200 hover:shadow-sm transition-shadow">
                                     <div className="flex items-center gap-3">
@@ -583,15 +654,17 @@ export default function SuperAdminDashboard() {
     const renderLiveUsersTab = () => {
         const data = liveUsers || overview?.liveUsers;
         if (!data) return <LoadingSkeleton />;
+        const userList = Array.isArray(data.users) ? data.users : [];
+        const roleEntries = data.byRole ? Object.entries(data.byRole) : [];
         return (
             <div className="space-y-4">
                 {/* Role breakdown */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <KpiCard icon={<Users size={20} />} label="Total Active"
-                        value={String(data.activeCount)} accent="cyan" />
-                    {Object.entries(data.byRole).map(([role, count]) => (
+                        value={String(data.activeCount ?? 0)} accent="cyan" />
+                    {roleEntries.map(([role, count]) => (
                         <KpiCard key={role} icon={<Users size={20} />} label={role}
-                            value={String(count)} accent="blue" />
+                            value={String(count ?? 0)} accent="blue" />
                     ))}
                 </div>
 
@@ -611,20 +684,20 @@ export default function SuperAdminDashboard() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {data.users.map(u => (
-                                    <tr key={u.userId} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                                {userList.map(u => (
+                                    <tr key={u.userId || u.email} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                                         <td className="py-2 px-2 text-gray-700 font-medium">{u.email}</td>
                                         <td className="py-2 px-2">
                                             <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-100 text-blue-700">
                                                 {u.role}
                                             </span>
                                         </td>
-                                        <td className="py-2 px-2 text-gray-500 font-mono text-xs">{u.ipAddress}</td>
-                                        <td className="py-2 px-2 text-gray-500">{u.sessionDurationMinutes.toFixed(0)}m</td>
-                                        <td className="py-2 px-2 text-gray-400 text-xs">{timeAgo(u.lastActivity)}</td>
+                                        <td className="py-2 px-2 text-gray-500 font-mono text-xs">{u.ipAddress ?? '—'}</td>
+                                        <td className="py-2 px-2 text-gray-500">{(u.sessionDurationMinutes ?? 0).toFixed(0)}m</td>
+                                        <td className="py-2 px-2 text-gray-400 text-xs">{u.lastActivity ? timeAgo(u.lastActivity) : '—'}</td>
                                     </tr>
                                 ))}
-                                {data.users.length === 0 && (
+                                {userList.length === 0 && (
                                     <tr><td colSpan={5} className="text-center py-8 text-gray-400">No active sessions.</td></tr>
                                 )}
                             </tbody>
@@ -932,7 +1005,9 @@ export default function SuperAdminDashboard() {
             </div>
 
             {/* Tab Content */}
-            {renderTabContent()}
+            <ErrorBoundary scope={`AdminTab:${activeTab}`} key={activeTab}>
+                {renderTabContent()}
+            </ErrorBoundary>
         </div>
     );
 }

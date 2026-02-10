@@ -77,10 +77,10 @@ public class AdminController : BaseApiController
             snapshot.UptimeSeconds,
             snapshot.TotalRequests,
             snapshot.AverageResponseTimeMs,
-            snapshot.ErrorRate24h,
-            snapshot.ErrorCount24h,
-            snapshot.ServerStartedAt,
-            DatabaseStatus = dbStatus,
+            ErrorRate = snapshot.ErrorRate24h,
+            Errors24h = snapshot.ErrorCount24h,
+            DatabaseConnected = dbStatus == "Healthy",
+            Timestamp = snapshot.ServerStartedAt,
             LogCounts = InMemoryLogSink.GetCountsByLevel()
         });
     }
@@ -107,7 +107,7 @@ public class AdminController : BaseApiController
 
         return Ok(new
         {
-            data = logs.Select(l => new
+            items = logs.Select(l => new
             {
                 l.Id,
                 l.Timestamp,
@@ -172,8 +172,13 @@ public class AdminController : BaseApiController
             })
             .ToList();
 
-        _cache.Set(cacheKey, result, TimeSpan.FromHours(1));
-        return Ok(result);
+        var response = new {
+            Countries = result,
+            TotalLogins = totalUsers
+        };
+
+        _cache.Set(cacheKey, response, TimeSpan.FromHours(1));
+        return Ok(response);
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -187,7 +192,27 @@ public class AdminController : BaseApiController
     public IActionResult GetLiveUsers()
     {
         var snapshot = _sessionTracker.GetSnapshot();
-        return Ok(snapshot);
+
+        // Map to shape expected by frontend LiveUsersData interface
+        return Ok(new
+        {
+            ActiveCount = snapshot.TotalConnected,
+            Users = snapshot.Sessions.Select(s => new
+            {
+                UserId = s.Email, // frontend uses email as identifier
+                s.Email,
+                s.Role,
+                IpAddress = "—", // not tracked in LiveUserInfo
+                s.LastActivity,
+                SessionDurationMinutes = (DateTime.UtcNow - s.LastActivity).TotalMinutes
+            }),
+            ByRole = new Dictionary<string, int>
+            {
+                ["SuperAdmin"] = snapshot.SuperAdminCount,
+                ["Manager"] = snapshot.ManagerCount,
+                ["Employee"] = snapshot.EmployeeCount
+            }
+        });
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -211,7 +236,7 @@ public class AdminController : BaseApiController
 
         return Ok(new
         {
-            data = alerts,
+            items = alerts,
             totalCount,
             page,
             pageSize,
@@ -247,6 +272,26 @@ public class AdminController : BaseApiController
             health.Status = "Degraded";
         }
 
+        var liveMapped = new
+        {
+            ActiveCount = liveUsers.TotalConnected,
+            Users = liveUsers.Sessions.Select(s => new
+            {
+                UserId = s.Email,
+                s.Email,
+                s.Role,
+                IpAddress = "—",
+                s.LastActivity,
+                SessionDurationMinutes = (DateTime.UtcNow - s.LastActivity).TotalMinutes
+            }),
+            ByRole = new Dictionary<string, int>
+            {
+                ["SuperAdmin"] = liveUsers.SuperAdminCount,
+                ["Manager"] = liveUsers.ManagerCount,
+                ["Employee"] = liveUsers.EmployeeCount
+            }
+        };
+
         return Ok(new
         {
             Health = new
@@ -255,14 +300,14 @@ public class AdminController : BaseApiController
                 health.UptimeSeconds,
                 health.TotalRequests,
                 health.AverageResponseTimeMs,
-                health.ErrorRate24h,
-                health.ErrorCount24h,
-                health.ServerStartedAt,
-                DatabaseStatus = dbStatus
+                ErrorRate = health.ErrorRate24h,
+                Errors24h = health.ErrorCount24h,
+                DatabaseConnected = dbStatus == "Healthy",
+                Timestamp = health.ServerStartedAt
             },
-            LiveUsers = liveUsers,
-            AlertSummary = alertSummary,
-            LogSummary = logSummary,
+            LiveUsers = liveMapped,
+            TotalAlertCount = _securityAlerts.GetTotalCount(null),
+            TotalLogCount = InMemoryLogSink.GetTotalCount(null),
             RecentAlerts = _securityAlerts.GetAlerts(1, 5),
             RecentLogs = InMemoryLogSink.GetLogs(1, 5)
         });
