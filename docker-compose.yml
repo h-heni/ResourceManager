@@ -43,7 +43,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: resourcemanager-api
-    # No ports exposed — only the frontend (nginx) can reach it via the internal network
+    ports:
+      - "7175:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
