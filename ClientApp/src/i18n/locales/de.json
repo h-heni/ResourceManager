@@ -133,9 +133,16 @@
     "linkedDelivery": "Verknüpfte Lieferscheine",
     "noPayments": "Keine Zahlungen erfasst",
     "noLinkedDocs": "Keine verknüpften Dokumente gefunden",
+    "lockedAfterPayment": "Gesperrt — Zahlungen registriert",
+    "noRelatedQuote": "Kein verknüpftes Angebot",
+    "relatedDeliveryNotes": "Zugehörige Lieferscheine",
+    "noRelatedDeliveryNotes": "Keine zugehörigen Lieferscheine",
+    "currency": "Währung",
     "qty": "Menge",
     "taxRate": "MwSt %",
     "itemDescription": "Positionsbeschreibung",
+    "totalPaid": "Insgesamt bezahlt",
+    "relatedQuote": "Zugehöriges Angebot",
     "alreadyPaid": "Bereits bezahlt",
     "amountPaid": "Bezahlter Betrag",
     "paymentAmount": "Zahlungsbetrag",
@@ -162,7 +169,8 @@
   "deliveryNote": {
     "title": "Lieferscheine",
     "newDeliveryNote": "Neuer Lieferschein",
-    "noteNumber": "Lieferscheinnummer"
+    "noteNumber": "Lieferscheinnummer",
+    "delivered": "Geliefert"
   },
   "client": {
     "title": "Kunden",

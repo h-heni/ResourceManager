@@ -40,14 +40,14 @@ export default function CompanySetupPage() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-4">
-            <div className="w-full max-w-lg bg-white/90 backdrop-blur-lg rounded-2xl shadow-2xl overflow-hidden animate-fade-in">
+        <div className="min-h-screen flex items-center justify-center bg-[#F9FAFB] p-4">
+            <div className="w-full max-w-lg bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden animate-fade-in">
                 <div className="p-8">
                     <div className="text-center mb-8">
-                        <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-indigo-500 to-pink-500 rounded-full mb-4">
+                        <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-[#065F46] to-[#14B8A6] rounded-full mb-4">
                             <Building className="w-8 h-8 text-white" />
                         </div>
-                        <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-pink-600">
+                        <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-[#065F46]">
                             Complete Your Profile
                         </h1>
                         <p className="text-gray-500 mt-2">Tell us about your company to get started</p>
@@ -63,7 +63,7 @@ export default function CompanySetupPage() {
                                     value={formData.companyName}
                                     onChange={handleChange}
                                     required
-                                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
+                                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
                                     placeholder="Your Company Name"
                                 />
                             </div>
@@ -78,7 +78,7 @@ export default function CompanySetupPage() {
                                     value={formData.address}
                                     onChange={handleChange}
                                     required
-                                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
+                                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
                                     placeholder="Business Address"
                                 />
                             </div>
@@ -94,7 +94,7 @@ export default function CompanySetupPage() {
                                         value={formData.matriculeFiscal}
                                         onChange={handleChange}
                                         required
-                                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
+                                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
                                         placeholder="MF123456"
                                     />
                                 </div>
@@ -107,7 +107,7 @@ export default function CompanySetupPage() {
                                         name="phone"
                                         value={formData.phone}
                                         onChange={handleChange}
-                                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
+                                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
                                         placeholder="+216 XX XXX XXX"
                                     />
                                 </div>
@@ -125,7 +125,7 @@ export default function CompanySetupPage() {
                             disabled={loading}
                             className={cn(
                                 "w-full py-3 px-4 rounded-xl text-white font-semibold shadow-lg transition-all transform hover:scale-[1.02] active:scale-[0.98]",
-                                "bg-gradient-to-r from-indigo-600 to-pink-600 hover:from-indigo-700 hover:to-pink-700",
+                                "bg-[#065F46] hover:bg-[#047857]",
                                 loading && "opacity-70 cursor-not-allowed"
                             )}
                         >

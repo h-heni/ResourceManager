@@ -36,6 +36,7 @@ namespace ResourceManager.Services
         
         // PDF signature & language
         public string? PdfSignatureText { get; set; }
+        public string? PdfSignerPosition { get; set; }
         public string InvoiceLanguage { get; set; } = "fr"; // fr, en, de, ar
         
         // Signature / Cachet image
@@ -51,6 +52,55 @@ namespace ResourceManager.Services
         public bool ShowBankBIC { get; set; } = true;
         public bool ShowBankRIB { get; set; } = true;
         public bool ShowBankIBAN { get; set; } = true;
+
+        /// <summary>
+        /// Creates PdfSettings from company configuration.
+        /// </summary>
+        /// <param name="settings">Company settings (nullable).</param>
+        /// <param name="company">Company entity (nullable).</param>
+        /// <param name="creatorName">Name of the user generating the PDF.</param>
+        /// <param name="currencyOverride">Entity-level currency override (e.g. invoice.CurrencySymbol).</param>
+        /// <param name="languageOverride">Entity-level language override (e.g. invoice.PdfLanguage).</param>
+        /// <param name="previewDefaults">When true, uses preview-friendly defaults for empty fields.</param>
+        public static PdfSettings FromCompanySettings(
+            CompanySettings? settings,
+            Company? company,
+            string creatorName = "",
+            string? currencyOverride = null,
+            string? languageOverride = null,
+            bool previewDefaults = false)
+        {
+            return new PdfSettings
+            {
+                PrimaryColor = settings?.PrimaryColor ?? (previewDefaults ? "#667eea" : "#00AEEF"),
+                SecondaryColor = settings?.SecondaryColor ?? "#764ba2",
+                CurrencySymbol = currencyOverride ?? settings?.CurrencySymbol ?? (previewDefaults ? "TND" : "DT"),
+                ShowLogo = settings?.ShowCompanyLogo ?? true,
+                LogoData = company?.LogoData,
+                FooterText = settings?.PdfFooterText,
+                CompanyName = company?.Name ?? (previewDefaults ? "Your Company" : ""),
+                CompanyAddress = company?.Address ?? (previewDefaults ? "123 Business St" : ""),
+                CompanyTaxId = company?.MatriculeFiscal ?? (previewDefaults ? "000ABC000" : ""),
+                CompanyPhone = company?.Phone ?? (previewDefaults ? "+216 00 000 000" : ""),
+                CustomTaxEnabled = settings?.CustomTaxEnabled ?? true,
+                CustomTaxName = settings?.CustomTaxName ?? "Timbre Fiscal",
+                CustomTaxAmount = settings?.CustomTaxAmount ?? 1.000m,
+                CreatedByName = creatorName,
+                PdfSignatureText = settings?.PdfSignatureText,
+                PdfSignerPosition = settings?.PdfSignerPosition,
+                InvoiceLanguage = languageOverride ?? settings?.InvoiceLanguage ?? "fr",
+                SignatureImageData = settings?.SignatureImageData,
+                ShowSignatureOnPdf = settings?.ShowSignatureOnPdf ?? false,
+                BankName = settings?.BankName,
+                BankBIC = settings?.BankBIC,
+                BankRIB = settings?.BankRIB,
+                BankIBAN = settings?.BankIBAN,
+                ShowBankName = settings?.ShowBankName ?? true,
+                ShowBankBIC = settings?.ShowBankBIC ?? true,
+                ShowBankRIB = settings?.ShowBankRIB ?? true,
+                ShowBankIBAN = settings?.ShowBankIBAN ?? true
+            };
+        }
     }
 
     public class Document<T> : IDocument where T : class, IPdfDocumentData
@@ -159,7 +209,7 @@ namespace ResourceManager.Services
                 (Devis, _)    => "Quote",
                 (DeliveryNote, "fr") => "Bon de livraison",
                 (DeliveryNote, "de") => "Lieferschein",
-                (DeliveryNote, "ar") => "إذن تسليم",
+                (DeliveryNote, "ar") => "وصل التسليم",
                 (DeliveryNote, _)    => "Delivery Note",
                 _ => "Document"
             };
@@ -226,7 +276,7 @@ namespace ResourceManager.Services
         void ComposeTable(IContainer container)
         {
             var lang = Settings.InvoiceLanguage?.ToLower() ?? "fr";
-            var descLabel = lang switch { "fr" => "Désignation", "de" => "Bezeichnung", "ar" => "الوصف", _ => "Description" };
+            var descLabel = lang switch { "fr" => "Déscription", "de" => "Bezeichnung", "ar" => "الوصف", _ => "Description" };
             var qtyLabel = lang switch { "fr" => "Qté", "de" => "Menge", "ar" => "الكمية", _ => "Qty" };
             var taxLabel = lang switch { "fr" => "TVA", "de" => "MwSt", "ar" => "ضريبة", _ => "Tax" };
             var upLabel = lang switch { "fr" => "Prix Unit.", "de" => "Einzelpreis", "ar" => "سعر الوحدة", _ => "Unit Price" };
@@ -522,7 +572,7 @@ namespace ResourceManager.Services
             var paymentMethodsLabel = lang switch { "fr" => "Modes de paiement", "de" => "Zahlungsmethoden", "ar" => "طرق الدفع", _ => "Payment Methods" };
             var paymentMethodsLine1 = lang switch { "fr" => "Virement bancaire / Chèque /", "de" => "Überweisung / Scheck /", "ar" => "تحويل بنكي / شيك /", _ => "Bank Transfer / Check /" };
             var paymentMethodsLine2 = lang switch { "fr" => "Traite / Espèces", "de" => "Wechsel / Bargeld", "ar" => "كمبيالة / نقد", _ => "Bank Draft / Cash" };
-            var subtotalLabel = lang switch { "fr" => "Sous-total", "de" => "Zwischensumme", "ar" => "المجموع الفرعي", _ => "Subtotal" };
+            var subtotalLabel = lang switch { "fr" => "Total H TVA", "de" => "Zwischensumme", "ar" => "المجموع الفرعي", _ => "Subtotal" };
             var vatPrefix = lang switch { "fr" => "TVA", "de" => "MwSt", "ar" => "ضريبة", _ => "VAT" };
             var totalTtcLabel = lang switch { "fr" => "Total TTC", "de" => "Gesamtbetrag", "ar" => "المجموع الكلي", _ => "Total" };
 
@@ -583,45 +633,40 @@ namespace ResourceManager.Services
         void ComposeSignature(IContainer container)
         {
             var lang = Settings.InvoiceLanguage?.ToLower() ?? "fr";
-            var thankYou = lang switch
+            var defaultThankYou = lang switch
             {
                 "fr" => "MERCI POUR VOTRE CONFIANCE",
                 "de" => "VIELEN DANK FÜR IHR VERTRAUEN",
                 "ar" => "شكراً لثقتكم",
                 _ => "THANK YOU FOR YOUR BUSINESS"
             };
+            var footerText = !string.IsNullOrWhiteSpace(Settings.FooterText) ? Settings.FooterText : defaultThankYou;
             container.Row(row =>
             {
                 row.RelativeItem().Column(c =>
                 {
-                    c.Item().PaddingTop(15).Text(thankYou).FontSize(10).SemiBold();
+                    c.Item().PaddingTop(15).Text(footerText).FontSize(10).SemiBold();
                 });
 
                 row.RelativeItem().AlignRight().Column(c =>
                 {
                     // Vertical signature layout:
-                    // 1. Name entered by user
+                    // 1. Signature text (name/title entered by user)
                     // 2. Horizontal line
-                    // 3. Optional title (pdfSignatureText)
+                    // 3. Signer position/title
                     // 4. Signature/cachet image (if enabled)
                     
-                    var signatureName = !string.IsNullOrEmpty(Settings.CreatedByName)
-                        ? Settings.CreatedByName
-                        : Settings.CompanyName;
-                    
-                    // 1. Name
-                    if (!string.IsNullOrEmpty(signatureName))
+                    if (!string.IsNullOrEmpty(Settings.PdfSignatureText))
                     {
-                        c.Item().AlignCenter().PaddingBottom(5).Text(signatureName).FontSize(14).SemiBold();
+                        c.Item().AlignCenter().PaddingTop(3).Text(Settings.PdfSignatureText).FontSize(9).SemiBold();;
                     }
-                    
                     // 2. Horizontal line
                     c.Item().BorderTop(1).BorderColor(Colors.Grey.Medium).PaddingTop(5);
                     
-                    // 3. Optional title
-                    if (!string.IsNullOrEmpty(Settings.PdfSignatureText))
+                    // 3. Signer position/title
+                    if (!string.IsNullOrEmpty(Settings.PdfSignerPosition))
                     {
-                        c.Item().AlignCenter().PaddingTop(3).Text(Settings.PdfSignatureText).FontSize(9).Italic().FontColor(TextGrey);
+                        c.Item().AlignCenter().PaddingTop(3).Text(Settings.PdfSignerPosition).FontSize(8).FontColor(Colors.Grey.Darken1);
                     }
                     
                     // 4. Signature/cachet image if enabled

@@ -35,11 +35,7 @@ namespace ResourceManager.Controllers
         [HttpGet]
         public async Task<IActionResult> GetSettings()
         {
-            var userId = _userManager.GetUserId(User);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
-            
-            var user = await _userManager.FindByIdAsync(userId);
-            
+            var user = await GetCurrentUserAsync(_userManager);
             if (user == null) return Unauthorized();
 
             var settings = await _context.CompanySettings
@@ -110,7 +106,12 @@ namespace ResourceManager.Controllers
                 settings.PdfFooterText,
                 settings.ShowCompanyLogo,
                 settings.PdfSignatureText,
+                settings.PdfSignerPosition,
                 settings.InvoiceLanguage,
+                
+                // File-system language
+                settings.FileSystemLanguage,
+                settings.FileSystemLanguageLocked,
                 
                 // Signature
                 HasSignatureImage = settings.SignatureImageData != null && settings.SignatureImageData.Length > 0,
@@ -171,10 +172,7 @@ namespace ResourceManager.Controllers
                 return BadRequest(new { message = "Only JPEG, PNG, GIF, and WebP images are allowed" });
             }
 
-            var userId = _userManager.GetUserId(User);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
-            
-            var user = await _userManager.FindByIdAsync(userId);
+            var user = await GetCurrentUserAsync(_userManager);
             if (user == null) return Unauthorized();
 
             var company = await _context.Companies.FindAsync(user.CompanyId);
@@ -208,7 +206,9 @@ namespace ResourceManager.Controllers
                         int newHeight = (int)((float)bitmap.Height / bitmap.Width * newWidth);
                         
                         // Resize image
+#pragma warning disable CS0618 // SKFilterQuality is obsolete but SKSamplingOptions not available in this SkiaSharp version
                         using var resizedBitmap = bitmap.Resize(new SkiaSharp.SKImageInfo(newWidth, newHeight), SkiaSharp.SKFilterQuality.High);
+#pragma warning restore CS0618
                         if (resizedBitmap != null)
                         {
                             using var image = SkiaSharp.SKImage.FromBitmap(resizedBitmap);
@@ -249,10 +249,7 @@ namespace ResourceManager.Controllers
         [HttpDelete("logo")]
         public async Task<IActionResult> DeleteLogo()
         {
-            var userId = _userManager.GetUserId(User);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
-            
-            var user = await _userManager.FindByIdAsync(userId);
+            var user = await GetCurrentUserAsync(_userManager);
             if (user == null) return Unauthorized();
 
             var company = await _context.Companies.FindAsync(user.CompanyId);
@@ -278,9 +275,7 @@ namespace ResourceManager.Controllers
             if (!_allowedImageTypes.Contains(file.ContentType.ToLower()))
                 return BadRequest(new { message = "Only JPEG, PNG, GIF, and WebP images are allowed" });
 
-            var userId = _userManager.GetUserId(User);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
-            var user = await _userManager.FindByIdAsync(userId);
+            var user = await GetCurrentUserAsync(_userManager);
             if (user == null) return Unauthorized();
 
             var settings = await _context.CompanySettings.FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
@@ -302,9 +297,7 @@ namespace ResourceManager.Controllers
         [HttpGet("signature")]
         public async Task<IActionResult> GetSignature()
         {
-            var userId = _userManager.GetUserId(User);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
-            var user = await _userManager.FindByIdAsync(userId);
+            var user = await GetCurrentUserAsync(_userManager);
             if (user == null) return Unauthorized();
 
             var settings = await _context.CompanySettings.FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
@@ -318,9 +311,7 @@ namespace ResourceManager.Controllers
         [HttpDelete("signature")]
         public async Task<IActionResult> DeleteSignature()
         {
-            var userId = _userManager.GetUserId(User);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
-            var user = await _userManager.FindByIdAsync(userId);
+            var user = await GetCurrentUserAsync(_userManager);
             if (user == null) return Unauthorized();
 
             var settings = await _context.CompanySettings.FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
@@ -350,35 +341,9 @@ namespace ResourceManager.Controllers
             var userProfile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
             var creatorName = userProfile != null ? $"{userProfile.FirstName} {userProfile.LastName}".Trim() : user.UserName ?? "";
 
-            var pdfSettings = new ResourceManager.Services.PdfSettings
-            {
-                PrimaryColor = companySettings?.PrimaryColor ?? "#667eea",
-                SecondaryColor = companySettings?.SecondaryColor ?? "#764ba2",
-                CurrencySymbol = companySettings?.CurrencySymbol ?? "TND",
-                ShowLogo = companySettings?.ShowCompanyLogo ?? true,
-                LogoData = company?.LogoData,
-                FooterText = companySettings?.PdfFooterText,
-                CompanyName = company?.Name ?? "Your Company",
-                CompanyAddress = company?.Address ?? "123 Business St",
-                CompanyTaxId = company?.MatriculeFiscal ?? "000ABC000",
-                CompanyPhone = company?.Phone ?? "+216 00 000 000",
-                CustomTaxEnabled = companySettings?.CustomTaxEnabled ?? true,
-                CustomTaxName = companySettings?.CustomTaxName ?? "Timbre Fiscal",
-                CustomTaxAmount = companySettings?.CustomTaxAmount ?? 1.000m,
-                CreatedByName = creatorName,
-                PdfSignatureText = companySettings?.PdfSignatureText,
-                InvoiceLanguage = companySettings?.InvoiceLanguage ?? "fr",
-                SignatureImageData = companySettings?.SignatureImageData,
-                ShowSignatureOnPdf = companySettings?.ShowSignatureOnPdf ?? false,
-                BankName = companySettings?.BankName,
-                BankBIC = companySettings?.BankBIC,
-                BankRIB = companySettings?.BankRIB,
-                BankIBAN = companySettings?.BankIBAN,
-                ShowBankName = companySettings?.ShowBankName ?? true,
-                ShowBankBIC = companySettings?.ShowBankBIC ?? true,
-                ShowBankRIB = companySettings?.ShowBankRIB ?? true,
-                ShowBankIBAN = companySettings?.ShowBankIBAN ?? true
-            };
+            var pdfSettings = PdfSettings.FromCompanySettings(
+                companySettings, company, creatorName,
+                previewDefaults: true);
 
             var lang = pdfSettings.InvoiceLanguage?.ToLower() ?? "fr";
 
@@ -421,11 +386,7 @@ namespace ResourceManager.Controllers
         [HttpPut]
         public async Task<IActionResult> UpdateSettings([FromBody] UpdateSettingsDto dto)
         {
-            var userId = _userManager.GetUserId(User);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
-            
-            var user = await _userManager.FindByIdAsync(userId);
-            
+            var user = await GetCurrentUserAsync(_userManager);
             if (user == null) return Unauthorized();
 
             var settings = await _context.CompanySettings
@@ -455,6 +416,7 @@ namespace ResourceManager.Controllers
             if (dto.PdfFooterText != null) settings.PdfFooterText = dto.PdfFooterText;
             if (dto.ShowCompanyLogo.HasValue) settings.ShowCompanyLogo = dto.ShowCompanyLogo.Value;
             if (dto.PdfSignatureText != null) settings.PdfSignatureText = dto.PdfSignatureText;
+            if (dto.PdfSignerPosition != null) settings.PdfSignerPosition = dto.PdfSignerPosition;
             if (dto.InvoiceLanguage != null) settings.InvoiceLanguage = dto.InvoiceLanguage;
             if (dto.ShowSignatureOnPdf.HasValue) settings.ShowSignatureOnPdf = dto.ShowSignatureOnPdf.Value;
             if (dto.BankName != null) settings.BankName = dto.BankName;
@@ -465,6 +427,18 @@ namespace ResourceManager.Controllers
             if (dto.ShowBankBIC.HasValue) settings.ShowBankBIC = dto.ShowBankBIC.Value;
             if (dto.ShowBankRIB.HasValue) settings.ShowBankRIB = dto.ShowBankRIB.Value;
             if (dto.ShowBankIBAN.HasValue) settings.ShowBankIBAN = dto.ShowBankIBAN.Value;
+            
+            // File-system language: set once, immutable after lock
+            if (dto.FileSystemLanguage != null)
+            {
+                if (settings.FileSystemLanguageLocked)
+                {
+                    _logger.LogWarning("Attempt to change locked FileSystemLanguage for company {CompanyId}", user.CompanyId);
+                    return BadRequest(new { message = "File-system language is locked and cannot be changed." });
+                }
+                settings.FileSystemLanguage = dto.FileSystemLanguage;
+                settings.FileSystemLanguageLocked = true; // Lock immediately upon first set
+            }
             
             settings.UpdatedAt = DateTime.UtcNow;
 
@@ -479,11 +453,7 @@ namespace ResourceManager.Controllers
         [HttpPut("company")]
         public async Task<IActionResult> UpdateCompanyInfo([FromBody] UpdateCompanyDto dto)
         {
-            var userId = _userManager.GetUserId(User);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
-            
-            var user = await _userManager.FindByIdAsync(userId);
-            
+            var user = await GetCurrentUserAsync(_userManager);
             if (user == null) return Unauthorized();
 
             var company = await _context.Companies.FindAsync(user.CompanyId);
@@ -604,10 +574,7 @@ namespace ResourceManager.Controllers
                 return BadRequest(new { success = false, message = "Email address is required" });
             }
 
-            var userId = _userManager.GetUserId(User);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
-            
-            var user = await _userManager.FindByIdAsync(userId);
+            var user = await GetCurrentUserAsync(_userManager);
             if (user == null) return Unauthorized();
 
             // Check if Gmail OAuth is connected and verified
@@ -696,10 +663,7 @@ namespace ResourceManager.Controllers
         [HttpGet("email/oauth/status")]
         public async Task<IActionResult> GetGmailOAuthStatus([FromServices] IGmailOAuthService gmailService)
         {
-            var userId = _userManager.GetUserId(User);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
-            
-            var user = await _userManager.FindByIdAsync(userId);
+            var user = await GetCurrentUserAsync(_userManager);
             if (user == null) return Unauthorized();
 
             var status = await gmailService.GetConnectionStatusAsync(user.CompanyId);
@@ -721,10 +685,7 @@ namespace ResourceManager.Controllers
         [HttpGet("email/oauth/connect")]
         public async Task<IActionResult> GetGmailOAuthUrl([FromServices] IGmailOAuthService gmailService, [FromQuery] string? redirectUri)
         {
-            var userId = _userManager.GetUserId(User);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
-            
-            var user = await _userManager.FindByIdAsync(userId);
+            var user = await GetCurrentUserAsync(_userManager);
             if (user == null) return Unauthorized();
 
             try
@@ -785,10 +746,7 @@ namespace ResourceManager.Controllers
                 });
             }
             
-            var userId = _userManager.GetUserId(User);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
-            
-            var user = await _userManager.FindByIdAsync(userId);
+            var user = await GetCurrentUserAsync(_userManager);
             if (user == null) return Unauthorized();
 
             var result = await gmailService.ExchangeCodeForTokenAsync(user.CompanyId, dto.Code, dto.RedirectUri);
@@ -819,10 +777,7 @@ namespace ResourceManager.Controllers
         [HttpDelete("email/oauth/disconnect")]
         public async Task<IActionResult> DisconnectGmail([FromServices] IGmailOAuthService gmailService)
         {
-            var userId = _userManager.GetUserId(User);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
-            
-            var user = await _userManager.FindByIdAsync(userId);
+            var user = await GetCurrentUserAsync(_userManager);
             if (user == null) return Unauthorized();
 
             await gmailService.DisconnectAsync(user.CompanyId);
@@ -834,10 +789,7 @@ namespace ResourceManager.Controllers
         [HttpPost("email/oauth/test")]
         public async Task<IActionResult> TestGmailOAuth([FromServices] IGmailOAuthService gmailService)
         {
-            var userId = _userManager.GetUserId(User);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
-            
-            var user = await _userManager.FindByIdAsync(userId);
+            var user = await GetCurrentUserAsync(_userManager);
             if (user == null) return Unauthorized();
 
             var isConnected = await gmailService.TestConnectionAsync(user.CompanyId);
@@ -882,7 +834,11 @@ namespace ResourceManager.Controllers
         public string? PdfFooterText { get; set; }
         public bool? ShowCompanyLogo { get; set; }
         public string? PdfSignatureText { get; set; }
+        public string? PdfSignerPosition { get; set; }
         public string? InvoiceLanguage { get; set; }
+        
+        // File-system language (set once, immutable after lock)
+        public string? FileSystemLanguage { get; set; }
         
         // Signature
         public bool? ShowSignatureOnPdf { get; set; }

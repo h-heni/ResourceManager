@@ -1,76 +1,103 @@
 # ============================================
-# ResourceManager - Docker Compose (Local Development)
+# ResourceManager - Docker Compose (Production / VPS)
 # ============================================
 # Usage:
-#   docker-compose up --build        # Build and start all services
-#   docker-compose up -d             # Start in background
-#   docker-compose down              # Stop all services
-#   docker-compose logs -f api       # Follow API logs
+#   docker compose up -d              # Start all services (detached)
+#   docker compose down               # Stop all services
+#   docker compose logs -f api        # Follow API logs
+#   docker compose ps                 # List running services
+#
+# IMPORTANT: Create a .env file from .env.example before running!
 # ============================================
 
 services:
   # ============================================
+  # PostgreSQL Database
+  # ============================================
+  postgres_db:
+    image: postgres:16-alpine
+    container_name: postgres_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-resourcemanager}
+      POSTGRES_USER: ${POSTGRES_USER:-rmuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    # No ports exposed — only accessible from the internal network
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - rm-internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rmuser} -d ${POSTGRES_DB:-resourcemanager}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ============================================
   # Backend API (.NET 8)
   # ============================================
   api:
+    image: ${API_IMAGE:-resourcemanager-api:latest}
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ResourceManager-api
-    ports:
-      - "8080:8080"
+    container_name: resourcemanager-api
+    # No ports exposed — only the frontend (nginx) can reach it via the internal network
     environment:
-      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
-      # Database (Supabase-hosted - no local container needed)
-      - ConnectionStrings__DefaultConnection=${DB_CONNECTION_STRING}
+      # Connection string — uses container name 'postgres_db' as host
+      - CONNECTION_STRING=Host=postgres_db;Port=5432;Database=${POSTGRES_DB:-resourcemanager};Username=${POSTGRES_USER:-rmuser};Password=${POSTGRES_PASSWORD:?err};SSL Mode=Prefer
+      - ConnectionStrings__DefaultConnection=Host=postgres_db;Port=5432;Database=${POSTGRES_DB:-resourcemanager};Username=${POSTGRES_USER:-rmuser};Password=${POSTGRES_PASSWORD:?err};SSL Mode=Prefer
       # JWT Configuration
-      - Jwt__Key=${JWT_KEY}
-      - Jwt__Issuer=${JWT_ISSUER:-MyAwesomeApp}
-      - Jwt__Audience=${JWT_AUDIENCE:-MyAwesomeUsers}
+      - Jwt__Key=${JWT_KEY:?Set JWT_KEY in .env}
+      - Jwt__Issuer=${JWT_ISSUER:-ResourceManager}
+      - Jwt__Audience=${JWT_AUDIENCE:-ResourceManager-Users}
       - Jwt__TokenExpirationInMinutes=${JWT_EXPIRATION:-100}
-      # Supabase
-      - Supabase__Url=${SUPABASE_URL}
-      - Supabase__Key=${SUPABASE_KEY}
-      # Google Integration
-      - Google__ClientId=${GOOGLE_CLIENT_ID}
-      - Google__ClientSecret=${GOOGLE_CLIENT_SECRET}
-      - Google__RefreshToken=${GOOGLE_REFRESH_TOKEN}
-      # Auth0 (for future OIDC)
-      - Auth0__Domain=${AUTH0_DOMAIN}
-      - Auth0__ClientId=${AUTH0_CLIENT_ID}
-      - Auth0__ClientSecret=${AUTH0_CLIENT_SECRET}
-      - Auth0__Audience=${AUTH0_AUDIENCE}
+      # Google Integration (optional)
+      - GoogleOptions__ClientId=${GOOGLE_CLIENT_ID:-}
+      - GoogleOptions__ClientSecret=${GOOGLE_CLIENT_SECRET:-}
+      - GoogleOptions__RefreshToken=${GOOGLE_REFRESH_TOKEN:-}
+      # Auth0 (optional)
+      - Auth0__Domain=${AUTH0_DOMAIN:-}
+      - Auth0__ClientId=${AUTH0_CLIENT_ID:-}
+      - Auth0__ClientSecret=${AUTH0_CLIENT_SECRET:-}
+      - Auth0__Audience=${AUTH0_AUDIENCE:-}
     volumes:
-      - ./Logs:/app/Logs  # Persist logs locally
+      - api-logs:/app/Logs
+    depends_on:
+      postgres_db:
+        condition: service_healthy
     networks:
-      - ResourceManager-network
+      - rm-internal
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 15s
 
   # ============================================
-  # Frontend (React + Vite + Nginx)
+  # Frontend (React + Nginx reverse proxy)
   # ============================================
   web:
+    image: ${WEB_IMAGE:-resourcemanager-web:latest}
     build:
       context: ./ClientApp
       dockerfile: Dockerfile
       args:
-        - VITE_API_URL=http://localhost:8080
-        - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-    container_name: ResourceManager-web
+        - VITE_API_URL=
+        - VITE_GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+    container_name: resourcemanager-web
     ports:
-      - "80:80"
+      - "${WEB_PORT:-80}:80"
     depends_on:
       api:
         condition: service_healthy
     networks:
-      - ResourceManager-network
+      - rm-internal
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
@@ -78,12 +105,12 @@ services:
       timeout: 10s
       retries: 3
 
-networks:
-  ResourceManager-network:
-    driver: bridge
+volumes:
+  pgdata:
+    driver: local
+  api-logs:
+    driver: local
 
-# ============================================
-# Volume Notes:
-# - No database volume needed (using Supabase-hosted PostgreSQL)
-# - Logs are persisted to local ./Logs directory
-# ============================================
+networks:
+  rm-internal:
+    driver: bridge

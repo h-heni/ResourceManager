@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, Save, Package, FileText, History, User, Calendar, AlertCircle, CheckCircle } from 'lucide-react';
 import api from '../services/api';
+import { DEFAULT_CURRENCY, CURRENCY_OPTIONS, getCurrencySymbol } from '../lib/currencyUtils';
 
 interface DevisItem {
     description: string;
@@ -60,6 +61,11 @@ export default function DeliveryNoteCreatePage() {
     const [touched, setTouched] = useState<Record<string, boolean>>({});
     const [submitted, setSubmitted] = useState(false);
 
+    // Currency & Language state (per-document override)
+    const [pdfCurrency, setPdfCurrency] = useState('');
+    const [pdfCurrencySymbol, setPdfCurrencySymbol] = useState('');
+    const [pdfLanguage, setPdfLanguage] = useState('');
+
     // Form State
     const [selectedDevisId, setSelectedDevisId] = useState('');
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -83,7 +89,23 @@ export default function DeliveryNoteCreatePage() {
 
     useEffect(() => {
         fetchPendingDevis();
+        fetchCurrencySettings();
     }, []);
+
+    const fetchCurrencySettings = async () => {
+        try {
+            const res = await api.get('/Settings');
+            if (!pdfCurrency) {
+                setPdfCurrency(res.data.currency || DEFAULT_CURRENCY);
+                setPdfCurrencySymbol(res.data.currencySymbol || getCurrencySymbol(res.data.currency) || DEFAULT_CURRENCY);
+            }
+            if (!pdfLanguage) {
+                setPdfLanguage(res.data.invoiceLanguage || 'fr');
+            }
+        } catch (error) {
+            console.error('Error fetching currency settings', error);
+        }
+    };
 
     // Validate form
     const validateForm = (): boolean => {
@@ -262,6 +284,9 @@ export default function DeliveryNoteCreatePage() {
                 date: new Date(date).toISOString(),
                 devisId: parseInt(selectedDevisId),
                 clientId: selectedDevis?.clientId || null,
+                currency: pdfCurrency || undefined,
+                currencySymbol: pdfCurrencySymbol || undefined,
+                pdfLanguage: pdfLanguage || undefined,
                 deliveryNoteItems: items
                     .filter(item => item.description.trim() !== '')
                     .map(item => ({
@@ -302,7 +327,7 @@ export default function DeliveryNoteCreatePage() {
                 <button
                     onClick={handleSubmit}
                     disabled={loading || allFullyDelivered}
-                    className="flex items-center px-6 py-3 bg-emerald-600 text-white rounded-xl shadow-lg hover:bg-emerald-700 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center px-6 py-3 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <Save size={20} className="mr-2" />
                     {loading ? 'Saving...' : 'Save BL'}
@@ -342,6 +367,40 @@ export default function DeliveryNoteCreatePage() {
                     </div>
                 )}
 
+                {/* Currency & Language Selection */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-[#065F46]/5 border border-emerald-100 rounded-xl">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Document Currency</label>
+                        <select
+                            value={pdfCurrency}
+                            onChange={e => {
+                                setPdfCurrency(e.target.value);
+                                setPdfCurrencySymbol(getCurrencySymbol(e.target.value));
+                            }}
+                            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none transition-all"
+                        >
+                            {CURRENCY_OPTIONS.map(opt => (
+                                <option key={opt.code} value={opt.code}>{opt.label}</option>
+                            ))}
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">Currency used on this delivery note's PDF</p>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">PDF Language</label>
+                        <select
+                            value={pdfLanguage}
+                            onChange={e => setPdfLanguage(e.target.value)}
+                            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none transition-all"
+                        >
+                            <option value="fr">Français</option>
+                            <option value="en">English</option>
+                            <option value="de">Deutsch</option>
+                            <option value="ar">العربية</option>
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">Language used on this delivery note's PDF</p>
+                    </div>
+                </div>
+
                 {/* Select Quote (Required) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="md:col-span-2">
@@ -352,7 +411,7 @@ export default function DeliveryNoteCreatePage() {
                             value={selectedDevisId}
                             onChange={e => handleDevisSelection(e.target.value)}
                             onBlur={() => handleBlur('devisId')}
-                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none ${
+                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none ${
                                 errors.devisId && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
                             }`}
                             required
@@ -360,7 +419,7 @@ export default function DeliveryNoteCreatePage() {
                             <option value="">-- Select a Quote --</option>
                             {pendingDevis.map(devis => (
                                 <option key={devis.id} value={devis.id}>
-                                    {devis.number} - {devis.clientName} ({(devis.totalAmount || 0).toLocaleString()} TND)
+                                    {devis.number} - {devis.clientName} ({(devis.totalAmount || 0).toLocaleString()} {pdfCurrencySymbol || DEFAULT_CURRENCY})
                                 </option>
                             ))}
                         </select>
@@ -374,14 +433,14 @@ export default function DeliveryNoteCreatePage() {
                     
                     {/* Show selected quote info - Enhanced compact format */}
                     {selectedDevis && (
-                        <div className="md:col-span-2 p-4 bg-purple-50 border border-purple-200 rounded-xl">
+                        <div className="md:col-span-2 p-4 bg-[#065F46]/5 border border-[#065F46]/20 rounded-xl">
                             <div className="flex items-start space-x-3">
-                                <FileText className="text-purple-600 mt-1 flex-shrink-0" size={20} />
+                                <FileText className="text-[#065F46] mt-1 flex-shrink-0" size={20} />
                                 <div className="flex-1">
                                     <div className="flex items-center justify-between mb-2">
-                                        <h4 className="font-semibold text-purple-900">Quote: {selectedDevis.number}</h4>
+                                        <h4 className="font-semibold text-[#065F46]">Quote: {selectedDevis.number}</h4>
                                         {selectedDevis.createdByUser && (
-                                            <span className="text-xs text-purple-600 flex items-center">
+                                            <span className="text-xs text-[#065F46] flex items-center">
                                                 <User size={12} className="mr-1" />
                                                 {(selectedDevis.createdByUser.firstName || selectedDevis.createdByUser.lastName) 
                                                     ? `${selectedDevis.createdByUser.firstName || ''} ${selectedDevis.createdByUser.lastName || ''}`.trim()
@@ -392,7 +451,7 @@ export default function DeliveryNoteCreatePage() {
                                     {/* Quote items list */}
                                     {selectedDevis.devisItems && selectedDevis.devisItems.length > 0 && (
                                         <div className="mt-2 space-y-1">
-                                            <p className="text-xs font-semibold text-purple-700 uppercase">Items:</p>
+                                            <p className="text-xs font-semibold text-[#065F46] uppercase">Items:</p>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
                                                 {selectedDevis.devisItems.map((item, idx) => {
                                                     const key = item.description.toLowerCase().trim();
@@ -404,7 +463,7 @@ export default function DeliveryNoteCreatePage() {
                                                         <div 
                                                             key={idx} 
                                                             className={`flex items-center justify-between text-sm px-2 py-1 rounded ${
-                                                                fullyDelivered ? 'bg-green-100 text-green-800' : 'bg-purple-100 text-purple-800'
+                                                                fullyDelivered ? 'bg-green-100 text-green-800' : 'bg-[#065F46]/10 text-[#065F46]'
                                                             }`}
                                                         >
                                                             <span className="truncate">{item.description}</span>
@@ -451,7 +510,7 @@ export default function DeliveryNoteCreatePage() {
                             value={date}
                             onChange={e => setDate(e.target.value)}
                             onBlur={() => handleBlur('date')}
-                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none ${
+                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none ${
                                 errors.date && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
                             }`}
                         />
@@ -539,7 +598,7 @@ export default function DeliveryNoteCreatePage() {
                                             value={item.description}
                                             onChange={e => updateItem(index, 'description', e.target.value)}
                                             onBlur={() => handleBlur('items')}
-                                            className={`w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 ${
+                                            className={`w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-[#065F46] ${
                                                 item.description.trim() === '' && touched.items ? 'border-amber-400' : 'border-gray-200'
                                             }`}
                                         />
@@ -547,22 +606,21 @@ export default function DeliveryNoteCreatePage() {
                                     <div className="col-span-2">
                                         <label className="text-xs font-semibold text-gray-500 mb-1 block">
                                             Qty {item.remainingQuantity > 0 && (
-                                                <span className="text-emerald-600">(max: {item.remainingQuantity})</span>
+                                                <span className="text-[#065F46]">(quoted: {item.remainingQuantity})</span>
                                             )}
                                         </label>
                                         <input
                                             type="number"
                                             min="1"
-                                            max={item.remainingQuantity > 0 ? item.remainingQuantity : undefined}
                                             value={item.quantity}
                                             onChange={e => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
-                                            className={`w-full px-3 py-2 border rounded-lg text-right focus:ring-2 focus:ring-emerald-500 ${
-                                                exceedsRemaining ? 'border-red-500 bg-red-50' : 
+                                            className={`w-full px-3 py-2 border rounded-lg text-right focus:ring-2 focus:ring-[#065F46] ${
+                                                exceedsRemaining ? 'border-amber-400 bg-amber-50' : 
                                                 item.quantity <= 0 ? 'border-red-500 bg-red-50' : 'border-gray-200'
                                             }`}
                                         />
                                         {exceedsRemaining && (
-                                            <p className="text-xs text-red-600 mt-1">Exceeds remaining!</p>
+                                            <p className="text-xs text-amber-600 mt-1">Exceeds quoted qty</p>
                                         )}
                                     </div>
                                     <div className="col-span-2 md:col-span-1 text-center">
@@ -582,7 +640,7 @@ export default function DeliveryNoteCreatePage() {
                         })}
                     </div>
 
-                    <button onClick={addItem} className="mt-4 flex items-center text-sm font-semibold text-emerald-600">
+                    <button onClick={addItem} className="mt-4 flex items-center text-sm font-semibold text-[#065F46]">
                         <Plus size={18} className="mr-1" /> Add Item
                     </button>
                 </div>

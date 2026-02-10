@@ -12,6 +12,11 @@ namespace ResourceManager.DTOs
         
         public int? ClientId { get; set; }
         
+        // Per-document currency & language (overrides company defaults)
+        public string? Currency { get; set; }
+        public string? CurrencySymbol { get; set; }
+        public string? PdfLanguage { get; set; }
+        
         public List<CreateDevisItemDto> Items { get; set; } = new List<CreateDevisItemDto>();
     }
 

@@ -1,6 +1,4 @@
-using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.OpenApi;
 using Microsoft.EntityFrameworkCore;
 using ResourceManager.Data;
 using System.ComponentModel.DataAnnotations;
@@ -53,6 +51,9 @@ namespace ResourceManager.Models
         // Company Logo stored as bytes
         public byte[]? LogoData { get; set; }
         public string? LogoContentType { get; set; } // e.g., "image/png", "image/jpeg"
+        
+        // Employee limit — 0 means unlimited
+        public int EmployeeLimit { get; set; } = 0;
         
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; } = default;

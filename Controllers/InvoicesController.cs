@@ -65,6 +65,9 @@ namespace ResourceManager.Controllers
                 i.IsLocked,
                 i.Treated,
                 i.DevisId,
+                i.Currency,
+                i.CurrencySymbol,
+                i.PdfLanguage,
                 AmountPaid = i.Payments?.Where(p => p.Status == "Completed").Sum(p => p.Amount) ?? 0,
                 PendingAmount = i.Payments?.Where(p => p.Status == "Pending").Sum(p => p.Amount) ?? 0,
                 RemainingAmount = (i.TotalAmount ?? 0) - (i.Payments?.Where(p => p.Status == "Completed").Sum(p => p.Amount) ?? 0),
@@ -276,6 +279,9 @@ namespace ResourceManager.Controllers
                 invoice.Status,
                 invoice.IsLocked,
                 invoice.Treated,
+                invoice.Currency,
+                invoice.CurrencySymbol,
+                invoice.PdfLanguage,
                 amountPaid,
                 remainingAmount = (invoice.TotalAmount ?? 0) - amountPaid,
                 payments = invoice.Payments?.Select(p => new
@@ -328,6 +334,10 @@ namespace ResourceManager.Controllers
                 DueDate = dto.DueDate?.ToUniversalTime(), // Payment due date
                 ClientId = dto.ClientId,
                 DevisId = dto.DevisId,
+                // Per-document currency & language (fallback to company settings)
+                Currency = dto.Currency ?? companySettings?.Currency,
+                CurrencySymbol = dto.CurrencySymbol ?? companySettings?.CurrencySymbol,
+                PdfLanguage = dto.PdfLanguage ?? companySettings?.InvoiceLanguage,
                 // Apply custom tax from company settings
                 Tfiscal = companySettings?.CustomTaxEnabled == true ? companySettings.CustomTaxAmount : 0,
                 TfiscalName = companySettings?.CustomTaxName ?? "Timbre Fiscal",
@@ -402,6 +412,9 @@ namespace ResourceManager.Controllers
                 invoice.RemainingAmount,
                 invoice.IsOverdue,
                 invoice.DaysUntilDue,
+                invoice.Currency,
+                invoice.CurrencySymbol,
+                invoice.PdfLanguage,
                 InvoiceItems = invoice.InvoiceItems.Select(i => new {
                     i.Id,
                     i.Description,
@@ -427,16 +440,21 @@ namespace ResourceManager.Controllers
 
              if (invoice == null) return NotFound();
 
-             // Logic: Block update if IsLocked == true or Status == 'Paid'
-             if (invoice.IsLocked || invoice.Status == "Paid")
+             // Logic: Block update if any payment has been made (IsLocked, Paid, or PartiallyPaid)
+             if (invoice.IsLocked || invoice.Status == "Paid" || invoice.Status == "PartiallyPaid")
              {
-                 return BadRequest("Invoice is locked or paid and cannot be modified.");
+                 return BadRequest("Invoice cannot be modified after payments have been registered.");
              }
 
              invoice.Number = dto.Number;
              invoice.Date = dto.Date.ToUniversalTime();
              invoice.DueDate = dto.DueDate?.ToUniversalTime();
              invoice.ClientId = dto.ClientId;
+             
+             // Update per-document currency & language
+             if (dto.Currency != null) invoice.Currency = dto.Currency;
+             if (dto.CurrencySymbol != null) invoice.CurrencySymbol = dto.CurrencySymbol;
+             if (dto.PdfLanguage != null) invoice.PdfLanguage = dto.PdfLanguage;
              
              // Update Items: Simple strategy - remove all and re-add. 
              // Production apps might want diffing, but for this task, replacement is standard for documents.
@@ -595,39 +613,10 @@ namespace ResourceManager.Controllers
             var company = await _context.Companies.FindAsync(user.CompanyId);
 
             // Build PDF settings from company config
-            var pdfSettings = new PdfSettings
-            {
-                PrimaryColor = companySettings?.PrimaryColor ?? "#00AEEF",
-                SecondaryColor = companySettings?.SecondaryColor ?? "#764ba2",
-                CurrencySymbol = companySettings?.CurrencySymbol ?? "DT",
-                ShowLogo = companySettings?.ShowCompanyLogo ?? true,
-                LogoData = company?.LogoData,
-                FooterText = companySettings?.PdfFooterText,
-                CompanyName = company?.Name ?? "",
-                CompanyAddress = company?.Address ?? "",
-                CompanyTaxId = company?.MatriculeFiscal ?? "",
-                CompanyPhone = company?.Phone ?? "",
-                // Custom tax settings
-                CustomTaxEnabled = companySettings?.CustomTaxEnabled ?? true,
-                CustomTaxName = companySettings?.CustomTaxName ?? "Timbre Fiscal",
-                CustomTaxAmount = companySettings?.CustomTaxAmount ?? 1.000m,
-                // Creator name for signature
-                CreatedByName = creatorName,
-                PdfSignatureText = companySettings?.PdfSignatureText,
-                InvoiceLanguage = companySettings?.InvoiceLanguage ?? "fr",
-                // Signature image
-                SignatureImageData = companySettings?.SignatureImageData,
-                ShowSignatureOnPdf = companySettings?.ShowSignatureOnPdf ?? false,
-                // Bank info
-                BankName = companySettings?.BankName,
-                BankBIC = companySettings?.BankBIC,
-                BankRIB = companySettings?.BankRIB,
-                BankIBAN = companySettings?.BankIBAN,
-                ShowBankName = companySettings?.ShowBankName ?? true,
-                ShowBankBIC = companySettings?.ShowBankBIC ?? true,
-                ShowBankRIB = companySettings?.ShowBankRIB ?? true,
-                ShowBankIBAN = companySettings?.ShowBankIBAN ?? true
-            };
+            var pdfSettings = PdfSettings.FromCompanySettings(
+                companySettings, company, creatorName,
+                currencyOverride: invoice.CurrencySymbol,
+                languageOverride: invoice.PdfLanguage);
             
             // Apply custom tax settings to invoice if not already set
             if (invoice.Tfiscal == null || invoice.TfiscalName == null)

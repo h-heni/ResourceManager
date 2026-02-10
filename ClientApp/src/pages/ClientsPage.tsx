@@ -98,7 +98,7 @@ export default function ClientsPage() {
                 </div>
                 <button
                     onClick={() => handleOpenModal()}
-                    className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-xl shadow-lg hover:bg-indigo-700 transition-all transform hover:scale-105"
+                    className="flex items-center px-4 py-2 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all transform hover:scale-105"
                 >
                     <Plus size={20} className="mr-2" />
                     Add Client
@@ -113,7 +113,7 @@ export default function ClientsPage() {
                     placeholder="Search clients by name or matricule..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                    className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent outline-none transition-all"
                 />
             </div>
 
@@ -125,11 +125,11 @@ export default function ClientsPage() {
                     {filteredClients.map((client) => (
                         <div key={client.id} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow group">
                             <div className="flex justify-between items-start mb-4">
-                                <div className="h-12 w-12 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600 font-bold text-lg">
+                                <div className="h-12 w-12 bg-[#065F46]/5 rounded-xl flex items-center justify-center text-[#065F46] font-bold text-lg">
                                     {client.name.substring(0, 2).toUpperCase()}
                                 </div>
                                 <div className="flex space-x-2">
-                                    <button onClick={() => handleOpenModal(client)} className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-gray-50 rounded-lg transition-colors">
+                                    <button onClick={() => handleOpenModal(client)} className="p-2 text-gray-400 hover:text-[#065F46] hover:bg-gray-50 rounded-lg transition-colors">
                                         <Edit2 size={18} />
                                     </button>
                                     <button onClick={() => handleDelete(client.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-gray-50 rounded-lg transition-colors">
@@ -176,7 +176,7 @@ export default function ClientsPage() {
                             required
                             value={formData.name}
                             onChange={e => setFormData({ ...formData, name: e.target.value })}
-                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] outline-none"
                             placeholder="e.g. Acme Corp"
                         />
                     </div>
@@ -187,7 +187,7 @@ export default function ClientsPage() {
                             required
                             value={formData.matriculeFiscal}
                             onChange={e => setFormData({ ...formData, matriculeFiscal: e.target.value })}
-                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] outline-none"
                             placeholder="e.g. 12345678"
                         />
                     </div>
@@ -197,7 +197,7 @@ export default function ClientsPage() {
                             type="text"
                             value={formData.phone}
                             onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] outline-none"
                             placeholder="e.g. +216 55 123 456"
                         />
                     </div>
@@ -206,7 +206,7 @@ export default function ClientsPage() {
                         <textarea
                             value={formData.address}
                             onChange={e => setFormData({ ...formData, address: e.target.value })}
-                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] outline-none"
                             placeholder="Full business address..."
                             rows={3}
                         />
@@ -222,7 +222,7 @@ export default function ClientsPage() {
                         </button>
                         <button
                             type="submit"
-                            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-lg"
+                            className="px-4 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#047857] transition-colors shadow-lg"
                         >
                             {editingClient ? "Save Changes" : "Create Client"}
                         </button>

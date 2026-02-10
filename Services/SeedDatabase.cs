@@ -83,30 +83,7 @@ public static class SeedDatabase
                 }
             }
 
-            // 6. Create Test User (AHT)
-            var testUserEmail = "AHT@gmail.com";
-            var testUser = await userManager.FindByEmailAsync(testUserEmail);
-            if (testUser == null)
-            {
-                var newTestUser = new ApplicationUser
-                {
-                    UserName = testUserEmail,
-                    Email = testUserEmail,
-                    EmailConfirmed = true,
-                    CompanyId = adminCompany.Id, // Same company for testing
-                    Profile = new UserProfile
-                    {
-                        FirstName = "AHT",
-                        LastName = "User"
-                    }
-                };
-                var result = await userManager.CreateAsync(newTestUser, "AHT@gmail.com");
-                if (result.Succeeded)
-                {
-                    await userManager.AddToRoleAsync(newTestUser, "Manager");
-                    Console.WriteLine("✅ Test User (AHT) Created Successfully!");
-                }
-            }
+            
         }
         catch (Exception ex)
         {

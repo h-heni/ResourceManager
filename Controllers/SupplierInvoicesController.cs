@@ -73,6 +73,8 @@ namespace ResourceManager.Controllers
                 PaymentCount = f.Payments.Count,
                 f.FilePath,
                 f.IsDeleted,
+                f.Currency,
+                f.CurrencySymbol,
                 Payments = f.Payments.OrderByDescending(p => p.PaymentDate).Select(p => new
                 {
                     p.Id, p.Amount, p.PaymentDate, p.Notes, p.Status, p.IsScheduled, p.CreatedAt
@@ -256,7 +258,17 @@ namespace ResourceManager.Controllers
             // Handle fournisseur
             int? fournisseurId = dto.FournisseurId;
             string fournisseurName = dto.FournisseurName ?? "Unknown";
-            if (!fournisseurId.HasValue && !string.IsNullOrWhiteSpace(dto.FournisseurName))
+
+            // If FournisseurId is provided, always look up the name from DB
+            if (fournisseurId.HasValue)
+            {
+                var existingById = await _context.Fournisseurs.FindAsync(fournisseurId.Value);
+                if (existingById != null)
+                {
+                    fournisseurName = existingById.Name;
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(dto.FournisseurName))
             {
                 var existing = await _context.Fournisseurs
                     .FirstOrDefaultAsync(f => f.Name == dto.FournisseurName && !f.IsDeleted);
@@ -296,6 +308,9 @@ namespace ResourceManager.Controllers
                 ConfidenceScore = dto.ConfidenceScore,
                 ExtractionStatus = "Confirmed",
                 FournisseurId = fournisseurId,
+                // Per-document currency
+                Currency = dto.Currency,
+                CurrencySymbol = dto.CurrencySymbol,
                 CreatedAt = DateTime.UtcNow,
                 UserId = userId
             };

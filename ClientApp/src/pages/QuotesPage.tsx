@@ -3,6 +3,8 @@ import { Plus, Search, FileText, Calendar, Download, Trash2, Filter, Archive } f
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { formatCurrency } from '../lib/formatNumber';
+import { DEFAULT_CURRENCY } from '../lib/currencyUtils';
 
 interface DevisItem {
     id: number;
@@ -27,6 +29,8 @@ interface Devis {
     status: string;
     treated: boolean;
     devisItems?: DevisItem[];
+    currency?: string;
+    currencySymbol?: string;
 }
 
 export default function QuotesPage() {
@@ -39,6 +43,13 @@ export default function QuotesPage() {
 
     useEffect(() => {
         fetchQuotes();
+    }, []);
+
+    // Refetch when a payment is confirmed/extended via NotificationBell (cascade changes quote status)
+    useEffect(() => {
+        const handler = () => fetchQuotes();
+        window.addEventListener('payment-status-changed', handler);
+        return () => window.removeEventListener('payment-status-changed', handler);
     }, []);
 
     const fetchQuotes = async () => {
@@ -130,7 +141,7 @@ export default function QuotesPage() {
                 </div>
                 <button
                     onClick={() => navigate('/quotes/create')}
-                    className="flex items-center px-4 py-2 bg-purple-600 text-white rounded-xl shadow-lg hover:bg-purple-700 transition-all transform hover:scale-105"
+                    className="flex items-center px-4 py-2 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all transform hover:scale-105"
                 >
                     <Plus size={20} className="mr-2" />
                     Create Quote
@@ -145,7 +156,7 @@ export default function QuotesPage() {
                         placeholder="Search quotes..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+                        className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent outline-none transition-all"
                     />
                 </div>
                 {isManager && (
@@ -153,7 +164,7 @@ export default function QuotesPage() {
                         <button
                             onClick={() => setViewMode('active')}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                                viewMode === 'active' ? 'bg-white shadow-sm text-purple-600' : 'text-gray-500 hover:text-gray-700'
+                                viewMode === 'active' ? 'bg-white shadow-sm text-[#065F46]' : 'text-gray-500 hover:text-gray-700'
                             }`}
                         >
                             <Filter size={16} />
@@ -181,7 +192,7 @@ export default function QuotesPage() {
                             {/* Header */}
                             <div className="flex justify-between items-start mb-4">
                                 <div className="flex items-center space-x-3">
-                                    <div className="h-12 w-12 bg-purple-50 rounded-xl flex items-center justify-center text-purple-600 font-bold">
+                                    <div className="h-12 w-12 bg-[#065F46]/5 rounded-xl flex items-center justify-center text-[#065F46] font-bold">
                                         <FileText size={24} />
                                     </div>
                                     <div>
@@ -192,7 +203,7 @@ export default function QuotesPage() {
                                 <div className="flex items-center space-x-2">
                                     <button
                                         onClick={() => handleDownloadPdf(quote.id, quote.number)}
-                                        className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                                        className="p-2 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
                                         title="Download PDF"
                                     >
                                         <Download size={18} />
@@ -219,7 +230,7 @@ export default function QuotesPage() {
                                     <Calendar size={16} className="mr-2" />
                                     {quote.date ? new Date(quote.date).toLocaleDateString() : 'N/A'}
                                 </span>
-                                <span className="font-bold text-purple-600 text-lg">{(quote.totalAmount ?? 0).toLocaleString()} TND</span>
+                                <span className="font-bold text-[#065F46] text-lg">{formatCurrency(quote.totalAmount, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
                             </div>
 
                             {/* Items Section - Always Visible */}
@@ -231,13 +242,13 @@ export default function QuotesPage() {
                                             <div key={item.id || idx} className="bg-gray-50 p-3 rounded-lg text-sm">
                                                 <div className="flex justify-between items-start">
                                                     <span className="font-medium text-gray-800 flex-1">{item.description}</span>
-                                                    <span className="text-purple-600 font-semibold ml-2">
-                                                        {((item.quantity || 0) * (item.price || 0)).toLocaleString()} TND
+                                                    <span className="text-[#065F46] font-semibold ml-2">
+                                                        {formatCurrency((item.quantity || 0) * (item.price || 0), quote.currencySymbol || DEFAULT_CURRENCY)}
                                                     </span>
                                                 </div>
                                                 <div className="flex justify-between text-xs text-gray-500 mt-1">
                                                     <span>Qty: {item.quantity || 0}</span>
-                                                    <span>Unit Price: {(item.price || 0).toLocaleString()} TND</span>
+                                                    <span>Unit Price: {formatCurrency(item.price, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
                                                     {item.tva && <span className="text-orange-500">+TVA {((item.vatRate ?? 0.19) * 100).toFixed(0)}%</span>}
                                                 </div>
                                             </div>
@@ -252,15 +263,15 @@ export default function QuotesPage() {
                                     <div className="pt-3 mt-3 border-t border-gray-200 space-y-1">
                                         <div className="flex justify-between text-sm text-gray-600">
                                             <span>Subtotal:</span>
-                                            <span>{(quote.subTotal ?? 0).toLocaleString()} TND</span>
+                                            <span>{formatCurrency(quote.subTotal, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
                                         </div>
                                         <div className="flex justify-between text-sm text-gray-600">
                                             <span>Tax:</span>
-                                            <span>{(quote.taxAmount ?? 0).toLocaleString()} TND</span>
+                                            <span>{formatCurrency(quote.taxAmount, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
                                         </div>
-                                        <div className="flex justify-between text-sm font-bold text-purple-600">
+                                        <div className="flex justify-between text-sm font-bold text-[#065F46]">
                                             <span>Total:</span>
-                                            <span>{(quote.totalAmount ?? 0).toLocaleString()} TND</span>
+                                            <span>{formatCurrency(quote.totalAmount, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
                                         </div>
                                     </div>
                                 )}
@@ -269,8 +280,8 @@ export default function QuotesPage() {
                     ))}
 
                     {filteredQuotes.length === 0 && (
-                        <div className="col-span-full text-center py-12 bg-purple-50 rounded-2xl border border-dashed border-purple-200">
-                            <FileText size={48} className="mx-auto text-purple-300 mb-4" />
+                        <div className="col-span-full text-center py-12 bg-[#065F46]/5 rounded-2xl border border-dashed border-[#065F46]/20">
+                            <FileText size={48} className="mx-auto text-[#065F46]/30 mb-4" />
                             <p className="text-gray-500 font-medium">No quotes found.</p>
                             <p className="text-sm text-gray-400 mt-1">Create your first quote to get started.</p>
                         </div>

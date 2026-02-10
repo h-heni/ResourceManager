@@ -33,6 +33,8 @@ namespace ResourceManager.Controllers
 
             var query = _context.DeliveryNotes
                 .Include(dn => dn.Client)
+                .Include(dn => dn.Devis)
+                .Include(dn => dn.Invoice)
                 .OrderByDescending(dn => dn.Date);
 
             var totalCount = await query.CountAsync();
@@ -50,6 +52,8 @@ namespace ResourceManager.Controllers
                     dn.Treated,
                     dn.DevisId,
                     dn.InvoiceId,
+                    DevisNumber = dn.Devis != null ? dn.Devis.Number : null,
+                    InvoiceNumber = dn.Invoice != null ? dn.Invoice.Number : null,
                     ItemsCount = dn.DeliveryNoteItems.Count
                 })
                 .ToListAsync();
@@ -71,7 +75,7 @@ namespace ResourceManager.Controllers
                 .Include(dn => dn.Client)
                 .Include(dn => dn.DeliveryNoteItems)
                 .Include(dn => dn.CreatedByUser)
-                    .ThenInclude(u => u.Profile)
+                    .ThenInclude(u => u!.Profile)
                 .FirstOrDefaultAsync(dn => dn.Id == id);
 
             if (note == null) return NotFound();
@@ -118,6 +122,10 @@ namespace ResourceManager.Controllers
                 Date = dto.Date.ToUniversalTime(), // Ensure UTC
                 ClientId = dto.ClientId, // If linked to Client directly
                 InvoiceId = dto.InvoiceId, // Linked Invoice
+                // Per-document currency & language
+                Currency = dto.Currency,
+                CurrencySymbol = dto.CurrencySymbol,
+                PdfLanguage = dto.PdfLanguage,
                 
                 CreatedByUserId = userId,
                 CreatedAt = DateTime.UtcNow
@@ -187,25 +195,10 @@ namespace ResourceManager.Controllers
             var company = await _context.Companies.FindAsync(user.CompanyId);
 
             // Build PDF settings from company config
-            var pdfSettings = new PdfSettings
-            {
-                PrimaryColor = companySettings?.PrimaryColor ?? "#00AEEF",
-                SecondaryColor = companySettings?.SecondaryColor ?? "#764ba2",
-                CurrencySymbol = companySettings?.CurrencySymbol ?? "DT",
-                ShowLogo = companySettings?.ShowCompanyLogo ?? true,
-                LogoData = company?.LogoData,
-                FooterText = companySettings?.PdfFooterText,
-                CompanyName = company?.Name ?? "",
-                CompanyAddress = company?.Address ?? "",
-                CompanyTaxId = company?.MatriculeFiscal ?? "",
-                CompanyPhone = company?.Phone ?? "",
-                // Creator name for signature
-                CreatedByName = creatorName,
-                PdfSignatureText = companySettings?.PdfSignatureText,
-                InvoiceLanguage = companySettings?.InvoiceLanguage ?? "fr",
-                SignatureImageData = companySettings?.SignatureImageData,
-                ShowSignatureOnPdf = companySettings?.ShowSignatureOnPdf ?? false
-            };
+            var pdfSettings = PdfSettings.FromCompanySettings(
+                companySettings, company, creatorName,
+                currencyOverride: note.CurrencySymbol,
+                languageOverride: note.PdfLanguage);
 
             var document = new Document<DeliveryNote>(note, pdfSettings);
             var pdfData = document.GeneratePdf();

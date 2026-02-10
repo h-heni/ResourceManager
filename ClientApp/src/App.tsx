@@ -1,13 +1,12 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import LoginPage from './pages/LoginPage';
-import DashboardLayout from './layouts/DashboardLayout';
-import DashboardPage from './pages/DashboardPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 
-// OPTIMIZATION: Lazy load non-critical pages for faster initial load
-// These pages will only be downloaded when the user navigates to them
+// OPTIMIZATION: Lazy load all authenticated pages for faster initial load
+const DashboardLayout = lazy(() => import('./layouts/DashboardLayout'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const ClientsPage = lazy(() => import('./pages/ClientsPage'));
 const SuppliersPage = lazy(() => import('./pages/SuppliersPage'));
 const SupplierInvoicesPage = lazy(() => import('./pages/SupplierInvoicesPage'));
@@ -20,15 +19,15 @@ const DeliveryNoteCreatePage = lazy(() => import('./pages/DeliveryNoteCreatePage
 const UsersPage = lazy(() => import('./pages/UsersPage'));
 const SignUpPage = lazy(() => import('./pages/SignUpPage'));
 const CompanySetupPage = lazy(() => import('./pages/CompanySetupPage'));
-const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const ExpensesPage = lazy(() => import('./pages/ExpensesPage'));
 const ProductServicesPage = lazy(() => import('./pages/ProductServicesPage'));
+const DataManagementPage = lazy(() => import('./pages/DataManagementPage'));
 
 // Loading fallback for lazy-loaded pages
 const PageLoader = () => (
   <div className="flex items-center justify-center h-64">
-    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#065F46]"></div>
   </div>
 );
 
@@ -42,9 +41,9 @@ function App() {
 
         {/* Protected Routes */}
         <Route element={<ProtectedRoute />}>
-          <Route path="/" element={<DashboardLayout />}>
+          <Route path="/" element={<Suspense fallback={<PageLoader />}><DashboardLayout /></Suspense>}>
             <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="dashboard" element={<DashboardPage />} />
+            <Route path="dashboard" element={<Suspense fallback={<PageLoader />}><DashboardPage /></Suspense>} />
             <Route path="clients" element={<Suspense fallback={<PageLoader />}><ClientsPage /></Suspense>} />
             <Route path="suppliers" element={<Suspense fallback={<PageLoader />}><SuppliersPage /></Suspense>} />
             <Route path="supplier-invoices" element={<Suspense fallback={<PageLoader />}><SupplierInvoicesPage /></Suspense>} />
@@ -57,9 +56,9 @@ function App() {
             <Route path="delivery-notes/create" element={<Suspense fallback={<PageLoader />}><DeliveryNoteCreatePage /></Suspense>} />
             <Route path="expenses" element={<Suspense fallback={<PageLoader />}><ExpensesPage /></Suspense>} />
             <Route path="products" element={<Suspense fallback={<PageLoader />}><ProductServicesPage /></Suspense>} />
+            <Route path="data-management" element={<Suspense fallback={<PageLoader />}><DataManagementPage /></Suspense>} />
             <Route path="users" element={<Suspense fallback={<PageLoader />}><UsersPage /></Suspense>} />
             <Route path="settings" element={<Suspense fallback={<PageLoader />}><SettingsPage /></Suspense>} />
-            <Route path="profile" element={<Suspense fallback={<PageLoader />}><ProfilePage /></Suspense>} />
           </Route>
         </Route>
 

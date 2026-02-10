@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-    X, FileText, User, DollarSign, CreditCard, Package, 
+    X, FileText, User, DollarSign, CreditCard, Package,
     ClipboardList, Truck, CheckCircle, AlertCircle, Clock, Edit2,
-    Download, Mail, History, Receipt
+    Download, Mail, History, Receipt, Lock
 } from 'lucide-react';
 import api from '../services/api';
+import { formatCurrency as fmtCurrency } from '../lib/formatNumber';
+import { DEFAULT_CURRENCY } from '../lib/currencyUtils';
 
 interface Payment {
     id: number;
@@ -68,6 +70,8 @@ interface InvoiceDetails {
     updatedAt?: string;
     createdByUserName?: string;
     notes?: string;
+    currency?: string;
+    currencySymbol?: string;
 }
 
 interface Props {
@@ -79,13 +83,13 @@ interface Props {
     isManager?: boolean;
 }
 
-export default function InvoiceDetailView({ 
-    invoiceId, 
-    onClose, 
-    onEdit, 
-    onDownloadPdf, 
+export default function InvoiceDetailView({
+    invoiceId,
+    onClose,
+    onEdit,
+    onDownloadPdf,
     onSendEmail,
-    isManager = false 
+    isManager = false
 }: Props) {
     const { t } = useTranslation();
     const [invoice, setInvoice] = useState<InvoiceDetails | null>(null);
@@ -124,7 +128,9 @@ export default function InvoiceDetailView({
     const getStatusBadge = (status: string) => {
         const statusConfig: Record<string, { bg: string; text: string; icon: any }> = {
             'Paid': { bg: 'bg-emerald-100', text: 'text-emerald-800', icon: CheckCircle },
+            'PartiallyPaid': { bg: 'bg-blue-100', text: 'text-blue-800', icon: Clock },
             'Partial': { bg: 'bg-amber-100', text: 'text-amber-800', icon: Clock },
+            'Unpaid': { bg: 'bg-amber-100', text: 'text-amber-800', icon: AlertCircle },
             'Pending': { bg: 'bg-blue-100', text: 'text-blue-800', icon: AlertCircle },
             'Overdue': { bg: 'bg-red-100', text: 'text-red-800', icon: AlertCircle },
             'Cancelled': { bg: 'bg-gray-100', text: 'text-gray-800', icon: X },
@@ -134,18 +140,21 @@ export default function InvoiceDetailView({
         return (
             <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${config.bg} ${config.text}`}>
                 <Icon size={14} className="mr-1" />
-                {status}
+                {t(`invoice.status.${status}`, status)}
             </span>
         );
     };
 
+    // Use per-document currency, falling back to 'TND'
+    const getCurrencySymbol = () => invoice?.currencySymbol || DEFAULT_CURRENCY;
+
     const formatCurrency = (amount: number) => {
-        return new Intl.NumberFormat('fr-TN', {
-            style: 'decimal',
-            minimumFractionDigits: 3,
-            maximumFractionDigits: 3
-        }).format(amount) + ' TND';
+        return fmtCurrency(amount, getCurrencySymbol());
     };
+
+    // Edit lock: cannot edit once ANY payment has been registered  
+    const hasPayments = invoice ? (invoice.payments && invoice.payments.length > 0) : false;
+    const canEdit = isManager && !invoice?.isLocked && !hasPayments && invoice?.status !== 'Paid' && invoice?.status !== 'PartiallyPaid';
 
     const formatDate = (date: string) => {
         return new Date(date).toLocaleDateString('fr-FR', {
@@ -159,7 +168,7 @@ export default function InvoiceDetailView({
         return (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
                 <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-600 border-t-transparent"></div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#065F46] border-t-transparent"></div>
                 </div>
             </div>
         );
@@ -170,13 +179,13 @@ export default function InvoiceDetailView({
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
                 <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md text-center">
                     <AlertCircle className="mx-auto text-red-500 mb-4" size={48} />
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Error</h3>
-                    <p className="text-gray-600 mb-4">{error || 'Failed to load invoice'}</p>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('common.error')}</h3>
+                    <p className="text-gray-600 mb-4">{error || t('createPage.loadFailed')}</p>
                     <button
                         onClick={onClose}
                         className="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
                     >
-                        Close
+                        {t('common.close')}
                     </button>
                 </div>
             </div>
@@ -194,7 +203,7 @@ export default function InvoiceDetailView({
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden animate-scale-up">
                 {/* Header */}
-                <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4 flex items-center justify-between">
+                <div className="bg-[#065F46] px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center space-x-4">
                         <div className="bg-white/20 p-3 rounded-xl">
                             <Receipt className="text-white" size={24} />
@@ -203,7 +212,7 @@ export default function InvoiceDetailView({
                             <h2 className="text-xl font-bold text-white">
                                 {t('invoice.title')} #{invoice.number}
                             </h2>
-                            <p className="text-indigo-200 text-sm">
+                            <p className="text-white/70 text-sm">
                                 {invoice.clientName} • {formatDate(invoice.date)}
                             </p>
                         </div>
@@ -221,15 +230,20 @@ export default function InvoiceDetailView({
 
                 {/* Action Buttons */}
                 <div className="px-6 py-3 bg-gray-50 border-b flex items-center space-x-3">
-                    {isManager && !invoice.isLocked && (
+                    {canEdit ? (
                         <button
                             onClick={() => onEdit?.(invoice.id)}
-                            className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                            className="flex items-center px-4 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#047857] transition-colors"
                         >
                             <Edit2 size={16} className="mr-2" />
                             {t('common.edit')}
                         </button>
-                    )}
+                    ) : hasPayments && isManager ? (
+                        <div className="flex items-center px-4 py-2 bg-gray-100 text-gray-500 rounded-lg cursor-not-allowed">
+                            <Lock size={16} className="mr-2" />
+                            {t('invoice.lockedAfterPayment', 'Locked (payments registered)')}
+                        </div>
+                    ) : null}
                     <button
                         onClick={() => onDownloadPdf?.(invoice.id, invoice.number)}
                         className="flex items-center px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
@@ -253,11 +267,10 @@ export default function InvoiceDetailView({
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
-                                className={`flex items-center space-x-2 px-4 py-3 border-b-2 font-medium transition-colors ${
-                                    activeTab === tab.id
-                                        ? 'border-indigo-600 text-indigo-600'
-                                        : 'border-transparent text-gray-500 hover:text-gray-700'
-                                }`}
+                                className={`flex items-center space-x-2 px-4 py-3 border-b-2 font-medium transition-colors ${activeTab === tab.id
+                                    ? 'border-[#065F46] text-[#065F46]'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                                    }`}
                             >
                                 <tab.icon size={16} />
                                 <span>{tab.label}</span>
@@ -273,7 +286,7 @@ export default function InvoiceDetailView({
                             {/* Invoice Info */}
                             <div className="bg-gray-50 rounded-xl p-5">
                                 <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
-                                    <FileText size={18} className="mr-2 text-indigo-600" />
+                                    <FileText size={18} className="mr-2 text-[#065F46]" />
                                     {t('invoice.info')}
                                 </h3>
                                 <div className="space-y-3">
@@ -292,7 +305,7 @@ export default function InvoiceDetailView({
                                         </div>
                                     )}
                                     <div className="flex justify-between">
-                                        <span className="text-gray-600">{t('invoice.status')}:</span>
+                                        <span className="text-gray-600">{t('invoice.statusLabel')}:</span>
                                         {getStatusBadge(invoice.status)}
                                     </div>
                                     {invoice.createdByUserName && (
@@ -307,7 +320,7 @@ export default function InvoiceDetailView({
                             {/* Client Info */}
                             <div className="bg-gray-50 rounded-xl p-5">
                                 <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
-                                    <User size={18} className="mr-2 text-indigo-600" />
+                                    <User size={18} className="mr-2 text-[#065F46]" />
                                     {t('common.client')}
                                 </h3>
                                 <div className="space-y-3">
@@ -324,7 +337,7 @@ export default function InvoiceDetailView({
                                     {invoice.clientEmail && (
                                         <div className="flex justify-between">
                                             <span className="text-gray-600">{t('common.email')}:</span>
-                                            <a href={`mailto:${invoice.clientEmail}`} className="font-medium text-indigo-600 hover:underline">
+                                            <a href={`mailto:${invoice.clientEmail}`} className="font-medium text-[#065F46] hover:underline">
                                                 {invoice.clientEmail}
                                             </a>
                                         </div>
@@ -339,9 +352,9 @@ export default function InvoiceDetailView({
                             </div>
 
                             {/* Financial Summary */}
-                            <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl p-5 lg:col-span-2">
+                            <div className="bg-[#065F46]/5 rounded-xl p-5 lg:col-span-2">
                                 <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
-                                    <DollarSign size={18} className="mr-2 text-indigo-600" />
+                                    <DollarSign size={18} className="mr-2 text-[#065F46]" />
                                     {t('invoice.financial')}
                                 </h3>
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -359,8 +372,8 @@ export default function InvoiceDetailView({
                                             <p className="text-xl font-bold text-gray-900">{formatCurrency(invoice.timbreFiscal)}</p>
                                         </div>
                                     )}
-                                    <div className="bg-indigo-600 rounded-lg p-4 shadow-sm">
-                                        <p className="text-sm text-indigo-200">{t('invoice.totalTTC')}</p>
+                                    <div className="bg-[#065F46] rounded-lg p-4 shadow-sm">
+                                        <p className="text-sm text-white/70">{t('invoice.totalTTC')}</p>
                                         <p className="text-xl font-bold text-white">{formatCurrency(invoice.totalAmount)}</p>
                                     </div>
                                 </div>
@@ -377,7 +390,7 @@ export default function InvoiceDetailView({
                                         <p className="text-sm text-gray-500">{t('invoice.paymentProgress')}</p>
                                         <div className="mt-2">
                                             <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                                                <div 
+                                                <div
                                                     className="h-full bg-emerald-500 rounded-full transition-all"
                                                     style={{ width: `${Math.min(100, (invoice.amountPaid / invoice.totalAmount) * 100)}%` }}
                                                 />
@@ -406,11 +419,11 @@ export default function InvoiceDetailView({
                                 <thead className="bg-gray-50">
                                     <tr>
                                         <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">#</th>
-                                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">{t('item.description')}</th>
-                                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">{t('item.quantity')}</th>
-                                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">{t('item.unitPrice')}</th>
-                                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">{t('item.vat')}</th>
-                                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">{t('item.total')}</th>
+                                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">{t('invoice.description', 'Description')}</th>
+                                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">{t('invoice.qty', 'Qty')}</th>
+                                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">{t('invoice.unitPrice', 'Unit Price')}</th>
+                                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">{t('invoice.taxRate', 'Tax %')}</th>
+                                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">{t('invoice.total', 'Total')}</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
@@ -436,7 +449,7 @@ export default function InvoiceDetailView({
                                 <tfoot className="bg-gray-50">
                                     <tr>
                                         <td colSpan={5} className="px-4 py-3 text-right font-semibold">{t('invoice.total')}:</td>
-                                        <td className="px-4 py-3 text-right font-bold text-indigo-600">{formatCurrency(invoice.totalAmount)}</td>
+                                        <td className="px-4 py-3 text-right font-bold text-[#065F46]">{formatCurrency(invoice.totalAmount)}</td>
                                     </tr>
                                 </tfoot>
                             </table>
@@ -447,9 +460,9 @@ export default function InvoiceDetailView({
                         <div className="space-y-4">
                             {/* Payment Summary */}
                             <div className="grid grid-cols-3 gap-4 mb-6">
-                                <div className="bg-indigo-50 rounded-xl p-4 text-center">
-                                    <p className="text-sm text-indigo-600">{t('invoice.totalTTC')}</p>
-                                    <p className="text-2xl font-bold text-indigo-900">{formatCurrency(invoice.totalAmount)}</p>
+                                <div className="bg-[#065F46]/5 rounded-xl p-4 text-center">
+                                    <p className="text-sm text-[#065F46]">{t('invoice.totalTTC')}</p>
+                                    <p className="text-2xl font-bold text-[#065F46]">{formatCurrency(invoice.totalAmount)}</p>
                                 </div>
                                 <div className="bg-emerald-50 rounded-xl p-4 text-center">
                                     <p className="text-sm text-emerald-600">{t('invoice.totalPaid')}</p>
@@ -464,8 +477,8 @@ export default function InvoiceDetailView({
                             {/* Payment History */}
                             <div className="bg-white rounded-xl border">
                                 <div className="px-4 py-3 border-b flex items-center">
-                                    <History size={18} className="mr-2 text-indigo-600" />
-                                    <h3 className="font-semibold">{t('payment.history')}</h3>
+                                    <History size={18} className="mr-2 text-[#065F46]" />
+                                    <h3 className="font-semibold">{t('invoice.paymentHistory', 'Payment History')}</h3>
                                 </div>
                                 {invoice.payments && invoice.payments.length > 0 ? (
                                     <div className="divide-y">
@@ -492,11 +505,10 @@ export default function InvoiceDetailView({
                                                         )}
                                                     </div>
                                                 </div>
-                                                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                                                    payment.status === 'Completed' 
-                                                        ? 'bg-emerald-100 text-emerald-800' 
-                                                        : 'bg-amber-100 text-amber-800'
-                                                }`}>
+                                                <span className={`px-3 py-1 rounded-full text-sm font-medium ${payment.status === 'Completed'
+                                                    ? 'bg-emerald-100 text-emerald-800'
+                                                    : 'bg-amber-100 text-amber-800'
+                                                    }`}>
                                                     {payment.status || 'Completed'}
                                                 </span>
                                             </div>
@@ -505,7 +517,7 @@ export default function InvoiceDetailView({
                                 ) : (
                                     <div className="px-4 py-8 text-center text-gray-500">
                                         <CreditCard size={32} className="mx-auto mb-2 text-gray-300" />
-                                        <p>{t('payment.noPayments')}</p>
+                                        <p>{t('invoice.noPayments', 'No payments recorded')}</p>
                                     </div>
                                 )}
                             </div>
@@ -530,31 +542,30 @@ export default function InvoiceDetailView({
                                                 {formatDate(invoice.relatedDevis.date)} • {formatCurrency(invoice.relatedDevis.totalAmount)}
                                             </p>
                                         </div>
-                                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                                            invoice.relatedDevis.status === 'Accepted' 
-                                                ? 'bg-emerald-100 text-emerald-800' 
-                                                : 'bg-gray-100 text-gray-800'
-                                        }`}>
+                                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${invoice.relatedDevis.status === 'Accepted'
+                                            ? 'bg-emerald-100 text-emerald-800'
+                                            : 'bg-gray-100 text-gray-800'
+                                            }`}>
                                             {invoice.relatedDevis.status}
                                         </span>
                                     </div>
                                 ) : invoice.devisId ? (
                                     <div className="p-4 text-gray-600">
-                                        <p>{t('quote.linkedId')}: #{invoice.devisId}</p>
+                                        <p>{t('invoice.linkedQuote', 'Linked Quote')}: #{invoice.devisId}</p>
                                     </div>
                                 ) : (
                                     <div className="p-8 text-center text-gray-500">
                                         <ClipboardList size={32} className="mx-auto mb-2 text-gray-300" />
-                                        <p>{t('invoice.noRelatedQuote')}</p>
+                                        <p>{t('invoice.noRelatedQuote', 'No linked quote')}</p>
                                     </div>
                                 )}
                             </div>
 
                             {/* Related Delivery Notes */}
                             <div className="bg-white rounded-xl border overflow-hidden">
-                                <div className="px-4 py-3 border-b flex items-center bg-purple-50">
-                                    <Truck size={18} className="mr-2 text-purple-600" />
-                                    <h3 className="font-semibold text-purple-900">{t('invoice.relatedDeliveryNotes')}</h3>
+                                <div className="px-4 py-3 border-b flex items-center bg-[#065F46]/5">
+                                    <Truck size={18} className="mr-2 text-[#065F46]" />
+                                    <h3 className="font-semibold text-[#065F46]">{t('invoice.relatedDeliveryNotes', 'Related Delivery Notes')}</h3>
                                 </div>
                                 {invoice.relatedDeliveryNotes && invoice.relatedDeliveryNotes.length > 0 ? (
                                     <div className="divide-y">
@@ -566,7 +577,7 @@ export default function InvoiceDetailView({
                                                     </p>
                                                     <p className="text-sm text-gray-500">{formatDate(note.date)}</p>
                                                 </div>
-                                                <span className="px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800">
+                                                <span className="px-3 py-1 rounded-full text-sm font-medium bg-[#065F46]/10 text-[#065F46]">
                                                     {note.status || 'Delivered'}
                                                 </span>
                                             </div>
@@ -575,7 +586,7 @@ export default function InvoiceDetailView({
                                 ) : (
                                     <div className="p-8 text-center text-gray-500">
                                         <Truck size={32} className="mx-auto mb-2 text-gray-300" />
-                                        <p>{t('invoice.noRelatedDeliveryNotes')}</p>
+                                        <p>{t('invoice.noRelatedDeliveryNotes', 'No linked delivery notes')}</p>
                                     </div>
                                 )}
                             </div>

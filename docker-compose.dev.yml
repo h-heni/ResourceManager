@@ -1,0 +1,71 @@
+# ============================================
+# ResourceManager - Local Development
+# ============================================
+# Usage:
+#   docker compose -f docker-compose.dev.yml up -d     # Start Postgres + pgAdmin
+#   docker compose -f docker-compose.dev.yml down       # Stop services
+#   docker compose -f docker-compose.dev.yml down -v    # Stop + delete data volumes
+#
+# Then run the .NET API locally:
+#   dotnet run
+#
+# And the React frontend locally:
+#   cd ClientApp && npm run dev
+# ============================================
+
+services:
+  # ============================================
+  # PostgreSQL Database (Dev)
+  # ============================================
+  postgres_dev:
+    image: postgres:16-alpine
+    container_name: resourcemanager-postgres-dev
+    environment:
+      POSTGRES_DB: resourcemanager_dev
+      POSTGRES_USER: rmuser
+      POSTGRES_PASSWORD: DevPassword123!
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+    networks:
+      - rm-dev
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U rmuser -d resourcemanager_dev" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ============================================
+  # pgAdmin 4 (Database Viewer)
+  # ============================================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: resourcemanager-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@resourcemanager.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports:
+      - "5050:80"
+    depends_on:
+      postgres_dev:
+        condition: service_healthy
+    networks:
+      - rm-dev
+    restart: unless-stopped
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+volumes:
+  pgdata_dev:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  rm-dev:
+    driver: bridge

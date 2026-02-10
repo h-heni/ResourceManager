@@ -1,6 +1,25 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { setAccessToken } from '../services/api';
+import api from '../services/api';
+import { setAppLanguage } from '../i18n/index';
 
+// Google Identity Services global type (shared with LoginPage)
+declare global {
+    interface Window {
+        google?: {
+            accounts: {
+                id: {
+                    initialize: (config: any) => void;
+                    renderButton: (element: HTMLElement, config: any) => void;
+                    prompt: () => void;
+                    disableAutoSelect: () => void;
+                    revoke: (email: string, callback: () => void) => void;
+                };
+            };
+        };
+    }
+}
 interface User {
     email: string;
     roles: string[];
@@ -14,8 +33,7 @@ interface AuthContextType {
     login: (email: string, token: string, roles: string[], firstName?: string, lastName?: string) => void;
     logout: () => void;
     loading: boolean;
-    displayName: string; // Computed display name (firstName lastName or email)
-    // Role-based permission helpers
+    displayName: string;
     isManager: boolean;
     isEmployee: boolean;
     isSuperAdmin: boolean;
@@ -32,39 +50,114 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [loading, setLoading] = useState(true);
     const navigate = useNavigate();
 
-    useEffect(() => {
-        const token = localStorage.getItem('auth_token');
-        const savedEmail = localStorage.getItem('user_email');
-        const savedRoles = localStorage.getItem('user_roles');
-        const savedFirstName = localStorage.getItem('user_firstName');
-        const savedLastName = localStorage.getItem('user_lastName');
-
-        if (token && savedEmail) {
-            setUser({
-                email: savedEmail,
-                roles: savedRoles ? JSON.parse(savedRoles) : [],
-                firstName: savedFirstName || '',
-                lastName: savedLastName || ''
-            });
+    // Fetch company language from backend and apply it
+    const syncLanguageFromSettings = useCallback(async () => {
+        try {
+            const res = await api.get('/Settings');
+            const lang = res.data?.invoiceLanguage;
+            if (lang) setAppLanguage(lang);
+        } catch {
+            // Non-critical — keep whatever language is persisted
         }
-        setLoading(false);
     }, []);
 
-    const login = (email: string, token: string, roles: string[], firstName?: string, lastName?: string) => {
-        localStorage.setItem('auth_token', token);
+    // On mount: try to restore session via silent refresh
+    useEffect(() => {
+        const restoreSession = async () => {
+            // Check if we have saved user metadata (non-secret info)
+            const savedEmail = localStorage.getItem('user_email');
+            if (!savedEmail) {
+                setLoading(false);
+                return;
+            }
+
+            try {
+                // Attempt silent refresh — the HttpOnly cookie will be sent automatically
+                const response = await api.post('/auth/refresh');
+                const { accessToken: newToken } = response.data;
+                setAccessToken(newToken);
+
+                const savedRoles = localStorage.getItem('user_roles');
+                const savedFirstName = localStorage.getItem('user_firstName');
+                const savedLastName = localStorage.getItem('user_lastName');
+
+                setUser({
+                    email: savedEmail,
+                    roles: savedRoles ? JSON.parse(savedRoles) : [],
+                    firstName: savedFirstName || '',
+                    lastName: savedLastName || ''
+                });
+
+                // Sync language from company settings (authoritative source)
+                syncLanguageFromSettings();
+            } catch {
+                // Refresh failed — session expired, clear local data
+                localStorage.removeItem('user_email');
+                localStorage.removeItem('user_roles');
+                localStorage.removeItem('user_firstName');
+                localStorage.removeItem('user_lastName');
+                setAccessToken(null);
+            }
+            setLoading(false);
+        };
+
+        // Also check for auth_callback_token cookie (set by Auth0 OIDC callback)
+        const callbackToken = document.cookie
+            .split('; ')
+            .find(row => row.startsWith('auth_callback_token='));
+        if (callbackToken) {
+            const token = callbackToken.split('=')[1];
+            setAccessToken(token);
+            // Clear the temporary cookie
+            document.cookie = 'auth_callback_token=; Max-Age=0; Path=/';
+        }
+
+        restoreSession();
+    }, []);
+
+    const login = useCallback((email: string, token: string, roles: string[], firstName?: string, lastName?: string) => {
+        // Store access token in memory only (XSS-safe)
+        setAccessToken(token);
+
+        // Store non-secret user metadata in localStorage for session restoration
         localStorage.setItem('user_email', email);
         localStorage.setItem('user_roles', JSON.stringify(roles));
         localStorage.setItem('user_firstName', firstName || '');
         localStorage.setItem('user_lastName', lastName || '');
-        setUser({ email, roles, firstName: firstName || '', lastName: lastName || '' });
-        navigate('/dashboard');
-    };
 
-    const logout = () => {
-        localStorage.clear();
+        setUser({ email, roles, firstName: firstName || '', lastName: lastName || '' });
+
+        // Sync language from company settings after login
+        syncLanguageFromSettings();
+
+        navigate('/dashboard');
+    }, [navigate, syncLanguageFromSettings]);
+
+    const logout = useCallback(async () => {
+        // Dispatch logout event BEFORE clearing state so components can clean up
+        window.dispatchEvent(new Event('auth:logout'));
+
+        try {
+            if (window.google?.accounts?.id) {
+                window.google.accounts.id.disableAutoSelect();
+            }
+        } catch (_) { /* Google SDK not loaded */ }
+
+        // Call server to revoke refresh token and clear the cookie
+        try {
+            await api.post('/auth/logout');
+        } catch {
+            // Best effort — continue with client-side cleanup
+        }
+
+        setAccessToken(null);
+        localStorage.removeItem('user_email');
+        localStorage.removeItem('user_roles');
+        localStorage.removeItem('user_firstName');
+        localStorage.removeItem('user_lastName');
         setUser(null);
         navigate('/login');
-    };
+    }, [navigate]);
 
     // Compute display name: prefer "FirstName LastName", fallback to email
     const displayName = user 

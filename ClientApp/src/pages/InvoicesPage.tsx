@@ -5,6 +5,9 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import InvoiceDetailView from '../components/InvoiceDetailView';
+import { formatCurrency } from '../lib/formatNumber';
+import { DEFAULT_CURRENCY } from '../lib/currencyUtils';
+import { getInvoiceStatusColor } from '../lib/utils';
 
 interface Payment {
     id: number;
@@ -30,6 +33,8 @@ interface Invoice {
     amountPaid: number;
     remainingAmount: number;
     payments: Payment[];
+    currency?: string;
+    currencySymbol?: string;
 }
 
 export default function InvoicesPage() {
@@ -66,6 +71,13 @@ export default function InvoicesPage() {
 
     useEffect(() => {
         fetchInvoices();
+    }, []);
+
+    // Refetch when a payment is confirmed/extended via NotificationBell
+    useEffect(() => {
+        const handler = () => fetchInvoices();
+        window.addEventListener('payment-status-changed', handler);
+        return () => window.removeEventListener('payment-status-changed', handler);
     }, []);
 
     const fetchInvoices = async () => {
@@ -145,8 +157,8 @@ export default function InvoicesPage() {
             // Replace @ placeholders with actual values
             const replacements: Record<string, string> = {
                 '@ClientName': invoice.clientName || t('common.client'),
-                '@InvoiceNumber': invoice.number || '',
-                '@TotalAmount': `${invoice.totalAmount?.toLocaleString()} ${settingsData.currencySymbol || 'TND'}`,
+                '@InvoiceNumber': invoice.number.toLocaleString() || '',
+                '@TotalAmount': `${invoice.totalAmount?.toLocaleString()} ${invoice.currencySymbol || settingsData.currencySymbol || DEFAULT_CURRENCY}`,
                 '@DueDate': invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : (invoice.date ? new Date(invoice.date).toLocaleDateString() : 'N/A'),
                 '@CompanyName': settingsData.companyName || t('common.company'),
                 '@CompanyPhone': settingsData.companyPhone || '',
@@ -169,7 +181,7 @@ export default function InvoicesPage() {
             setEmailSubject(`${t('invoice.title')} #${invoice.number} - ${invoice.clientName || t('common.client')}`);
             setEmailBody(
                 `${t('email.greeting')} ${invoice.clientName || t('common.client')},\n\n` +
-                `${t('email.invoiceAttached')} #${invoice.number} ${t('email.forAmount')} ${invoice.totalAmount?.toLocaleString()} TND.\n\n` +
+                `${t('email.invoiceAttached')} #${invoice.number} ${t('email.forAmount')} ${invoice.totalAmount?.toLocaleString()} ${invoice.currencySymbol || DEFAULT_CURRENCY}.\n\n` +
                 `${t('email.regards')},\n${t('common.company')}`
             );
         }
@@ -240,18 +252,7 @@ export default function InvoicesPage() {
         }
     };
 
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'Paid':
-                return 'bg-emerald-100 text-emerald-700';
-            case 'PartiallyPaid':
-                return 'bg-blue-100 text-blue-700';
-            case 'Unpaid':
-                return 'bg-amber-100 text-amber-700';
-            default:
-                return 'bg-gray-100 text-gray-700';
-        }
-    };
+
 
     const filteredInvoices = (invoices || []).filter(i => {
         const numMatch = i.number?.toString().includes(search) ?? false;
@@ -278,7 +279,7 @@ export default function InvoicesPage() {
                 </div>
                 <button
                     onClick={() => navigate('/invoices/create')}
-                    className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-xl shadow-lg hover:bg-indigo-700 transition-all transform hover:scale-105"
+                    className="flex items-center px-4 py-2 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all transform hover:scale-105"
                 >
                     <Plus size={20} className="mr-2" />
                     {t('invoice.create')}
@@ -292,7 +293,7 @@ export default function InvoicesPage() {
                     placeholder={t('invoice.searchPlaceholder')}
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                    className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent outline-none transition-all"
                 />
             </div>
 
@@ -303,7 +304,7 @@ export default function InvoicesPage() {
                         onClick={() => setViewMode('active')}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                             viewMode === 'active'
-                                ? 'bg-white shadow-sm text-indigo-600'
+                                ? 'bg-white shadow-sm text-[#065F46]'
                                 : 'text-gray-500 hover:text-gray-700'
                         }`}
                     >
@@ -345,25 +346,32 @@ export default function InvoicesPage() {
                             <tbody className="divide-y divide-gray-100">
                                 {filteredInvoices.map((invoice) => (
                                     <tr key={invoice.id} className="hover:bg-gray-50 transition-colors group">
-                                        <td className="p-4 font-medium text-indigo-600">#{invoice.number}</td>
+                                        <td className="p-4 font-medium text-[#065F46]">#{invoice.number}</td>
                                         <td className="p-4 text-gray-900">{invoice.clientName || "Unknown"}</td>
                                         <td className="p-4 text-gray-500">{invoice.date ? new Date(invoice.date).toLocaleDateString() : 'N/A'}</td>
-                                        <td className="p-4 text-gray-900 font-bold text-right">{(invoice.totalAmount ?? 0).toLocaleString()} TND</td>
-                                        <td className="p-4 text-emerald-600 font-semibold text-right">{(invoice.amountPaid ?? 0).toLocaleString()} TND</td>
+                                        <td className="p-4 text-gray-900 font-bold text-right">{formatCurrency(invoice.totalAmount, invoice.currencySymbol || DEFAULT_CURRENCY)}</td>
+                                        <td className="p-4 text-emerald-600 font-semibold text-right">
+                                            {formatCurrency(invoice.amountPaid, invoice.currencySymbol || DEFAULT_CURRENCY)}
+                                            {invoice.payments?.some(p => p.status === 'Pending') && (
+                                                <div className="text-xs text-orange-500 font-normal mt-0.5">
+                                                    ⏰ {formatCurrency(invoice.payments.filter(p => p.status === 'Pending').reduce((sum, p) => sum + p.amount, 0), invoice.currencySymbol || DEFAULT_CURRENCY)} {t('payment.pending', 'pending')}
+                                                </div>
+                                            )}
+                                        </td>
                                         <td className="p-4 text-amber-600 font-semibold text-right">
-                                            {invoice.remainingAmount > 0 ? `${invoice.remainingAmount.toLocaleString()} TND` : '—'}
+                                            {invoice.remainingAmount > 0 ? formatCurrency(invoice.remainingAmount, invoice.currencySymbol || DEFAULT_CURRENCY) : '—'}
                                         </td>
                                         <td className="p-4">
                                             <div className="flex flex-col gap-1">
-                                                <span className={`px-3 py-1 text-xs font-semibold rounded-full inline-block w-fit ${getStatusColor(invoice.status)}`}>
+                                                <span className={`px-3 py-1 text-xs font-semibold rounded-full inline-block w-fit ${getInvoiceStatusColor(invoice.status)}`}>
                                                     {invoice.status}
                                                 </span>
                                                 {/* Payment History Indicators */}
                                                 {invoice.payments && invoice.payments.length > 0 && (
                                                     <div className="flex flex-wrap gap-1 mt-1">
                                                         {invoice.payments.slice(0, 3).map((p, idx) => (
-                                                            <span key={idx} className="text-xs text-gray-500" title={`${new Date(p.paymentDate).toLocaleDateString()}: ${p.amount} TND`}>
-                                                                💵 {p.amount.toLocaleString()}
+                                                            <span key={idx} className={`text-xs ${p.status === 'Pending' ? 'text-orange-500' : 'text-gray-500'}`} title={`${new Date(p.paymentDate).toLocaleDateString()}: ${p.amount} ${invoice.currencySymbol || DEFAULT_CURRENCY} (${p.status || 'Completed'})`}>
+                                                                {p.status === 'Pending' ? '⏰' : '💵'} {p.amount.toLocaleString()}
                                                             </span>
                                                         ))}
                                                         {invoice.payments.length > 3 && (
@@ -385,8 +393,8 @@ export default function InvoicesPage() {
                                                         <DollarSign size={18} />
                                                     </button>
                                                 )}
-                                                {/* Edit Invoice - Only if not locked/paid */}
-                                                {isManager && !invoice.isLocked && invoice.status !== 'Paid' && (
+                                                {/* Edit Invoice - Only if not locked/paid/partially paid (payments registered) */}
+                                                {isManager && !invoice.isLocked && invoice.status !== 'Paid' && invoice.status !== 'PartiallyPaid' && (
                                                     <button
                                                         onClick={() => navigate(`/invoices/edit/${invoice.id}`)}
                                                         className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
@@ -406,7 +414,7 @@ export default function InvoicesPage() {
                                                 {/* View Details (Eye icon now shows detail view, not PDF) */}
                                                 <button
                                                     onClick={() => handleViewDetails(invoice.id)}
-                                                    className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                                    className="p-2 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
                                                     title={t('invoice.viewDetails')}
                                                 >
                                                     <Eye size={18} />
@@ -459,9 +467,9 @@ export default function InvoicesPage() {
                         
                         <div className="mb-4 p-4 bg-gray-50 rounded-xl">
                             <p className="text-sm text-gray-600">{t('invoice.title')}: <span className="font-bold">#{selectedInvoice.number}</span></p>
-                            <p className="text-sm text-gray-600">{t('invoice.total')}: <span className="font-bold">{selectedInvoice.totalAmount?.toLocaleString()} TND</span></p>
-                            <p className="text-sm text-gray-600">{t('invoice.alreadyPaid')}: <span className="font-bold text-emerald-600">{selectedInvoice.amountPaid?.toLocaleString()} TND</span></p>
-                            <p className="text-sm text-gray-600">{t('invoice.remaining')}: <span className="font-bold text-amber-600">{selectedInvoice.remainingAmount?.toLocaleString()} TND</span></p>
+                            <p className="text-sm text-gray-600">{t('invoice.total')}: <span className="font-bold">{formatCurrency(selectedInvoice.totalAmount, selectedInvoice.currencySymbol || DEFAULT_CURRENCY)}</span></p>
+                            <p className="text-sm text-gray-600">{t('invoice.alreadyPaid')}: <span className="font-bold text-emerald-600">{formatCurrency(selectedInvoice.amountPaid, selectedInvoice.currencySymbol || DEFAULT_CURRENCY)}</span></p>
+                            <p className="text-sm text-gray-600">{t('invoice.remaining')}: <span className="font-bold text-amber-600">{formatCurrency(selectedInvoice.remainingAmount, selectedInvoice.currencySymbol || DEFAULT_CURRENCY)}</span></p>
                         </div>
 
                         <div className="space-y-4">
@@ -472,7 +480,7 @@ export default function InvoicesPage() {
                                     onClick={() => setIsScheduledPayment(false)}
                                     className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg transition-all ${
                                         !isScheduledPayment 
-                                            ? 'bg-white shadow-sm text-indigo-600 font-medium' 
+                                            ? 'bg-white shadow-sm text-[#065F46] font-medium' 
                                             : 'text-gray-600 hover:text-gray-800'
                                     }`}
                                 >
@@ -484,7 +492,7 @@ export default function InvoicesPage() {
                                     onClick={() => setIsScheduledPayment(true)}
                                     className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg transition-all ${
                                         isScheduledPayment 
-                                            ? 'bg-white shadow-sm text-indigo-600 font-medium' 
+                                            ? 'bg-white shadow-sm text-[#065F46] font-medium' 
                                             : 'text-gray-600 hover:text-gray-800'
                                     }`}
                                 >
@@ -514,7 +522,7 @@ export default function InvoicesPage() {
                             )}
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">{t('invoice.paymentAmount')} (TND)</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">{t('invoice.paymentAmount')} ({selectedInvoice?.currencySymbol || DEFAULT_CURRENCY})</label>
                                 <input
                                     type="number"
                                     step="0.001"
@@ -522,7 +530,7 @@ export default function InvoicesPage() {
                                     max={selectedInvoice.remainingAmount}
                                     value={paymentAmount}
                                     onChange={(e) => setPaymentAmount(e.target.value)}
-                                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
                                     placeholder={t('invoice.enterAmount')}
                                 />
                             </div>
@@ -532,7 +540,7 @@ export default function InvoicesPage() {
                                     type="text"
                                     value={paymentNotes}
                                     onChange={(e) => setPaymentNotes(e.target.value)}
-                                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
                                     placeholder={t('invoice.paymentNotesPlaceholder')}
                                 />
                             </div>
@@ -594,7 +602,7 @@ export default function InvoicesPage() {
                                 📄 {t('invoice.title')} <span className="font-bold">#{emailInvoice.number}</span> - {emailInvoice.clientName || t('common.client')}
                             </p>
                             <p className="text-sm text-blue-700 mt-1">
-                                💰 {t('invoice.total')}: <span className="font-bold">{emailInvoice.totalAmount?.toLocaleString()} TND</span>
+                                💰 {t('invoice.total')}: <span className="font-bold">{formatCurrency(emailInvoice.totalAmount, emailInvoice.currencySymbol || DEFAULT_CURRENCY)}</span>
                             </p>
                         </div>
 
@@ -636,7 +644,7 @@ export default function InvoicesPage() {
                                 />
                                 <div className="mt-1 text-xs text-gray-400 space-y-0.5">
                                     <p>Press <kbd className="px-1 py-0.5 bg-gray-100 border rounded text-[10px]">Enter</kbd> for new lines</p>
-                                    <p>Formatting: <code className="text-indigo-500">@strong(text)</code> <code className="text-indigo-500">@underline(text)</code> <code className="text-indigo-500">@italic(text)</code></p>
+                                    <p>Formatting: <code className="text-[#065F46]">@strong(text)</code> <code className="text-[#065F46]">@underline(text)</code> <code className="text-[#065F46]">@italic(text)</code></p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2 text-sm text-gray-500">

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Search, Edit2, Trash2, Phone, MapPin, Truck, Upload } from 'lucide-react';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
 
 interface Supplier {
@@ -12,6 +13,8 @@ interface Supplier {
 }
 
 export default function SuppliersPage() {
+    const { user } = useAuth();
+    const isManager = user?.roles?.includes('Manager') || user?.roles?.includes('SuperAdmin') || user?.roles?.includes('FreeUser');
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -98,7 +101,7 @@ export default function SuppliersPage() {
                 </div>
                 <button
                     onClick={() => handleOpenModal()}
-                    className="flex items-center px-4 py-2 bg-emerald-600 text-white rounded-xl shadow-lg hover:bg-emerald-700 transition-all transform hover:scale-105"
+                    className="flex items-center px-4 py-2 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all transform hover:scale-105"
                 >
                     <Plus size={20} className="mr-2" />
                     Add Supplier
@@ -112,7 +115,7 @@ export default function SuppliersPage() {
                     placeholder="Search suppliers..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
+                    className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent outline-none transition-all"
                 />
             </div>
 
@@ -123,10 +126,10 @@ export default function SuppliersPage() {
                     {filteredSuppliers.map((supplier) => (
                         <div key={supplier.id} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow group">
                             <div className="flex justify-between items-start mb-4">
-                                <div className="h-12 w-12 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600 font-bold text-lg">
+                                <div className="h-12 w-12 bg-[#065F46]/5 rounded-xl flex items-center justify-center text-[#065F46] font-bold text-lg">
                                     <Truck size={24} />
                                 </div>
-                                <div className="flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="flex space-x-2">
                                     <button onClick={() => {
                                         const input = document.createElement('input');
                                         input.type = 'file';
@@ -150,12 +153,14 @@ export default function SuppliersPage() {
                                     }} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-gray-50 rounded-lg transition-colors" title="Upload Invoice">
                                         <Upload size={18} />
                                     </button>
-                                    <button onClick={() => handleOpenModal(supplier)} className="p-2 text-gray-400 hover:text-emerald-600 hover:bg-gray-50 rounded-lg transition-colors">
+                                    <button onClick={() => handleOpenModal(supplier)} className="p-2 text-gray-400 hover:text-[#065F46] hover:bg-gray-50 rounded-lg transition-colors" title="Edit">
                                         <Edit2 size={18} />
                                     </button>
-                                    <button onClick={() => handleDelete(supplier.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-gray-50 rounded-lg transition-colors">
-                                        <Trash2 size={18} />
-                                    </button>
+                                    {isManager && (
+                                        <button onClick={() => handleDelete(supplier.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-gray-50 rounded-lg transition-colors" title="Delete">
+                                            <Trash2 size={18} />
+                                        </button>
+                                    )}
                                 </div>
                             </div>
 
@@ -196,7 +201,7 @@ export default function SuppliersPage() {
                             required
                             value={formData.name}
                             onChange={e => setFormData({ ...formData, name: e.target.value })}
-                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] outline-none"
                             placeholder="e.g. Acme Supply"
                         />
                     </div>
@@ -207,7 +212,7 @@ export default function SuppliersPage() {
                             required
                             value={formData.matriculeFiscal}
                             onChange={e => setFormData({ ...formData, matriculeFiscal: e.target.value })}
-                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] outline-none"
                             placeholder="e.g. 12345678"
                         />
                     </div>
@@ -217,7 +222,7 @@ export default function SuppliersPage() {
                             type="text"
                             value={formData.phone}
                             onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] outline-none"
                             placeholder="e.g. +216..."
                         />
                     </div>
@@ -226,7 +231,7 @@ export default function SuppliersPage() {
                         <textarea
                             value={formData.address}
                             onChange={e => setFormData({ ...formData, address: e.target.value })}
-                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] outline-none"
                             placeholder="Address..."
                             rows={3}
                         />
@@ -242,7 +247,7 @@ export default function SuppliersPage() {
                         </button>
                         <button
                             type="submit"
-                            className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors shadow-lg"
+                            className="px-4 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#047857] transition-colors shadow-lg"
                         >
                             {editingSupplier ? "Save Changes" : "Create Supplier"}
                         </button>

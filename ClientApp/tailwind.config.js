@@ -7,23 +7,39 @@ export default {
     theme: {
         extend: {
             colors: {
+                // Professional Green design system
                 primary: {
-                    50: '#f0f9ff',
-                    100: '#e0f2fe',
-                    200: '#bae6fd',
-                    300: '#7dd3fc',
-                    400: '#38bdf8',
-                    500: '#0ea5e9',
-                    600: '#0284c7',
-                    700: '#0369a1',
-                    800: '#075985',
-                    900: '#0c4a6e',
-                    950: '#082f49',
+                    50: '#ECFDF5',
+                    100: '#D1FAE5',
+                    200: '#A7F3D0',
+                    300: '#6EE7B7',
+                    400: '#34D399',
+                    500: '#10B981',
+                    600: '#059669',
+                    700: '#047857',
+                    800: '#065F46',
+                    900: '#064E3B',
+                    950: '#022C22',
+                },
+                accent: {
+                    50: '#F0FDFA',
+                    100: '#CCFBF1',
+                    200: '#99F6E4',
+                    300: '#5EEAD4',
+                    400: '#2DD4BF',
+                    500: '#14B8A6',
+                    600: '#0D9488',
+                    700: '#0F766E',
+                    800: '#115E59',
+                    900: '#134E4A',
                 },
             },
+            fontFamily: {
+                sans: ['Inter', 'system-ui', 'sans-serif'],
+            },
             animation: {
-                'fade-in': 'fadeIn 0.5s ease-out',
-                'slide-up': 'slideUp 0.5s ease-out',
+                'fade-in': 'fadeIn 0.3s ease-out',
+                'slide-up': 'slideUp 0.3s ease-out',
             },
             keyframes: {
                 fadeIn: {

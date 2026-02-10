@@ -17,6 +17,11 @@ namespace ResourceManager.DTOs
         public int? DevisId { get; set; } // Optional: link to a quote
         public List<int>? DeliveryNoteIds { get; set; } // Link Delivery Notes
         
+        // Per-document currency & language (overrides company defaults)
+        public string? Currency { get; set; }
+        public string? CurrencySymbol { get; set; }
+        public string? PdfLanguage { get; set; }
+        
         public List<CreateInvoiceItemDto> Items { get; set; } = new List<CreateInvoiceItemDto>();
     }
 
@@ -30,11 +35,17 @@ namespace ResourceManager.DTOs
 
     public class UpdateInvoiceDto
     {
-        public string Number { get; set; }
+        public string Number { get; set; } = string.Empty;
         public DateTime Date { get; set; }
         public DateTime? DueDate { get; set; } // Payment due date
         public int? ClientId { get; set; }
-        public List<CreateInvoiceItemDto> Items { get; set; }
+        
+        // Per-document currency & language
+        public string? Currency { get; set; }
+        public string? CurrencySymbol { get; set; }
+        public string? PdfLanguage { get; set; }
+        
+        public List<CreateInvoiceItemDto> Items { get; set; } = new();
     }
 
     public class AddPaymentDto

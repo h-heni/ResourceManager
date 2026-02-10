@@ -1,11 +1,11 @@
 # ============================================
 # ResourceManager Frontend - Multi-stage Dockerfile
 # ============================================
-# Build: docker build -t ResourceManager-web .
-# Run:   docker run -p 80:80 ResourceManager-web
+# Build: docker build -t resourcemanager-web .
+# Run:   docker run -p 80:80 resourcemanager-web
 # ============================================
 
-# Stage 1: Build
+# Stage 1: Build with Node (discarded after build)
 FROM node:20-alpine AS build
 WORKDIR /app
 
@@ -19,8 +19,9 @@ RUN npm ci
 COPY . .
 
 # Build arguments for environment variables
-ARG VITE_API_URL=http://localhost:8080
-ARG VITE_GOOGLE_CLIENT_ID
+# VITE_API_URL is empty — nginx proxies /api to the backend at runtime
+ARG VITE_API_URL=""
+ARG VITE_GOOGLE_CLIENT_ID=""
 
 # Set environment variables for build
 ENV VITE_API_URL=$VITE_API_URL
@@ -29,7 +30,7 @@ ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
 # Build production bundle
 RUN npm run build
 
-# Stage 2: Production with Nginx
+# Stage 2: Production with Nginx Alpine (~25MB final image)
 FROM nginx:alpine AS production
 WORKDIR /usr/share/nginx/html
 

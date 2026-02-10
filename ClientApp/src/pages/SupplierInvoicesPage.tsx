@@ -4,10 +4,12 @@ import { useTranslation } from 'react-i18next';
 import {
     Upload, FileText, Loader2, CheckCircle, AlertTriangle, Trash2,
     Plus, Save, ArrowLeft, Eye, X, Edit2, Search, DollarSign, ShieldCheck, Calendar,
-    Archive, Clock
+    Clock
 } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { formatCurrency } from '../lib/formatNumber';
+import { DEFAULT_CURRENCY, CURRENCY_OPTIONS, getCurrencySymbol } from '../lib/currencyUtils';
 
 // ═══════════════════════════════════════════════════════════════
 // TYPES
@@ -71,6 +73,8 @@ interface SupplierInvoice {
     filePath: string | null;
     isDeleted?: boolean;
     payments: SupplierPayment[];
+    currency?: string;
+    currencySymbol?: string;
 }
 
 interface ConsistencyIssue {
@@ -119,7 +123,7 @@ export default function SupplierInvoicesPage() {
     const [tempFileType, setTempFileType] = useState<string | null>(null);
     const [tempRawText, setTempRawText] = useState<string | null>(null);
     const [showDocPreview, setShowDocPreview] = useState(true);
-    const [extractedData, setExtractedData] = useState<ExtractedData | null>(null);
+    const [, setExtractedData] = useState<ExtractedData | null>(null);
     const [lineItems, setLineItems] = useState<LineItem[]>([]);
     const [headerData, setHeaderData] = useState({
         fournisseurName: '',
@@ -141,6 +145,10 @@ export default function SupplierInvoicesPage() {
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [selectedSupplierId, setSelectedSupplierId] = useState<number | null>(null);
 
+    // Currency state for supplier invoice
+    const [supplierCurrency, setSupplierCurrency] = useState(DEFAULT_CURRENCY);
+    const [supplierCurrencySymbol, setSupplierCurrencySymbol] = useState(DEFAULT_CURRENCY);
+
     // Payment state
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [selectedInvoice, setSelectedInvoice] = useState<SupplierInvoice | null>(null);
@@ -153,6 +161,11 @@ export default function SupplierInvoicesPage() {
     // Payment history modal
     const [showPaymentHistory, setShowPaymentHistory] = useState(false);
     const [historyInvoice, setHistoryInvoice] = useState<SupplierInvoice | null>(null);
+
+    // Detail view modal (read-only)
+    const [showDetailModal, setShowDetailModal] = useState(false);
+    const [detailInvoice, setDetailInvoice] = useState<SupplierInvoice | null>(null);
+    const [detailItems, setDetailItems] = useState<LineItem[]>([]);
 
     // Consistency check state
     const [showConsistencyModal, setShowConsistencyModal] = useState(false);
@@ -175,6 +188,13 @@ export default function SupplierInvoicesPage() {
         fetchInvoices();
         fetchSuppliers();
         restoreDraft();
+    }, []);
+
+    // Refetch when a payment is confirmed/extended via NotificationBell
+    useEffect(() => {
+        const handler = () => fetchInvoices();
+        window.addEventListener('payment-status-changed', handler);
+        return () => window.removeEventListener('payment-status-changed', handler);
     }, []);
 
     const fetchInvoices = async () => {
@@ -401,10 +421,10 @@ export default function SupplierInvoicesPage() {
                 taxRate: item.taxRate,
             }));
 
-            // Use computed totals from line items when items exist, otherwise fall back to header
-            const finalTotalHT = items.length > 0 ? computedTotalHT : (headerData.totalHT ? parseFloat(headerData.totalHT) : undefined);
-            const finalTVA = items.length > 0 ? computedTVA : (headerData.tva ? parseFloat(headerData.tva) : undefined);
-            const finalTotalTTC = items.length > 0 ? computedTotalTTC : (headerData.totalTTC ? parseFloat(headerData.totalTTC) : undefined);
+            // Always use manually-entered header totals (user is the source of truth for supplier invoices)
+            const finalTotalHT = headerData.totalHT ? parseFloat(headerData.totalHT) : undefined;
+            const finalTVA = headerData.tva ? parseFloat(headerData.tva) : undefined;
+            const finalTotalTTC = headerData.totalTTC ? parseFloat(headerData.totalTTC) : undefined;
 
             if (tempFilePath && !currentInvoiceId) {
                 // ── NEW upload: create record for the first time ──
@@ -424,6 +444,8 @@ export default function SupplierInvoicesPage() {
                     fournisseurName: !selectedSupplierId ? headerData.fournisseurName : undefined,
                     fournisseurAddress: headerData.fournisseurAddress || undefined,
                     fournisseurPhone: headerData.fournisseurPhone || undefined,
+                    currency: supplierCurrency || undefined,
+                    currencySymbol: supplierCurrencySymbol || undefined,
                     items,
                 };
                 await api.post('/SupplierInvoices/confirm-new', payload);
@@ -576,27 +598,6 @@ export default function SupplierInvoicesPage() {
         setShowPaymentHistory(true);
     };
 
-    const handleArchive = async (id: number) => {
-        if (!confirm('Archive this invoice? It will be moved to the Paid tab.')) return;
-        try {
-            // Mark as fully paid to archive
-            const inv = invoices.find(i => i.id === id);
-            if (inv && inv.remainingAmount > 0) {
-                await api.post(`/SupplierInvoices/${id}/payments`, {
-                    amount: inv.remainingAmount,
-                    paymentDate: new Date().toISOString(),
-                    notes: 'Archived - marked as paid',
-                    status: 'Completed',
-                });
-            }
-            fetchInvoices();
-            setStatus({ type: 'success', message: '📦 Invoice archived' });
-            setTimeout(() => setStatus(null), 3000);
-        } catch (error: any) {
-            setStatus({ type: 'error', message: 'Failed to archive invoice' });
-        }
-    };
-
     // ═══════════════════════════════════════════════════════════════
     // CONSISTENCY CHECK
     // ═══════════════════════════════════════════════════════════════
@@ -613,6 +614,7 @@ export default function SupplierInvoicesPage() {
                 message: error.response?.data?.message || t('supplierInvoice.consistencyFailed', 'Consistency check failed'),
             });
             setShowConsistencyModal(false);
+            setConsistencyResult(null);
         } finally {
             setConsistencyLoading(false);
         }
@@ -637,11 +639,6 @@ export default function SupplierInvoicesPage() {
             default: return '❔';
         }
     };
-
-    // Computed totals from line items
-    const computedTotalHT = lineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-    const computedTVA = lineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice * item.taxRate, 0);
-    const computedTotalTTC = computedTotalHT + computedTVA;
 
     const filteredInvoices = invoices.filter(inv => {
         const matchesSearch = (inv.fileName?.toLowerCase() || '').includes(search.toLowerCase()) ||
@@ -690,6 +687,32 @@ export default function SupplierInvoicesPage() {
         }
     };
 
+    // Read-only detail view
+    const handleViewDetail = async (id: number) => {
+        try {
+            const res = await api.get(`/SupplierInvoices/${id}`);
+            const data = res.data;
+            const inv = invoices.find(i => i.id === id);
+            if (inv) {
+                setDetailInvoice({ ...inv, ...data });
+            } else {
+                setDetailInvoice(data);
+            }
+            setDetailItems((data.items || []).map((item: any, i: number) => ({
+                id: `item-${Date.now()}-${i}`,
+                description: item.description,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                taxRate: item.taxRate ?? 0.19,
+                totalHT: item.totalHT,
+            })));
+            setShowDetailModal(true);
+        } catch (error) {
+            console.error('Error loading invoice:', error);
+            setStatus({ type: 'error', message: t('supplierInvoice.loadFailed', 'Failed to load invoice details') });
+        }
+    };
+
     // ═══════════════════════════════════════════════════════════════
     // RENDER: LIST VIEW
     // ═══════════════════════════════════════════════════════════════
@@ -705,10 +728,17 @@ export default function SupplierInvoicesPage() {
                     <div className="flex gap-3">
                         <button
                             onClick={runConsistencyCheck}
-                            className="flex items-center px-4 py-2 bg-amber-50 text-amber-700 rounded-xl hover:bg-amber-100 transition-all border border-amber-200"
+                            className={`flex items-center px-4 py-2 rounded-xl transition-all border ${
+                                consistencyResult && consistencyResult.invoicesWithIssues === 0
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                    : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                            }`}
                         >
                             <ShieldCheck size={18} className="mr-2" />
                             {t('supplierInvoice.consistencyCheck', 'Check')}
+                            {consistencyResult && consistencyResult.invoicesWithIssues === 0 && (
+                                <CheckCircle size={14} className="ml-1.5 text-emerald-600" />
+                            )}
                         </button>
                         <button
                             onClick={() => navigate('/suppliers')}
@@ -719,7 +749,7 @@ export default function SupplierInvoicesPage() {
                         </button>
                         <button
                             onClick={() => { resetReviewState(); setView('upload'); }}
-                            className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-xl shadow-lg hover:bg-indigo-700 transition-all transform hover:scale-105"
+                            className="flex items-center px-4 py-2 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all transform hover:scale-105"
                         >
                             <Upload size={20} className="mr-2" />
                             {t('supplierInvoice.upload', 'Upload Invoice')}
@@ -772,7 +802,7 @@ export default function SupplierInvoicesPage() {
                         placeholder={t('supplierInvoice.searchPlaceholder', 'Search by file name, invoice number, or supplier...')}
                         value={search}
                         onChange={e => setSearch(e.target.value)}
-                        className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                        className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent outline-none transition-all"
                     />
                 </div>
 
@@ -789,7 +819,7 @@ export default function SupplierInvoicesPage() {
                         <p className="text-gray-400 text-sm mt-1">{t('supplierInvoice.uploadToStart', 'Upload a PDF to get started')}</p>
                         <button
                             onClick={() => { resetReviewState(); setView('upload'); }}
-                            className="mt-4 px-6 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all"
+                            className="mt-4 px-6 py-2 bg-[#065F46] text-white rounded-xl hover:bg-[#047857] transition-all"
                         >
                             {t('supplierInvoice.uploadFirst', 'Upload First Invoice')}
                         </button>
@@ -821,18 +851,23 @@ export default function SupplierInvoicesPage() {
                                             {inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString() : '—'}
                                         </td>
                                         <td className="px-6 py-4 text-right font-medium text-gray-900">
-                                            {inv.totalTTC != null ? `${inv.totalTTC.toFixed(3)} TND` : '—'}
+                                            {inv.totalTTC != null ? formatCurrency(inv.totalTTC, inv.currencySymbol || DEFAULT_CURRENCY) : '—'}
                                         </td>
                                         <td className="px-6 py-4 text-right text-sm">
                                             {inv.amountPaid > 0 ? (
-                                                <span className="text-emerald-600 font-medium">{inv.amountPaid.toFixed(3)}</span>
+                                                <span className="text-emerald-600 font-medium">{formatCurrency(inv.amountPaid, inv.currencySymbol || DEFAULT_CURRENCY)}</span>
                                             ) : (
                                                 <span className="text-gray-400">—</span>
+                                            )}
+                                            {inv.pendingAmount > 0 && (
+                                                <div className="text-xs text-amber-500 mt-0.5" title={t('supplierInvoice.pendingPayments', 'Pending payments awaiting confirmation')}>
+                                                    ⏰ {formatCurrency(inv.pendingAmount, inv.currencySymbol || DEFAULT_CURRENCY)}
+                                                </div>
                                             )}
                                         </td>
                                         <td className="px-6 py-4 text-right text-sm">
                                             {inv.remainingAmount > 0 ? (
-                                                <span className="text-amber-600 font-medium">{inv.remainingAmount.toFixed(3)}</span>
+                                                <span className="text-amber-600 font-medium">{formatCurrency(inv.remainingAmount, inv.currencySymbol || DEFAULT_CURRENCY)}</span>
                                             ) : inv.totalTTC ? (
                                                 <span className="text-emerald-600 font-medium">0.000</span>
                                             ) : (
@@ -847,14 +882,14 @@ export default function SupplierInvoicesPage() {
                                             {inv.payments && inv.payments.length > 0 && (
                                                 <div className="flex flex-wrap gap-1 mt-1.5 justify-center">
                                                     {inv.payments.slice(0, 3).map((p, idx) => (
-                                                        <span key={idx} className="text-xs text-gray-500" title={`${new Date(p.paymentDate).toLocaleDateString()}: ${p.amount.toFixed(3)} TND${p.status === 'Pending' ? ' ⏰' : ''}`}>
+                                                        <span key={idx} className="text-xs text-gray-500" title={`${new Date(p.paymentDate).toLocaleDateString()}: ${p.amount.toFixed(3)} ${inv.currencySymbol || DEFAULT_CURRENCY}${p.status === 'Pending' ? ' ⏰' : ''}`}>
                                                             {p.status === 'Pending' ? '⏰' : '💵'} {p.amount.toLocaleString()}
                                                         </span>
                                                     ))}
                                                     {inv.payments.length > 3 && (
                                                         <button
                                                             onClick={() => openPaymentHistory(inv)}
-                                                            className="text-xs text-indigo-500 hover:text-indigo-700"
+                                                            className="text-xs text-[#065F46] hover:text-[#065F46]"
                                                         >
                                                             +{inv.payments.length - 3} more
                                                         </button>
@@ -879,22 +914,19 @@ export default function SupplierInvoicesPage() {
                                                     </button>
                                                 )}
                                                 <button
-                                                    onClick={() => handleViewInvoice(inv.id)}
-                                                    className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                                                    title={t('common.edit', 'View / Edit')}
+                                                    onClick={() => handleViewDetail(inv.id)}
+                                                    className="p-2 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
+                                                    title={t('common.viewDetails', 'View Details')}
                                                 >
                                                     <Eye size={18} />
                                                 </button>
-                                                {/* Archive - manager only, not yet paid */}
-                                                {isManager && inv.paymentStatus !== 'Paid' && (
-                                                    <button
-                                                        onClick={() => handleArchive(inv.id)}
-                                                        className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                                                        title="Archive"
-                                                    >
-                                                        <Archive size={18} />
-                                                    </button>
-                                                )}
+                                                <button
+                                                    onClick={() => handleViewInvoice(inv.id)}
+                                                    className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                                                    title={t('common.edit', 'Edit')}
+                                                >
+                                                    <Edit2 size={18} />
+                                                </button>
                                                 {/* Delete - manager only */}
                                                 {isManager && (
                                                     <button
@@ -911,22 +943,36 @@ export default function SupplierInvoicesPage() {
                                 ))}
                             </tbody>
                             <tfoot className="bg-gray-50 border-t-2 border-gray-200">
-                                <tr>
-                                    <td colSpan={3} className="px-6 py-3 text-sm font-semibold text-gray-700 text-right">
-                                        {t('common.total', 'Total')}
-                                    </td>
-                                    <td className="px-6 py-3 text-right font-bold text-gray-900">
-                                        {filteredInvoices.reduce((sum, inv) => sum + (inv.totalTTC || 0), 0).toFixed(3)} TND
-                                    </td>
-                                    <td className="px-6 py-3 text-right font-semibold text-emerald-600">
-                                        {filteredInvoices.reduce((sum, inv) => sum + (inv.amountPaid || 0), 0).toFixed(3)}
-                                    </td>
-                                    <td className="px-6 py-3 text-right font-semibold text-amber-600">
-                                        {filteredInvoices.reduce((sum, inv) => sum + (inv.remainingAmount || 0), 0).toFixed(3)}
-                                    </td>
-                                    <td className="px-6 py-3"></td>
-                                    <td className="px-6 py-3"></td>
-                                </tr>
+                                {(() => {
+                                    // Group totals by currency to avoid mixing
+                                    const byCurrency: Record<string, { totalTTC: number; paid: number; remaining: number }> = {};
+                                    filteredInvoices.forEach(inv => {
+                                        const cur = inv.currencySymbol || DEFAULT_CURRENCY;
+                                        if (!byCurrency[cur]) byCurrency[cur] = { totalTTC: 0, paid: 0, remaining: 0 };
+                                        byCurrency[cur].totalTTC += inv.totalTTC || 0;
+                                        byCurrency[cur].paid += inv.amountPaid || 0;
+                                        byCurrency[cur].remaining += inv.remainingAmount || 0;
+                                    });
+                                    const currencies = Object.keys(byCurrency);
+                                    return currencies.map(cur => (
+                                        <tr key={cur}>
+                                            <td colSpan={3} className="px-6 py-3 text-sm font-semibold text-gray-700 text-right">
+                                                {currencies.length > 1 ? `${t('common.total', 'Total')} (${cur})` : t('common.total', 'Total')}
+                                            </td>
+                                            <td className="px-6 py-3 text-right font-bold text-gray-900">
+                                                {formatCurrency(byCurrency[cur].totalTTC, cur)}
+                                            </td>
+                                            <td className="px-6 py-3 text-right font-semibold text-emerald-600">
+                                                {formatCurrency(byCurrency[cur].paid, cur)}
+                                            </td>
+                                            <td className="px-6 py-3 text-right font-semibold text-amber-600">
+                                                {formatCurrency(byCurrency[cur].remaining, cur)}
+                                            </td>
+                                            <td className="px-6 py-3"></td>
+                                            <td className="px-6 py-3"></td>
+                                        </tr>
+                                    ));
+                                })()}
                             </tfoot>
                         </table>
                     </div>
@@ -954,15 +1000,15 @@ export default function SupplierInvoicesPage() {
                                     <div className="grid grid-cols-3 gap-2 mt-3">
                                         <div>
                                             <div className="text-xs text-gray-400">{t('invoice.totalTTC', 'Total')}</div>
-                                            <div className="font-semibold text-gray-900">{(selectedInvoice.totalTTC || 0).toFixed(3)} TND</div>
+                                            <div className="font-semibold text-gray-900">{formatCurrency(selectedInvoice.totalTTC, selectedInvoice.currencySymbol || DEFAULT_CURRENCY)}</div>
                                         </div>
                                         <div>
                                             <div className="text-xs text-gray-400">{t('supplierInvoice.paid', 'Paid')}</div>
-                                            <div className="font-semibold text-emerald-600">{(selectedInvoice.amountPaid || 0).toFixed(3)} TND</div>
+                                            <div className="font-semibold text-emerald-600">{formatCurrency(selectedInvoice.amountPaid, selectedInvoice.currencySymbol || DEFAULT_CURRENCY)}</div>
                                         </div>
                                         <div>
                                             <div className="text-xs text-gray-400">{t('supplierInvoice.remaining', 'Remaining')}</div>
-                                            <div className="font-semibold text-amber-600">{(selectedInvoice.remainingAmount || 0).toFixed(3)} TND</div>
+                                            <div className="font-semibold text-amber-600">{formatCurrency(selectedInvoice.remainingAmount, selectedInvoice.currencySymbol || DEFAULT_CURRENCY)}</div>
                                         </div>
                                     </div>
                                 </div>
@@ -974,7 +1020,7 @@ export default function SupplierInvoicesPage() {
                                         onClick={() => setIsScheduledPayment(false)}
                                         className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg transition-all ${
                                             !isScheduledPayment
-                                                ? 'bg-white shadow-sm text-indigo-600 font-medium'
+                                                ? 'bg-white shadow-sm text-[#065F46] font-medium'
                                                 : 'text-gray-600 hover:text-gray-800'
                                         }`}
                                     >
@@ -986,7 +1032,7 @@ export default function SupplierInvoicesPage() {
                                         onClick={() => setIsScheduledPayment(true)}
                                         className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg transition-all ${
                                             isScheduledPayment
-                                                ? 'bg-white shadow-sm text-indigo-600 font-medium'
+                                                ? 'bg-white shadow-sm text-[#065F46] font-medium'
                                                 : 'text-gray-600 hover:text-gray-800'
                                         }`}
                                     >
@@ -1017,7 +1063,7 @@ export default function SupplierInvoicesPage() {
 
                                 {/* Amount */}
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('supplierInvoice.paymentAmount', 'Amount')} (TND)</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('supplierInvoice.paymentAmount', 'Amount')} ({selectedInvoice?.currencySymbol || DEFAULT_CURRENCY})</label>
                                     <input
                                         type="number"
                                         step="0.001"
@@ -1078,6 +1124,128 @@ export default function SupplierInvoicesPage() {
                     </div>
                 )}
 
+                {/* Supplier Invoice Detail Modal (read-only) */}
+                {showDetailModal && detailInvoice && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowDetailModal(false)}>
+                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                            <div className="p-6 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl z-10">
+                                <h3 className="text-lg font-bold flex items-center gap-2">
+                                    <FileText size={20} className="text-[#065F46]" />
+                                    {t('supplierInvoice.invoiceDetails', 'Invoice Details')}
+                                </h3>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => { setShowDetailModal(false); handleViewInvoice(detailInvoice.id); }}
+                                        className="px-3 py-1.5 text-sm bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100 flex items-center gap-1"
+                                    >
+                                        <Edit2 size={14} /> {t('common.edit', 'Edit')}
+                                    </button>
+                                    <button onClick={() => setShowDetailModal(false)} className="p-1.5 hover:bg-gray-100 rounded-lg">
+                                        <X size={20} />
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="p-6 space-y-6">
+                                {/* Header info */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <p className="text-xs text-gray-500 uppercase font-medium">{t('supplierInvoice.invoiceNumber', 'Invoice #')}</p>
+                                        <p className="font-semibold text-gray-900">{detailInvoice.invoiceNumber || '—'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-gray-500 uppercase font-medium">{t('supplierInvoice.supplier', 'Supplier')}</p>
+                                        <p className="font-semibold text-gray-900">{detailInvoice.fournisseurName || '—'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-gray-500 uppercase font-medium">{t('common.date', 'Date')}</p>
+                                        <p className="text-gray-700">{detailInvoice.invoiceDate ? new Date(detailInvoice.invoiceDate).toLocaleDateString() : '—'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-gray-500 uppercase font-medium">{t('invoice.dueDate', 'Due Date')}</p>
+                                        <p className="text-gray-700">{detailInvoice.dueDate ? new Date(detailInvoice.dueDate).toLocaleDateString() : '—'}</p>
+                                    </div>
+                                </div>
+                                {/* Amounts */}
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div className="p-3 bg-gray-50 rounded-xl text-center">
+                                        <p className="text-xs text-gray-500">{t('invoice.totalHT', 'Total HT')}</p>
+                                        <p className="text-lg font-bold text-gray-900">{detailInvoice.totalHT != null ? `${detailInvoice.totalHT.toFixed(3)}` : '—'}</p>
+                                    </div>
+                                    <div className="p-3 bg-gray-50 rounded-xl text-center">
+                                        <p className="text-xs text-gray-500">{t('invoice.tax', 'TVA')}</p>
+                                        <p className="text-lg font-bold text-gray-900">{detailInvoice.tva != null ? `${detailInvoice.tva.toFixed(3)}` : '—'}</p>
+                                    </div>
+                                    <div className="p-3 bg-[#065F46]/5 rounded-xl text-center">
+                                        <p className="text-xs text-[#065F46]">{t('invoice.totalTTC', 'Total TTC')}</p>
+                                        <p className="text-lg font-bold text-[#065F46]">{detailInvoice.totalTTC != null ? formatCurrency(detailInvoice.totalTTC, detailInvoice.currencySymbol || DEFAULT_CURRENCY) : '—'}</p>
+                                    </div>
+                                </div>
+                                {/* Payment status */}
+                                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                                    <div className="flex items-center gap-3">
+                                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getPaymentStatusColor(detailInvoice.paymentStatus)}`}>
+                                            {getPaymentStatusEmoji(detailInvoice.paymentStatus)} {detailInvoice.paymentStatus}
+                                        </span>
+                                    </div>
+                                    <div className="text-sm text-right">
+                                        <span className="text-emerald-600 font-medium">{formatCurrency(detailInvoice.amountPaid, detailInvoice.currencySymbol || DEFAULT_CURRENCY)}</span>
+                                        <span className="text-gray-400 mx-1">/</span>
+                                        <span className="text-gray-600">{formatCurrency(detailInvoice.totalTTC, detailInvoice.currencySymbol || DEFAULT_CURRENCY)}</span>
+                                    </div>
+                                </div>
+                                {/* Line items */}
+                                {detailItems.length > 0 && (
+                                    <div>
+                                        <h4 className="text-sm font-semibold text-gray-700 mb-2">{t('invoice.items', 'Line Items')}</h4>
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-gray-50">
+                                                <tr>
+                                                    <th className="px-3 py-2 text-left text-xs text-gray-500">{t('invoice.description', 'Description')}</th>
+                                                    <th className="px-3 py-2 text-right text-xs text-gray-500">{t('invoice.qty', 'Qty')}</th>
+                                                    <th className="px-3 py-2 text-right text-xs text-gray-500">{t('invoice.unitPrice', 'Unit Price')}</th>
+                                                    <th className="px-3 py-2 text-right text-xs text-gray-500">{t('invoice.totalHT', 'Total HT')}</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-100">
+                                                {detailItems.map(item => (
+                                                    <tr key={item.id}>
+                                                        <td className="px-3 py-2 text-gray-900">{item.description || '—'}</td>
+                                                        <td className="px-3 py-2 text-right text-gray-600">{item.quantity}</td>
+                                                        <td className="px-3 py-2 text-right text-gray-600">{item.unitPrice.toFixed(3)}</td>
+                                                        <td className="px-3 py-2 text-right font-medium text-gray-900">{item.totalHT.toFixed(3)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                                {/* Payments */}
+                                {detailInvoice.payments && detailInvoice.payments.length > 0 && (
+                                    <div>
+                                        <h4 className="text-sm font-semibold text-gray-700 mb-2">{t('supplierInvoice.payments', 'Payments')}</h4>
+                                        <div className="space-y-2">
+                                            {detailInvoice.payments.map((p, idx) => (
+                                                <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg text-sm">
+                                                    <div className="flex items-center gap-2">
+                                                        <span>{p.status === 'Pending' ? '⏰' : '💵'}</span>
+                                                        <span className="text-gray-600">{new Date(p.paymentDate).toLocaleDateString()}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`px-2 py-0.5 rounded-full text-xs ${p.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'}`}>
+                                                            {p.status}
+                                                        </span>
+                                                        <span className="font-medium text-gray-900">{formatCurrency(p.amount, detailInvoice.currencySymbol || DEFAULT_CURRENCY)}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Payment History Modal */}
                 {showPaymentHistory && historyInvoice && (
                     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowPaymentHistory(false)}>
@@ -1098,7 +1266,7 @@ export default function SupplierInvoicesPage() {
                                         }`}>
                                             <div>
                                                 <div className="text-sm font-medium text-gray-900">
-                                                    {p.status === 'Pending' ? '⏰' : '💵'} {p.amount.toFixed(3)} TND
+                                                    {p.status === 'Pending' ? '⏰' : '💵'} {formatCurrency(p.amount, historyInvoice.currencySymbol || DEFAULT_CURRENCY)}
                                                 </div>
                                                 <div className="text-xs text-gray-500">
                                                     {new Date(p.paymentDate).toLocaleDateString()} {p.notes && `— ${p.notes}`}
@@ -1116,7 +1284,7 @@ export default function SupplierInvoicesPage() {
                                 )}
                                 <div className="pt-3 border-t border-gray-200 flex justify-between text-sm">
                                     <span className="text-gray-600 font-medium">Total Paid:</span>
-                                    <span className="font-bold text-emerald-600">{(historyInvoice.amountPaid || 0).toFixed(3)} TND</span>
+                                    <span className="font-bold text-emerald-600">{formatCurrency(historyInvoice.amountPaid, historyInvoice.currencySymbol || DEFAULT_CURRENCY)}</span>
                                 </div>
                             </div>
                         </div>
@@ -1141,7 +1309,7 @@ export default function SupplierInvoicesPage() {
                             <div className="p-6 overflow-y-auto flex-1">
                                 {consistencyLoading ? (
                                     <div className="text-center py-12">
-                                        <Loader2 size={32} className="animate-spin mx-auto text-indigo-500 mb-3" />
+                                        <Loader2 size={32} className="animate-spin mx-auto text-[#065F46] mb-3" />
                                         <p className="text-gray-500">{t('supplierInvoice.runningCheck', 'Running consistency check...')}</p>
                                     </div>
                                 ) : consistencyResult ? (
@@ -1186,7 +1354,7 @@ export default function SupplierInvoicesPage() {
                                                         </ul>
                                                         <button
                                                             onClick={() => { setShowConsistencyModal(false); handleViewInvoice(issue.invoiceId); }}
-                                                            className="mt-2 text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                                                            className="mt-2 text-xs text-[#065F46] hover:text-[#065F46] font-medium"
                                                         >
                                                             {t('supplierInvoice.fixNow', 'Fix now →')}
                                                         </button>
@@ -1237,7 +1405,7 @@ export default function SupplierInvoicesPage() {
                 {/* Upload Zone */}
                 <div
                     className={`border-2 border-dashed rounded-2xl p-12 text-center transition-all ${
-                        uploading ? 'border-indigo-400 bg-indigo-50' : 'border-gray-300 hover:border-indigo-400 hover:bg-indigo-50 cursor-pointer'
+                        uploading ? 'border-[#065F46] bg-[#065F46]/5' : 'border-gray-300 hover:border-[#065F46] hover:bg-[#065F46]/5 cursor-pointer'
                     }`}
                     onClick={() => !uploading && fileInputRef.current?.click()}
                 >
@@ -1251,16 +1419,16 @@ export default function SupplierInvoicesPage() {
 
                     {uploading ? (
                         <div className="space-y-4">
-                            <Loader2 size={48} className="mx-auto text-indigo-500 animate-spin" />
-                            <p className="text-lg font-medium text-indigo-700">{uploadProgress}</p>
-                            <div className="w-64 mx-auto bg-indigo-200 rounded-full h-2">
-                                <div className="bg-indigo-600 h-2 rounded-full animate-pulse w-3/4"></div>
+                            <Loader2 size={48} className="mx-auto text-[#065F46] animate-spin" />
+                            <p className="text-lg font-medium text-[#065F46]">{uploadProgress}</p>
+                            <div className="w-64 mx-auto bg-[#065F46]/20 rounded-full h-2">
+                                <div className="bg-[#065F46] h-2 rounded-full animate-pulse w-3/4"></div>
                             </div>
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            <div className="w-20 h-20 mx-auto bg-indigo-100 rounded-2xl flex items-center justify-center">
-                                <Upload size={40} className="text-indigo-500" />
+                            <div className="w-20 h-20 mx-auto bg-[#065F46]/10 rounded-2xl flex items-center justify-center">
+                                <Upload size={40} className="text-[#065F46]" />
                             </div>
                             <div>
                                 <p className="text-lg font-semibold text-gray-700">{t('supplierInvoice.dropHere', 'Drop your PDF or photo here, or click to browse')}</p>
@@ -1399,7 +1567,7 @@ export default function SupplierInvoicesPage() {
                         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden sticky top-4">
                             <div className="flex items-center justify-between p-3 bg-gray-50 border-b border-gray-100">
                                 <span className="text-sm font-medium text-gray-700 flex items-center">
-                                    <Eye size={16} className="mr-2 text-indigo-600" />
+                                    <Eye size={16} className="mr-2 text-[#065F46]" />
                                     {t('supplierInvoice.documentPreview', 'Document Preview')}
                                 </span>
                                 <button
@@ -1437,7 +1605,7 @@ export default function SupplierInvoicesPage() {
             {/* Header Fields */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                    <FileText size={20} className="mr-2 text-indigo-600" />
+                    <FileText size={20} className="mr-2 text-[#065F46]" />
                     {t('supplierInvoice.invoiceDetails', 'Invoice Details')}
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1455,7 +1623,7 @@ export default function SupplierInvoicesPage() {
                                         if (s) setHeaderData(prev => ({ ...prev, fournisseurName: s.name }));
                                     }
                                 }}
-                                className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                                className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
                             >
                                 <option value="">-- {t('supplierInvoice.selectSupplier', 'Select existing or create new')} --</option>
                                 {suppliers.map(s => (
@@ -1469,7 +1637,7 @@ export default function SupplierInvoicesPage() {
                                 value={headerData.fournisseurName}
                                 onChange={e => setHeaderData(prev => ({ ...prev, fournisseurName: e.target.value }))}
                                 placeholder={t('supplierInvoice.newSupplierName', 'Or type new supplier name')}
-                                className="w-full mt-2 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                                className="w-full mt-2 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
                             />
                         )}
                     </div>
@@ -1479,7 +1647,7 @@ export default function SupplierInvoicesPage() {
                             type="text"
                             value={headerData.invoiceNumber}
                             onChange={e => setHeaderData(prev => ({ ...prev, invoiceNumber: e.target.value }))}
-                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
                             placeholder="e.g. FACT-2025-001"
                         />
                     </div>
@@ -1489,7 +1657,7 @@ export default function SupplierInvoicesPage() {
                             type="date"
                             value={headerData.invoiceDate}
                             onChange={e => setHeaderData(prev => ({ ...prev, invoiceDate: e.target.value }))}
-                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
                         />
                     </div>
                     <div>
@@ -1501,7 +1669,7 @@ export default function SupplierInvoicesPage() {
                             type="date"
                             value={headerData.dueDate}
                             onChange={e => setHeaderData(prev => ({ ...prev, dueDate: e.target.value }))}
-                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
                         />
                     </div>
                     {/* Supplier Phone */}
@@ -1511,7 +1679,7 @@ export default function SupplierInvoicesPage() {
                             type="text"
                             value={headerData.fournisseurPhone}
                             onChange={e => setHeaderData(prev => ({ ...prev, fournisseurPhone: e.target.value }))}
-                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
                             placeholder="+216..."
                         />
                     </div>
@@ -1522,55 +1690,79 @@ export default function SupplierInvoicesPage() {
                             type="text"
                             value={headerData.fournisseurAddress}
                             onChange={e => setHeaderData(prev => ({ ...prev, fournisseurAddress: e.target.value }))}
-                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
                             placeholder="Supplier address..."
                         />
                     </div>
                 </div>
 
-                {/* Computed Totals - read-only, from line items or extraction */}
-                {(lineItems.length > 0 || headerData.totalHT || headerData.totalTTC) && (
-                    <div className="mt-4 pt-4 border-t border-gray-100">
-                        <div className="grid grid-cols-3 gap-3">
-                            <div className="bg-blue-50 rounded-xl p-3 text-center">
-                                <div className="text-xs text-blue-600 font-medium">{t('invoice.totalHT', 'Subtotal HT')}</div>
-                                <div className="text-lg font-bold text-blue-800">
-                                    {lineItems.length > 0
-                                        ? computedTotalHT.toFixed(3)
-                                        : (parseFloat(headerData.totalHT) || 0).toFixed(3)} TND
-                                </div>
-                            </div>
-                            <div className="bg-amber-50 rounded-xl p-3 text-center">
-                                <div className="text-xs text-amber-600 font-medium">TVA</div>
-                                <div className="text-lg font-bold text-amber-800">
-                                    {lineItems.length > 0
-                                        ? computedTVA.toFixed(3)
-                                        : (parseFloat(headerData.tva) || 0).toFixed(3)} TND
-                                </div>
-                            </div>
-                            <div className="bg-emerald-50 rounded-xl p-3 text-center">
-                                <div className="text-xs text-emerald-600 font-medium">{t('invoice.totalTTC', 'Total TTC')}</div>
-                                <div className="text-lg font-bold text-emerald-800">
-                                    {lineItems.length > 0
-                                        ? computedTotalTTC.toFixed(3)
-                                        : (parseFloat(headerData.totalTTC) || 0).toFixed(3)} TND
-                                </div>
-                            </div>
+                {/* Totals - manually editable */}
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                    {/* Currency selection */}
+                    <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Document Currency</label>
+                        <select
+                            value={supplierCurrency}
+                            onChange={e => {
+                                setSupplierCurrency(e.target.value);
+                                setSupplierCurrencySymbol(getCurrencySymbol(e.target.value));
+                            }}
+                            className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none transition-all"
+                        >
+                            {CURRENCY_OPTIONS.map(opt => (
+                                <option key={opt.code} value={opt.code}>{opt.label}</option>
+                            ))}
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">Currency of this supplier invoice</p>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                        <div>
+                            <label className="block text-xs font-medium text-blue-600 mb-1">{t('invoice.totalHT', 'Subtotal HT')}</label>
+                            <input
+                                type="number"
+                                step="0.001"
+                                value={headerData.totalHT}
+                                onChange={e => setHeaderData(prev => ({ ...prev, totalHT: e.target.value }))}
+                                className="w-full px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-lg font-bold text-blue-800 text-center"
+                                placeholder="0.000"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-amber-600 mb-1">TVA</label>
+                            <input
+                                type="number"
+                                step="0.001"
+                                value={headerData.tva}
+                                onChange={e => setHeaderData(prev => ({ ...prev, tva: e.target.value }))}
+                                className="w-full px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none text-lg font-bold text-amber-800 text-center"
+                                placeholder="0.000"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-emerald-600 mb-1">{t('invoice.totalTTC', 'Total TTC')}</label>
+                            <input
+                                type="number"
+                                step="0.001"
+                                value={headerData.totalTTC}
+                                onChange={e => setHeaderData(prev => ({ ...prev, totalTTC: e.target.value }))}
+                                className="w-full px-3 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-lg font-bold text-emerald-800 text-center"
+                                placeholder="0.000"
+                            />
                         </div>
                     </div>
-                )}
+                </div>
             </div>
 
             {/* Line Items Table */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
                 <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                        <Edit2 size={20} className="mr-2 text-indigo-600" />
+                        <Edit2 size={20} className="mr-2 text-[#065F46]" />
                         {t('supplierInvoice.lineItems', 'Line Items')}
                     </h3>
                     <button
                         onClick={addLineItem}
-                        className="flex items-center px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors text-sm font-medium"
+                        className="flex items-center px-3 py-1.5 bg-[#065F46]/5 text-[#065F46] rounded-lg hover:bg-[#065F46]/10 transition-colors text-sm font-medium"
                     >
                         <Plus size={16} className="mr-1" />
                         {t('supplierInvoice.addItem', 'Add Item')}
@@ -1582,7 +1774,7 @@ export default function SupplierInvoicesPage() {
                         <p className="text-gray-500">{t('supplierInvoice.noLineItems', 'No line items extracted.')}</p>
                         <button
                             onClick={addLineItem}
-                            className="mt-3 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm"
+                            className="mt-3 px-4 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#047857] text-sm"
                         >
                             {t('supplierInvoice.addFirstItem', 'Add First Item')}
                         </button>
@@ -1595,9 +1787,6 @@ export default function SupplierInvoicesPage() {
                                     <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase w-2/5">{t('invoice.description', 'Description')}</th>
                                     <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 uppercase w-16">{t('invoice.qty', 'Qty')}</th>
                                     <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase w-28">{t('invoice.unitPrice', 'Unit Price')}</th>
-                                    <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase w-20">{t('invoice.taxRate', 'Tax %')}</th>
-                                    <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase w-28">{t('invoice.totalHT', 'Total HT')}</th>
-                                    <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase w-28">{t('invoice.totalTTC', 'Total TTC')}</th>
                                     <th className="px-3 py-2 w-10"></th>
                                 </tr>
                             </thead>
@@ -1609,7 +1798,7 @@ export default function SupplierInvoicesPage() {
                                                 type="text"
                                                 value={item.description}
                                                 onChange={e => updateLineItem(item.id, 'description', e.target.value)}
-                                                className="w-full px-2 py-1.5 bg-transparent border border-transparent hover:border-gray-300 focus:border-indigo-400 rounded focus:ring-1 focus:ring-indigo-400 outline-none text-sm"
+                                                className="w-full px-2 py-1.5 bg-transparent border border-transparent hover:border-gray-300 focus:border-[#065F46] rounded focus:ring-1 focus:ring-[#065F46] outline-none text-sm"
                                                 placeholder={t('invoice.itemDescription', 'Item description')}
                                             />
                                         </td>
@@ -1619,7 +1808,7 @@ export default function SupplierInvoicesPage() {
                                                 min="1"
                                                 value={item.quantity}
                                                 onChange={e => updateLineItem(item.id, 'quantity', parseInt(e.target.value) || 1)}
-                                                className="w-full px-2 py-1.5 bg-transparent border border-transparent hover:border-gray-300 focus:border-indigo-400 rounded focus:ring-1 focus:ring-indigo-400 outline-none text-sm text-center"
+                                                className="w-full px-2 py-1.5 bg-transparent border border-transparent hover:border-gray-300 focus:border-[#065F46] rounded focus:ring-1 focus:ring-[#065F46] outline-none text-sm text-center"
                                             />
                                         </td>
                                         <td className="px-3 py-2">
@@ -1628,27 +1817,10 @@ export default function SupplierInvoicesPage() {
                                                 step="0.001"
                                                 value={item.unitPrice}
                                                 onChange={e => updateLineItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
-                                                className="w-full px-2 py-1.5 bg-transparent border border-transparent hover:border-gray-300 focus:border-indigo-400 rounded focus:ring-1 focus:ring-indigo-400 outline-none text-sm text-right"
+                                                className="w-full px-2 py-1.5 bg-transparent border border-transparent hover:border-gray-300 focus:border-[#065F46] rounded focus:ring-1 focus:ring-[#065F46] outline-none text-sm text-right"
                                             />
                                         </td>
-                                        <td className="px-3 py-2">
-                                            <select
-                                                value={item.taxRate}
-                                                onChange={e => updateLineItem(item.id, 'taxRate', parseFloat(e.target.value))}
-                                                className="w-full px-1 py-1.5 bg-transparent border border-transparent hover:border-gray-300 focus:border-indigo-400 rounded focus:ring-1 focus:ring-indigo-400 outline-none text-sm text-right"
-                                            >
-                                                <option value={0}>0%</option>
-                                                <option value={0.07}>7%</option>
-                                                <option value={0.13}>13%</option>
-                                                <option value={0.19}>19%</option>
-                                            </select>
-                                        </td>
-                                        <td className="px-3 py-2 text-right text-sm font-medium text-gray-700">
-                                            {(item.quantity * item.unitPrice).toFixed(3)}
-                                        </td>
-                                        <td className="px-3 py-2 text-right text-sm font-medium text-gray-900">
-                                            {(item.quantity * item.unitPrice * (1 + item.taxRate)).toFixed(3)}
-                                        </td>
+
                                         <td className="px-3 py-2">
                                             <button
                                                 onClick={() => removeLineItem(item.id)}
@@ -1662,25 +1834,7 @@ export default function SupplierInvoicesPage() {
                             </tbody>
                         </table>
 
-                        {/* Totals */}
-                        <div className="mt-4 pt-4 border-t border-gray-200">
-                            <div className="flex justify-end">
-                                <div className="w-72 space-y-2">
-                                    <div className="flex justify-between text-sm">
-                                        <span className="text-gray-500">{t('invoice.subtotal', 'Subtotal (HT)')}</span>
-                                        <span className="font-medium">{computedTotalHT.toFixed(3)} TND</span>
-                                    </div>
-                                    <div className="flex justify-between text-sm">
-                                        <span className="text-gray-500">TVA</span>
-                                        <span className="font-medium">{computedTVA.toFixed(3)} TND</span>
-                                    </div>
-                                    <div className="flex justify-between text-base pt-2 border-t border-gray-200">
-                                        <span className="font-semibold text-gray-900">{t('invoice.totalTTC', 'Total TTC')}</span>
-                                        <span className="font-bold text-indigo-600">{computedTotalTTC.toFixed(3)} TND</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+
                     </div>
                 )}
             </div>
@@ -1691,7 +1845,7 @@ export default function SupplierInvoicesPage() {
             {/* Bottom Action Bar */}
             <div className="sticky bottom-0 bg-white border-t border-gray-200 p-4 -mx-6 px-6 rounded-b-2xl flex justify-between items-center shadow-lg">
                 <div className="text-sm text-gray-500">
-                    {lineItems.length} {t('supplierInvoice.itemsCount', 'item(s)')} | {t('common.total', 'Total')}: <span className="font-bold text-indigo-600">{computedTotalTTC.toFixed(3)} TND</span>
+                    {lineItems.length} {t('supplierInvoice.itemsCount', 'item(s)')} | {t('common.total', 'Total')}: <span className="font-bold text-[#065F46]">{formatCurrency(parseFloat(headerData.totalTTC) || 0, supplierCurrencySymbol || DEFAULT_CURRENCY)}</span>
                 </div>
                 <div className="flex gap-3">
                     <button

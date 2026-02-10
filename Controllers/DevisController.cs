@@ -51,7 +51,9 @@ namespace ResourceManager.Controllers
                     d.Status,
                     d.Treated,
                     d.CreatedByUserId,
-                    d.ClientId
+                    d.ClientId,
+                    d.Currency,
+                    d.CurrencySymbol
                 })
                 .ToListAsync();
 
@@ -72,7 +74,7 @@ namespace ResourceManager.Controllers
                 .Include(d => d.Client)
                 .Include(d => d.DevisItems)
                 .Include(d => d.CreatedByUser)
-                    .ThenInclude(u => u.Profile)
+                    .ThenInclude(u => u!.Profile)
                 .FirstOrDefaultAsync(d => d.Id == id);
 
             if (devis == null) return NotFound();
@@ -89,6 +91,8 @@ namespace ResourceManager.Controllers
                 devis.SubTotal,
                 devis.TaxAmount,
                 devis.TotalAmount,
+                devis.Currency,
+                devis.CurrencySymbol,
                 DevisItems = devis.DevisItems.Select(i => new {
                     i.Id,
                     i.Description,
@@ -115,11 +119,13 @@ namespace ResourceManager.Controllers
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
             var userId = _userManager.GetUserId(User);
+            if (string.IsNullOrEmpty(userId)) return Unauthorized();
             var user = await _userManager.FindByIdAsync(userId);
+            if (user == null) return Unauthorized();
             
             // Get company settings for custom tax
             var companySettings = await _context.CompanySettings
-                .FirstOrDefaultAsync(s => s.CompanyId == user!.CompanyId);
+                .FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
 
             var devis = new Devis
             {
@@ -129,6 +135,10 @@ namespace ResourceManager.Controllers
                 CreatedByUserId = userId,
                 CreatedAt = DateTime.UtcNow,
                 Status = "Draft",
+                // Per-document currency & language
+                Currency = dto.Currency ?? companySettings?.Currency,
+                CurrencySymbol = dto.CurrencySymbol ?? companySettings?.CurrencySymbol,
+                PdfLanguage = dto.PdfLanguage ?? companySettings?.InvoiceLanguage,
                 // Apply custom tax from company settings
                 Tfiscal = companySettings?.CustomTaxEnabled == true ? companySettings.CustomTaxAmount : 0,
                 TfiscalName = companySettings?.CustomTaxName ?? "Timbre Fiscal"
@@ -299,37 +309,10 @@ namespace ResourceManager.Controllers
             var company = await _context.Companies.FindAsync(user.CompanyId);
 
             // Build PDF settings from company config
-            var pdfSettings = new PdfSettings
-            {
-                PrimaryColor = companySettings?.PrimaryColor ?? "#00AEEF",
-                SecondaryColor = companySettings?.SecondaryColor ?? "#764ba2",
-                CurrencySymbol = companySettings?.CurrencySymbol ?? "DT",
-                ShowLogo = companySettings?.ShowCompanyLogo ?? true,
-                LogoData = company?.LogoData,
-                FooterText = companySettings?.PdfFooterText,
-                CompanyName = company?.Name ?? "",
-                CompanyAddress = company?.Address ?? "",
-                CompanyTaxId = company?.MatriculeFiscal ?? "",
-                CompanyPhone = company?.Phone ?? "",
-                // Custom tax settings
-                CustomTaxEnabled = companySettings?.CustomTaxEnabled ?? true,
-                CustomTaxName = companySettings?.CustomTaxName ?? "Timbre Fiscal",
-                CustomTaxAmount = companySettings?.CustomTaxAmount ?? 1.000m,
-                // Creator name for signature
-                CreatedByName = creatorName,
-                PdfSignatureText = companySettings?.PdfSignatureText,
-                InvoiceLanguage = companySettings?.InvoiceLanguage ?? "fr",
-                SignatureImageData = companySettings?.SignatureImageData,
-                ShowSignatureOnPdf = companySettings?.ShowSignatureOnPdf ?? false,
-                BankName = companySettings?.BankName,
-                BankBIC = companySettings?.BankBIC,
-                BankRIB = companySettings?.BankRIB,
-                BankIBAN = companySettings?.BankIBAN,
-                ShowBankName = companySettings?.ShowBankName ?? true,
-                ShowBankBIC = companySettings?.ShowBankBIC ?? true,
-                ShowBankRIB = companySettings?.ShowBankRIB ?? true,
-                ShowBankIBAN = companySettings?.ShowBankIBAN ?? true
-            };
+            var pdfSettings = PdfSettings.FromCompanySettings(
+                companySettings, company, creatorName,
+                currencyOverride: devis.CurrencySymbol,
+                languageOverride: devis.PdfLanguage);
             
             // Apply custom tax settings to devis if not already set
             if (devis.Tfiscal == null || devis.TfiscalName == null)

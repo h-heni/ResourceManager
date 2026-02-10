@@ -17,6 +17,8 @@ declare global {
                     initialize: (config: any) => void;
                     renderButton: (element: HTMLElement, config: any) => void;
                     prompt: () => void;
+                    disableAutoSelect: () => void;
+                    revoke: (email: string, callback: () => void) => void;
                 };
             };
         };
@@ -58,15 +60,7 @@ export default function LoginPage() {
                         name: auth0User.name
                     });
                     
-                    const { token, user, needsCompanySetup } = res.data;
-
-                    // Extract the JWT token
-                    let jwtToken = "";
-                    if (typeof token === 'string') {
-                        jwtToken = token;
-                    } else if (token && typeof token === 'object') {
-                        jwtToken = token.accessToken || token.AccessToken || "";
-                    }
+                    const { accessToken: jwtToken, user, needsCompanySetup } = res.data;
 
                     const roles = user.Role ? [user.Role] : (user.role ? [user.role] : []);
                     login(
@@ -96,8 +90,10 @@ export default function LoginPage() {
         handleAuth0Callback();
     }, [auth0IsAuthenticated, auth0User, getAccessTokenSilently, login, navigate, auth0Loading]);
 
-    // Initialize Google Sign-In
+    // Initialize Google Sign-In (skip if client ID is not configured)
     useEffect(() => {
+        if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID === 'YOUR_GOOGLE_CLIENT_ID') return;
+
         // Load Google Identity Services script
         const script = document.createElement('script');
         script.src = 'https://accounts.google.com/gsi/client';
@@ -116,19 +112,24 @@ export default function LoginPage() {
 
     const initializeGoogleSignIn = () => {
         if (window.google && GOOGLE_CLIENT_ID !== 'YOUR_GOOGLE_CLIENT_ID') {
-            window.google.accounts.id.initialize({
-                client_id: GOOGLE_CLIENT_ID,
-                callback: handleGoogleCallback,
-            });
-
-            const buttonDiv = document.getElementById('google-signin-button');
-            if (buttonDiv) {
-                window.google.accounts.id.renderButton(buttonDiv, {
-                    theme: 'outline',
-                    size: 'large',
-                    width: '100%',
-                    text: 'signin_with',
+            try {
+                window.google.accounts.id.initialize({
+                    client_id: GOOGLE_CLIENT_ID,
+                    callback: handleGoogleCallback,
                 });
+
+                const buttonDiv = document.getElementById('google-signin-button');
+                if (buttonDiv) {
+                    window.google.accounts.id.renderButton(buttonDiv, {
+                        theme: 'outline',
+                        size: 'large',
+                        width: '100%',
+                        text: 'signin_with',
+                    });
+                }
+            } catch (err) {
+                // Catch "origin not allowed for client ID" and similar Google GSI errors
+                console.warn('Google Sign-In initialization failed:', err);
             }
         }
     };
@@ -138,14 +139,10 @@ export default function LoginPage() {
         setError('');
         try {
             const res = await api.post('/Auth/google-login', { idToken: response.credential });
-            const { token, user, needsCompanySetup } = res.data;
+            const { accessToken, user, needsCompanySetup } = res.data;
 
-            // Fix: Token extraction
-            let accessToken = "";
-            if (typeof token === 'string') {
-                accessToken = token;
-            } else if (token && typeof token === 'object') {
-                accessToken = token.accessToken || token.AccessToken || "";
+            if (!accessToken) {
+                throw new Error("Invalid token received from server");
             }
 
             const roles = user.Role ? [user.Role] : (user.role ? [user.role] : []);
@@ -177,8 +174,13 @@ export default function LoginPage() {
             alert("Google Sign-In requires a valid Client ID.\n\nTo enable:\n1. Go to Google Cloud Console\n2. Create OAuth 2.0 credentials\n3. Set VITE_GOOGLE_CLIENT_ID in your .env file");
             return;
         }
-        if (window.google) {
-            window.google.accounts.id.prompt();
+        try {
+            if (window.google) {
+                window.google.accounts.id.prompt();
+            }
+        } catch (err) {
+            console.warn('Google Sign-In prompt failed:', err);
+            setError('Google Sign-In is not available. Check your Google Cloud Console Authorized Origins.');
         }
     };
 
@@ -200,16 +202,7 @@ export default function LoginPage() {
 
         try {
             const response = await api.post('/Auth/login', { email, password });
-            console.log("Login Successful", response.data);
-            const { token, user } = response.data;
-
-            // Fix: Token extraction
-            let accessToken = "";
-            if (typeof token === 'string') {
-                accessToken = token;
-            } else if (token && typeof token === 'object') {
-                accessToken = token.accessToken || token.AccessToken || "";
-            }
+            const { accessToken, user } = response.data;
 
             if (!accessToken) {
                 throw new Error("Invalid token received from server");
@@ -226,7 +219,7 @@ export default function LoginPage() {
             navigate('/dashboard');
         } catch (err: any) {
             console.error("Login Error:", err);
-            const msg = err.response?.data || "Login failed. Check your connection.";
+            const msg = err.response?.data?.error || err.response?.data || "Login failed. Check your connection.";
             setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
         } finally {
             setLoading(false);
@@ -234,11 +227,11 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 p-4">
-            <div className="w-full max-w-md bg-white/90 backdrop-blur-lg rounded-2xl shadow-2xl overflow-hidden animate-fade-in">
+        <div className="min-h-screen flex items-center justify-center bg-[#F9FAFB] p-4">
+            <div className="w-full max-w-md bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden animate-fade-in">
                 <div className="p-8">
                     <div className="text-center mb-10">
-                        <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-pink-600">
+                        <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-[#065F46]">
                             Resource Manager
                         </h1>
                         <p className="text-gray-500 mt-2">Welcome back! Please sign in.</p>
@@ -254,7 +247,7 @@ export default function LoginPage() {
                                     required
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
+                                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
                                     placeholder="you@example.com"
                                 />
                             </div>
@@ -269,7 +262,7 @@ export default function LoginPage() {
                                     required
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
+                                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
                                     placeholder="••••••••"
                                 />
                             </div>
@@ -286,7 +279,7 @@ export default function LoginPage() {
                             disabled={loading}
                             className={cn(
                                 "w-full py-3 px-4 rounded-xl text-white font-semibold shadow-lg transition-all transform hover:scale-[1.02] active:scale-[0.98]",
-                                "bg-gradient-to-r from-indigo-600 to-pink-600 hover:from-indigo-700 hover:to-pink-700",
+                                "bg-[#065F46] hover:bg-[#047857]",
                                 loading && "opacity-70 cursor-not-allowed"
                             )}
                         >
@@ -323,7 +316,7 @@ export default function LoginPage() {
                                 type="button"
                                 onClick={handleManualGoogleLogin}
                                 disabled={googleLoading}
-                                className="w-full py-3 px-4 rounded-xl border-2 border-gray-200 text-gray-700 font-semibold hover:border-indigo-500 hover:bg-indigo-50 transition-all flex items-center justify-center space-x-2"
+                                className="w-full py-3 px-4 rounded-xl border-2 border-gray-200 text-gray-700 font-semibold hover:border-[#065F46] hover:bg-[#065F46]/5 transition-all flex items-center justify-center space-x-2"
                             >
                                 {googleLoading ? (
                                     <Loader className="animate-spin h-5 w-5" />
@@ -374,7 +367,7 @@ export default function LoginPage() {
                 </div>
                 <div className="px-8 py-4 bg-gray-50 border-t border-gray-100/50 text-center">
                     <p className="text-sm text-gray-500">
-                        Don't have an account? <span onClick={() => navigate('/signup')} className="text-indigo-600 font-semibold cursor-pointer hover:underline">Create Account</span>
+                        Don't have an account? <span onClick={() => navigate('/signup')} className="text-[#065F46] font-semibold cursor-pointer hover:underline">Create Account</span>
                     </p>
                 </div>
             </div>

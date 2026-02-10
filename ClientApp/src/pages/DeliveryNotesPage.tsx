@@ -40,6 +40,13 @@ export default function DeliveryNotesPage() {
         fetchNotes();
     }, []);
 
+    // Refetch when a payment is confirmed/extended via NotificationBell (cascade changes treated status)
+    useEffect(() => {
+        const handler = () => fetchNotes();
+        window.addEventListener('payment-status-changed', handler);
+        return () => window.removeEventListener('payment-status-changed', handler);
+    }, []);
+
     const fetchNotes = async () => {
         try {
             const res = await api.get('/DeliveryNotes');
@@ -122,7 +129,7 @@ export default function DeliveryNotesPage() {
                 </div>
                 <button
                     onClick={() => navigate('/delivery-notes/create')}
-                    className="flex items-center px-4 py-2 bg-emerald-600 text-white rounded-xl shadow-lg hover:bg-emerald-700 transition-all transform hover:scale-105"
+                    className="flex items-center px-4 py-2 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all transform hover:scale-105"
                 >
                     <Plus size={20} className="mr-2" />
                     {t('deliveryNote.create')}
@@ -137,7 +144,7 @@ export default function DeliveryNotesPage() {
                         placeholder={t('deliveryNote.searchPlaceholder')}
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
+                        className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent outline-none transition-all"
                     />
                 </div>
                 {isManager && (
@@ -145,7 +152,7 @@ export default function DeliveryNotesPage() {
                         <button
                             onClick={() => setViewMode('active')}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                                viewMode === 'active' ? 'bg-white shadow-sm text-emerald-600' : 'text-gray-500 hover:text-gray-700'
+                                viewMode === 'active' ? 'bg-white shadow-sm text-[#065F46]' : 'text-gray-500 hover:text-gray-700'
                             }`}
                         >
                             <Filter size={16} />
@@ -154,7 +161,7 @@ export default function DeliveryNotesPage() {
                         <button
                             onClick={() => setViewMode('archived')}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                                viewMode === 'archived' ? 'bg-white shadow-sm text-emerald-600' : 'text-gray-500 hover:text-gray-700'
+                                viewMode === 'archived' ? 'bg-white shadow-sm text-[#065F46]' : 'text-gray-500 hover:text-gray-700'
                             }`}
                         >
                             <Archive size={16} />
@@ -184,11 +191,11 @@ export default function DeliveryNotesPage() {
                                 {filteredNotes.map((note) => (
                                     <tr key={note.id} className="hover:bg-gray-50 transition-colors group">
                                         <td className="p-4">
-                                            <span className="font-bold text-emerald-600">📄 {note.number}</span>
+                                            <span className="font-bold text-[#065F46]">📄 {note.number}</span>
                                         </td>
                                         <td className="p-4">
                                             <div className="flex items-center gap-2">
-                                                <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 font-bold text-sm">
+                                                <div className="w-8 h-8 bg-[#065F46]/10 rounded-full flex items-center justify-center text-[#065F46] font-bold text-sm">
                                                     {(note.clientName || 'U')[0].toUpperCase()}
                                                 </div>
                                                 <span className="text-gray-900">{note.clientName || t('common.unknown')}</span>
@@ -210,14 +217,14 @@ export default function DeliveryNotesPage() {
                                         </td>
                                         <td className="p-4">
                                             {note.invoiceId ? (
-                                                <span className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-full">
+                                                <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#065F46]/10 text-[#065F46] text-xs font-semibold rounded-full">
                                                     <FileText size={12} />
-                                                    {t('invoice.title')} #{note.invoiceNumber || note.invoiceId}
+                                                    {t('invoice.title')} #{note.invoiceNumber}
                                                 </span>
                                             ) : note.devisId ? (
                                                 <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
                                                     <FileText size={12} />
-                                                    {t('quote.title')} #{note.devisNumber || note.devisId}
+                                                    {t('quote.title')} #{note.devisNumber}
                                                 </span>
                                             ) : (
                                                 <span className="text-gray-400 text-sm">—</span>
@@ -228,7 +235,7 @@ export default function DeliveryNotesPage() {
                                                 {/* View PDF */}
                                                 <button
                                                     onClick={() => handleViewPdf(note.id)}
-                                                    className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                                    className="p-2 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
                                                     title={t('invoice.viewPdf')}
                                                 >
                                                     <Eye size={18} />
@@ -236,7 +243,7 @@ export default function DeliveryNotesPage() {
                                                 {/* Download PDF */}
                                                 <button
                                                     onClick={() => handleDownloadPdf(note.id, note.number)}
-                                                    className="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                                                    className="p-2 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
                                                     title={t('common.download')}
                                                 >
                                                     <Download size={18} />

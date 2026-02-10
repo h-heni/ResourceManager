@@ -15,14 +15,14 @@ import {
     Menu,
     X,
     CreditCard,
-    User,
     UserPlus,
     FileUp,
     DollarSign,
     Package,
     ChevronDown,
     ChevronRight,
-    Building2
+    Building2,
+    Database
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -48,75 +48,95 @@ export default function DashboardLayout() {
     const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
     const navigate = useNavigate();
     const location = useLocation();
-    const { logout, canManageUsers, canManageSettings } = useAuth();
+    const { logout, canManageUsers, canManageSettings, displayName, isSuperAdmin, isManager } = useAuth();
     const { t } = useTranslation();
 
     // Determine active section and auto-expand it
     useEffect(() => {
         const path = location.pathname;
         const newExpanded: Record<string, boolean> = {};
-        
+
         if (['/clients', '/invoices', '/quotes', '/delivery-notes', '/products'].some(p => path.startsWith(p))) {
             newExpanded['sales'] = true;
         }
         if (['/suppliers', '/supplier-invoices', '/expenses'].some(p => path.startsWith(p))) {
             newExpanded['purchases'] = true;
         }
-        if (path.startsWith('/settings')) {
+        if (path.startsWith('/settings') || path.startsWith('/data-management')) {
             newExpanded['settings'] = true;
         }
-        
+
         setExpandedSections(prev => ({ ...prev, ...newExpanded }));
     }, [location.pathname]);
 
     // Fetch company branding on mount
     useEffect(() => {
         let logoUrlToCleanup: string | null = null;
-        
+
         const fetchCompanyBranding = async () => {
             try {
                 const res = await api.get('/Settings');
                 if (res.data) {
                     setCompanyName(res.data.companyName || 'Resource Manager');
                 }
-                
-                try {
-                    const logoRes = await api.get('/Settings/logo', { responseType: 'blob' });
-                    if (logoRes.data && logoRes.data.size > 0) {
-                        const url = URL.createObjectURL(logoRes.data);
-                        logoUrlToCleanup = url;
-                        setCompanyLogo(url);
+
+                // Only fetch logo blob if the backend confirms one exists
+                if (res.data?.hasLogoData) {
+                    try {
+                        const logoRes = await api.get('/Settings/logo', { responseType: 'blob' });
+                        if (logoRes.data && logoRes.data.size > 0) {
+                            const url = URL.createObjectURL(logoRes.data);
+                            logoUrlToCleanup = url;
+                            setCompanyLogo(url);
+                        }
+                    } catch {
+                        // Logo fetch failed — non-critical
                     }
-                } catch {
-                    // No logo uploaded
                 }
 
-                // Fetch user profile name
-                try {
-                    const profileRes = await api.get('/user/profile');
-                    if (profileRes.data) {
-                        setUserName(profileRes.data.firstName 
-                            ? `${profileRes.data.firstName} ${profileRes.data.lastName || ''}`.trim()
-                            : profileRes.data.email || ''
-                        );
-                    }
-                } catch {
-                    // Profile not available
-                }
             } catch (error) {
                 console.error('Error fetching company branding:', error);
                 setCompanyName('Resource Manager');
             }
         };
-        
+
         fetchCompanyBranding();
-        
+
         return () => {
             if (logoUrlToCleanup) {
                 URL.revokeObjectURL(logoUrlToCleanup);
             }
         };
     }, []);
+
+    // Set userName from auth context (avoids 400 error from /api/user/profile)
+    useEffect(() => {
+        if (displayName) {
+            setUserName(displayName);
+        }
+    }, [displayName]);
+
+    // Dynamic browser tab: title + favicon from company branding
+    useEffect(() => {
+        document.title = companyName ? `Resource Manager — ${companyName}` : 'Resource Manager';
+    }, [companyName]);
+
+    useEffect(() => {
+        const defaultFavicon = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📄</text></svg>";
+        let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement | null;
+        if (!link) {
+            link = document.createElement('link');
+            link.rel = 'icon';
+            document.head.appendChild(link);
+        }
+        link.href = companyLogo || defaultFavicon;
+
+        return () => {
+            // Restore default favicon on unmount (logout / company switch)
+            const el = document.querySelector("link[rel~='icon']") as HTMLLinkElement | null;
+            if (el) el.href = defaultFavicon;
+        };
+    }, [companyLogo]);
 
     const handleLogout = () => {
         logout();
@@ -160,8 +180,9 @@ export default function DashboardLayout() {
     ];
 
     const bottomNavItems: NavItem[] = [
+        ...(isManager ? [{ icon: Database, label: t('nav.dataManagement', 'Data Management'), path: '/data-management' }] : []),
         ...(canManageUsers ? [{ icon: UserPlus, label: t('nav.users'), path: '/users' }] : []),
-        { icon: User, label: t('nav.profile'), path: '/profile' },
+
         ...(canManageSettings ? [{ icon: Settings, label: t('nav.settings'), path: '/settings' }] : []),
     ];
 
@@ -181,23 +202,20 @@ export default function DashboardLayout() {
                 key={item.path}
                 onClick={() => navigate(item.path)}
                 className={cn(
-                    "w-full flex items-center p-2.5 rounded-xl transition-all duration-200 group text-left",
-                    indent && sidebarOpen && "pl-10",
+                    "w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 group text-left text-sm",
+                    indent && sidebarOpen && "pl-11",
                     active
-                        ? "bg-white text-[#764ba2] shadow-lg font-bold"
-                        : "text-white/80 hover:bg-white/10 hover:text-white"
+                        ? "bg-[#065F46] text-white shadow-sm"
+                        : "text-slate-700 hover:bg-slate-100"
                 )}
             >
-                <item.icon size={20} className={cn("flex-shrink-0 transition-colors", active ? "text-[#764ba2]" : "text-white/80")} />
+                <item.icon size={18} className="flex-shrink-0" />
                 <span className={cn(
-                    "ml-3 text-sm font-medium transition-all duration-200 overflow-hidden whitespace-nowrap",
+                    "font-medium transition-all duration-200 overflow-hidden whitespace-nowrap",
                     sidebarOpen ? "opacity-100 w-auto" : "opacity-0 w-0"
                 )}>
                     {item.label}
                 </span>
-                {active && sidebarOpen && (
-                    <div className="ml-auto w-1.5 h-1.5 rounded-full bg-[#764ba2] flex-shrink-0" />
-                )}
             </button>
         );
     };
@@ -211,27 +229,27 @@ export default function DashboardLayout() {
                 <button
                     onClick={() => toggleSection(section.key)}
                     className={cn(
-                        "w-full flex items-center p-2.5 rounded-xl transition-all duration-200 text-left",
+                        "w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 text-left text-sm",
                         hasActiveChild
-                            ? "text-white font-bold bg-white/15"
-                            : "text-white/70 hover:bg-white/10 hover:text-white"
+                            ? "text-[#065F46] font-semibold bg-[#065F46]/5"
+                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                     )}
                 >
-                    <section.icon size={20} className="flex-shrink-0" />
+                    <section.icon size={18} className="flex-shrink-0" />
                     <span className={cn(
-                        "ml-3 text-sm font-medium transition-all duration-200 overflow-hidden whitespace-nowrap flex-1",
+                        "font-medium transition-all duration-200 overflow-hidden whitespace-nowrap flex-1",
                         sidebarOpen ? "opacity-100 w-auto" : "opacity-0 w-0"
                     )}>
                         {section.label}
                     </span>
                     {sidebarOpen && (
-                        <span className="flex-shrink-0 text-white/50">
+                        <span className="flex-shrink-0 text-slate-400">
                             {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                         </span>
                     )}
                 </button>
                 {isExpanded && sidebarOpen && (
-                    <div className="space-y-0.5 ml-1">
+                    <div className="space-y-0.5">
                         {section.children.map(child => renderNavItem(child, true))}
                     </div>
                 )}
@@ -250,85 +268,92 @@ export default function DashboardLayout() {
     // ════════════════════════════════════════════════════════
 
     return (
-        <div className="min-h-screen bg-gray-50 flex">
-            {/* Sidebar */}
+        <div className="min-h-screen bg-[#F9FAFB] flex" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
+            {/* Sidebar — Professional Green: white bg, green active states */}
             <aside
                 className={cn(
-                    "fixed inset-y-0 left-0 z-50 transition-all duration-300 ease-in-out flex flex-col shadow-2xl",
-                    sidebarOpen ? "w-64" : "w-20",
-                    "bg-gradient-to-b from-[#667eea] to-[#764ba2]"
+                    "fixed inset-y-0 left-0 z-50 transition-all duration-300 ease-in-out flex flex-col",
+                    "bg-white border-r border-slate-200",
+                    sidebarOpen ? "w-72" : "w-20"
                 )}
             >
                 {/* Company Header */}
-                <div className="h-20 flex items-center justify-between px-4 border-b border-white/20">
+                <div className="h-[72px] flex items-center justify-between px-4 border-b border-slate-200">
                     {sidebarOpen ? (
                         <div className="flex items-center gap-3 overflow-hidden">
-                            {companyLogo && (
-                                <img 
-                                    src={companyLogo} 
-                                    alt="Company Logo" 
-                                    className="h-10 w-10 object-contain rounded-lg bg-white/10 p-1 flex-shrink-0"
+                            {companyLogo ? (
+                                <img
+                                    src={companyLogo}
+                                    alt="Company Logo"
+                                    className="h-10 w-10 object-contain rounded-lg flex-shrink-0"
                                 />
+                            ) : (
+                                <div className="size-10 rounded-lg bg-[#065F46] flex items-center justify-center flex-shrink-0">
+                                    <LayoutDashboard className="size-6 text-white" />
+                                </div>
                             )}
-                            <span className="text-lg font-bold text-white tracking-wide truncate">
-                                {companyName || 'Resource Manager'}
-                            </span>
+                            <div className="min-w-0">
+                                <div className="text-base font-semibold text-slate-900 truncate">
+                                    {companyName || t('common.appName')}
+                                </div>
+                                <div className="text-xs text-slate-500">{t('common.appName')}</div>
+                            </div>
                         </div>
                     ) : (
                         companyLogo ? (
-                            <img 
-                                src={companyLogo} 
-                                alt="Logo" 
-                                className="h-10 w-10 object-contain rounded-lg bg-white/10 p-1 mx-auto"
+                            <img
+                                src={companyLogo}
+                                alt="Logo"
+                                className="h-10 w-10 object-contain rounded-lg mx-auto"
                             />
                         ) : (
-                            <span className="text-2xl font-bold text-white mx-auto">
-                                {companyName ? companyName.charAt(0).toUpperCase() : 'M'}
-                            </span>
+                            <div className="size-10 rounded-lg bg-[#065F46] flex items-center justify-center mx-auto">
+                                <LayoutDashboard className="size-5 text-white" />
+                            </div>
                         )
                     )}
                     <button
                         onClick={() => setSidebarOpen(!sidebarOpen)}
-                        className="p-1.5 rounded-lg hover:bg-white/20 text-white transition-colors flex-shrink-0"
+                        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors flex-shrink-0"
                     >
-                        {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+                        {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
                     </button>
                 </div>
 
                 {/* Navigation */}
-                <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto mt-2">
+                <nav className="flex-1 p-3 space-y-1 overflow-y-auto mt-1">
                     {/* Dashboard */}
                     {topNavItems.map(item => renderNavItem(item))}
-                    
+
                     {/* Separator */}
-                    <div className="border-t border-white/15 my-2" />
+                    <div className="border-t border-slate-200 my-2" />
 
                     {/* Contextual Sections: Sales & Purchases */}
                     {navSections.map(section => renderSection(section))}
 
                     {/* Separator */}
-                    <div className="border-t border-white/15 my-2" />
+                    <div className="border-t border-slate-200 my-2" />
 
                     {/* Management items */}
                     {bottomNavItems.map(item => renderNavItem(item))}
                 </nav>
 
                 {/* User info + Logout */}
-                <div className="p-4 border-t border-white/20">
+                <div className="p-3 border-t border-slate-200">
                     {sidebarOpen && userName && (
-                        <div className="text-xs text-white/60 mb-2 truncate px-3">
+                        <div className="text-xs text-slate-500 mb-2 truncate px-4">
                             {userName}
                         </div>
                     )}
                     <button
                         onClick={handleLogout}
                         className={cn(
-                            "w-full flex items-center p-2.5 rounded-xl text-white hover:bg-red-500/20 transition-all",
+                            "w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 hover:bg-red-50 hover:text-red-600 transition-all text-sm",
                             !sidebarOpen && "justify-center"
                         )}
                     >
-                        <LogOut size={20} />
-                        <span className={cn("ml-3 text-sm font-medium transition-all duration-200 overflow-hidden", sidebarOpen ? "opacity-100 w-auto" : "opacity-0 w-0")}>
+                        <LogOut size={18} />
+                        <span className={cn("font-medium transition-all duration-200 overflow-hidden", sidebarOpen ? "opacity-100 w-auto" : "opacity-0 w-0")}>
                             {t('nav.signOut')}
                         </span>
                     </button>
@@ -337,28 +362,28 @@ export default function DashboardLayout() {
 
             {/* Main Content */}
             <main className={cn(
-                "flex-1 transition-all duration-300 min-h-screen bg-[#eef2f5]",
-                sidebarOpen ? "ml-64" : "ml-20"
+                "flex-1 transition-all duration-300 min-h-screen",
+                sidebarOpen ? "ml-72" : "ml-20"
             )}>
-                {/* Topbar with company/user info + Language + Notifications */}
-                <div className="bg-white shadow-sm border-b border-gray-200 px-8 py-3 flex justify-between items-center">
+                {/* Topbar */}
+                <div className="bg-white border-b border-slate-200 px-8 py-3 flex justify-between items-center">
                     <div className="flex items-center gap-3">
                         {companyLogo && (
                             <img src={companyLogo} alt="" className="h-7 w-7 object-contain rounded" />
                         )}
-                        <span className="text-sm font-medium text-gray-600 hidden md:inline">
+                        <span className="text-sm font-medium text-slate-600 hidden md:inline">
                             {companyName}
                         </span>
                         {userName && (
                             <>
-                                <div className="w-px h-5 bg-gray-200 hidden md:block" />
-                                <span className="text-sm text-gray-500 hidden md:inline">{userName}</span>
+                                <div className="w-px h-5 bg-slate-200 hidden md:block" />
+                                <span className="text-sm text-slate-500 hidden md:inline">{userName}</span>
                             </>
                         )}
                     </div>
                     <div className="flex items-center gap-3">
-                        <NotificationBell />
-                        <div className="w-px h-6 bg-gray-200"></div>
+                        {!isSuperAdmin && <NotificationBell />}
+                        <div className="w-px h-6 bg-slate-200"></div>
                         <LanguageSelector />
                     </div>
                 </div>

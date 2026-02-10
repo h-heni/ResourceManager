@@ -463,29 +463,7 @@ namespace ResourceManager.Services
                             .FirstOrDefaultAsync(s => s.CompanyId == company!.Id);
                         
                         // Create PDF settings
-                        var pdfSettings = new PdfSettings
-                        {
-                            CompanyName = company?.Name ?? "",
-                            CompanyAddress = company?.Address ?? "",
-                            CompanyTaxId = company?.MatriculeFiscal ?? "",
-                            CompanyPhone = company?.Phone ?? "",
-                            CustomTaxEnabled = settings?.CustomTaxEnabled ?? true,
-                            CustomTaxName = settings?.CustomTaxName ?? "Timbre Fiscal",
-                            CustomTaxAmount = settings?.CustomTaxAmount ?? 1.000m,
-                            LogoData = company?.LogoData,
-                            PdfSignatureText = settings?.PdfSignatureText,
-                            InvoiceLanguage = settings?.InvoiceLanguage ?? "fr",
-                            SignatureImageData = settings?.SignatureImageData,
-                            ShowSignatureOnPdf = settings?.ShowSignatureOnPdf ?? false,
-                            BankName = settings?.BankName,
-                            BankBIC = settings?.BankBIC,
-                            BankRIB = settings?.BankRIB,
-                            BankIBAN = settings?.BankIBAN,
-                            ShowBankName = settings?.ShowBankName ?? true,
-                            ShowBankBIC = settings?.ShowBankBIC ?? true,
-                            ShowBankRIB = settings?.ShowBankRIB ?? true,
-                            ShowBankIBAN = settings?.ShowBankIBAN ?? true
-                        };
+                        var pdfSettings = PdfSettings.FromCompanySettings(settings, company);
                         
                         var document = new Document<Invoice>(fullInvoice, pdfSettings);
                         pdfBytes = document.GeneratePdf();

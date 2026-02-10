@@ -92,8 +92,8 @@ namespace ResourceManager.Controllers
         }
 
         /// <summary>
-        /// Soft delete a user. SuperAdmin can delete any user, Manager can delete employees from their company.
-        /// The user's work (invoices, etc.) remains intact with CreatedByUserId preserved.
+        /// Delete a user. SuperAdmin performs full cascading delete (company + all data).
+        /// Manager performs soft delete on employees.
         /// </summary>
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteUser(string id)
@@ -144,6 +144,122 @@ namespace ResourceManager.Controllers
             else
             {
                 return Forbid("Insufficient permissions.");
+            }
+
+            // ═══ SuperAdmin: Full cascading delete ═══
+            if (isSuperAdmin && (targetRoles.Contains("Manager") || targetRoles.Contains("FreeUser")))
+            {
+                // Deleting a tenant owner → cascade-delete entire company + all data
+                var companyId = targetUser.CompanyId;
+
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    // 1. Delete all invoice items → payments → invoices
+                    var invoiceIds = await _context.Invoices.IgnoreQueryFilters()
+                        .Where(i => i.CompanyId == companyId).Select(i => i.Id).ToListAsync();
+                    _context.InvoiceItems.RemoveRange(
+                        await _context.InvoiceItems.IgnoreQueryFilters()
+                            .Where(ii => ii.InvoiceId.HasValue && invoiceIds.Contains(ii.InvoiceId.Value)).ToListAsync());
+                    _context.Payments.RemoveRange(
+                        await _context.Payments.Where(p => invoiceIds.Contains(p.InvoiceId)).ToListAsync());
+                    _context.InvoiceEmails.RemoveRange(
+                        await _context.InvoiceEmails.Where(e => invoiceIds.Contains(e.InvoiceId)).ToListAsync());
+                    _context.Invoices.RemoveRange(
+                        await _context.Invoices.IgnoreQueryFilters()
+                            .Where(i => i.CompanyId == companyId).ToListAsync());
+
+                    // 2. Delete delivery note items → delivery notes
+                    var dnIds = await _context.DeliveryNotes.IgnoreQueryFilters()
+                        .Where(d => d.CompanyId == companyId).Select(d => d.Id).ToListAsync();
+                    _context.DeliveryNoteItems.RemoveRange(
+                        await _context.DeliveryNoteItems.IgnoreQueryFilters()
+                            .Where(di => di.DeliveryNoteId.HasValue && dnIds.Contains(di.DeliveryNoteId.Value)).ToListAsync());
+                    _context.DeliveryNotes.RemoveRange(
+                        await _context.DeliveryNotes.IgnoreQueryFilters()
+                            .Where(d => d.CompanyId == companyId).ToListAsync());
+
+                    // 3. Delete devis items → devis
+                    var devisIds = await _context.Devis.IgnoreQueryFilters()
+                        .Where(d => d.CompanyId == companyId).Select(d => d.Id).ToListAsync();
+                    _context.DevisItems.RemoveRange(
+                        await _context.DevisItems.IgnoreQueryFilters()
+                            .Where(di => di.DevisId.HasValue && devisIds.Contains(di.DevisId.Value)).ToListAsync());
+                    _context.Devis.RemoveRange(
+                        await _context.Devis.IgnoreQueryFilters()
+                            .Where(d => d.CompanyId == companyId).ToListAsync());
+
+                    // 4. Delete supplier invoice items → payments → supplier invoices
+                    var siIds = await _context.FournisseurInvoices.IgnoreQueryFilters()
+                        .Where(si => si.CompanyId == companyId).Select(si => si.Id).ToListAsync();
+                    _context.FournisseurInvoiceItems.RemoveRange(
+                        await _context.FournisseurInvoiceItems.IgnoreQueryFilters()
+                            .Where(sii => siIds.Contains(sii.FournisseurInvoiceId)).ToListAsync());
+                    _context.SupplierPayments.RemoveRange(
+                        await _context.SupplierPayments.Where(sp => siIds.Contains(sp.FournisseurInvoiceId)).ToListAsync());
+                    _context.FournisseurInvoices.RemoveRange(
+                        await _context.FournisseurInvoices.IgnoreQueryFilters()
+                            .Where(si => si.CompanyId == companyId).ToListAsync());
+
+                    // 5. Delete other expenses, clients, fournisseurs, products, PDF records
+                    _context.OtherExpenses.RemoveRange(
+                        await _context.OtherExpenses.IgnoreQueryFilters()
+                            .Where(e => e.CompanyId == companyId).ToListAsync());
+                    _context.Clients.RemoveRange(
+                        await _context.Clients.IgnoreQueryFilters()
+                            .Where(c => c.CompanyId == companyId).ToListAsync());
+                    _context.Fournisseurs.RemoveRange(
+                        await _context.Fournisseurs.IgnoreQueryFilters()
+                            .Where(f => f.CompanyId == companyId).ToListAsync());
+                    _context.ProductServices.RemoveRange(
+                        await _context.ProductServices.IgnoreQueryFilters()
+                            .Where(ps => ps.CompanyId == companyId).ToListAsync());
+                    _context.PdfFileRecords.RemoveRange(
+                        await _context.PdfFileRecords.IgnoreQueryFilters()
+                            .Where(p => p.CompanyId == companyId).ToListAsync());
+
+                    // 6. Delete payment notifications for this company's users
+                    var companyUserIds = await _context.Users
+                        .Where(u => u.CompanyId == companyId).Select(u => u.Id).ToListAsync();
+                    _context.PaymentNotifications.RemoveRange(
+                        await _context.PaymentNotifications
+                            .Where(n => n.UserId != null && companyUserIds.Contains(n.UserId)).ToListAsync());
+
+                    // 7. Delete company settings
+                    _context.CompanySettings.RemoveRange(
+                        await _context.CompanySettings.Where(s => s.CompanyId == companyId).ToListAsync());
+
+                    // 8. Delete all company users (profiles + identity)
+                    var companyUsers = await _context.Users
+                        .Include(u => u.Profile)
+                        .Where(u => u.CompanyId == companyId)
+                        .ToListAsync();
+                    foreach (var u in companyUsers)
+                    {
+                        if (u.Profile != null)
+                            _context.UserProfiles.Remove(u.Profile);
+                        await _userManager.DeleteAsync(u);
+                    }
+
+                    // 9. Delete the company itself
+                    var company = await _context.Companies.FindAsync(companyId);
+                    if (company != null)
+                        _context.Companies.Remove(company);
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    return Ok(new { Message = $"Tenant and all associated data deleted permanently." });
+                }
+                catch (Exception ex)
+                {
+                    await transaction.RollbackAsync();
+                    return StatusCode(500, new { Message = $"Cascading delete failed: {ex.Message}" });
+                }
+            }
+            else if (isSuperAdmin)
+            {
+                // SuperAdmin deleting an Employee: soft delete only
             }
 
             // Soft delete: mark UserProfile as deleted

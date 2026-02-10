@@ -34,7 +34,8 @@ namespace ResourceManager.Controllers
                     p.Type,
                     p.Category,
                     p.VatApplicable,
-                    p.CreatedAt
+                    p.CreatedAt,
+                    p.TvaRate
                 })
                 .ToListAsync();
 
@@ -57,7 +58,7 @@ namespace ResourceManager.Controllers
                 item.Type,
                 item.Category,
                 item.VatApplicable,
-                item.CreatedAt
+                item.TvaRate
             });
         }
 
@@ -80,7 +81,8 @@ namespace ResourceManager.Controllers
                     p.DefaultUnitPrice,
                     p.Type,
                     p.Category,
-                    p.VatApplicable
+                    p.VatApplicable,
+                    p.TvaRate
                 })
                 .ToListAsync();
 
@@ -96,6 +98,7 @@ namespace ResourceManager.Controllers
                 Name = dto.Name,
                 Description = dto.Description,
                 DefaultUnitPrice = dto.DefaultUnitPrice,
+                TvaRate = dto.TvaRate,
                 Type = dto.Type,
                 Category = dto.Category,
                 VatApplicable = dto.VatApplicable
@@ -129,6 +132,7 @@ namespace ResourceManager.Controllers
             item.Name = dto.Name;
             item.Description = dto.Description;
             item.DefaultUnitPrice = dto.DefaultUnitPrice;
+            item.TvaRate = dto.TvaRate;
             item.Type = dto.Type;
             item.Category = dto.Category;
             item.VatApplicable = dto.VatApplicable;

@@ -133,9 +133,16 @@
     "linkedDelivery": "سندات التسليم المرتبطة",
     "noPayments": "لا توجد دفعات مسجلة",
     "noLinkedDocs": "لا توجد مستندات مرتبطة",
+    "lockedAfterPayment": "مقفلة — تم تسجيل مدفوعات",
+    "noRelatedQuote": "لا يوجد عرض أسعار مرتبط",
+    "relatedDeliveryNotes": "مذكرات التسليم المرتبطة",
+    "noRelatedDeliveryNotes": "لا توجد مذكرات تسليم مرتبطة",
+    "currency": "العملة",
     "qty": "الكمية",
     "taxRate": "نسبة الضريبة %",
     "itemDescription": "وصف البند",
+    "totalPaid": "إجمالي المدفوع",
+    "relatedQuote": "عرض الأسعار المرتبط",
     "alreadyPaid": "مدفوع مسبقاً",
     "create": "إنشاء فاتورة",
     "viewPdf": "عرض PDF",
@@ -161,7 +168,8 @@
   "deliveryNote": {
     "title": "سندات التسليم",
     "newDeliveryNote": "سند تسليم جديد",
-    "noteNumber": "رقم السند"
+    "noteNumber": "رقم السند",
+    "delivered": "تم التسليم"
   },
   "client": {
     "title": "العملاء",

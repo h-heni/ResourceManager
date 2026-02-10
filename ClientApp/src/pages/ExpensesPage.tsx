@@ -1,11 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-    Plus, Trash2, Edit2, Search, DollarSign, Calendar, Tag, X,
+    Plus, Trash2, Edit2, Search, DollarSign, Calendar, X,
     TrendingUp, Loader2, FileText, Settings2
 } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useSettings } from '../hooks/useSettings';
+import { formatCurrency } from '../lib/formatNumber';
+import { CURRENCY_OPTIONS, DEFAULT_CURRENCY } from '../lib/currencyUtils';
 
 interface Expense {
     id: number;
@@ -16,6 +19,17 @@ interface Expense {
     notes?: string;
     isRecurring: boolean;
     createdAt: string;
+    currency?: string;
+    currencySymbol?: string;
+}
+
+interface CurrencyBreakdown {
+    currency: string;
+    currencySymbol: string;
+    totalAll: number;
+    totalThisMonth: number;
+    totalThisYear: number;
+    count: number;
 }
 
 interface ExpenseSummary {
@@ -24,6 +38,8 @@ interface ExpenseSummary {
     totalThisYear: number;
     byCategory: { category: string; total: number; count: number }[];
     count: number;
+    currencyBreakdowns?: CurrencyBreakdown[];
+    defaultCurrency?: string;
 }
 
 const BASE_CATEGORIES = [
@@ -46,6 +62,7 @@ function saveCustomCategories(cats: string[]) {
 export default function ExpensesPage() {
     const { t } = useTranslation();
     const { isManager } = useAuth();
+    const { currencySymbol } = useSettings();
     const [expenses, setExpenses] = useState<Expense[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -68,7 +85,9 @@ export default function ExpensesPage() {
         date: new Date().toISOString().split('T')[0],
         category: 'other',
         notes: '',
-        isRecurring: false
+        isRecurring: false,
+        currency: '',
+        currencySymbol: ''
     });
 
     const fetchExpenses = useCallback(async () => {
@@ -105,7 +124,9 @@ export default function ExpensesPage() {
             date: new Date().toISOString().split('T')[0],
             category: 'other',
             notes: '',
-            isRecurring: false
+            isRecurring: false,
+            currency: currencySymbol === '$' ? 'USD' : currencySymbol === '€' ? 'EUR' : currencySymbol === '£' ? 'GBP' : DEFAULT_CURRENCY,
+            currencySymbol: currencySymbol
         });
         setShowModal(true);
     };
@@ -118,7 +139,9 @@ export default function ExpensesPage() {
             date: expense.date ? new Date(expense.date).toISOString().split('T')[0] : '',
             category: expense.category,
             notes: expense.notes || '',
-            isRecurring: expense.isRecurring
+            isRecurring: expense.isRecurring,
+            currency: expense.currency || DEFAULT_CURRENCY,
+            currencySymbol: expense.currencySymbol || currencySymbol
         });
         setShowModal(true);
     };
@@ -133,7 +156,9 @@ export default function ExpensesPage() {
                 date: form.date || undefined,
                 category: form.category,
                 notes: form.notes || undefined,
-                isRecurring: form.isRecurring
+                isRecurring: form.isRecurring,
+                currency: form.currency || undefined,
+                currencySymbol: form.currencySymbol || undefined
             };
 
             if (editingExpense) {
@@ -168,14 +193,14 @@ export default function ExpensesPage() {
             rent: 'bg-blue-100 text-blue-700',
             utilities: 'bg-yellow-100 text-yellow-700',
             office: 'bg-green-100 text-green-700',
-            travel: 'bg-purple-100 text-purple-700',
-            marketing: 'bg-pink-100 text-pink-700',
-            insurance: 'bg-indigo-100 text-indigo-700',
+            travel: 'bg-[#065F46]/10 text-[#065F46]',
+            marketing: 'bg-[#14B8A6]/10 text-[#14B8A6]',
+            insurance: 'bg-[#065F46]/10 text-[#065F46]',
             maintenance: 'bg-orange-100 text-orange-700',
             subscription: 'bg-cyan-100 text-cyan-700',
             salary: 'bg-emerald-100 text-emerald-700',
             telecom: 'bg-teal-100 text-teal-700',
-            bankFees: 'bg-rose-100 text-rose-700',
+            bankFees: 'bg-red-100 text-red-700',
             other: 'bg-gray-100 text-gray-700'
         };
         return colors[cat] || 'bg-violet-100 text-violet-700';
@@ -199,7 +224,7 @@ export default function ExpensesPage() {
     if (loading) {
         return (
             <div className="flex items-center justify-center h-64">
-                <Loader2 className="animate-spin text-indigo-600" size={32} />
+                <Loader2 className="animate-spin text-[#065F46]" size={32} />
             </div>
         );
     }
@@ -217,7 +242,7 @@ export default function ExpensesPage() {
                 <div className="flex items-center gap-3">
                 <button
                     onClick={openCreateModal}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all font-medium"
+                    className="flex items-center gap-2 px-4 py-2.5 bg-[#065F46] text-white rounded-xl hover:bg-[#047857] shadow-lg hover:shadow-xl transition-all font-medium"
                 >
                     <Plus size={18} />
                     {t('expense.newExpense')}
@@ -235,17 +260,19 @@ export default function ExpensesPage() {
                 </div>
             </div>
 
-            {/* Summary Cards */}
-            {summary && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Summary Cards - per-currency breakdown */}
+            {summary && summary.currencyBreakdowns && summary.currencyBreakdowns.length > 0 && (
+                <>
+                {summary.currencyBreakdowns.map((cb) => (
+                <div key={cb.currency} className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
                         <div className="flex items-center gap-3">
-                            <div className="p-2 bg-indigo-100 rounded-lg">
-                                <DollarSign size={20} className="text-indigo-600" />
+                            <div className="p-2 bg-[#065F46]/10 rounded-lg">
+                                <DollarSign size={20} className="text-[#065F46]" />
                             </div>
                             <div>
-                                <p className="text-sm text-gray-500">{t('expense.totalExpenses')}</p>
-                                <p className="text-xl font-bold text-gray-900">{summary.totalAll.toFixed(3)} TND</p>
+                                <p className="text-sm text-gray-500">{t('expense.totalExpenses')} ({cb.currencySymbol})</p>
+                                <p className="text-xl font-bold text-gray-900">{formatCurrency(cb.totalAll, cb.currencySymbol)}</p>
                             </div>
                         </div>
                     </div>
@@ -255,23 +282,25 @@ export default function ExpensesPage() {
                                 <Calendar size={20} className="text-emerald-600" />
                             </div>
                             <div>
-                                <p className="text-sm text-gray-500">{t('expense.thisMonth')}</p>
-                                <p className="text-xl font-bold text-gray-900">{summary.totalThisMonth.toFixed(3)} TND</p>
+                                <p className="text-sm text-gray-500">{t('expense.thisMonth')} ({cb.currencySymbol})</p>
+                                <p className="text-xl font-bold text-gray-900">{formatCurrency(cb.totalThisMonth, cb.currencySymbol)}</p>
                             </div>
                         </div>
                     </div>
                     <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
                         <div className="flex items-center gap-3">
-                            <div className="p-2 bg-purple-100 rounded-lg">
-                                <TrendingUp size={20} className="text-purple-600" />
+                            <div className="p-2 bg-[#065F46]/10 rounded-lg">
+                                <TrendingUp size={20} className="text-[#065F46]" />
                             </div>
                             <div>
-                                <p className="text-sm text-gray-500">{t('expense.thisYear')}</p>
-                                <p className="text-xl font-bold text-gray-900">{summary.totalThisYear.toFixed(3)} TND</p>
+                                <p className="text-sm text-gray-500">{t('expense.thisYear')} ({cb.currencySymbol})</p>
+                                <p className="text-xl font-bold text-gray-900">{formatCurrency(cb.totalThisYear, cb.currencySymbol)}</p>
                             </div>
                         </div>
                     </div>
                 </div>
+                ))}
+                </>
             )}
 
             {/* Search & Filter Bar */}
@@ -284,13 +313,13 @@ export default function ExpensesPage() {
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             placeholder={t('expense.searchPlaceholder')}
-                            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
+                            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] focus:border-[#065F46] transition"
                         />
                     </div>
                     <select
                         value={filterCategory}
                         onChange={(e) => setFilterCategory(e.target.value)}
-                        className="px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition bg-white"
+                        className="px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] focus:border-[#065F46] transition bg-white"
                     >
                         <option value="all">{t('common.all')}</option>
                         {allCategories.map(cat => (
@@ -345,13 +374,13 @@ export default function ExpensesPage() {
                                         {new Date(expense.date).toLocaleDateString()}
                                     </td>
                                     <td className="px-6 py-4 text-right font-medium text-gray-900">
-                                        {expense.amount.toFixed(3)} TND
+                                        {formatCurrency(expense.amount, expense.currencySymbol || currencySymbol)}
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                         <div className="flex justify-end gap-2">
                                             <button
                                                 onClick={() => openEditModal(expense)}
-                                                className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                                className="p-2 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
                                                 title={t('common.edit')}
                                             >
                                                 <Edit2 size={16} />
@@ -369,15 +398,28 @@ export default function ExpensesPage() {
                             ))}
                         </tbody>
                         <tfoot className="bg-gray-50 border-t-2 border-gray-200">
-                            <tr>
-                                <td colSpan={3} className="px-6 py-3 text-sm font-semibold text-gray-700 text-right">
-                                    {t('common.total')}
-                                </td>
-                                <td className="px-6 py-3 text-right font-bold text-gray-900">
-                                    {filteredExpenses.reduce((sum, e) => sum + e.amount, 0).toFixed(3)} TND
-                                </td>
-                                <td></td>
-                            </tr>
+                            {(() => {
+                                // Group filtered expenses by currency for the total row
+                                const byCur: Record<string, { total: number; symbol: string }> = {};
+                                filteredExpenses.forEach(e => {
+                                    const sym = e.currencySymbol || currencySymbol;
+                                    const cur = e.currency || 'DEFAULT';
+                                    if (!byCur[cur]) byCur[cur] = { total: 0, symbol: sym };
+                                    byCur[cur].total += e.amount;
+                                });
+                                const entries = Object.values(byCur);
+                                return entries.map((entry, i) => (
+                                    <tr key={i}>
+                                        <td colSpan={3} className="px-6 py-3 text-sm font-semibold text-gray-700 text-right">
+                                            {i === 0 ? t('common.total') : ''}
+                                        </td>
+                                        <td className="px-6 py-3 text-right font-bold text-gray-900">
+                                            {formatCurrency(entry.total, entry.symbol)}
+                                        </td>
+                                        <td></td>
+                                    </tr>
+                                ));
+                            })()}
                         </tfoot>
                     </table>
                 </div>
@@ -403,7 +445,7 @@ export default function ExpensesPage() {
                                     type="text"
                                     value={form.description}
                                     onChange={e => setForm({ ...form, description: e.target.value })}
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] focus:border-[#065F46]"
                                     placeholder={t('expense.description')}
                                 />
                             </div>
@@ -417,7 +459,7 @@ export default function ExpensesPage() {
                                         step="0.001"
                                         value={form.amount}
                                         onChange={e => setForm({ ...form, amount: e.target.value })}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] focus:border-[#065F46]"
                                         placeholder="0.000"
                                     />
                                 </div>
@@ -427,18 +469,19 @@ export default function ExpensesPage() {
                                         type="date"
                                         value={form.date}
                                         onChange={e => setForm({ ...form, date: e.target.value })}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] focus:border-[#065F46]"
                                     />
                                 </div>
                             </div>
 
-                            {/* Category */}
+                            {/* Category & Currency */}
+                            <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('expense.category')}</label>
                                 <select
                                     value={form.category}
                                     onChange={e => setForm({ ...form, category: e.target.value })}
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] focus:border-[#065F46] bg-white"
                                 >
                                     {allCategories.map(cat => (
                                         <option key={cat} value={cat}>
@@ -446,6 +489,24 @@ export default function ExpensesPage() {
                                         </option>
                                     ))}
                                 </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">{t('invoice.currency', 'Currency')}</label>
+                                <select
+                                    value={form.currency}
+                                    onChange={e => {
+                                        const opt = CURRENCY_OPTIONS.find(o => o.code === e.target.value);
+                                        setForm({ ...form, currency: e.target.value, currencySymbol: opt?.symbol || e.target.value });
+                                    }}
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] focus:border-[#065F46] bg-white"
+                                >
+                                    {CURRENCY_OPTIONS.map(opt => (
+                                        <option key={opt.code} value={opt.code}>
+                                            {opt.symbol} — {opt.code}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
                             </div>
 
                             {/* Notes */}
@@ -455,7 +516,7 @@ export default function ExpensesPage() {
                                     value={form.notes}
                                     onChange={e => setForm({ ...form, notes: e.target.value })}
                                     rows={2}
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] focus:border-[#065F46]"
                                     placeholder={t('expense.notes')}
                                 />
                             </div>
@@ -466,7 +527,7 @@ export default function ExpensesPage() {
                                     type="checkbox"
                                     checked={form.isRecurring}
                                     onChange={e => setForm({ ...form, isRecurring: e.target.checked })}
-                                    className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                    className="w-4 h-4 rounded border-gray-300 text-[#065F46] focus:ring-[#065F46]"
                                 />
                                 <span className="text-sm text-gray-700">{t('expense.recurring')}</span>
                             </label>
@@ -482,7 +543,7 @@ export default function ExpensesPage() {
                             <button
                                 onClick={handleSave}
                                 disabled={saving || !form.description.trim() || !form.amount}
-                                className="px-6 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 font-medium flex items-center gap-2 transition-all"
+                                className="px-6 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#047857] disabled:opacity-50 font-medium flex items-center gap-2 transition-all"
                             >
                                 {saving && <Loader2 size={16} className="animate-spin" />}
                                 {t('common.save')}
@@ -516,13 +577,13 @@ export default function ExpensesPage() {
                                         value={newCategoryName}
                                         onChange={e => setNewCategoryName(e.target.value)}
                                         onKeyDown={e => e.key === 'Enter' && handleAddCustomCategory()}
-                                        className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                        className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] focus:border-[#065F46]"
                                         placeholder={t('expense.categoryNamePlaceholder', 'e.g. Legal Fees')}
                                     />
                                     <button
                                         onClick={handleAddCustomCategory}
                                         disabled={!newCategoryName.trim()}
-                                        className="px-4 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                                        className="px-4 py-2.5 bg-[#065F46] text-white rounded-lg hover:bg-[#047857] disabled:opacity-50 transition-colors"
                                     >
                                         <Plus size={18} />
                                     </button>
@@ -564,7 +625,7 @@ export default function ExpensesPage() {
                         <div className="flex justify-end px-6 py-4 border-t border-gray-100 bg-gray-50">
                             <button
                                 onClick={() => setShowCategoryModal(false)}
-                                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
+                                className="px-4 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#047857] transition-colors font-medium"
                             >
                                 {t('common.close')}
                             </button>

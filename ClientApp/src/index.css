@@ -1,31 +1,19 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* 
-   We keep Tailwind for utility classes if needed, 
-   but we override the defaults with the User's "Razor Style" CSS 
-*/
+/* ═══════════════════════════════════════════════
+   Professional Green Design System
+   Primary: #065F46 (Forest Green)
+   Accent:  #14B8A6 (Teal)
+   ═══════════════════════════════════════════════ */
 
-/* 1. GLOBAL PAGE BACKGROUND */
+/* 1. GLOBAL */
+
 html {
   font-size: 14px;
-}
-
-h1,
-.display-5,
-.text-gradient {
-  /* The Purple Gradient (Same as your buttons) */
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  /* Clip the background to the text shape */
-  -webkit-background-clip: text !important;
-  background-clip: text !important;
-  /* Make the text transparent so the background shows through */
-  -webkit-text-fill-color: transparent !important;
-  color: #764ba2 !important;
-  /* Fallback for old browsers */
-  /* Optional: Add a slight shadow to make it pop */
-  filter: drop-shadow(0 2px 4px rgba(118, 75, 162, 0.1));
 }
 
 @media (min-width: 768px) {
@@ -34,95 +22,101 @@ h1,
   }
 }
 
+h1,
+.display-5,
+.text-gradient {
+  color: #065F46 !important;
+  -webkit-text-fill-color: #065F46 !important;
+  background: none !important;
+  -webkit-background-clip: unset !important;
+  background-clip: unset !important;
+  filter: none;
+}
+
 body {
-  background-color: #eef2f5;
-  /* Global Light Gray Background */
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  color: #2d3748;
-  margin-bottom: 60px;
+  background-color: #F9FAFB;
+  font-family: 'Inter', system-ui, sans-serif;
+  color: #1e293b;
+  margin: 0;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
 
-body>.container {
+body > .container {
   flex: 1 0 auto;
 }
 
-/* 2. MODERN NAVBAR */
+/* 2. NAVBAR */
 .navbar {
   background-color: #ffffff;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-  /* Soft float effect */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   padding: 1rem 0;
 }
 
 .nav-link {
-  color: #4a5568 !important;
-  font-weight: 600;
+  color: #475569 !important;
+  font-weight: 500;
   margin: 0 5px;
   padding: 8px 16px !important;
-  border-radius: 50px;
-  /* Pill shape */
-  transition: all 0.3s ease;
+  border-radius: 8px;
+  transition: all 0.2s ease;
   text-decoration: none;
-  /* React Router Link specific */
 }
 
 .nav-link:hover,
 .nav-link.active {
-  background-color: #eef2f5;
-  color: #764ba2 !important;
-  /* Brand Purple */
+  background-color: #ECFDF5;
+  color: #065F46 !important;
 }
 
-/* 3. FANCY CARDS (Use <div class="fancy-card"> in your pages) */
+/* 3. CARDS */
 .fancy-card {
   background: white;
-  border-radius: 20px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-  border: none;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e2e8f0;
   overflow: hidden;
 }
 
-/* 4. FANCY INPUTS (The Gray BG + Dark Border you requested) */
+/* 4. INPUTS */
 .fancy-input,
 .form-control,
 .form-select {
-  background-color: #f0f2f5;
-  /* Visible Gray */
-  border: 2px solid #2d3748;
-  /* High Contrast Dark Border */
-  border-radius: 12px;
-  padding: 12px 15px;
-  font-weight: 500;
-  color: #1a202c;
-  transition: all 0.3s ease;
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-weight: 400;
+  color: #1e293b;
+  transition: all 0.2s ease;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 14px;
 }
 
 .fancy-input:focus,
 .form-control:focus,
 .form-select:focus {
   background-color: #ffffff;
-  border-color: #764ba2 !important;
-  /* Purple/Blue border when typing */
-  box-shadow: 0 0 0 4px rgba(118, 75, 162, 0.15) !important;
+  border-color: #065F46 !important;
+  box-shadow: 0 0 0 3px rgba(6, 95, 70, 0.12) !important;
   outline: none;
 }
 
 /* 5. BUTTONS */
 .btn-gradient {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #065F46;
   border: none;
   color: white;
-  font-weight: bold;
-  letter-spacing: 0.5px;
-  transition: transform 0.2s;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
 }
 
 .btn-gradient:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 20px rgba(118, 75, 162, 0.3);
+  background: #047857;
+  box-shadow: 0 4px 12px rgba(6, 95, 70, 0.25);
   color: white;
 }
 

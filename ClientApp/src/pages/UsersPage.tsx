@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { Plus, Users, AlertCircle, Trash2, KeyRound, X, Building2 } from 'lucide-react';
+import { CURRENCY_OPTIONS, DEFAULT_CURRENCY } from '../lib/currencyUtils';
 
 interface UserDto {
     id: string;
@@ -45,7 +46,10 @@ export default function UsersPage() {
         userEmail: '',
         userPassword: '',
         userFirstName: '',
-        userLastName: ''
+        userLastName: '',
+        defaultCurrency: DEFAULT_CURRENCY,
+        defaultLanguage: 'fr',
+        employeeLimit: 0
     });
 
     const [newPassword, setNewPassword] = useState('');
@@ -102,7 +106,8 @@ export default function UsersPage() {
             setShowTenantModal(false);
             setNewTenant({
                 companyName: '', address: '', matriculeFiscal: '', phone: '', email: '',
-                userEmail: '', userPassword: '', userFirstName: '', userLastName: ''
+                userEmail: '', userPassword: '', userFirstName: '', userLastName: '',
+                defaultCurrency: DEFAULT_CURRENCY, defaultLanguage: 'fr', employeeLimit: 0
             });
             fetchUsers();
             alert("New tenant (company + manager) created successfully!");
@@ -116,19 +121,22 @@ export default function UsersPage() {
     };
 
     const handleDeleteUser = async (targetUser: UserDto) => {
-        if (targetUser.id === user?.id) {
+        if (targetUser.email === user?.email) {
             alert("You cannot delete your own account.");
             return;
         }
 
-        const confirmMsg = `Are you sure you want to delete ${targetUser.firstName} ${targetUser.lastName} (${targetUser.email})?\n\nTheir work records (invoices, quotes, etc.) will remain intact.`;
+        const isTargetManager = targetUser.role === 'Manager' || targetUser.role === 'FreeUser';
+        const confirmMsg = isSuperAdmin && isTargetManager
+            ? `⚠️ PERMANENT DELETE: This will delete ${targetUser.firstName} ${targetUser.lastName} (${targetUser.email}), their ENTIRE company, and ALL associated data (invoices, payments, quotes, expenses, clients, suppliers, files).\n\nThis action CANNOT be undone. Continue?`
+            : `Are you sure you want to delete ${targetUser.firstName} ${targetUser.lastName} (${targetUser.email})?\n\nTheir account will be deactivated but work records remain intact.`;
         if (!confirm(confirmMsg)) return;
 
         setActionLoading(true);
         try {
             await api.delete(`/Users/${targetUser.id}`);
             fetchUsers();
-            alert("User deleted successfully. Their work records remain intact.");
+            alert("User deleted successfully.");
         } catch (err: any) {
             console.error("Failed to delete user", err);
             const errorMsg = err.response?.data?.message || err.response?.data || "Failed to delete user.";
@@ -170,7 +178,7 @@ export default function UsersPage() {
     };
 
     const canDeleteUser = (targetUser: UserDto) => {
-        if (targetUser.id === user?.id) return false;
+        if (targetUser.email === user?.email) return false;
         if (isSuperAdmin && targetUser.role !== 'SuperAdmin') return true;
         if (isManager && targetUser.role === 'Employee' && !isSuperAdmin) return true;
         return false;
@@ -194,7 +202,7 @@ export default function UsersPage() {
             <p className="text-red-600 font-medium">{error}</p>
             <button 
                 onClick={fetchUsers}
-                className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700"
+                className="mt-4 px-4 py-2 bg-[#065F46] text-white rounded-xl hover:bg-[#047857]"
             >
                 Retry
             </button>
@@ -223,7 +231,7 @@ export default function UsersPage() {
                     {isSuperAdmin && (
                         <button
                             onClick={() => setShowTenantModal(true)}
-                            className="flex items-center space-x-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-4 py-2 rounded-xl shadow-lg hover:shadow-xl transition-all"
+                            className="flex items-center space-x-2 bg-[#065F46] text-white px-4 py-2 rounded-xl shadow-lg hover:shadow-xl transition-all"
                         >
                             <Building2 size={20} />
                             <span>Add Tenant</span>
@@ -231,7 +239,7 @@ export default function UsersPage() {
                     )}
                     <button
                         onClick={() => setShowEmployeeModal(true)}
-                        className="flex items-center space-x-2 bg-gradient-to-r from-indigo-600 to-pink-600 text-white px-4 py-2 rounded-xl shadow-lg hover:shadow-xl transition-all"
+                        className="flex items-center space-x-2 bg-[#065F46] text-white px-4 py-2 rounded-xl shadow-lg hover:shadow-xl transition-all"
                     >
                         <Plus size={20} />
                         <span>Add Employee</span>
@@ -257,7 +265,7 @@ export default function UsersPage() {
                             <tr key={u.id} className="hover:bg-gray-50 transition-colors">
                                 <td className="px-6 py-4">
                                     <div className="flex items-center">
-                                        <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
+                                        <div className="h-10 w-10 rounded-full bg-[#065F46]/10 flex items-center justify-center text-[#065F46] font-bold">
                                             {u.firstName?.[0] || u.email[0].toUpperCase()}
                                         </div>
                                         <div className="ml-4">
@@ -274,7 +282,7 @@ export default function UsersPage() {
                                 <td className="px-6 py-4">
                                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                                         u.role === 'SuperAdmin' ? 'bg-red-50 text-red-600' :
-                                        u.role === 'Manager' || u.role === 'FreeUser' ? 'bg-purple-50 text-purple-600' :
+                                        u.role === 'Manager' || u.role === 'FreeUser' ? 'bg-[#065F46]/5 text-[#065F46]' :
                                         'bg-blue-50 text-blue-600'
                                     }`}>
                                         {u.role || "Employee"}
@@ -384,7 +392,7 @@ export default function UsersPage() {
                                 <button
                                     type="submit"
                                     disabled={actionLoading}
-                                    className="px-4 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 shadow-md disabled:opacity-50"
+                                    className="px-4 py-2 rounded-xl bg-[#065F46] text-white hover:bg-[#047857] shadow-md disabled:opacity-50"
                                 >
                                     {actionLoading ? 'Creating...' : 'Create Employee'}
                                 </button>
@@ -463,13 +471,13 @@ export default function UsersPage() {
                             </div>
 
                             {/* Manager Section */}
-                            <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-200">
-                                <h3 className="font-semibold text-indigo-800 mb-4">Manager Account</h3>
+                            <div className="p-4 bg-[#065F46]/5 rounded-xl border border-[#065F46]/20">
+                                <h3 className="font-semibold text-[#065F46] mb-4">Manager Account</h3>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
                                         <input
-                                            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                                            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
                                             value={newTenant.userFirstName}
                                             onChange={e => setNewTenant({ ...newTenant, userFirstName: e.target.value })}
                                             required
@@ -478,7 +486,7 @@ export default function UsersPage() {
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
                                         <input
-                                            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                                            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
                                             value={newTenant.userLastName}
                                             onChange={e => setNewTenant({ ...newTenant, userLastName: e.target.value })}
                                             required
@@ -488,7 +496,7 @@ export default function UsersPage() {
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
                                         <input
                                             type="email"
-                                            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                                            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
                                             value={newTenant.userEmail}
                                             onChange={e => setNewTenant({ ...newTenant, userEmail: e.target.value })}
                                             required
@@ -498,11 +506,59 @@ export default function UsersPage() {
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
                                         <input
                                             type="password"
-                                            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                                            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
                                             value={newTenant.userPassword}
                                             onChange={e => setNewTenant({ ...newTenant, userPassword: e.target.value })}
                                             required
                                             minLength={6}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Defaults Section */}
+                            <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
+                                <h3 className="font-semibold text-amber-800 mb-4">Company Defaults</h3>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Default Currency</label>
+                                        <select
+                                            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none bg-white"
+                                            value={newTenant.defaultCurrency}
+                                            onChange={e => setNewTenant({ ...newTenant, defaultCurrency: e.target.value })}
+                                        >
+                                            {CURRENCY_OPTIONS.map(opt => (
+                                                <option key={opt.code} value={opt.code}>
+                                                    {opt.symbol} — {opt.code}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Default Language</label>
+                                        <select
+                                            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none bg-white"
+                                            value={newTenant.defaultLanguage}
+                                            onChange={e => setNewTenant({ ...newTenant, defaultLanguage: e.target.value })}
+                                        >
+                                            <option value="fr">Français</option>
+                                            <option value="en">English</option>
+                                            <option value="de">Deutsch</option>
+                                            <option value="ar">العربية</option>
+                                        </select>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Employee Limit
+                                            <span className="text-gray-400 font-normal ml-1">(0 = unlimited)</span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none bg-white"
+                                            value={newTenant.employeeLimit}
+                                            onChange={e => setNewTenant({ ...newTenant, employeeLimit: parseInt(e.target.value) || 0 })}
+                                            placeholder="0 for unlimited"
                                         />
                                     </div>
                                 </div>

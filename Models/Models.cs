@@ -60,6 +60,10 @@ namespace ResourceManager.Models
         public double? ConfidenceScore { get; set; }
         public string? ExtractionStatus { get; set; } = "Pending"; // Pending, Extracted, Confirmed, Failed
         
+        // Per-document currency (overrides company defaults)
+        public string? Currency { get; set; }
+        public string? CurrencySymbol { get; set; }
+        
         public int? FournisseurId { get; set; }
         public Fournisseur? Fournisseur { get; set; } = null!;
         public int? InvoiceId { get; set; }
@@ -152,6 +156,11 @@ namespace ResourceManager.Models
         public DateTime Date { get; set; }
         public DateTime? DueDate { get; set; } // Payment due date - nullable for backwards compatibility
         public int? ClientId { get; set; }
+        
+        // Per-document currency & language (overrides company defaults)
+        public string? Currency { get; set; }
+        public string? CurrencySymbol { get; set; }
+        public string? PdfLanguage { get; set; }
         [ForeignKey("ClientId")]
         public virtual Client? Client { get; set; }
         public int? DevisId { get; set; }
@@ -257,6 +266,12 @@ namespace ResourceManager.Models
     {
         public string Number { get; set; } = string.Empty; // e.g. DN-2023-001
         public DateTime Date { get; set; }
+        
+        // Per-document currency & language (overrides company defaults)
+        public string? Currency { get; set; }
+        public string? CurrencySymbol { get; set; }
+        public string? PdfLanguage { get; set; }
+        
         public int? DevisId { get; set; }
         public Devis? Devis { get; set; } = null!;
         public ICollection<DeliveryNoteItem> DeliveryNoteItems { get; set; } = new List<DeliveryNoteItem>();
@@ -305,6 +320,12 @@ namespace ResourceManager.Models
     {
         public string Number { get; set; } = string.Empty; 
         public DateTime Date { get; set; }
+        
+        // Per-document currency & language (overrides company defaults)
+        public string? Currency { get; set; }
+        public string? CurrencySymbol { get; set; }
+        public string? PdfLanguage { get; set; }
+        
         public int? ClientId { get; set; }
         public Client? Client { get; set; } = null!;
         public Invoice? Invoice { get; set; } = null!;
@@ -442,6 +463,7 @@ namespace ResourceManager.Models
         public string? PdfFooterText { get; set; }
         public bool ShowCompanyLogo { get; set; } = true;
         public string? PdfSignatureText { get; set; } // Custom signature text on PDF
+        public string? PdfSignerPosition { get; set; } // Signer position/title on PDF (e.g. "Managing Director")
         public string InvoiceLanguage { get; set; } = "fr"; // "fr", "en", "de", "ar"
         
         // Signature / Cachet image
@@ -458,6 +480,10 @@ namespace ResourceManager.Models
         public bool ShowBankBIC { get; set; } = true;
         public bool ShowBankRIB { get; set; } = true;
         public bool ShowBankIBAN { get; set; } = true;
+        
+        // File-system language (set once, immutable after confirmation)
+        public string? FileSystemLanguage { get; set; }
+        public bool FileSystemLanguageLocked { get; set; } = false;
         
         // PDF Storage configuration
         public string? PdfBaseFolderPath { get; set; } // User-selected base folder for PDFs
@@ -557,6 +583,17 @@ namespace ResourceManager.Models
         /// Is this a recurring expense?
         /// </summary>
         public bool IsRecurring { get; set; } = false;
+
+        /// <summary>
+        /// Per-expense currency code (e.g., "TND", "EUR"). Nullable for backwards compatibility.
+        /// Falls back to company settings when null.
+        /// </summary>
+        public string? Currency { get; set; }
+
+        /// <summary>
+        /// Per-expense currency symbol (e.g., "TND", "€"). Nullable for backwards compatibility.
+        /// </summary>
+        public string? CurrencySymbol { get; set; }
     }
 
     /// <summary>
@@ -573,7 +610,10 @@ namespace ResourceManager.Models
         /// Default unit price
         /// </summary>
         public decimal DefaultUnitPrice { get; set; }
-        
+        // <summary>
+        /// Default Tax Rate
+        /// </summary>
+        public decimal TvaRate { get; set; }
         /// <summary>
         /// Type: "product" or "service"
         /// </summary>
@@ -588,6 +628,140 @@ namespace ResourceManager.Models
         /// Whether VAT applies to this item by default
         /// </summary>
         public bool VatApplicable { get; set; } = true;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // REFRESH TOKEN (Secure token rotation for JWT auth)
+    // ═══════════════════════════════════════════════════════════════
+    public class RefreshToken
+    {
+        [Key]
+        public int Id { get; set; }
+
+        [Required]
+        public string Token { get; set; } = string.Empty;
+
+        [Required]
+        public string UserId { get; set; } = string.Empty;
+
+        [ForeignKey("UserId")]
+        public ApplicationUser? User { get; set; }
+
+        /// <summary>
+        /// Unique identifier for the token family — detects replay attacks.
+        /// When a refresh token is rotated, the new token inherits the family.
+        /// If a revoked token from the same family is reused, all tokens in the family are revoked.
+        /// </summary>
+        [Required]
+        public string Family { get; set; } = string.Empty;
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime ExpiresAt { get; set; }
+        public DateTime? RevokedAt { get; set; }
+
+        /// <summary>
+        /// The token that replaced this one (for audit trail)
+        /// </summary>
+        public string? ReplacedByToken { get; set; }
+
+        /// <summary>
+        /// Reason for revocation
+        /// </summary>
+        public string? RevokedReason { get; set; }
+
+        [NotMapped]
+        public bool IsExpired => DateTime.UtcNow >= ExpiresAt;
+
+        [NotMapped]
+        public bool IsRevoked => RevokedAt != null;
+
+        [NotMapped]
+        public bool IsActive => !IsRevoked && !IsExpired;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // USER LOGIN RECORD — Tracks login IP for country stats
+    // ═══════════════════════════════════════════════════════════════
+
+    public class UserLoginRecord
+    {
+        [Key]
+        public int Id { get; set; }
+
+        [Required]
+        public string UserId { get; set; } = string.Empty;
+
+        [Required]
+        [StringLength(45)] // IPv4 max 15, IPv6 max 45
+        public string IpAddress { get; set; } = string.Empty;
+
+        [StringLength(100)]
+        public string? Country { get; set; }
+
+        [StringLength(5)]
+        public string? CountryCode { get; set; }
+
+        public DateTime LoginAt { get; set; } = DateTime.UtcNow;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // HISTORICAL DATA — Imported previous revenues/expenses
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Historical revenue record imported by manager. Payment-based.
+    /// </summary>
+    public class HistoricalRevenue : Shared
+    {
+        [Required]
+        public DateTime Date { get; set; }
+
+        [Required]
+        public string ClientName { get; set; } = string.Empty;
+
+        [Required]
+        public decimal AmountPaid { get; set; }
+
+        [Required]
+        [StringLength(10)]
+        public string Currency { get; set; } = "TND";
+
+        [StringLength(50)]
+        public string? PaymentMethod { get; set; }
+
+        [StringLength(200)]
+        public string? Reference { get; set; }
+
+        /// <summary>Marks this record as imported historical data</summary>
+        public bool IsHistorical { get; set; } = true;
+    }
+
+    /// <summary>
+    /// Historical expense record imported by manager. Payment-based.
+    /// </summary>
+    public class HistoricalExpense : Shared
+    {
+        [Required]
+        public DateTime Date { get; set; }
+
+        [Required]
+        public string SupplierName { get; set; } = string.Empty;
+
+        [Required]
+        public decimal AmountPaid { get; set; }
+
+        [Required]
+        [StringLength(10)]
+        public string Currency { get; set; } = "TND";
+
+        [StringLength(50)]
+        public string? Category { get; set; }
+
+        [StringLength(200)]
+        public string? Reference { get; set; }
+
+        /// <summary>Marks this record as imported historical data</summary>
+        public bool IsHistorical { get; set; } = true;
     }
     
 }

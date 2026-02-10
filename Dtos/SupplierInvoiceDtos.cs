@@ -17,6 +17,11 @@ namespace ResourceManager.DTOs
         public string? FournisseurName { get; set; }
         public string? FournisseurAddress { get; set; }
         public string? FournisseurPhone { get; set; }
+        
+        // Per-document currency
+        public string? Currency { get; set; }
+        public string? CurrencySymbol { get; set; }
+        
         public List<ConfirmSupplierItemDto>? Items { get; set; }
     }
 

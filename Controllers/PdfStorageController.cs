@@ -19,17 +19,20 @@ namespace ResourceManager.Controllers
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ILocalPdfStorageService _pdfStorageService;
         private readonly ILogger<PdfStorageController> _logger;
+        private readonly IConfiguration _configuration;
 
         public PdfStorageController(
             AppDbContext context,
             UserManager<ApplicationUser> userManager,
             ILocalPdfStorageService pdfStorageService,
-            ILogger<PdfStorageController> logger)
+            ILogger<PdfStorageController> logger,
+            IConfiguration configuration)
         {
             _context = context;
             _userManager = userManager;
             _pdfStorageService = pdfStorageService;
             _logger = logger;
+            _configuration = configuration;
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -103,10 +106,7 @@ namespace ResourceManager.Controllers
         [HttpGet("check-consistency")]
         public async Task<IActionResult> CheckFileConsistency()
         {
-            var userId = _userManager.GetUserId(User);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
-            
-            var user = await _userManager.FindByIdAsync(userId);
+            var user = await GetCurrentUserAsync(_userManager);
             if (user == null) return Unauthorized();
 
             var report = await _pdfStorageService.CheckFileConsistencyAsync(user.CompanyId);
@@ -138,10 +138,7 @@ namespace ResourceManager.Controllers
         [HttpPost("recover")]
         public async Task<IActionResult> RecoverMissingFiles([FromBody] RecoverFilesDto dto)
         {
-            var userId = _userManager.GetUserId(User);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
-            
-            var user = await _userManager.FindByIdAsync(userId);
+            var user = await GetCurrentUserAsync(_userManager);
             if (user == null) return Unauthorized();
 
             if (dto.FileIds == null || !dto.FileIds.Any())
@@ -167,10 +164,7 @@ namespace ResourceManager.Controllers
         [HttpPost("recover-all")]
         public async Task<IActionResult> RecoverAllMissingFiles()
         {
-            var userId = _userManager.GetUserId(User);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
-            
-            var user = await _userManager.FindByIdAsync(userId);
+            var user = await GetCurrentUserAsync(_userManager);
             if (user == null) return Unauthorized();
 
             // First check consistency to get missing files
@@ -220,10 +214,7 @@ namespace ResourceManager.Controllers
         [HttpGet("files")]
         public async Task<IActionResult> GetAllFiles([FromQuery] string? documentType = null, [FromQuery] int page = 1, [FromQuery] int size = 50)
         {
-            var userId = _userManager.GetUserId(User);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
-            
-            var user = await _userManager.FindByIdAsync(userId);
+            var user = await GetCurrentUserAsync(_userManager);
             if (user == null) return Unauthorized();
 
             var query = _context.PdfFileRecords
@@ -302,51 +293,52 @@ namespace ResourceManager.Controllers
         }
 
         // ═══════════════════════════════════════════════════════════════
-        // FOLDER BROWSER (Optional helper for choosing base folder)
+        // FOLDER BROWSER — Restricted to SuperAdmin only
+        // Scoped to a safe base directory to prevent filesystem traversal
         // ═══════════════════════════════════════════════════════════════
 
         /// <summary>
-        /// GET: api/pdf-storage/browse - List directories for folder selection
+        /// GET: api/pdf-storage/browse - List directories within the configured PDF storage base path.
+        /// Restricted to SuperAdmin role to prevent filesystem enumeration.
         /// </summary>
         [HttpGet("browse")]
+        [Authorize(Roles = "SuperAdmin")]
         public IActionResult BrowseFolders([FromQuery] string? path = null)
         {
             try
             {
+                // Determine the safe base directory for browsing
+                var basePath = _configuration["PdfStorage:BasePath"]
+                    ?? Path.Combine(Directory.GetCurrentDirectory(), "PdfStorage");
+
+                if (!Directory.Exists(basePath))
+                    Directory.CreateDirectory(basePath);
+
                 string targetPath;
                 
                 if (string.IsNullOrEmpty(path))
                 {
-                    // Return drives/root folders
-                    var drives = DriveInfo.GetDrives()
-                        .Where(d => d.IsReady)
-                        .Select(d => new
-                        {
-                            name = d.Name.TrimEnd('\\'),
-                            path = d.Name,
-                            type = "drive",
-                            totalSize = d.TotalSize,
-                            availableSpace = d.AvailableFreeSpace
-                        });
-
-                    return Ok(new
-                    {
-                        currentPath = "",
-                        parent = (string?)null,
-                        items = drives
-                    });
+                    targetPath = basePath;
                 }
-
-                targetPath = path;
-                
-                if (!Directory.Exists(targetPath))
+                else
                 {
-                    return BadRequest(new { message = "Path does not exist" });
+                    // Resolve and validate the path is within the base directory
+                    targetPath = Path.GetFullPath(path);
+                    var resolvedBase = Path.GetFullPath(basePath);
+                    
+                    if (!targetPath.StartsWith(resolvedBase, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogWarning("Path traversal attempt blocked: {AttemptedPath} (base: {BasePath})", path, resolvedBase);
+                        return Forbid();
+                    }
                 }
+
+                if (!Directory.Exists(targetPath))
+                    return BadRequest(new { message = "Path does not exist" });
 
                 var directories = Directory.GetDirectories(targetPath)
                     .Select(d => new DirectoryInfo(d))
-                    .Where(d => (d.Attributes & FileAttributes.Hidden) == 0) // Skip hidden
+                    .Where(d => (d.Attributes & FileAttributes.Hidden) == 0)
                     .Select(d => new
                     {
                         name = d.Name,
@@ -355,7 +347,14 @@ namespace ResourceManager.Controllers
                     })
                     .ToList();
 
+                // Only allow navigating up to the base path
                 var parentPath = Directory.GetParent(targetPath)?.FullName;
+                var resolvedBasePath = Path.GetFullPath(basePath);
+                if (parentPath != null && !parentPath.StartsWith(resolvedBasePath, StringComparison.OrdinalIgnoreCase)
+                    && !parentPath.Equals(resolvedBasePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    parentPath = null; // Don't allow navigating above base
+                }
 
                 return Ok(new
                 {

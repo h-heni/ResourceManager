@@ -17,7 +17,7 @@ namespace ResourceManager.Services
                 AutoConnectRealtime = false
             };
 
-            _client = new Supabase.Client(url, key, options);
+            _client = new Supabase.Client(url ?? "", key, options);
         }
 
         public async Task<string> UploadPdfAsync(byte[] fileBytes, string folderPath, string fileName)

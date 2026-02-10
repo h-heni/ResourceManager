@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Plus, Trash2, Save, FileText, AlertCircle, PackagePlus, X, Check } from 'lucide-react';
 import api from '../services/api';
+import { DEFAULT_CURRENCY, CURRENCY_OPTIONS, getCurrencySymbol } from '../lib/currencyUtils';
 
 interface Client {
     id: number;
@@ -15,6 +16,7 @@ interface DevisItem {
     price: number;
     tva: boolean;
     vatRate: number; // actual rate as percentage (e.g. 19, 7, 0)
+    fromCatalog?: boolean; // true when selected from product catalog or created inline
 }
 
 // Validation errors interface
@@ -39,6 +41,7 @@ interface ProductSuggestion {
     description?: string;
     defaultUnitPrice: number;
     vatApplicable: boolean;
+    tvaRate?: number;
 }
 
 export default function DevisCreatePage() {
@@ -63,11 +66,16 @@ export default function DevisCreatePage() {
     const [newProduct, setNewProduct] = useState({ name: '', description: '', defaultUnitPrice: 0, vatRate: 19 });
     const [creatingProduct, setCreatingProduct] = useState(false);
 
+    // Currency & Language state (per-document override)
+    const [pdfCurrency, setPdfCurrency] = useState('');
+    const [pdfCurrencySymbol, setPdfCurrencySymbol] = useState('');
+    const [pdfLanguage, setPdfLanguage] = useState('');
+
     // Form State
     const [clientId, setClientId] = useState('');
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [items, setItems] = useState<DevisItem[]>([
-        { description: '', quantity: 1, price: 0, tva: true, vatRate: 19 }
+        { description: '', quantity: 1, price: 0, tva: true, vatRate: 19, fromCatalog: false }
     ]);
 
     useEffect(() => {
@@ -106,6 +114,14 @@ export default function DevisCreatePage() {
                 ...item,
                 vatRate: item.vatRate === 19 ? defaultRateInt : item.vatRate
             })));
+            // Initialize per-document currency & language from company defaults
+            if (!pdfCurrency) {
+                setPdfCurrency(res.data.currency || DEFAULT_CURRENCY);
+                setPdfCurrencySymbol(res.data.currencySymbol || getCurrencySymbol(res.data.currency) || DEFAULT_CURRENCY);
+            }
+            if (!pdfLanguage) {
+                setPdfLanguage(res.data.invoiceLanguage || 'fr');
+            }
         } catch (error) {
             console.error("Error fetching tax settings", error);
         }
@@ -155,7 +171,7 @@ export default function DevisCreatePage() {
 
     const addItem = () => {
         const defaultRate = Math.round(taxSettings.defaultVatRate * 100);
-        setItems([...items, { description: '', quantity: 1, price: 0, tva: true, vatRate: defaultRate }]);
+        setItems([...items, { description: '', quantity: 1, price: 0, tva: true, vatRate: defaultRate, fromCatalog: false }]);
     };
 
     // Product autocomplete: search saved products as user types
@@ -180,13 +196,15 @@ export default function DevisCreatePage() {
 
     const selectProduct = (product: ProductSuggestion, itemIndex: number) => {
         const defaultRate = Math.round(taxSettings.defaultVatRate * 100);
+        const productRate = product.tvaRate != null ? Math.round(product.tvaRate) : defaultRate;
         const newItems = [...items];
         newItems[itemIndex] = {
             ...newItems[itemIndex],
             description: product.name + (product.description ? ` - ${product.description}` : ''),
             price: product.defaultUnitPrice,
             tva: product.vatApplicable,
-            vatRate: product.vatApplicable ? defaultRate : 0,
+            vatRate: product.vatApplicable ? productRate : 0,
+            fromCatalog: true,
         };
         setItems(newItems);
         setSuggestions([]);
@@ -220,6 +238,7 @@ export default function DevisCreatePage() {
                 name: newProduct.name.trim(),
                 description: newProduct.description.trim() || null,
                 defaultUnitPrice: newProduct.defaultUnitPrice,
+                tvaRate: newProduct.vatRate,
                 type: 'product',
                 category: null,
                 vatApplicable: newProduct.vatRate > 0,
@@ -233,6 +252,7 @@ export default function DevisCreatePage() {
                 price: created.defaultUnitPrice,
                 tva: created.vatApplicable,
                 vatRate: created.vatApplicable ? newProduct.vatRate : 0,
+                fromCatalog: true,
             };
             setItems(newItems);
             setShowCreateProduct(false);
@@ -252,6 +272,10 @@ export default function DevisCreatePage() {
     const updateItem = (index: number, field: keyof DevisItem, value: any) => {
         const newItems = [...items];
         (newItems[index] as any)[field] = value;
+        // Reset fromCatalog when user manually edits the description
+        if (field === 'description') {
+            newItems[index].fromCatalog = false;
+        }
         setItems(newItems);
     };
 
@@ -286,6 +310,9 @@ export default function DevisCreatePage() {
                 number: "DEV-" + Date.now().toString().slice(-6),
                 date: new Date(date),
                 clientId: parseInt(clientId),
+                currency: pdfCurrency || undefined,
+                currencySymbol: pdfCurrencySymbol || undefined,
+                pdfLanguage: pdfLanguage || undefined,
                 items: items
                     .filter(item => item.description.trim() !== '')
                     .map(item => ({
@@ -322,7 +349,7 @@ export default function DevisCreatePage() {
                 <button
                     onClick={handleSubmit}
                     disabled={loading}
-                    className="flex items-center px-6 py-3 bg-purple-600 text-white rounded-xl shadow-lg hover:bg-purple-700 transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex items-center px-6 py-3 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <Save size={20} className="mr-2" />
                     {loading ? 'Saving...' : 'Save Quote'}
@@ -348,6 +375,40 @@ export default function DevisCreatePage() {
                     </div>
                 )}
 
+                {/* Currency & Language Selection */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-[#065F46]/5 border border-[#065F46]/10 rounded-xl">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Document Currency</label>
+                        <select
+                            value={pdfCurrency}
+                            onChange={e => {
+                                setPdfCurrency(e.target.value);
+                                setPdfCurrencySymbol(getCurrencySymbol(e.target.value));
+                            }}
+                            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none transition-all"
+                        >
+                            {CURRENCY_OPTIONS.map(opt => (
+                                <option key={opt.code} value={opt.code}>{opt.label}</option>
+                            ))}
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">Currency used on this quote's PDF</p>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">PDF Language</label>
+                        <select
+                            value={pdfLanguage}
+                            onChange={e => setPdfLanguage(e.target.value)}
+                            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none transition-all"
+                        >
+                            <option value="fr">Français</option>
+                            <option value="en">English</option>
+                            <option value="de">Deutsch</option>
+                            <option value="ar">العربية</option>
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">Language used on this quote's PDF</p>
+                    </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -357,7 +418,7 @@ export default function DevisCreatePage() {
                             value={clientId}
                             onChange={e => setClientId(e.target.value)}
                             onBlur={() => handleBlur('clientId')}
-                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-purple-500 outline-none ${
+                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none ${
                                 errors.clientId && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
                             }`}
                         >
@@ -379,7 +440,7 @@ export default function DevisCreatePage() {
                             value={date}
                             onChange={e => setDate(e.target.value)}
                             onBlur={() => handleBlur('date')}
-                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-purple-500 outline-none ${
+                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none ${
                                 errors.date && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
                             }`}
                         />
@@ -391,7 +452,7 @@ export default function DevisCreatePage() {
 
                 <div className="border-t border-gray-100 pt-6">
                     <h3 className="text-lg font-bold text-gray-900 flex items-center mb-4">
-                        <FileText className="mr-2 text-purple-500" size={20} />
+                        <FileText className="mr-2 text-[#065F46]" size={20} />
                         Quote Items <span className="text-red-500 ml-1">*</span>
                     </h3>
 
@@ -417,10 +478,10 @@ export default function DevisCreatePage() {
                                             searchProducts(e.target.value, index);
                                         }}
                                         onBlur={() => { handleBlur('items'); dismissSuggestions(); }}
-                                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none ${
+                                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#065F46] outline-none ${
                                             item.description.trim() === '' && touched.items ? 'border-amber-400' : 'border-gray-200'
                                         }`}
-                                        placeholder={t('devis.descriptionPlaceholder', 'Type to search products or enter custom...')}
+                                        placeholder={t('devis.descriptionPlaceholder', 'Type to search products...')}
                                         autoComplete="off"
                                     />
                                     {/* Product suggestions dropdown */}
@@ -431,7 +492,7 @@ export default function DevisCreatePage() {
                                                     key={product.id}
                                                     type="button"
                                                     onMouseDown={() => selectProduct(product, index)}
-                                                    className="w-full px-3 py-2 text-left hover:bg-purple-50 flex justify-between items-center text-sm border-b border-gray-50 last:border-0"
+                                                    className="w-full px-3 py-2 text-left hover:bg-[#065F46]/5 flex justify-between items-center text-sm border-b border-gray-50 last:border-0"
                                                 >
                                                     <div>
                                                         <span className="font-medium text-gray-900">{product.name}</span>
@@ -439,8 +500,8 @@ export default function DevisCreatePage() {
                                                             <span className="text-gray-400 ml-1 text-xs">— {product.description}</span>
                                                         )}
                                                     </div>
-                                                    <span className="text-purple-600 font-medium text-xs whitespace-nowrap ml-2">
-                                                        {product.defaultUnitPrice.toFixed(3)} TND
+                                                    <span className="text-[#065F46] font-medium text-xs whitespace-nowrap ml-2">
+                                                        {product.defaultUnitPrice.toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}
                                                     </span>
                                                 </button>
                                             ))}
@@ -476,7 +537,7 @@ export default function DevisCreatePage() {
                                         min="1"
                                         value={item.quantity}
                                         onChange={e => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
-                                        className={`w-full px-3 py-2 border rounded-lg text-right focus:ring-2 focus:ring-purple-500 outline-none ${
+                                        className={`w-full px-3 py-2 border rounded-lg text-right focus:ring-2 focus:ring-[#065F46] outline-none ${
                                             item.quantity <= 0 && item.description.trim() ? 'border-red-500 bg-red-50' : 'border-gray-200'
                                         }`}
                                     />
@@ -489,7 +550,7 @@ export default function DevisCreatePage() {
                                         step="0.001"
                                         value={item.price}
                                         onChange={e => updateItem(index, 'price', parseFloat(e.target.value) || 0)}
-                                        className={`w-full px-3 py-2 border rounded-lg text-right focus:ring-2 focus:ring-purple-500 outline-none ${
+                                        className={`w-full px-3 py-2 border rounded-lg text-right focus:ring-2 focus:ring-[#065F46] outline-none ${
                                             item.price < 0 && item.description.trim() ? 'border-red-500 bg-red-50' : 'border-gray-200'
                                         }`}
                                     />
@@ -504,7 +565,7 @@ export default function DevisCreatePage() {
                                             newItems[index].vatRate = rate;
                                             setItems(newItems);
                                         }}
-                                        className="w-full px-2 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white"
+                                        className="w-full px-2 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#065F46] outline-none bg-white"
                                     >
                                         {taxSettings.availableVatRates.map(rate => (
                                             <option key={rate} value={rate}>
@@ -522,7 +583,7 @@ export default function DevisCreatePage() {
                         ))}
                     </div>
 
-                    <button onClick={addItem} className="mt-4 flex items-center text-sm font-semibold text-purple-600">
+                    <button onClick={addItem} className="mt-4 flex items-center text-sm font-semibold text-[#065F46]">
                         <Plus size={18} className="mr-1" /> Add Item
                     </button>
                 </div>
@@ -531,15 +592,15 @@ export default function DevisCreatePage() {
                     <div className="w-full md:w-1/3 space-y-3">
                         <div className="flex justify-between text-gray-600">
                             <span>Subtotal:</span>
-                            <span>{calculateSubtotal().toFixed(3)} TND</span>
+                            <span>{calculateSubtotal().toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}</span>
                         </div>
                         <div className="flex justify-between text-gray-600">
                             <span>Tax:</span>
-                            <span>{(calculateTotal() - calculateSubtotal()).toFixed(3)} TND</span>
+                            <span>{(calculateTotal() - calculateSubtotal()).toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}</span>
                         </div>
                         <div className="border-t border-gray-200 pt-3 flex justify-between text-xl font-bold text-gray-900">
                             <span>Total (incl. stamp):</span>
-                            <span className="text-purple-600">{calculateTotal().toFixed(3)} TND</span>
+                            <span className="text-[#065F46]">{calculateTotal().toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}</span>
                         </div>
                     </div>
                 </div>
@@ -598,7 +659,7 @@ export default function DevisCreatePage() {
                                             onChange={e => setNewProduct(prev => ({ ...prev, defaultUnitPrice: parseFloat(e.target.value) || 0 }))}
                                             className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none pr-14"
                                         />
-                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">TND</span>
+                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">{pdfCurrencySymbol || DEFAULT_CURRENCY}</span>
                                     </div>
                                 </div>
                                 <div>

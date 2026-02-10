@@ -84,6 +84,7 @@ namespace ResourceManager.Controllers
         public async Task<IActionResult> GetMyCompany()
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId)) return Unauthorized();
             var user = await _userManager.FindByIdAsync(userId);
             
             if (user == null || user.CompanyId == 0)

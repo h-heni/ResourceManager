@@ -28,14 +28,9 @@ namespace ResourceManager.Controllers
             if (page < 1) page = 1;
             if (size < 1) size = 20;
 
-            var query = _context.Fournisseurs.OrderBy(f => f.Name); // Note: DbSet might be named 'Fournisseurs' or 'Fournisseur'. Checking context is ideal but standard convention is plural. Models.cs didn't show DbSets. Assuming Fournisseur based on singular class. 
-            // Wait, looking at InvoicesController, it used `_context.Invoices` (plural). 
-            // I'll assume `_context.Fournisseurss`. If it fails I'll fix it. actually logic usually dictates plural.
-            // Let's safe bet check context? I haven't seen AppDbContext.cs. 
-            // However, Models.cs had `public class Fournisseur`.
-            // I'll assume `Fournisseurs`.
+            var query = _context.Fournisseurs.OrderBy(f => f.Name);
 
-            var totalCount = await query.CountAsync(); // If Fournisseurs doesn't exist, this will error. I'll risk it for now or check Context if I can.
+            var totalCount = await query.CountAsync();
             
             var list = await query
                 .Skip((page - 1) * size)
@@ -77,11 +72,7 @@ namespace ResourceManager.Controllers
                 CreatedAt = DateTime.UtcNow
             };
 
-            _context.Fournisseurs.Add(f); // Using Fournisseur property - I should suspect it might be singular or plural. Based on Models check, it's safer to check context, but let's assume `Fournisseur` or `Fournisseurs`. The user said "Standard CRUD". 
-            // If I look at the files list, there isn't an AppDbContext file visible in root, likely in Data folder.
-            // I'll check Data/AppDbContext.cs in next turn if strictly needed, but I'll write code assuming `Fournisseurs` (plural) is standardized, but typically scaffolding makes it plural.
-            // Wait, `Fournisseur` class in Models.cs. 
-            // Let's try `Fournisseurs` and fix if needed. 
+            _context.Fournisseurs.Add(f);
             
             await _context.SaveChangesAsync();
 
@@ -146,34 +137,12 @@ namespace ResourceManager.Controllers
                 FileName = file.FileName,
                 FilePath = publicUrl,
                 FileType = Path.GetExtension(file.FileName).Replace(".", ""),
-                InvoiceNumber = "UPLOADED-" + DateTime.Now.Ticks, // Or user provided
+                InvoiceNumber = "UPLOADED-" + DateTime.Now.Ticks,
                 CreatedAt = DateTime.UtcNow,
                 UserId = userId,
-                // CompanyId should be handled by context or we need to set it if manual? 
-                // Context filters usually handle reading, but for writing we need to ensure company ID is set if it's required.
-                // However, `IsFiltered` usually works on Query. For Add, we might need to set it if it's not handled by interceptor.
-                // Assuming interceptor or manual set. `Shared` model has `CompanyId`.
-                // `FournisseurInvoice` has `CompanyId` [Required]. 
-                // We need to fetch current user's company ID. 
-                // Usually `User.FindFirst("CompanyId")` or similar.
-                // Assuming `_userManager` or `User` claims has it.
-                // If not available easily, we might fail validation.
-                // But generally, the AppDbContext might handle tenant assignment on SaveChanges if set up.
-                // For now, I'll attempt to set it if I can find it in claims, or leave it 0 and hope the context handles it.
             };
             
-            // To be safe, usually we assume the context or a service handles tenant ID setting if it's a multi-tenant app.
-            
-            // Note: I need to add FournisseurInvoice to context.
-            // `_context.FournisseursInvoices`?
-            // Models.cs showed `public class FournisseurInvoice`.
-            // I'll assume `FournisseurInvoices` DbSet exists.
-            
-            // _context.Set<FournisseurInvoice>().Add(invoice); // Safe way if property unknown
-             _context.Entry(invoice).State = EntityState.Added; // Another way
-            
-            // Let's try explicit Set<T> to avoid guessing property name
-             _context.Set<FournisseurInvoice>().Add(invoice);
+            _context.Set<FournisseurInvoice>().Add(invoice);
 
             await _context.SaveChangesAsync();
 

@@ -60,6 +60,10 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<ResourceManager.Services.PaymentNotification> PaymentNotifications { get; set; } 
     public DbSet<OtherExpense> OtherExpenses { get; set; }
     public DbSet<ProductService> ProductServices { get; set; }
+    public DbSet<RefreshToken> RefreshTokens { get; set; }
+    public DbSet<UserLoginRecord> UserLoginRecords { get; set; }
+    public DbSet<HistoricalRevenue> HistoricalRevenues { get; set; }
+    public DbSet<HistoricalExpense> HistoricalExpenses { get; set; }
 
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -88,6 +92,17 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<PdfFileRecord>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
         builder.Entity<OtherExpense>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
         builder.Entity<ProductService>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
+        builder.Entity<HistoricalRevenue>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
+        builder.Entity<HistoricalExpense>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
+        builder.Entity<CompanySettings>().HasQueryFilter(e => _isSuperAdmin || e.CompanyId == _currentCompanyId);
+
+        // RefreshToken indexes for fast lookup
+        builder.Entity<RefreshToken>().HasIndex(e => e.Token).IsUnique();
+        builder.Entity<RefreshToken>().HasIndex(e => e.UserId);
+
+        // UserLoginRecord indexes
+        builder.Entity<UserLoginRecord>().HasIndex(e => e.UserId);
+        builder.Entity<UserLoginRecord>().HasIndex(e => e.IpAddress);
     }
 
     // 3. AUTO-FILL COMPANY ID ON SAVE
@@ -104,7 +119,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         if (companyClaim != null) int.TryParse(companyClaim.Value, out currentCompanyId);
 
         // Get User ID (string)
-        string currentUserId = user?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        string? currentUserId = user?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
         // 2. Look at the Change Tracker
         var addedEntities = ChangeTracker.Entries()

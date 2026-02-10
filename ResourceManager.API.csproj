@@ -3,7 +3,6 @@
 		<TargetFramework>net8.0</TargetFramework>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
-		<ImplicitUsings>enable</ImplicitUsings>
 	</PropertyGroup>
 
     <ItemGroup>
@@ -39,32 +38,25 @@
 		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.23" />
 		<PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="8.0.23" />
 		<PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.23" />
-		<PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.23" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.23" />
-		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.*" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.*">
 			<PrivateAssets>all</PrivateAssets>
 		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
-		<PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="8.0.23" />
 		<PackageReference Include="MimeKit" Version="4.14.0" />
 
 		<!-- Add runtime/provider and design packages (8.x) -->
 		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.*" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.*" />
-			<PackageReference Include="Google.Apis.Drive.v3" Version="1.73.0.3996" />
-		<PackageReference Include="Google.Apis.Sheets.v4" Version="1.72.0.3966" />
 		<PackageReference Include="QRCoder" Version="1.7.0" />
 		<PackageReference Include="QuestPDF" Version="2025.12.3" />
 		<PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
 		<PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
 		<PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
 		<PackageReference Include="SkiaSharp" Version="3.119.1" />
-		<PackageReference Include="SQLite" Version="3.13.0" />
 		<PackageReference Include="Supabase" Version="1.1.1" />
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="8.1.4" />
 		<PackageReference Include="Tesseract" Version="5.2.0" />
-		<PackageReference Include="TimeZoneConverter" Version="7.2.0" />
 		<PackageReference Include="UglyToad.PdfPig" Version="1.7.0-custom-5" />
 	</ItemGroup>
 
