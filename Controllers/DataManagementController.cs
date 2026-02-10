@@ -502,12 +502,16 @@ namespace ResourceManager.Controllers
                 {
                     if (row.ContainsKey("Date") && !string.IsNullOrWhiteSpace(row["Date"]))
                     {
-                        if (!DateTime.TryParse(row["Date"], CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
-                            rowErrors.Add("Invalid date format. Use YYYY-MM-DD");
+                        if (TryParseDate(row["Date"], out var parsedDate))
+                            row["Date"] = parsedDate.ToString("yyyy-MM-dd"); // normalise for ConfirmImport
+                        else
+                            rowErrors.Add("Invalid date format. Use YYYY-MM-DD or DD/MM/YYYY");
                     }
                     if (row.ContainsKey("Amount Paid") && !string.IsNullOrWhiteSpace(row["Amount Paid"]))
                     {
-                        if (!decimal.TryParse(row["Amount Paid"], NumberStyles.Number, CultureInfo.InvariantCulture, out var amt) || amt <= 0)
+                        if (TryParseAmount(row["Amount Paid"], out var amt) && amt > 0)
+                            row["Amount Paid"] = amt.ToString(CultureInfo.InvariantCulture); // normalise
+                        else
                             rowErrors.Add("'Amount Paid' must be a positive number");
                     }
                 }
@@ -516,12 +520,16 @@ namespace ResourceManager.Controllers
                 {
                     if (row.ContainsKey("Price") && !string.IsNullOrWhiteSpace(row["Price"]))
                     {
-                        if (!decimal.TryParse(row["Price"], NumberStyles.Number, CultureInfo.InvariantCulture, out var price) || price < 0)
+                        if (TryParseAmount(row["Price"], out var price) && price >= 0)
+                            row["Price"] = price.ToString(CultureInfo.InvariantCulture);
+                        else
                             rowErrors.Add("'Price' must be a non-negative number");
                     }
                     if (row.ContainsKey("TVA Rate") && !string.IsNullOrWhiteSpace(row["TVA Rate"]))
                     {
-                        if (!decimal.TryParse(row["TVA Rate"], NumberStyles.Number, CultureInfo.InvariantCulture, out var rate) || rate < 0 || rate > 100)
+                        if (TryParseAmount(row["TVA Rate"], out var rate) && rate >= 0 && rate <= 100)
+                            row["TVA Rate"] = rate.ToString(CultureInfo.InvariantCulture);
+                        else
                             rowErrors.Add("'TVA Rate' must be between 0 and 100");
                     }
                 }
@@ -550,6 +558,74 @@ namespace ResourceManager.Controllers
                 normalized[key] = kvp.Value?.Trim() ?? "";
             }
             return normalized;
+        }
+
+        // ── Date & Amount normalisation helpers ──
+
+        /// <summary>
+        /// Supported date formats (tried in order).  The first successful parse wins.
+        /// After validation the value is rewritten to yyyy-MM-dd so ConfirmImport
+        /// can always use InvariantCulture parsing.
+        /// </summary>
+        private static readonly string[] DateFormats = new[]
+        {
+            "yyyy-MM-dd",   // ISO 8601
+            "dd/MM/yyyy",   // French / European
+            "MM/dd/yyyy",   // US
+            "d/M/yyyy",     // short European
+            "M/d/yyyy",     // short US
+            "dd-MM-yyyy",
+            "dd.MM.yyyy",
+            "yyyy/MM/dd",
+        };
+
+        private static bool TryParseDate(string raw, out DateTime result)
+        {
+            return DateTime.TryParseExact(
+                raw.Trim(), DateFormats, CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out result);
+        }
+
+        /// <summary>
+        /// Parse a decimal that may use French formatting (comma = decimal, space/NBSP = thousands)
+        /// or invariant formatting (dot = decimal).
+        /// </summary>
+        private static bool TryParseAmount(string raw, out decimal result)
+        {
+            result = 0;
+            if (string.IsNullOrWhiteSpace(raw)) return false;
+
+            // Strip currency symbols, whitespace (including NBSP \u00A0), and thousands separators
+            var cleaned = raw
+                .Replace("\u00A0", "")  // non-breaking space
+                .Replace(" ", "")       // regular space (thousands sep)
+                .Replace("€", "").Replace("$", "").Replace("£", "")
+                .Trim();
+
+            // If both comma and dot exist, the LAST one is the decimal separator
+            bool hasComma = cleaned.Contains(',');
+            bool hasDot = cleaned.Contains('.');
+
+            if (hasComma && hasDot)
+            {
+                // e.g. 1.234,56 → comma is decimal
+                if (cleaned.LastIndexOf(',') > cleaned.LastIndexOf('.'))
+                    cleaned = cleaned.Replace(".", "").Replace(",", ".");
+                else // e.g. 1,234.56 → dot is decimal
+                    cleaned = cleaned.Replace(",", "");
+            }
+            else if (hasComma)
+            {
+                // Could be "1234,56" (decimal) or "1,234" (thousands).
+                // Heuristic: if exactly 3 digits after the last comma, treat as thousands; else decimal.
+                var afterComma = cleaned.Substring(cleaned.LastIndexOf(',') + 1);
+                if (afterComma.Length == 3 && !cleaned.Substring(0, cleaned.LastIndexOf(',')).Contains(','))
+                    cleaned = cleaned.Replace(",", ""); // thousands
+                else
+                    cleaned = cleaned.Replace(",", "."); // decimal
+            }
+
+            return decimal.TryParse(cleaned, NumberStyles.Number, CultureInfo.InvariantCulture, out result);
         }
 
         private static string BuildCsv(string[] headers, IEnumerable<string[]> rows)
