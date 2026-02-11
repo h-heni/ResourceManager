@@ -80,7 +80,7 @@ namespace ResourceManager.Controllers
                 CompanyMatriculeFiscal = company?.MatriculeFiscal,
                 CompanyPhone = company?.Phone,
                 CompanyEmail = company?.Email,
-                HasLogo = company?.LogoData != null && company.LogoData.Length > 0,
+                HasLogoData = company?.LogoData != null && company.LogoData.Length > 0,
                 
                 // Email settings
                 settings.EmailTemplate,
@@ -112,6 +112,10 @@ namespace ResourceManager.Controllers
                 // File-system language
                 settings.FileSystemLanguage,
                 settings.FileSystemLanguageLocked,
+
+                // Local Storage Path & Profile Completion
+                settings.BaseStoragePath,
+                settings.IsProfileComplete,
                 
                 // Signature
                 HasSignatureImage = settings.SignatureImageData != null && settings.SignatureImageData.Length > 0,
@@ -125,7 +129,10 @@ namespace ResourceManager.Controllers
                 settings.ShowBankName,
                 settings.ShowBankBIC,
                 settings.ShowBankRIB,
-                settings.ShowBankIBAN
+                settings.ShowBankIBAN,
+                
+                // Pro Invoice token signature
+                settings.ProInvoiceUseTokenSignature
             });
         }
 
@@ -398,6 +405,33 @@ namespace ResourceManager.Controllers
                 _context.CompanySettings.Add(settings);
             }
 
+            // Handle BaseStoragePath Locking Logic
+            if (!string.IsNullOrEmpty(dto.BaseStoragePath))
+            {
+                if (!string.IsNullOrEmpty(settings.BaseStoragePath) && settings.BaseStoragePath != dto.BaseStoragePath)
+                {
+                    // Allow SuperAdmin to override the lock
+                    var userRoles = await _userManager.GetRolesAsync(user);
+                    if (dto.OverrideLock == true && userRoles.Contains("SuperAdmin"))
+                    {
+                        _logger.LogWarning("SuperAdmin override: changing BaseStoragePath for company {CompanyId}", user.CompanyId);
+                        settings.BaseStoragePath = dto.BaseStoragePath;
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Attempt to change locked BaseStoragePath for company {CompanyId}", user.CompanyId);
+                        return BadRequest(new { message = "Storage Path is locked and cannot be changed." });
+                    }
+                }
+
+                // If setting for the first time
+                if (string.IsNullOrEmpty(settings.BaseStoragePath))
+                {
+                    settings.BaseStoragePath = dto.BaseStoragePath;
+                    settings.IsProfileComplete = true; // Mark profile as complete once path is set
+                }
+            }
+
             // Update settings
             if (dto.EmailTemplate != null) settings.EmailTemplate = dto.EmailTemplate;
             if (dto.EmailSubjectTemplate != null) settings.EmailSubjectTemplate = dto.EmailSubjectTemplate;
@@ -427,6 +461,7 @@ namespace ResourceManager.Controllers
             if (dto.ShowBankBIC.HasValue) settings.ShowBankBIC = dto.ShowBankBIC.Value;
             if (dto.ShowBankRIB.HasValue) settings.ShowBankRIB = dto.ShowBankRIB.Value;
             if (dto.ShowBankIBAN.HasValue) settings.ShowBankIBAN = dto.ShowBankIBAN.Value;
+            if (dto.ProInvoiceUseTokenSignature.HasValue) settings.ProInvoiceUseTokenSignature = dto.ProInvoiceUseTokenSignature.Value;
             
             // File-system language: set once, immutable after lock
             if (dto.FileSystemLanguage != null)
@@ -839,6 +874,12 @@ namespace ResourceManager.Controllers
         
         // File-system language (set once, immutable after lock)
         public string? FileSystemLanguage { get; set; }
+
+        // Local Storage Path & Profile Completion
+        public string? BaseStoragePath { get; set; }
+
+        /// <summary>If true and caller is SuperAdmin, allows overriding a locked BaseStoragePath.</summary>
+        public bool? OverrideLock { get; set; }
         
         // Signature
         public bool? ShowSignatureOnPdf { get; set; }
@@ -852,6 +893,9 @@ namespace ResourceManager.Controllers
         public bool? ShowBankBIC { get; set; }
         public bool? ShowBankRIB { get; set; }
         public bool? ShowBankIBAN { get; set; }
+        
+        // Pro Invoice token signature
+        public bool? ProInvoiceUseTokenSignature { get; set; }
     }
 
     public class UpdateCompanyDto

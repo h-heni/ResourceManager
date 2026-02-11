@@ -78,9 +78,6 @@ export default function NotificationBell() {
         return () => window.removeEventListener('auth:logout', handleLogout);
     }, [resetState]);
 
-    // SuperAdmin should never see notifications — render nothing
-    if (isSuperAdmin) return null;
-
     // Close dropdown when clicking outside
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
@@ -287,6 +284,9 @@ export default function NotificationBell() {
     const isDuePaymentNotification = (n: Notification) => {
         return n.message.includes('Is the money received') || n.message.includes('is now due');
     };
+
+    // SuperAdmin should never see notifications — render nothing
+    if (isSuperAdmin) return null;
 
     return (
         <div className="relative" ref={dropdownRef}>

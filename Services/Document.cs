@@ -52,6 +52,10 @@ namespace ResourceManager.Services
         public bool ShowBankBIC { get; set; } = true;
         public bool ShowBankRIB { get; set; } = true;
         public bool ShowBankIBAN { get; set; } = true;
+        
+        // Token-based verification signature
+        public string? VerificationToken { get; set; }
+        public string? VerificationUrl { get; set; }
 
         /// <summary>
         /// Creates PdfSettings from company configuration.
@@ -230,10 +234,10 @@ namespace ResourceManager.Services
                 {
                     column.Item().PaddingTop(20)
                         .Text($"{title}")
-                        .FontSize(20).Bold().FontColor(Colors.Blue.Medium);
+                        .FontSize(20).Bold().FontColor(BrandBlue);
                     column.Item().PaddingTop(2)
                         .Text($"{Model.Number}")
-                        .FontSize(15).Bold().FontColor(Colors.Blue.Medium);
+                        .FontSize(15).Bold().FontColor(BrandBlue);
 
                     column.Item().Text(text =>
                     {
@@ -676,6 +680,44 @@ namespace ResourceManager.Services
                     }
                 });
             });
+            
+            // 5. Verification token (Pro Invoice feature)
+            if (!string.IsNullOrEmpty(Settings.VerificationToken))
+            {
+                container.PaddingTop(10).Row(row =>
+                {
+                    // QR Code with verification URL
+                    if (!string.IsNullOrEmpty(Settings.VerificationUrl))
+                    {
+                        try
+                        {
+                            using var qrGenerator = new QRCodeGenerator();
+                            var qrUrl = $"{Settings.VerificationUrl}/{Settings.VerificationToken}";
+                            var qrCodeData = qrGenerator.CreateQrCode(qrUrl, QRCodeGenerator.ECCLevel.M);
+                            using var qrCode = new PngByteQRCode(qrCodeData);
+                            var qrBytes = qrCode.GetGraphic(4);
+                            row.ConstantItem(70).Height(70).Image(qrBytes).FitArea();
+                        }
+                        catch
+                        {
+                            // QR generation failed — skip silently
+                        }
+                    }
+                    
+                    row.RelativeItem().PaddingLeft(8).AlignMiddle().Column(c =>
+                    {
+                        var tokenLabel = (Settings.InvoiceLanguage?.ToLower() ?? "fr") switch
+                        {
+                            "fr" => "Jeton de vérification",
+                            "de" => "Verifizierungstoken",
+                            "ar" => "رمز التحقق",
+                            _ => "Verification Token"
+                        };
+                        c.Item().Text(tokenLabel).FontSize(7).FontColor(Colors.Grey.Darken1);
+                        c.Item().Text(Settings.VerificationToken).FontSize(7).FontFamily("Courier New");
+                    });
+                });
+            }
         }
 
     }

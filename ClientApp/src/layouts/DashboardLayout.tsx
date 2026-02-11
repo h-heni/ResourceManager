@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
@@ -41,18 +41,24 @@ interface NavItem {
 }
 
 export default function DashboardLayout() {
-    const [sidebarOpen, setSidebarOpen] = useState(true);
-    const [companyName, setCompanyName] = useState<string>('');
-    const [companyLogo, setCompanyLogo] = useState<string | null>(null);
-    const [userName, setUserName] = useState<string>('');
-    const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+    // Hooks must be called before any derived values that depend on them
     const navigate = useNavigate();
     const location = useLocation();
     const { logout, canManageUsers, canManageSettings, displayName, isSuperAdmin, isManager } = useAuth();
     const { t } = useTranslation();
 
-    // Determine active section and auto-expand it
+    const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [companyName, setCompanyName] = useState<string>('');
+    const [companyLogo, setCompanyLogo] = useState<string | null>(null);
+    const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+    const prevPathRef = useRef(location.pathname);
+    const userName = displayName || '';
+
+    // Determine active section and auto-expand it when route changes
     useEffect(() => {
+        if (prevPathRef.current === location.pathname) return;
+        prevPathRef.current = location.pathname;
+
         const path = location.pathname;
         const newExpanded: Record<string, boolean> = {};
 
@@ -66,7 +72,9 @@ export default function DashboardLayout() {
             newExpanded['settings'] = true;
         }
 
-        setExpandedSections(prev => ({ ...prev, ...newExpanded }));
+        if (Object.keys(newExpanded).length > 0) {
+            setExpandedSections(prev => ({ ...prev, ...newExpanded }));
+        }
     }, [location.pathname]);
 
     // Fetch company branding on mount
@@ -109,12 +117,7 @@ export default function DashboardLayout() {
         };
     }, []);
 
-    // Set userName from auth context (avoids 400 error from /api/user/profile)
-    useEffect(() => {
-        if (displayName) {
-            setUserName(displayName);
-        }
-    }, [displayName]);
+    // userName is derived directly from displayName (no sync effect needed)
 
     // Dynamic browser tab: title + favicon from company branding
     useEffect(() => {

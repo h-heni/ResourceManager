@@ -6,7 +6,8 @@ using ResourceManager.Models;
 using ResourceManager.DTOs;
 using ResourceManager.Services;
 using Microsoft.AspNetCore.Identity;
-using QuestPDF.Fluent; 
+using QuestPDF.Fluent;
+using System.Security.Cryptography;
 
 namespace ResourceManager.Controllers
 {
@@ -625,6 +626,23 @@ namespace ResourceManager.Controllers
                 invoice.TfiscalName = pdfSettings.CustomTaxName;
             }
 
+            // Token-based verification signature (Pro Invoice)
+            if (companySettings?.ProInvoiceUseTokenSignature == true)
+            {
+                if (string.IsNullOrEmpty(invoice.VerificationToken))
+                {
+                    // Generate a unique verification token
+                    var rawToken = $"{invoice.Id}-{Guid.NewGuid():N}";
+                    using var sha = SHA256.Create();
+                    var hash = sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(rawToken));
+                    invoice.VerificationToken = Convert.ToHexString(hash)[..24].ToLowerInvariant();
+                    invoice.VerificationTokenCreatedAt = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                }
+                pdfSettings.VerificationToken = invoice.VerificationToken;
+                pdfSettings.VerificationUrl = $"{Request.Scheme}://{Request.Host}/api/invoices/verify";
+            }
+
             var document = new Document<Invoice>(invoice, pdfSettings);
             var pdfData = document.GeneratePdf();
 
@@ -646,6 +664,41 @@ namespace ResourceManager.Controllers
             }
 
             return File(pdfData, "application/pdf", $"Facture_{invoice.Number}.pdf");
+        }
+
+        // GET: api/invoices/verify/{token} - Public verification endpoint
+        [AllowAnonymous]
+        [HttpGet("verify/{token}")]
+        public async Task<IActionResult> VerifyInvoice(string token)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+                return BadRequest(new { valid = false, message = "Token is required." });
+
+            var invoice = await _context.Invoices
+                .IgnoreQueryFilters()
+                .Include(i => i.Client)
+                .FirstOrDefaultAsync(i => i.VerificationToken == token && !i.IsDeleted);
+
+            if (invoice == null)
+                return NotFound(new { valid = false, message = "Invalid or expired verification token." });
+
+            var company = await _context.Companies
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(c => c.Id == invoice.CompanyId);
+
+            return Ok(new
+            {
+                valid = true,
+                invoiceNumber = invoice.Number,
+                date = invoice.Date,
+                dueDate = invoice.DueDate,
+                totalAmount = invoice.TotalAmount,
+                currency = invoice.CurrencySymbol ?? "DT",
+                clientName = invoice.Client?.Name,
+                companyName = company?.Name,
+                status = invoice.Status,
+                verifiedAt = DateTime.UtcNow
+            });
         }
 
         // POST: api/invoices/{id}/send-email - Send invoice via email

@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Building, MapPin, Hash, Phone, Loader, CheckCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import api from '../services/api';
+import { getErrorMessage } from '../utils/errorUtils';
 import { cn } from '../lib/utils';
 
 export default function CompanySetupPage() {
+    const { t } = useTranslation();
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -30,10 +33,10 @@ export default function CompanySetupPage() {
             // Clear the needsCompanySetup flag
             localStorage.removeItem('needsCompanySetup');
             navigate('/dashboard');
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error(err);
-            const msg = err.response?.data?.message || err.response?.data || "Failed to create company";
-            setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            const msg = getErrorMessage(err, t('companySetup.setupFailed'));
+            setError(msg);
         } finally {
             setLoading(false);
         }
@@ -48,14 +51,14 @@ export default function CompanySetupPage() {
                             <Building className="w-8 h-8 text-white" />
                         </div>
                         <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-[#065F46]">
-                            Complete Your Profile
+                            {t('companySetup.title')}
                         </h1>
-                        <p className="text-gray-500 mt-2">Tell us about your company to get started</p>
+                        <p className="text-gray-500 mt-2">{t('companySetup.subtitle')}</p>
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-5">
                         <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700 ml-1">Company Name *</label>
+                            <label className="text-sm font-medium text-gray-700 ml-1">{t('companySetup.companyName')} *</label>
                             <div className="relative">
                                 <Building className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                                 <input
@@ -64,13 +67,13 @@ export default function CompanySetupPage() {
                                     onChange={handleChange}
                                     required
                                     className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
-                                    placeholder="Your Company Name"
+                                    placeholder={t('companySetup.placeholders.companyName')}
                                 />
                             </div>
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700 ml-1">Address *</label>
+                            <label className="text-sm font-medium text-gray-700 ml-1">{t('companySetup.address')} *</label>
                             <div className="relative">
                                 <MapPin className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                                 <input
@@ -79,14 +82,14 @@ export default function CompanySetupPage() {
                                     onChange={handleChange}
                                     required
                                     className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
-                                    placeholder="Business Address"
+                                    placeholder={t('companySetup.placeholders.address')}
                                 />
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-700 ml-1">Matricule Fiscal *</label>
+                                <label className="text-sm font-medium text-gray-700 ml-1">{t('companySetup.matriculeFiscal')} *</label>
                                 <div className="relative">
                                     <Hash className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                                     <input
@@ -95,12 +98,12 @@ export default function CompanySetupPage() {
                                         onChange={handleChange}
                                         required
                                         className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
-                                        placeholder="MF123456"
+                                        placeholder={t('companySetup.placeholders.matriculeFiscal')}
                                     />
                                 </div>
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-700 ml-1">Phone</label>
+                                <label className="text-sm font-medium text-gray-700 ml-1">{t('companySetup.phone')}</label>
                                 <div className="relative">
                                     <Phone className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                                     <input
@@ -108,7 +111,7 @@ export default function CompanySetupPage() {
                                         value={formData.phone}
                                         onChange={handleChange}
                                         className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
-                                        placeholder="+216 XX XXX XXX"
+                                        placeholder={t('companySetup.placeholders.phone')}
                                     />
                                 </div>
                             </div>
@@ -133,12 +136,12 @@ export default function CompanySetupPage() {
                                 {loading ? (
                                     <>
                                         <Loader className="animate-spin h-5 w-5" />
-                                        <span>Setting up...</span>
+                                        <span>{t('companySetup.settingUp')}</span>
                                     </>
                                 ) : (
                                     <>
                                         <CheckCircle className="h-5 w-5" />
-                                        <span>Complete Setup</span>
+                                        <span>{t('companySetup.completeSetup')}</span>
                                     </>
                                 )}
                             </div>

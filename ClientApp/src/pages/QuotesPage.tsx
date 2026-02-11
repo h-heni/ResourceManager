@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Plus, Search, FileText, Calendar, Download, Trash2, Filter, Archive } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
@@ -34,6 +35,7 @@ interface Devis {
 }
 
 export default function QuotesPage() {
+    const { t } = useTranslation();
     const [quotes, setQuotes] = useState<Devis[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -71,7 +73,7 @@ export default function QuotesPage() {
             
             setQuotes(quotesWithDetails);
         } catch (error) {
-            console.error("Error fetching quotes", error);
+            console.error(t('quote.messages.fetchErrorLog'), error);
         } finally {
             setLoading(false);
         }
@@ -88,19 +90,19 @@ export default function QuotesPage() {
             link.click();
             link.remove();
         } catch (error) {
-            console.error("Error downloading PDF", error);
-            alert("Failed to download PDF");
+            console.error(t('quote.messages.downloadErrorLog'), error);
+            alert(t('common.downloadFailed'));
         }
     };
 
     const handleDeleteQuote = async (id: number) => {
-        if (!confirm("Are you sure you want to reject/delete this quote?")) return;
+        if (!confirm(t('quote.confirmDelete'))) return;
         try {
             await api.delete(`/Devis/${id}`);
             fetchQuotes();
         } catch (error) {
-            console.error("Error deleting quote", error);
-            alert("Failed to delete quote");
+            console.error(t('quote.messages.deleteErrorLog'), error);
+            alert(t('quote.deleteError'));
         }
     };
 
@@ -136,15 +138,15 @@ export default function QuotesPage() {
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-900">Quotes (Devis)</h1>
-                    <p className="text-gray-500 mt-1">Manage your quotes and estimates</p>
+                    <h1 className="text-3xl font-bold text-gray-900">{t('quote.title')}</h1>
+                    <p className="text-gray-500 mt-1">{t('quote.pageDescription')}</p>
                 </div>
                 <button
                     onClick={() => navigate('/quotes/create')}
                     className="flex items-center px-4 py-2 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all transform hover:scale-105"
                 >
                     <Plus size={20} className="mr-2" />
-                    Create Quote
+                    {t('quote.create')}
                 </button>
             </div>
 
@@ -153,14 +155,14 @@ export default function QuotesPage() {
                     <Search className="absolute left-4 top-3.5 h-5 w-5 text-gray-400" />
                     <input
                         type="text"
-                        placeholder="Search quotes..."
+                        placeholder={t('quote.searchPlaceholder')}
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent outline-none transition-all"
                     />
                 </div>
                 {isManager && (
-                    <div className="flex p-1 bg-gray-100 rounded-xl">
+                    <div className="flex flex-wrap p-1 bg-gray-100 rounded-xl">
                         <button
                             onClick={() => setViewMode('active')}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
@@ -168,7 +170,7 @@ export default function QuotesPage() {
                             }`}
                         >
                             <Filter size={16} />
-                            Active ({activeCount})
+                            {t('quote.active')} ({activeCount})
                         </button>
                         <button
                             onClick={() => setViewMode('archived')}
@@ -177,14 +179,14 @@ export default function QuotesPage() {
                             }`}
                         >
                             <Archive size={16} />
-                            Archived ({archivedCount})
+                            {t('quote.archived')} ({archivedCount})
                         </button>
                     </div>
                 )}
             </div>
 
             {loading ? (
-                <div className="text-center py-20 text-gray-500">Loading quotes...</div>
+                <div className="text-center py-20 text-gray-500">{t('quote.loading')}</div>
             ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {filteredQuotes.map((quote) => (
@@ -196,15 +198,15 @@ export default function QuotesPage() {
                                         <FileText size={24} />
                                     </div>
                                     <div>
-                                        <h3 className="text-lg font-bold text-gray-900">Quote #{quote.number}</h3>
-                                        <p className="text-sm text-gray-500">{quote.clientName || "Unknown Client"}</p>
+                                        <h3 className="text-lg font-bold text-gray-900">{t('quote.quoteNumberLabel', { number: quote.number })}</h3>
+                                        <p className="text-sm text-gray-500">{quote.clientName || t('common.unknown')}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center space-x-2">
                                     <button
                                         onClick={() => handleDownloadPdf(quote.id, quote.number)}
                                         className="p-2 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
-                                        title="Download PDF"
+                                        title={t('quote.downloadPdf')}
                                     >
                                         <Download size={18} />
                                     </button>
@@ -213,13 +215,13 @@ export default function QuotesPage() {
                                         <button
                                             onClick={() => handleDeleteQuote(quote.id)}
                                             className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                            title="Delete Quote"
+                                            title={t('quote.deleteQuote')}
                                         >
                                             <Trash2 size={18} />
                                         </button>
                                     )}
                                     <span className={`px-3 py-1 text-xs font-semibold rounded-full ${getStatusColor(quote.status)}`}>
-                                        {quote.status || 'Draft'}
+                                        {quote.status ? t(`quote.status.${quote.status}`, quote.status) : t('invoice.draft')}
                                     </span>
                                 </div>
                             </div>
@@ -228,14 +230,14 @@ export default function QuotesPage() {
                             <div className="flex items-center justify-between text-sm mb-4 pb-4 border-b border-gray-100">
                                 <span className="text-gray-500 flex items-center">
                                     <Calendar size={16} className="mr-2" />
-                                    {quote.date ? new Date(quote.date).toLocaleDateString() : 'N/A'}
+                                    {quote.date ? new Date(quote.date).toLocaleDateString() : t('quote.notAvailable')}
                                 </span>
                                 <span className="font-bold text-[#065F46] text-lg">{formatCurrency(quote.totalAmount, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
                             </div>
 
                             {/* Items Section - Always Visible */}
                             <div className="space-y-2">
-                                <h4 className="text-sm font-semibold text-gray-700 mb-2">Items</h4>
+                                <h4 className="text-sm font-semibold text-gray-700 mb-2">{t('quote.items')}</h4>
                                 {quote.devisItems && quote.devisItems.length > 0 ? (
                                     <div className="space-y-2 max-h-48 overflow-y-auto">
                                         {quote.devisItems.map((item, idx) => (
@@ -247,30 +249,30 @@ export default function QuotesPage() {
                                                     </span>
                                                 </div>
                                                 <div className="flex justify-between text-xs text-gray-500 mt-1">
-                                                    <span>Qty: {item.quantity || 0}</span>
-                                                    <span>Unit Price: {formatCurrency(item.price, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
-                                                    {item.tva && <span className="text-orange-500">+TVA {((item.vatRate ?? 0.19) * 100).toFixed(0)}%</span>}
+                                                    <span>{t('quote.qtyLabel', { value: item.quantity || 0 })}</span>
+                                                    <span>{t('quote.unitPriceLabel', { value: formatCurrency(item.price, quote.currencySymbol || DEFAULT_CURRENCY) })}</span>
+                                                    {item.tva && <span className="text-orange-500">{t('quote.taxRateLabel', { rate: ((item.vatRate ?? 0.19) * 100).toFixed(0) })}</span>}
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
                                 ) : (
-                                    <p className="text-sm text-gray-400 italic">No items in this quote.</p>
+                                    <p className="text-sm text-gray-400 italic">{t('quote.noItemsInQuote')}</p>
                                 )}
 
                                 {/* Totals */}
                                 {quote.devisItems && quote.devisItems.length > 0 && (
                                     <div className="pt-3 mt-3 border-t border-gray-200 space-y-1">
                                         <div className="flex justify-between text-sm text-gray-600">
-                                            <span>Subtotal:</span>
+                                            <span>{t('invoice.subtotal')}:</span>
                                             <span>{formatCurrency(quote.subTotal, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
                                         </div>
                                         <div className="flex justify-between text-sm text-gray-600">
-                                            <span>Tax:</span>
+                                            <span>{t('invoice.tax')}:</span>
                                             <span>{formatCurrency(quote.taxAmount, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
                                         </div>
                                         <div className="flex justify-between text-sm font-bold text-[#065F46]">
-                                            <span>Total:</span>
+                                            <span>{t('invoice.total')}:</span>
                                             <span>{formatCurrency(quote.totalAmount, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
                                         </div>
                                     </div>
@@ -282,8 +284,8 @@ export default function QuotesPage() {
                     {filteredQuotes.length === 0 && (
                         <div className="col-span-full text-center py-12 bg-[#065F46]/5 rounded-2xl border border-dashed border-[#065F46]/20">
                             <FileText size={48} className="mx-auto text-[#065F46]/30 mb-4" />
-                            <p className="text-gray-500 font-medium">No quotes found.</p>
-                            <p className="text-sm text-gray-400 mt-1">Create your first quote to get started.</p>
+                            <p className="text-gray-500 font-medium">{t('quote.noData')}</p>
+                            <p className="text-sm text-gray-400 mt-1">{t('quote.createFirst')}</p>
                         </div>
                     )}
                 </div>

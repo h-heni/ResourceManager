@@ -10,6 +10,7 @@ import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { formatCurrency } from '../lib/formatNumber';
 import { DEFAULT_CURRENCY, CURRENCY_OPTIONS, getCurrencySymbol } from '../lib/currencyUtils';
+import { getErrorMessage } from '../utils/errorUtils';
 
 // ═══════════════════════════════════════════════════════════════
 // TYPES
@@ -142,7 +143,15 @@ export default function SupplierInvoicesPage() {
     const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
     // Supplier list for linking
-    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+    interface SupplierFull {
+        id: number;
+        name: string;
+        address?: string;
+        phone?: string;
+        matriculeFiscal?: string;
+        email?: string;
+    }
+    const [suppliers, setSuppliers] = useState<SupplierFull[]>([]);
     const [selectedSupplierId, setSelectedSupplierId] = useState<number | null>(null);
 
     // Currency state for supplier invoice
@@ -187,7 +196,32 @@ export default function SupplierInvoicesPage() {
     useEffect(() => {
         fetchInvoices();
         fetchSuppliers();
+        const restoreDraft = () => {
+            try {
+                const saved = localStorage.getItem(AUTOSAVE_KEY);
+                if (saved) {
+                    const draft = JSON.parse(saved);
+                    // Only restore if less than 24 hours old
+                    const savedAt = new Date(draft.savedAt);
+                    const hoursOld = (Date.now() - savedAt.getTime()) / (1000 * 60 * 60);
+                    if (hoursOld < 24 && draft.lineItems?.length > 0) {
+                        setCurrentInvoiceId(draft.currentInvoiceId);
+                        setHeaderData(draft.headerData);
+                        setLineItems(draft.lineItems);
+                        setSelectedSupplierId(draft.selectedSupplierId);
+                        setView('review');
+                        setStatus({ type: 'success', message: t('supplierInvoice.draftRestored', 'Restored unsaved draft from previous session') });
+                        setTimeout(() => setStatus(null), 4000);
+                    } else {
+                        localStorage.removeItem(AUTOSAVE_KEY);
+                    }
+                }
+            } catch {
+                localStorage.removeItem(AUTOSAVE_KEY);
+            }
+        };
         restoreDraft();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Refetch when a payment is confirmed/extended via NotificationBell
@@ -211,9 +245,12 @@ export default function SupplierInvoicesPage() {
 
     const fetchSuppliers = async () => {
         try {
-            const res = await api.get('/Fournisseurs');
+            const res = await api.get('/Fournisseurs?size=9999');
             const data = Array.isArray(res.data) ? res.data : (res.data.data || []);
-            setSuppliers(data.map((s: any) => ({ id: s.id, name: s.name })));
+            setSuppliers(data.map((s: { id: number; name: string; address?: string; phone?: string; matriculeFiscal?: string; email?: string }) => ({
+                id: s.id, name: s.name, address: s.address, phone: s.phone,
+                matriculeFiscal: s.matriculeFiscal, email: s.email
+            })));
         } catch {
             // Non-critical
         }
@@ -234,31 +271,6 @@ export default function SupplierInvoicesPage() {
         };
         localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(draft));
     }, [currentInvoiceId, headerData, lineItems, selectedSupplierId]);
-
-    const restoreDraft = () => {
-        try {
-            const saved = localStorage.getItem(AUTOSAVE_KEY);
-            if (saved) {
-                const draft = JSON.parse(saved);
-                // Only restore if less than 24 hours old
-                const savedAt = new Date(draft.savedAt);
-                const hoursOld = (Date.now() - savedAt.getTime()) / (1000 * 60 * 60);
-                if (hoursOld < 24 && draft.lineItems?.length > 0) {
-                    setCurrentInvoiceId(draft.currentInvoiceId);
-                    setHeaderData(draft.headerData);
-                    setLineItems(draft.lineItems);
-                    setSelectedSupplierId(draft.selectedSupplierId);
-                    setView('review');
-                    setStatus({ type: 'success', message: t('supplierInvoice.draftRestored', 'Restored unsaved draft from previous session') });
-                    setTimeout(() => setStatus(null), 4000);
-                } else {
-                    localStorage.removeItem(AUTOSAVE_KEY);
-                }
-            }
-        } catch {
-            localStorage.removeItem(AUTOSAVE_KEY);
-        }
-    };
 
     const clearDraft = () => {
         localStorage.removeItem(AUTOSAVE_KEY);
@@ -335,7 +347,7 @@ export default function SupplierInvoicesPage() {
 
             // Populate line items
             const items: LineItem[] = (data.extractedData.lineItems || []).map(
-                (item: any, index: number) => ({
+                (item: { description?: string; quantity?: number; unitPrice?: number; taxRate?: number; totalHT?: number }, index: number) => ({
                     id: `item-${Date.now()}-${index}`,
                     description: item.description || '',
                     quantity: item.quantity || 1,
@@ -351,11 +363,11 @@ export default function SupplierInvoicesPage() {
                 type: data.success ? 'success' : 'error',
                 message: data.message,
             });
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Upload error:', error);
             setStatus({
                 type: 'error',
-                message: error.response?.data?.message || t('supplierInvoice.uploadFailed', 'Failed to upload and extract PDF'),
+                message: getErrorMessage(error, t('supplierInvoice.uploadFailed', 'Failed to upload and extract PDF')),
             });
         } finally {
             setUploading(false);
@@ -382,7 +394,7 @@ export default function SupplierInvoicesPage() {
         ]);
     };
 
-    const updateLineItem = (id: string, field: keyof LineItem, value: any) => {
+    const updateLineItem = (id: string, field: keyof LineItem, value: string | number | boolean) => {
         setLineItems(prev =>
             prev.map(item => {
                 if (item.id !== id) return item;
@@ -476,11 +488,11 @@ export default function SupplierInvoicesPage() {
                 fetchInvoices();
                 resetReviewState();
             }, 1500);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Confirm error:', error);
             setStatus({
                 type: 'error',
-                message: error.response?.data?.message || t('supplierInvoice.saveFailed', 'Failed to save supplier invoice'),
+                message: getErrorMessage(error, t('supplierInvoice.saveFailed', 'Failed to save supplier invoice')),
             });
         } finally {
             setSaving(false);
@@ -502,7 +514,7 @@ export default function SupplierInvoicesPage() {
     };
 
     const handleDelete = async (id: number) => {
-        if (!confirm(t('supplierInvoice.confirmDelete', 'Are you sure you want to delete this supplier invoice?'))) return;
+        if (!confirm(t('supplierInvoice.confirmDelete'))) return;
         try {
             await api.delete(`/SupplierInvoices/${id}`);
             fetchInvoices();
@@ -558,7 +570,7 @@ export default function SupplierInvoicesPage() {
         }
 
         if (isScheduledPayment && !scheduledDate) {
-            alert(t('payment.selectScheduledDate', 'Please select a scheduled date'));
+            alert(t('payment.selectScheduledDate'));
             return;
         }
 
@@ -583,10 +595,10 @@ export default function SupplierInvoicesPage() {
             fetchInvoices();
             setStatus({ type: 'success', message: isScheduledPayment ? '⏰ Payment scheduled!' : '💵 Payment recorded!' });
             setTimeout(() => setStatus(null), 3000);
-        } catch (error: any) {
+        } catch (error: unknown) {
             setStatus({
                 type: 'error',
-                message: error.response?.data?.message || t('supplierInvoice.paymentFailed', 'Failed to record payment'),
+                message: getErrorMessage(error, t('supplierInvoice.paymentFailed', 'Failed to record payment')),
             });
         } finally {
             setPaymentSaving(false);
@@ -608,10 +620,10 @@ export default function SupplierInvoicesPage() {
         try {
             const res = await api.post('/SupplierInvoices/validate');
             setConsistencyResult(res.data);
-        } catch (error: any) {
+        } catch (error: unknown) {
             setStatus({
                 type: 'error',
-                message: error.response?.data?.message || t('supplierInvoice.consistencyFailed', 'Consistency check failed'),
+                message: getErrorMessage(error, t('supplierInvoice.consistencyFailed', 'Consistency check failed')),
             });
             setShowConsistencyModal(false);
             setConsistencyResult(null);
@@ -670,7 +682,7 @@ export default function SupplierInvoicesPage() {
                 fournisseurPhone: data.fournisseurPhone || '',
                 fournisseurAddress: data.fournisseurAddress || '',
             });
-            setLineItems((data.items || []).map((item: any, i: number) => ({
+            setLineItems((data.items || []).map((item: { description: string; quantity: number; unitPrice: number; taxRate?: number; totalHT: number }, i: number) => ({
                 id: `item-${Date.now()}-${i}`,
                 description: item.description,
                 quantity: item.quantity,
@@ -680,6 +692,19 @@ export default function SupplierInvoicesPage() {
             })));
             setSelectedSupplierId(data.fournisseurId);
             setConfidenceScore(data.confidenceScore || 0);
+            // Fetch the file via authenticated API and create blob URL for iframe preview
+            if (data.filePath || data.fileName) {
+                try {
+                    const fileRes = await api.get(`/SupplierInvoices/${data.id}/file`, { responseType: 'blob' });
+                    const blobUrl = URL.createObjectURL(new Blob([fileRes.data], { type: data.fileType || 'application/pdf' }));
+                    setTempFilePath(blobUrl);
+                    setTempFileName(data.fileName || 'invoice');
+                    setTempFileType(data.fileType || 'application/pdf');
+                } catch {
+                    // File may not exist on disk — skip preview
+                    setTempFilePath(null);
+                }
+            }
             setView('review');
         } catch (error) {
             console.error('Error loading invoice:', error);
@@ -698,7 +723,7 @@ export default function SupplierInvoicesPage() {
             } else {
                 setDetailInvoice(data);
             }
-            setDetailItems((data.items || []).map((item: any, i: number) => ({
+            setDetailItems((data.items || []).map((item: { description: string; quantity: number; unitPrice: number; taxRate?: number; totalHT: number }, i: number) => ({
                 id: `item-${Date.now()}-${i}`,
                 description: item.description,
                 quantity: item.quantity,
@@ -1581,13 +1606,13 @@ export default function SupplierInvoicesPage() {
                                 <div className="p-2">
                                     {tempFileType?.startsWith('image/') ? (
                                         <img
-                                            src={`${api.defaults.baseURL?.replace('/api', '')}${tempFilePath}`}
+                                            src={tempFilePath || ''}
                                             alt={tempFileName || 'Uploaded document'}
                                             className="w-full rounded-lg object-contain max-h-[70vh]"
                                         />
                                     ) : (
                                         <iframe
-                                            src={`${api.defaults.baseURL?.replace('/api', '')}${tempFilePath}`}
+                                            src={tempFilePath || ''}
                                             className="w-full rounded-lg border-0"
                                             style={{ height: '70vh' }}
                                             title={tempFileName || 'PDF Preview'}
@@ -1619,8 +1644,15 @@ export default function SupplierInvoicesPage() {
                                     const val = e.target.value ? parseInt(e.target.value) : null;
                                     setSelectedSupplierId(val);
                                     if (val) {
-                                        const s = suppliers.find(s => s.id === val);
-                                        if (s) setHeaderData(prev => ({ ...prev, fournisseurName: s.name }));
+                                        const s = suppliers.find(sup => sup.id === val);
+                                        if (s) {
+                                            setHeaderData(prev => ({
+                                                ...prev,
+                                                fournisseurName: s.name,
+                                                fournisseurAddress: s.address || prev.fournisseurAddress,
+                                                fournisseurPhone: s.phone || prev.fournisseurPhone,
+                                            }));
+                                        }
                                     }
                                 }}
                                 className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"

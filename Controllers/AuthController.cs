@@ -18,7 +18,6 @@ namespace ResourceManager.Controllers
     [ApiController]
     [Route("api/[controller]")]
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
-    [EnableRateLimiting("AuthStrict")]
     public class AuthController : ControllerBase
     {
         private readonly ILogger<AuthController> _logger;
@@ -49,6 +48,7 @@ namespace ResourceManager.Controllers
 
         [HttpPost("login")]
         [AllowAnonymous]
+        [EnableRateLimiting("AuthStrict")]
         public async Task<IActionResult> Login([FromBody] LoginDto loginDto)
         {
             if (string.IsNullOrWhiteSpace(loginDto.Email) || string.IsNullOrWhiteSpace(loginDto.Password))
@@ -74,9 +74,18 @@ namespace ResourceManager.Controllers
 
                 if (result.IsLockedOut)
                 {
-                    _logger.LogWarning("Account locked out for {Email}", loginDto.Email);
+                    var lockoutEnd = await _userManager.GetLockoutEndDateAsync(user);
+                    var remainingSeconds = lockoutEnd.HasValue
+                        ? (int)Math.Ceiling((lockoutEnd.Value - DateTimeOffset.UtcNow).TotalSeconds)
+                        : 30;
+                    if (remainingSeconds < 1) remainingSeconds = 1;
+
+                    _logger.LogWarning("Account locked out for {Email}, {Seconds}s remaining", loginDto.Email, remainingSeconds);
                     _securityAlerts.RecordFailedLogin(ip, loginDto.Email);
-                    return Unauthorized(new { error = "Account locked. Try again later." });
+
+                    // Return 429 so the frontend shows the countdown timer
+                    Response.Headers["Retry-After"] = remainingSeconds.ToString();
+                    return StatusCode(429, new { error = $"Account locked. Try again in {remainingSeconds} seconds.", retryAfter = remainingSeconds });
                 }
 
                 if (!result.Succeeded)
@@ -102,6 +111,13 @@ namespace ResourceManager.Controllers
                 // Record login for country tracking
                 await RecordUserLoginAsync(user.Id, ip);
 
+                // Fetch company settings BYPASSING tenant filter (user not yet authenticated in this request)
+                var companySettings = await _context.CompanySettings
+                    .IgnoreQueryFilters()
+                    .Where(s => s.CompanyId == user.CompanyId)
+                    .Select(s => new { s.IsProfileComplete, s.BaseStoragePath })
+                    .FirstOrDefaultAsync();
+
                 return Ok(new
                 {
                     AccessToken = accessToken,
@@ -111,7 +127,9 @@ namespace ResourceManager.Controllers
                         user.Email, 
                         Role = role,
                         FirstName = userProfile?.FirstName ?? "",
-                        LastName = userProfile?.LastName ?? ""
+                        LastName = userProfile?.LastName ?? "",
+                        IsProfileComplete = companySettings?.IsProfileComplete ?? false,
+                        BaseStoragePath = companySettings?.BaseStoragePath
                     }
                 });
             }
@@ -124,6 +142,7 @@ namespace ResourceManager.Controllers
 
         [HttpPost("signup")]
         [AllowAnonymous]
+        [EnableRateLimiting("AuthStrict")]
         public async Task<IActionResult> SignUp([FromBody] CreateManagerDto createManagerDto)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
@@ -275,6 +294,7 @@ namespace ResourceManager.Controllers
         // ==========================================
         [HttpPost("register-manual")]
         [Authorize(Roles = "Manager,FreeUser")] // <--- Managers and FreeUsers can add employees to their company
+        [EnableRateLimiting("AuthStrict")]
         public async Task<IActionResult> RegisterManual([FromBody] CreateEmployeeDto employee)
         {
             using var transaction = await _context.Database.BeginTransactionAsync();
@@ -403,10 +423,32 @@ namespace ResourceManager.Controllers
             // Issue new access token
             var accessToken = GenerateAccessToken(user.Id.ToString(), user.Email!, role, user.CompanyId);
 
+            // Fetch company settings BYPASSING tenant filter (refresh requests are [AllowAnonymous])
+            var companySettings = await _context.CompanySettings
+                .IgnoreQueryFilters()
+                .Where(s => s.CompanyId == user.CompanyId)
+                .Select(s => new { s.IsProfileComplete, s.BaseStoragePath })
+                .FirstOrDefaultAsync();
+
             return Ok(new
             {
                 AccessToken = accessToken,
-                ExpiresInMinutes = AccessTokenMinutes
+                ExpiresInMinutes = AccessTokenMinutes,
+                User = new {
+                    user.Id,
+                    user.Email,
+                    Role = role,
+                    // We don't have profile handy here easily unless we fetch it, 
+                    // but for refresh we primarily need the new token. 
+                    // However, to keep AuthContext in sync if we reload page, we might need it.
+                    // But AuthContext.restoreSession calls /refresh then sets User from localStorage.
+                    // Actually AuthContext.restoreSession relies on localStorage for User details!
+                    // So RefreshToken result is ONLY used for the new token.
+                    // WAIT: If I update IsProfileComplete on the backend, the frontend won't know until re-login if I rely only on localStorage.
+                    // I should probably return the User object in RefreshToken too, or at least the flags.
+                    IsProfileComplete = companySettings?.IsProfileComplete ?? false,
+                    BaseStoragePath = companySettings?.BaseStoragePath
+                }
             });
         }
 

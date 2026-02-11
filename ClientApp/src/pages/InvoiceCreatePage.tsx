@@ -177,37 +177,33 @@ export default function InvoiceCreatePage() {
         if (!isEditMode) {
             fetchLastInvoiceNumber();
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Fetch invoice data for edit mode
     useEffect(() => {
-        if (isEditMode && editId) {
-            fetchInvoiceForEdit(parseInt(editId));
-        }
-    }, [editId]);
-
-    const fetchInvoiceForEdit = async (invoiceId: number) => {
-        setLoadingInvoice(true);
-        try {
-            const res = await api.get(`/Invoices/${invoiceId}/details`);
-            const inv = res.data;
-            setInvoiceNumber(inv.number || '');
-            setDate(inv.date ? new Date(inv.date).toISOString().split('T')[0] : '');
-            setClientId(inv.clientId?.toString() || '');
-            if (inv.devisId) setSelectedQuoteId(inv.devisId.toString());
-            // Load per-document currency/language if available
-            if (inv.currency) setPdfCurrency(inv.currency);
-            if (inv.currencySymbol) setPdfCurrencySymbol(inv.currencySymbol);
-            if (inv.pdfLanguage) setPdfLanguage(inv.pdfLanguage);
-            setItems(
-                inv.items && inv.items.length > 0
-                    ? inv.items.map((item: any) => ({
-                        description: item.description || '',
-                        quantity: item.quantity || 1,
-                        price: item.unitPrice || 0,
-                        tva: (item.vat ?? 0) > 0,
-                        vatRate: (item.vat ?? 0) > 0 ? Math.round((item.vatRate ?? item.vat ?? 0.19) * 100) : 0,
-                        fromCatalog: true
+        const fetchInvoiceForEdit = async (invoiceId: number) => {
+            setLoadingInvoice(true);
+            try {
+                const res = await api.get(`/Invoices/${invoiceId}/details`);
+                const inv = res.data;
+                setInvoiceNumber(inv.number || '');
+                setDate(inv.date ? new Date(inv.date).toISOString().split('T')[0] : '');
+                setClientId(inv.clientId?.toString() || '');
+                if (inv.devisId) setSelectedQuoteId(inv.devisId.toString());
+                // Load per-document currency/language if available
+                if (inv.currency) setPdfCurrency(inv.currency);
+                if (inv.currencySymbol) setPdfCurrencySymbol(inv.currencySymbol);
+                if (inv.pdfLanguage) setPdfLanguage(inv.pdfLanguage);
+                setItems(
+                    inv.items && inv.items.length > 0
+                        ? inv.items.map((item: { description?: string; quantity?: number; unitPrice?: number; vat?: number; vatRate?: number }) => ({
+                            description: item.description || '',
+                            quantity: item.quantity || 1,
+                            price: item.unitPrice || 0,
+                            tva: (item.vat ?? 0) > 0,
+                            vatRate: (item.vat ?? 0) > 0 ? Math.round((item.vatRate ?? item.vat ?? 0.19) * 100) : 0,
+                            fromCatalog: true
                     }))
                     : [{ description: '', quantity: 1, price: 0, tva: true, vatRate: Math.round((taxSettings.defaultVatRate) * 100), fromCatalog: false }]
             );
@@ -219,6 +215,11 @@ export default function InvoiceCreatePage() {
             setLoadingInvoice(false);
         }
     };
+        if (isEditMode && editId) {
+            fetchInvoiceForEdit(parseInt(editId));
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isEditMode, editId]);
 
     const fetchTaxSettings = async () => {
         try {
@@ -293,7 +294,7 @@ export default function InvoiceCreatePage() {
             const res = await api.get('/Devis');
             const allDevis = Array.isArray(res.data) ? res.data : (res.data.data || []);
             // Filter to only show Draft or Accepted status quotes for this client
-            const clientQuotes = allDevis.filter((d: any) =>
+            const clientQuotes = allDevis.filter((d: { status: string; isDeleted?: boolean; treated?: boolean; clientId: number }) =>
                 (d.status === 'Draft' || d.status === 'Accepted') &&
                 !d.isDeleted &&
                 !d.treated &&
@@ -313,7 +314,7 @@ export default function InvoiceCreatePage() {
         }
         try {
             const res = await api.get('/DeliveryNotes');
-            let allNotes: any[] = [];
+            let allNotes: Array<{ id: number; devisId?: number; invoiceId?: number | null }> = [];
             if (Array.isArray(res.data)) {
                 allNotes = res.data;
             } else if (res.data?.Data) {
@@ -324,8 +325,8 @@ export default function InvoiceCreatePage() {
 
             // Filter delivery notes linked to this quote that don't have an invoice yet
             const linkedNoteIds = allNotes
-                .filter((dn: any) => dn.devisId === parseInt(quoteId) && !dn.invoiceId)
-                .map((dn: any) => dn.id);
+                .filter((dn: { id: number; devisId?: number; invoiceId?: number | null }) => dn.devisId === parseInt(quoteId) && !dn.invoiceId)
+                .map((dn: { id: number; devisId?: number; invoiceId?: number | null }) => dn.id);
 
             // Fetch full details for each delivery note to get items and creator info
             const detailedNotes = await Promise.all(
@@ -366,51 +367,50 @@ export default function InvoiceCreatePage() {
         );
     };
 
-    // Auto-update items based on selected delivery notes and quote prices
-    const updateItemsFromDeliveryNotes = (quoteData: Devis | null, selectedDNIds: number[]) => {
-        if (!quoteData?.devisItems || selectedDNIds.length === 0) {
-            return;
-        }
-
-        // Calculate aggregated delivered quantities
-        const deliveredQty: Record<string, number> = {};
-        deliveryNotes
-            .filter(dn => selectedDNIds.includes(dn.id))
-            .forEach(dn => {
-                dn.deliveryNoteItems?.forEach(item => {
-                    const key = item.description.toLowerCase().trim();
-                    deliveredQty[key] = (deliveredQty[key] || 0) + (item.quantity || 0);
-                });
-            });
-
-        // Map quote items with delivered quantities
-        const newItems: InvoiceItem[] = quoteData.devisItems
-            .filter(qi => {
-                const key = qi.description.toLowerCase().trim();
-                return deliveredQty[key] && deliveredQty[key] > 0;
-            })
-            .map(qi => {
-                const key = qi.description.toLowerCase().trim();
-                return {
-                    description: qi.description,
-                    quantity: deliveredQty[key] || qi.quantity,
-                    price: qi.price,
-                    tva: qi.tva,
-                    vatRate: qi.tva ? Math.round(taxSettings.defaultVatRate * 100) : 0,
-                    fromCatalog: true
-                };
-            });
-
-        if (newItems.length > 0) {
-            setItems(newItems);
-        }
-    };
-
     // When delivery note selection changes, update items
     useEffect(() => {
         if (selectedQuoteData && selectedDeliveryNoteIds.length > 0) {
-            updateItemsFromDeliveryNotes(selectedQuoteData, selectedDeliveryNoteIds);
+            // Auto-update items based on selected delivery notes and quote prices
+            const quoteData = selectedQuoteData;
+            const selectedDNIds = selectedDeliveryNoteIds;
+            if (!quoteData?.devisItems || selectedDNIds.length === 0) {
+                return;
+            }
+
+            // Calculate aggregated delivered quantities
+            const deliveredQty: Record<string, number> = {};
+            deliveryNotes
+                .filter(dn => selectedDNIds.includes(dn.id))
+                .forEach(dn => {
+                    dn.deliveryNoteItems?.forEach(item => {
+                        const key = item.description.toLowerCase().trim();
+                        deliveredQty[key] = (deliveredQty[key] || 0) + (item.quantity || 0);
+                    });
+                });
+
+            // Map quote items with delivered quantities
+            const newItems: InvoiceItem[] = quoteData.devisItems
+                .filter(qi => {
+                    const key = qi.description.toLowerCase().trim();
+                    return deliveredQty[key] && deliveredQty[key] > 0;
+                })
+                .map(qi => {
+                    const key = qi.description.toLowerCase().trim();
+                    return {
+                        description: qi.description,
+                        quantity: deliveredQty[key] || qi.quantity,
+                        price: qi.price,
+                        tva: qi.tva,
+                        vatRate: qi.tva ? Math.round(taxSettings.defaultVatRate * 100) : 0,
+                        fromCatalog: true
+                    };
+                });
+
+            if (newItems.length > 0) {
+                setItems(newItems);
+            }
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedDeliveryNoteIds, selectedQuoteData, deliveryNotes]);
 
     const handleQuoteSelection = async (qid: string) => {
@@ -429,7 +429,7 @@ export default function InvoiceCreatePage() {
 
             // Pre-fill items from quote
             if (quote.devisItems && quote.devisItems.length > 0) {
-                setItems(quote.devisItems.map((item: any) => ({
+                setItems(quote.devisItems.map((item: { description: string; quantity: number; price: number; tva: boolean; vatRate?: number }) => ({
                     description: item.description,
                     quantity: item.quantity,
                     price: item.price,
@@ -494,9 +494,9 @@ export default function InvoiceCreatePage() {
         setItems(items.filter((_, i) => i !== index));
     };
 
-    const updateItem = (index: number, field: keyof InvoiceItem, value: any) => {
+    const updateItem = (index: number, field: keyof InvoiceItem, value: string | number | boolean) => {
         const newItems = [...items];
-        (newItems[index] as any)[field] = value;
+        (newItems[index] as Record<string, string | number | boolean>)[field] = value;
         // Reset fromCatalog when user manually edits the description
         if (field === 'description') {
             newItems[index].fromCatalog = false;
@@ -565,10 +565,10 @@ export default function InvoiceCreatePage() {
     };
 
     return (
-        <div className="max-w-4xl mx-auto space-y-6">
+        <div className="max-w-4xl mx-auto space-y-6 px-2 sm:px-0">
             {/* Header */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start space-x-4">
                     <button
                         onClick={() => navigate('/invoices')}
                         className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500"
@@ -583,7 +583,7 @@ export default function InvoiceCreatePage() {
                 <button
                     onClick={handleSubmit}
                     disabled={loading || loadingInvoice}
-                    className="flex items-center px-6 py-3 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all transform hover:scale-105 disabled:opacity-70 disabled:cursor-not-allowed"
+                    className="w-full sm:w-auto flex items-center justify-center px-6 py-3 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                     <Save size={20} className="mr-2" />
                     {loading ? t('createPage.saving') : isEditMode ? t('createPage.updateButton') : t('createPage.saveButton')}
@@ -637,10 +637,10 @@ export default function InvoiceCreatePage() {
                             onChange={e => setPdfLanguage(e.target.value)}
                             className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none transition-all"
                         >
-                            <option value="fr">Français</option>
-                            <option value="en">English</option>
-                            <option value="de">Deutsch</option>
-                            <option value="ar">العربية</option>
+                            <option value="fr">{t('language.fr')}</option>
+                            <option value="en">{t('language.en')}</option>
+                            <option value="de">{t('language.de')}</option>
+                            <option value="ar">{t('language.ar')}</option>
                         </select>
                         <p className="text-xs text-gray-500 mt-1">{t('createPage.languageHelp')}</p>
                     </div>
@@ -758,12 +758,12 @@ export default function InvoiceCreatePage() {
                                         />
                                         <div className="flex-1">
                                             {/* DN Header */}
-                                            <div className="flex items-center justify-between mb-2">
-                                                <span className="font-semibold text-gray-800">BL #{dn.number}</span>
-                                                <div className="flex items-center space-x-3 text-sm text-gray-500">
+                                            <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                                <span className="font-semibold text-gray-800">{t('deliveryNote.title')} #{dn.number}</span>
+                                                <div className="flex flex-wrap items-center gap-3 text-sm text-gray-500">
                                                     <span className="flex items-center">
                                                         <Calendar size={14} className="mr-1" />
-                                                        {dn.date ? new Date(dn.date).toLocaleDateString() : 'N/A'}
+                                                        {dn.date ? new Date(dn.date).toLocaleDateString() : t('users.table.notAvailable')}
                                                     </span>
                                                     {dn.createdByUser && (
                                                         <span className="flex items-center">
@@ -801,7 +801,7 @@ export default function InvoiceCreatePage() {
                         {/* Summary of delivered quantities */}
                         {selectedDeliveryNoteIds.length > 0 && Object.keys(deliveredQuantitiesByDescription).length > 0 && (
                             <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-xl">
-                                <h4 className="font-semibold text-blue-800 text-sm mb-2">Total Delivered Quantities:</h4>
+                                <h4 className="font-semibold text-blue-800 text-sm mb-2">{t('deliveryNote.messages.totalDelivered')}</h4>
                                 <div className="flex flex-wrap gap-2">
                                     {Object.entries(deliveredQuantitiesByDescription).map(([desc, qty]) => (
                                         <span key={desc} className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm">
@@ -815,10 +815,10 @@ export default function InvoiceCreatePage() {
                 )}
 
                 <div className="border-t border-gray-100 pt-6">
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <h3 className="text-lg font-bold text-gray-900 flex items-center">
                             <FileText className="mr-2 text-[#065F46]" size={20} />
-                            Invoice Items <span className="text-red-500 ml-1">*</span>
+                            {t('invoice.items')} <span className="text-red-500 ml-1">*</span>
                         </h3>
                     </div>
 
@@ -836,7 +836,7 @@ export default function InvoiceCreatePage() {
                             {items.map((item, index) => (
                                 <div key={index} className="grid grid-cols-2 md:grid-cols-12 gap-4 items-end p-4 md:p-0 bg-gray-50 md:bg-white rounded-xl md:rounded-none border border-gray-100 md:border-0 mb-4 md:mb-0">
                                     <div className="col-span-2 md:col-span-5 relative">
-                                        <label className="text-xs font-semibold text-gray-500 mb-1 block">Description</label>
+                                        <label className="text-xs font-semibold text-gray-500 mb-1 block">{t('invoice.description')}</label>
                                         <input
                                             type="text"
                                             value={item.description}
@@ -875,7 +875,7 @@ export default function InvoiceCreatePage() {
                                         )}
                                     </div>
                                     <div className="col-span-1 md:col-span-2">
-                                        <label className="text-xs font-semibold text-gray-500 mb-1 block">Qty</label>
+                                        <label className="text-xs font-semibold text-gray-500 mb-1 block">{t('invoice.qty')}</label>
                                         <input
                                             type="number"
                                             min="1"
@@ -886,7 +886,7 @@ export default function InvoiceCreatePage() {
                                         />
                                     </div>
                                     <div className="col-span-1 md:col-span-2">
-                                        <label className="text-xs font-semibold text-gray-500 mb-1 block">Price</label>
+                                        <label className="text-xs font-semibold text-gray-500 mb-1 block">{t('invoice.price')}</label>
                                         <input
                                             type="number"
                                             min="0"
@@ -898,7 +898,7 @@ export default function InvoiceCreatePage() {
                                         />
                                     </div>
                                     <div className="col-span-1 md:col-span-2 flex items-center space-x-2">
-                                        <label className="md:hidden text-xs font-semibold text-gray-500 mb-1 block">Tax</label>
+                                        <label className="md:hidden text-xs font-semibold text-gray-500 mb-1 block">{t('invoice.tax')}</label>
                                         <select
                                             value={item.tva ? item.vatRate : -1}
                                             onChange={e => {
@@ -944,15 +944,15 @@ export default function InvoiceCreatePage() {
                     <div className="border-t border-gray-100 pt-6 flex justify-end">
                         <div className="w-full md:w-1/3 space-y-3">
                             <div className="flex justify-between text-gray-600">
-                                <span>Subtotal:</span>
+                                <span>{t('invoice.subtotal')}:</span>
                                 <span>{calculateSubtotal().toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}</span>
                             </div>
                             <div className="flex justify-between text-gray-600">
-                                <span>Tax (Approx):</span>
+                                <span>{t('invoice.tax')}:</span>
                                 <span>{(calculateTotal() - calculateSubtotal()).toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}</span>
                             </div>
                             <div className="border-t border-gray-200 pt-3 flex justify-between text-xl font-bold text-gray-900">
-                                <span>Total:</span>
+                                <span>{t('invoice.total')}:</span>
                                 <span className="text-[#065F46]">{calculateTotal().toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}</span>
                             </div>
                         </div>

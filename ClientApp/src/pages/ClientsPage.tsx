@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Plus, Search, Edit2, Trash2, Phone, MapPin } from 'lucide-react';
 import api from '../services/api';
+import { getErrorMessage } from '../utils/errorUtils';
 import Modal from '../components/Modal';
+import { useTranslation } from 'react-i18next';
 
 interface Client {
     id: number;
@@ -12,6 +14,7 @@ interface Client {
 }
 
 export default function ClientsPage() {
+    const { t } = useTranslation();
     const [clients, setClients] = useState<Client[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -67,15 +70,15 @@ export default function ClientsPage() {
             }
             setIsModalOpen(false);
             fetchClients();
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Error saving client", error);
-            const msg = error.response?.data?.message || error.response?.data || error.message || "Failed to save client";
-            alert(`Failed to save client: ${JSON.stringify(msg)}`);
+            const msg = getErrorMessage(error, t('client.messages.saveFailed'));
+            alert(msg);
         }
     };
 
     const handleDelete = async (id: number) => {
-        if (!confirm("Are you sure you want to delete this client?")) return;
+        if (!confirm(t('client.messages.confirmDelete'))) return;
         try {
             await api.delete(`/Clients/${id}`);
             fetchClients();
@@ -93,15 +96,15 @@ export default function ClientsPage() {
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-900">Clients</h1>
-                    <p className="text-gray-500 mt-1">Manage your customer base</p>
+                    <h1 className="text-3xl font-bold text-gray-900">{t('client.title')}</h1>
+                    <p className="text-gray-500 mt-1">{t('client.messages.manage')}</p>
                 </div>
                 <button
                     onClick={() => handleOpenModal()}
                     className="flex items-center px-4 py-2 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all transform hover:scale-105"
                 >
                     <Plus size={20} className="mr-2" />
-                    Add Client
+                    {t('client.newClient')}
                 </button>
             </div>
 
@@ -110,7 +113,7 @@ export default function ClientsPage() {
                 <Search className="absolute left-4 top-3.5 h-5 w-5 text-gray-400" />
                 <input
                     type="text"
-                    placeholder="Search clients by name or matricule..."
+                    placeholder={t('client.messages.searchPlaceholder')}
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent outline-none transition-all"
@@ -119,7 +122,7 @@ export default function ClientsPage() {
 
             {/* Clients Grid/Table */}
             {loading ? (
-                <div className="text-center py-20 text-gray-500">Loading clients...</div>
+                <div className="text-center py-20 text-gray-500">{t('client.messages.loading')}</div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filteredClients.map((client) => (
@@ -156,7 +159,7 @@ export default function ClientsPage() {
 
                     {filteredClients.length === 0 && (
                         <div className="col-span-full text-center py-12 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
-                            <p className="text-gray-500">No clients found matching your search.</p>
+                            <p className="text-gray-500">{t('client.messages.emptySearch')}</p>
                         </div>
                     )}
                 </div>
@@ -166,48 +169,48 @@ export default function ClientsPage() {
             <Modal
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
-                title={editingClient ? "Edit Client" : "Add New Client"}
+                title={editingClient ? t('client.messages.editTitle') : t('client.messages.addTitle')}
             >
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('client.companyName')}</label>
                         <input
                             type="text"
                             required
                             value={formData.name}
                             onChange={e => setFormData({ ...formData, name: e.target.value })}
                             className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] outline-none"
-                            placeholder="e.g. Acme Corp"
+                            placeholder={t('client.messages.placeholders.companyName')}
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Fiscal ID (Matricule)</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('client.fiscalId')}</label>
                         <input
                             type="text"
                             required
                             value={formData.matriculeFiscal}
                             onChange={e => setFormData({ ...formData, matriculeFiscal: e.target.value })}
                             className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] outline-none"
-                            placeholder="e.g. 12345678"
+                            placeholder={t('client.messages.placeholders.fiscalId')}
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('client.phone')}</label>
                         <input
                             type="text"
                             value={formData.phone}
                             onChange={e => setFormData({ ...formData, phone: e.target.value })}
                             className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] outline-none"
-                            placeholder="e.g. +216 55 123 456"
+                            placeholder={t('client.messages.placeholders.phone')}
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('client.address')}</label>
                         <textarea
                             value={formData.address}
                             onChange={e => setFormData({ ...formData, address: e.target.value })}
                             className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] outline-none"
-                            placeholder="Full business address..."
+                            placeholder={t('client.messages.placeholders.address')}
                             rows={3}
                         />
                     </div>
@@ -218,13 +221,13 @@ export default function ClientsPage() {
                             onClick={() => setIsModalOpen(false)}
                             className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                         >
-                            Cancel
+                            {t('common.cancel')}
                         </button>
                         <button
                             type="submit"
                             className="px-4 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#047857] transition-colors shadow-lg"
                         >
-                            {editingClient ? "Save Changes" : "Create Client"}
+                            {editingClient ? t('client.messages.saveChanges') : t('client.messages.create')}
                         </button>
                     </div>
                 </form>

@@ -9,6 +9,7 @@ using ResourceManager.Models;
 using ResourceManager.Services;
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace ResourceManager.Controllers
 {
@@ -312,6 +313,8 @@ namespace ResourceManager.Controllers
 
         /// <summary>
         /// Import validated historical data. Stores in backend with IsHistorical = true.
+        /// Crash-proof: wrapped in transaction + try-catch. No partial imports.
+        /// Deduplicates based on Date + Amount + Client/Supplier (Upsert behavior).
         /// </summary>
         [HttpPost("import/confirm")]
         public async Task<IActionResult> ConfirmImport([FromBody] ImportRequest request)
@@ -324,98 +327,414 @@ namespace ResourceManager.Controllers
                 return BadRequest(new { message = "Validation failed", errors = validation.Errors });
 
             var userId = _userManager.GetUserId(User);
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
+                return Unauthorized();
+
+            var companyId = user.CompanyId;
             int imported = 0;
+            int updated = 0;
+            int skipped = 0;
 
-            switch (request.DataType.ToLower())
+            // ── Wrap everything in a transaction: if ANY row fails, nothing is saved ──
+            using var transaction = await _context.Database.BeginTransactionAsync();
+
+            try
             {
-                case "revenues":
-                    foreach (var row in validation.ValidRows)
+                switch (request.DataType.ToLower())
+                {
+                    case "revenues":
                     {
-                        _context.HistoricalRevenues.Add(new HistoricalRevenue
-                        {
-                            Date = DateTime.Parse(row["Date"]).ToUniversalTime(),
-                            ClientName = row["Client Name"],
-                            AmountPaid = decimal.Parse(row["Amount Paid"], CultureInfo.InvariantCulture),
-                            Currency = row.GetValueOrDefault("Currency") ?? "TND",
-                            PaymentMethod = row.GetValueOrDefault("Payment Method"),
-                            Reference = row.GetValueOrDefault("Reference"),
-                            IsHistorical = true,
-                            CreatedAt = DateTime.UtcNow
-                        });
-                        imported++;
-                    }
-                    break;
+                        // 1. Pre-load Clients
+                        var existingClients = await _context.Clients
+                            .Where(c => c.CompanyId == companyId)
+                            .ToListAsync();
+                        
+                        var clientLookup = existingClients
+                            .GroupBy(c => c.Name.Trim(), StringComparer.OrdinalIgnoreCase)
+                            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
-                case "expenses":
-                    foreach (var row in validation.ValidRows)
+                        // 2. Fetch existing HistoricalRevenues for Deduplication (Date + Client + Amount)
+                        // Optimization: Fetch only for the date range in the import
+                        var validDates = validation.ValidRows
+                            .Select(r => TryParseDate(SafeGet(r, "Date"), out var d) ? d : DateTime.MinValue)
+                            .Where(d => d != DateTime.MinValue)
+                            .ToList();
+
+                        var minDate = validDates.Any() ? validDates.Min().AddDays(-1) : DateTime.MinValue;
+                        var maxDate = validDates.Any() ? validDates.Max().AddDays(1) : DateTime.MaxValue;
+
+                        var existingRevenues = await _context.HistoricalRevenues
+                            .Where(r => r.CompanyId == companyId && r.Date >= minDate && r.Date <= maxDate)
+                            .ToListAsync();
+
+                        // Lookup Key: Date(UTC) + ClientId + Amount
+                        // structured as a list to handle multiple identical payments on same day
+                        var revenueLookup = existingRevenues
+                            .GroupBy(r => new { Date = r.Date.Date, r.ClientId, r.AmountPaid })
+                            .ToDictionary(g => g.Key, g => g.ToList());
+
+                        foreach (var row in validation.ValidRows)
+                        {
+                            if (row == null) { skipped++; continue; }
+
+                            var clientName = SafeGet(row, "Client Name");
+                            if (string.IsNullOrWhiteSpace(clientName)) { skipped++; continue; }
+
+                            var dateStr = SafeGet(row, "Date");
+                            if (!TryParseDate(dateStr, out var parsedDate)) { skipped++; continue; }
+                            var utcDate = parsedDate.ToUniversalTime();
+
+                            var amountStr = SafeGet(row, "Amount Paid");
+                            if (!TryParseAmount(amountStr, out var parsedAmount) || parsedAmount < 0) { skipped++; continue; }
+
+                            var currency = SafeGet(row, "Currency", "TND");
+                            var paymentMethod = SafeGet(row, "Payment Method");
+                            var reference = SafeGet(row, "Reference");
+
+                            // Get-or-Create Client
+                            if (!clientLookup.TryGetValue(clientName, out var client))
+                            {
+                                client = new Client
+                                {
+                                    Name = clientName,
+                                    Address = "",
+                                    MatriculeFiscal = "",
+                                    Phone = "",
+                                    CompanyId = companyId,
+                                    CreatedByUserId = userId,
+                                    CreatedAt = DateTime.UtcNow
+                                };
+                                _context.Clients.Add(client);
+                                await _context.SaveChangesAsync();
+                                clientLookup[clientName] = client;
+                            }
+
+                            // Deduplication / Upsert Check
+                            var lookupKey = new { Date = utcDate.Date, ClientId = (int?)client.Id, AmountPaid = parsedAmount };
+                            
+                            if (revenueLookup.TryGetValue(lookupKey, out var candidates) && candidates.Count > 0)
+                            {
+                                // MATCH FOUND: Update existing
+                                var existing = candidates[0];
+                                candidates.RemoveAt(0); // Consume this match
+
+                                existing.ClientName = clientName; // Update name in case it changed case/typo but mapped to same ID? Or just keep consistent.
+                                existing.Currency = currency;
+                                existing.PaymentMethod = paymentMethod;
+                                existing.Reference = reference;
+                                existing.UpdatedAt = DateTime.UtcNow;
+                                // ClientId, Amount, Date, CompanyId are part of identity/key, so no change needed.
+                                
+                                _context.HistoricalRevenues.Update(existing);
+                                updated++;
+                            }
+                            else
+                            {
+                                // NO MATCH: Insert new
+                                _context.HistoricalRevenues.Add(new HistoricalRevenue
+                                {
+                                    Date = utcDate,
+                                    ClientName = clientName,
+                                    ClientId = client.Id,
+                                    AmountPaid = parsedAmount,
+                                    Currency = currency,
+                                    PaymentMethod = paymentMethod,
+                                    Reference = reference,
+                                    IsHistorical = true,
+                                    CompanyId = companyId,
+                                    CreatedByUserId = userId,
+                                    CreatedAt = DateTime.UtcNow
+                                });
+                                imported++;
+                            }
+                        }
+                        break;
+                    }
+
+                    case "expenses":
                     {
-                        _context.HistoricalExpenses.Add(new HistoricalExpense
-                        {
-                            Date = DateTime.Parse(row["Date"]).ToUniversalTime(),
-                            SupplierName = row["Supplier"],
-                            AmountPaid = decimal.Parse(row["Amount Paid"], CultureInfo.InvariantCulture),
-                            Currency = row.GetValueOrDefault("Currency") ?? "TND",
-                            Category = row.GetValueOrDefault("Category"),
-                            Reference = row.GetValueOrDefault("Reference"),
-                            IsHistorical = true,
-                            CreatedAt = DateTime.UtcNow
-                        });
-                        imported++;
-                    }
-                    break;
+                        // 1. Pre-load Suppliers
+                        var existingSuppliers = await _context.Fournisseurs
+                            .Where(f => f.CompanyId == companyId)
+                            .ToListAsync();
 
-                case "clients":
-                    foreach (var row in validation.ValidRows)
+                        var supplierLookup = existingSuppliers
+                            .GroupBy(f => f.Name.Trim(), StringComparer.OrdinalIgnoreCase)
+                            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+                        // 2. Fetch existing for Deduplication
+                        var validDates = validation.ValidRows
+                            .Select(r => TryParseDate(SafeGet(r, "Date"), out var d) ? d : DateTime.MinValue)
+                            .Where(d => d != DateTime.MinValue)
+                            .ToList();
+
+                        var minDate = validDates.Any() ? validDates.Min().AddDays(-1) : DateTime.MinValue;
+                        var maxDate = validDates.Any() ? validDates.Max().AddDays(1) : DateTime.MaxValue;
+
+                        var existingExpenses = await _context.HistoricalExpenses
+                            .Where(e => e.CompanyId == companyId && e.Date >= minDate && e.Date <= maxDate)
+                            .ToListAsync();
+
+                        // Lookup Key: Date + FournisseurId + Amount
+                        var expenseLookup = existingExpenses
+                            .GroupBy(e => new { Date = e.Date.Date, e.FournisseurId, e.AmountPaid })
+                            .ToDictionary(g => g.Key, g => g.ToList());
+
+                        foreach (var row in validation.ValidRows)
+                        {
+                            if (row == null) { skipped++; continue; }
+
+                            var supplierName = SafeGet(row, "Supplier");
+                            if (string.IsNullOrWhiteSpace(supplierName)) { skipped++; continue; }
+
+                            var dateStr = SafeGet(row, "Date");
+                            if (!TryParseDate(dateStr, out var parsedDate)) { skipped++; continue; }
+                            var utcDate = parsedDate.ToUniversalTime();
+
+                            var amountStr = SafeGet(row, "Amount Paid");
+                            if (!TryParseAmount(amountStr, out var parsedAmount) || parsedAmount < 0) { skipped++; continue; }
+
+                            var currency = SafeGet(row, "Currency", "TND");
+                            var category = SafeGet(row, "Category");
+                            var reference = SafeGet(row, "Reference");
+
+                            // Get-or-Create Supplier
+                            if (!supplierLookup.TryGetValue(supplierName, out var supplier))
+                            {
+                                supplier = new Fournisseur
+                                {
+                                    Name = supplierName,
+                                    Address = "",
+                                    MatriculeFiscal = "",
+                                    Phone = "",
+                                    CompanyId = companyId,
+                                    CreatedByUserId = userId,
+                                    CreatedAt = DateTime.UtcNow
+                                };
+                                _context.Fournisseurs.Add(supplier);
+                                await _context.SaveChangesAsync();
+                                supplierLookup[supplierName] = supplier;
+                            }
+
+                            // Deduplication / Upsert Check
+                            var lookupKey = new { Date = utcDate.Date, FournisseurId = (int?)supplier.Id, AmountPaid = parsedAmount };
+
+                            if (expenseLookup.TryGetValue(lookupKey, out var candidates) && candidates.Count > 0)
+                            {
+                                // MATCH FOUND: Update
+                                var existing = candidates[0];
+                                candidates.RemoveAt(0);
+
+                                existing.SupplierName = supplierName;
+                                existing.Currency = currency;
+                                existing.Category = category;
+                                existing.Reference = reference;
+                                existing.UpdatedAt = DateTime.UtcNow;
+                                
+                                _context.HistoricalExpenses.Update(existing);
+                                updated++;
+                            }
+                            else
+                            {
+                                // NO MATCH: Insert
+                                _context.HistoricalExpenses.Add(new HistoricalExpense
+                                {
+                                    Date = utcDate,
+                                    SupplierName = supplierName,
+                                    FournisseurId = supplier.Id,
+                                    AmountPaid = parsedAmount,
+                                    Currency = currency,
+                                    Category = category,
+                                    Reference = reference,
+                                    IsHistorical = true,
+                                    CompanyId = companyId,
+                                    CreatedByUserId = userId,
+                                    CreatedAt = DateTime.UtcNow
+                                });
+                                imported++;
+                            }
+                        }
+                        break;
+                    }
+
+                    case "clients":
                     {
-                        // Check for duplicates
-                        var name = row["Name"].Trim();
-                        var existing = await _context.Clients.FirstOrDefaultAsync(c => c.Name == name);
-                        if (existing != null) continue; // Skip duplicates
+                        var existingClients = await _context.Clients
+                            .Where(c => c.CompanyId == companyId)
+                            .ToListAsync();
+                        var clientLookup = existingClients
+                            .ToDictionary(c => c.Name.Trim().ToLowerInvariant(), c => c);
 
-                        _context.Clients.Add(new Client
+                        foreach (var row in validation.ValidRows)
                         {
-                            Name = name,
-                            MatriculeFiscal = row.GetValueOrDefault("Matricule Fiscal") ?? "",
-                            Phone = row.GetValueOrDefault("Phone Number") ?? "",
-                            Address = row.GetValueOrDefault("Address") ?? "",
-                            Email = row.GetValueOrDefault("Email"),
-                            CreatedAt = DateTime.UtcNow
-                        });
-                        imported++;
-                    }
-                    break;
+                            if (row == null) { skipped++; continue; }
 
-                case "products":
-                    foreach (var row in validation.ValidRows)
+                            var name = SafeGet(row, "Name");
+                            if (string.IsNullOrWhiteSpace(name)) { skipped++; continue; }
+
+                            var key = name.Trim().ToLowerInvariant();
+                            if (clientLookup.TryGetValue(key, out var existing))
+                            {
+                                // Upsert: update existing client fields
+                                var mf = SafeGet(row, "Matricule Fiscal");
+                                var phone = SafeGet(row, "Phone Number");
+                                var addr = SafeGet(row, "Address");
+                                var email = SafeGet(row, "Email") is { Length: > 0 } em ? em : null;
+                                bool changed = false;
+                                if (!string.IsNullOrWhiteSpace(mf) && mf != existing.MatriculeFiscal) { existing.MatriculeFiscal = mf; changed = true; }
+                                if (!string.IsNullOrWhiteSpace(phone) && phone != existing.Phone) { existing.Phone = phone; changed = true; }
+                                if (!string.IsNullOrWhiteSpace(addr) && addr != existing.Address) { existing.Address = addr; changed = true; }
+                                if (email != null && email != existing.Email) { existing.Email = email; changed = true; }
+                                if (changed) { existing.UpdatedAt = DateTime.UtcNow; imported++; }
+                                else { skipped++; }
+                            }
+                            else
+                            {
+                                var client = new Client
+                                {
+                                    Name = name,
+                                    MatriculeFiscal = SafeGet(row, "Matricule Fiscal"),
+                                    Phone = SafeGet(row, "Phone Number"),
+                                    Address = SafeGet(row, "Address"),
+                                    Email = SafeGet(row, "Email") is { Length: > 0 } email ? email : null,
+                                    CompanyId = companyId,
+                                    CreatedByUserId = userId,
+                                    CreatedAt = DateTime.UtcNow
+                                };
+                                _context.Clients.Add(client);
+                                clientLookup[key] = client;
+                                imported++;
+                            }
+                        }
+                        break;
+                    }
+
+                    case "suppliers":
                     {
-                        var name = row["Name"].Trim();
-                        var existing = await _context.ProductServices.FirstOrDefaultAsync(p => p.Name == name);
-                        if (existing != null) continue; // Skip duplicates
+                        var existingSuppliers = await _context.Fournisseurs
+                            .Where(f => f.CompanyId == companyId)
+                            .ToListAsync();
+                        var supplierLookup = existingSuppliers
+                            .ToDictionary(f => f.Name.Trim().ToLowerInvariant(), f => f);
 
-                        _context.ProductServices.Add(new ProductService
+                        foreach (var row in validation.ValidRows)
                         {
-                            Name = name,
-                            Description = row.GetValueOrDefault("Description"),
-                            DefaultUnitPrice = decimal.Parse(row["Price"], CultureInfo.InvariantCulture),
-                            TvaRate = decimal.Parse(row["TVA Rate"], CultureInfo.InvariantCulture),
-                            Type = "product",
-                            VatApplicable = true,
-                            CreatedAt = DateTime.UtcNow
-                        });
-                        imported++;
-                    }
-                    break;
+                            if (row == null) { skipped++; continue; }
 
-                default:
-                    return BadRequest(new { message = $"Unknown data type: {request.DataType}" });
+                            var name = SafeGet(row, "Name");
+                            if (string.IsNullOrWhiteSpace(name)) { skipped++; continue; }
+
+                            var key = name.Trim().ToLowerInvariant();
+                            if (supplierLookup.TryGetValue(key, out var existing))
+                            {
+                                // Upsert: update existing supplier fields
+                                var mf = SafeGet(row, "Matricule Fiscal");
+                                var phone = SafeGet(row, "Phone Number");
+                                var addr = SafeGet(row, "Address");
+                                bool changed = false;
+                                if (!string.IsNullOrWhiteSpace(mf) && mf != existing.MatriculeFiscal) { existing.MatriculeFiscal = mf; changed = true; }
+                                if (!string.IsNullOrWhiteSpace(phone) && phone != existing.Phone) { existing.Phone = phone; changed = true; }
+                                if (!string.IsNullOrWhiteSpace(addr) && addr != existing.Address) { existing.Address = addr; changed = true; }
+                                if (changed) { existing.UpdatedAt = DateTime.UtcNow; imported++; }
+                                else { skipped++; }
+                            }
+                            else
+                            {
+                                var supplier = new Fournisseur
+                                {
+                                    Name = name,
+                                    MatriculeFiscal = SafeGet(row, "Matricule Fiscal"),
+                                    Phone = SafeGet(row, "Phone Number"),
+                                    Address = SafeGet(row, "Address"),
+                                    CompanyId = companyId,
+                                    CreatedByUserId = userId,
+                                    CreatedAt = DateTime.UtcNow
+                                };
+                                _context.Fournisseurs.Add(supplier);
+                                supplierLookup[key] = supplier;
+                                imported++;
+                            }
+                        }
+                        break;
+                    }
+
+                    case "products":
+                    {
+                        var existingNames = (await _context.ProductServices
+                            .Where(p => p.CompanyId == companyId)
+                            .Select(p => p.Name).ToListAsync())
+                            .Select(n => n.Trim().ToLowerInvariant())
+                            .ToHashSet();
+
+                        foreach (var row in validation.ValidRows)
+                        {
+                            if (row == null) { skipped++; continue; }
+
+                            var name = SafeGet(row, "Name");
+                            if (string.IsNullOrWhiteSpace(name)) { skipped++; continue; }
+
+                            if (existingNames.Contains(name.ToLowerInvariant()))
+                            { skipped++; continue; }
+
+                            var priceStr = SafeGet(row, "Price");
+                            if (!TryParseAmount(priceStr, out var price)) { skipped++; continue; }
+
+                            var tvaStr = SafeGet(row, "TVA Rate");
+                            if (!TryParseAmount(tvaStr, out var tvaRate)) { skipped++; continue; }
+
+                            _context.ProductServices.Add(new ProductService
+                            {
+                                Name = name,
+                                Description = SafeGet(row, "Description") is { Length: > 0 } desc ? desc : null,
+                                DefaultUnitPrice = price,
+                                TvaRate = tvaRate,
+                                Type = "product",
+                                VatApplicable = true,
+                                CompanyId = companyId,
+                                CreatedByUserId = userId,
+                                CreatedAt = DateTime.UtcNow
+                            });
+                            existingNames.Add(name.ToLowerInvariant());
+                            imported++;
+                        }
+                        break;
+                    }
+
+                    default:
+                        return BadRequest(new { message = $"Unknown data type: {request.DataType}" });
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                _logger.LogInformation(
+                    "Historical import: {Imported} new, {Updated} updated {Type} records, {Skipped} skipped, by user {User}",
+                    imported, updated, request.DataType, skipped, userId);
+
+                return Ok(new
+                {
+                    message = $"Import successful: {imported} new, {updated} updated." +
+                              (skipped > 0 ? $" ({skipped} skipped/invalid)" : ""),
+                    imported,
+                    updated,
+                    skipped
+                });
             }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
 
-            await _context.SaveChangesAsync();
+                _logger.LogError(ex,
+                    "Import failed for {Type} by user {User}. Imported={Imported}, Updated={Updated}, Skipped={Skipped}",
+                    request.DataType, userId, imported, updated, skipped);
 
-            _logger.LogInformation("Historical import: {Count} {Type} records imported by user {User}",
-                imported, request.DataType, userId);
-
-            return Ok(new { message = $"Successfully imported {imported} {request.DataType} records", imported });
+                return StatusCode(500, new
+                {
+                    message = $"Import failed: {ex.Message}",
+                    details = ex.InnerException?.Message
+                });
+            }
         }
 
         /// <summary>
@@ -436,8 +755,69 @@ namespace ResourceManager.Controllers
         }
 
         // ═══════════════════════════════════════════════════════════
+        // CSV TEMPLATE DOWNLOAD
+        // ═══════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// GET: api/DataManagement/template/{type}
+        /// Returns a semicolon-separated CSV file with the correct headers + one example row.
+        /// CRITICAL: Uses ';' separator to match our MiniExcel/CSV parser configuration.
+        /// </summary>
+        [HttpGet("template/{type}")]
+        public IActionResult DownloadTemplate(string type)
+        {
+            string headers;
+            string exampleRow;
+
+            switch (type.ToLower())
+            {
+                case "revenues":
+                    headers = "Date;Client Name;Amount Paid;Currency;Payment Method";
+                    exampleRow = "31/10/2024;Client Name;1500,50;TND;Bank Transfer";
+                    break;
+                case "expenses":
+                    headers = "Date;Supplier;Amount Paid;Currency;Category";
+                    exampleRow = "31/10/2024;Supplier Name;500,00;TND;Office Supplies";
+                    break;
+                case "clients":
+                    headers = "Name;Matricule Fiscal;Phone Number;Address;Email";
+                    exampleRow = "Client Name;MF123456;+21699123456;Tunis;client@email.com";
+                    break;
+                case "suppliers":
+                    headers = "Name;Matricule Fiscal;Phone Number;Address";
+                    exampleRow = "Supplier Name;MF654321;+21699654321;Tunis";
+                    break;
+                case "products":
+                    headers = "Name;Price;Currency;TVA Rate;Description";
+                    exampleRow = "Product Name;100,00;TND;19;Annual subscription";
+                    break;
+                default:
+                    return BadRequest(new { message = $"Unknown template type: {type}" });
+            }
+
+            // BOM + semicolon-separated CSV
+            var csv = $"{headers}\n{exampleRow}\n";
+            var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray();
+
+            return File(bytes, "text/csv; charset=utf-8", $"{type}_template.csv");
+        }
+
+        // ═══════════════════════════════════════════════════════════
         // PRIVATE HELPERS
         // ═══════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// Safely extract a trimmed string value from a row dictionary.
+        /// Returns the fallback if the key doesn't exist, is null, or is whitespace.
+        /// Handles leading/trailing spaces and prevents KeyNotFoundException.
+        /// </summary>
+        private static string SafeGet(Dictionary<string, string> row, string key, string fallback = "")
+        {
+            if (row == null) return fallback;
+            if (!row.TryGetValue(key, out var value)) return fallback;
+            var trimmed = value?.Trim() ?? "";
+            return string.IsNullOrWhiteSpace(trimmed) ? fallback : trimmed;
+        }
 
         private ValidationResult ValidateRows(string dataType, List<Dictionary<string, string>> rows)
         {
@@ -458,6 +838,9 @@ namespace ResourceManager.Controllers
                     break;
                 case "products":
                     requiredColumns = new[] { "Name", "Price", "Currency", "TVA Rate" };
+                    break;
+                case "suppliers":
+                    requiredColumns = new[] { "Name" };
                     break;
                 default:
                     errors.Add(new ValidationError(0, $"Unknown data type: {dataType}"));
@@ -631,17 +1014,14 @@ namespace ResourceManager.Controllers
         /// Supported date formats (tried in order).  The first successful parse wins.
         /// After validation the value is rewritten to yyyy-MM-dd so ConfirmImport
         /// can always use InvariantCulture parsing.
+        /// Covers: FR (dd/MM/yyyy), US (MM/dd/yyyy), ISO (yyyy-MM-dd), dashed EU (dd-MM-yyyy).
         /// </summary>
         private static readonly string[] DateFormats = new[]
         {
-            "yyyy-MM-dd",   // ISO 8601
             "dd/MM/yyyy",   // French / European
             "MM/dd/yyyy",   // US
-            "d/M/yyyy",     // short European
-            "M/d/yyyy",     // short US
-            "dd-MM-yyyy",
-            "dd.MM.yyyy",
-            "yyyy/MM/dd",
+            "yyyy-MM-dd",   // ISO 8601
+            "dd-MM-yyyy",   // European with dashes
         };
 
         private static bool TryParseDate(string raw, out DateTime result)
@@ -652,46 +1032,62 @@ namespace ResourceManager.Controllers
         }
 
         /// <summary>
-        /// Parse a decimal that may use French formatting (comma = decimal, space/NBSP = thousands)
-        /// or invariant formatting (dot = decimal).
+        /// Multi-culture decimal parser for dirty data.
+        ///
+        /// Algorithm:
+        ///   1. Remove all spaces and non-breaking spaces (\u00A0) + currency symbols.
+        ///   2. If both comma AND dot are present (e.g. "1,200.50"), treat the dot
+        ///      as the decimal separator → strip commas.
+        ///   3. If only a comma is present (e.g. "1500,50"), replace it with a dot
+        ///      to form a standard decimal string.
+        ///   4. Parse with CultureInfo.InvariantCulture.
+        ///
+        /// Covers: "6 922,00" (FR), "6,922.00" (US), "1500.50", "1500,50".
         /// </summary>
         private static bool TryParseAmount(string raw, out decimal result)
         {
             result = 0;
             if (string.IsNullOrWhiteSpace(raw)) return false;
 
-            // Strip currency symbols, whitespace (including NBSP \u00A0), and thousands separators
-            var cleaned = raw
-                .Replace("\u00A0", "")  // non-breaking space
-                .Replace(" ", "")       // regular space (thousands sep)
+            // Step 1: Strip ALL whitespace (regular space, NBSP \u00A0, tabs, etc.) + currency symbols
+            var cleaned = Regex.Replace(raw, @"[\s\u00A0]+", "")
                 .Replace("€", "").Replace("$", "").Replace("£", "")
                 .Trim();
 
-            // If both comma and dot exist, the LAST one is the decimal separator
             bool hasComma = cleaned.Contains(',');
-            bool hasDot = cleaned.Contains('.');
+            bool hasDot   = cleaned.Contains('.');
 
             if (hasComma && hasDot)
             {
-                // e.g. 1.234,56 → comma is decimal
-                if (cleaned.LastIndexOf(',') > cleaned.LastIndexOf('.'))
-                    cleaned = cleaned.Replace(".", "").Replace(",", ".");
-                else // e.g. 1,234.56 → dot is decimal
-                    cleaned = cleaned.Replace(",", "");
+                // Step 2: Both present → dot is the decimal separator, commas are thousands
+                cleaned = cleaned.Replace(",", "");
             }
             else if (hasComma)
             {
-                // Could be "1234,56" (decimal) or "1,234" (thousands).
-                // Heuristic: if exactly 3 digits after the last comma, treat as thousands; else decimal.
-                var afterComma = cleaned.Substring(cleaned.LastIndexOf(',') + 1);
-                if (afterComma.Length == 3 && !cleaned.Substring(0, cleaned.LastIndexOf(',')).Contains(','))
-                    cleaned = cleaned.Replace(",", ""); // thousands
-                else
-                    cleaned = cleaned.Replace(",", "."); // decimal
+                // Step 3: Only comma → it IS the decimal separator
+                cleaned = cleaned.Replace(",", ".");
             }
+            // else: only dot or neither → already in standard format
 
+            // Step 4: Parse with InvariantCulture (dot = decimal)
             return decimal.TryParse(cleaned, NumberStyles.Number, CultureInfo.InvariantCulture, out result);
         }
+
+        /// <summary>
+        /// Safe decimal parser that uses the global multi-culture logic.
+        /// Handles: "6 922,00" (FR), "6,922.00" (US), "1500.50", "1500,50".
+        /// Also handles the case where the frontend already sent a parsed decimal as a string.
+        /// </summary>
+        private static bool SafeParseDecimal(string raw, out decimal result)
+            => TryParseAmount(raw, out result);
+
+        /// <summary>
+        /// Safe date parser that uses the global multi-culture logic.
+        /// Handles: dd/MM/yyyy, MM/dd/yyyy, yyyy-MM-dd, dd-MM-yyyy.
+        /// Also handles the case where the frontend already normalised to yyyy-MM-dd.
+        /// </summary>
+        private static bool SafeParseDate(string raw, out DateTime result)
+            => TryParseDate(raw, out result);
 
         private static string BuildCsv(string[] headers, IEnumerable<string[]> rows)
         {
@@ -965,37 +1361,85 @@ namespace ResourceManager.Controllers
                 });
             }
 
-            // 2. Persist as HistoricalRevenue records
+            // 2. Persist as HistoricalRevenue records with Client linkage
             var userId = _userManager.GetUserId(User);
             int imported = 0;
 
-            foreach (var dto in validation.Rows)
+            using var transaction = await _context.Database.BeginTransactionAsync();
+
+            try
             {
-                _context.HistoricalRevenues.Add(new HistoricalRevenue
+                // ── Performance: Pre-load all Clients into a case-insensitive dictionary ──
+                var existingClients = await _context.Clients.ToListAsync();
+                var clientLookup = existingClients
+                    .GroupBy(c => c.Name.Trim(), StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+                foreach (var dto in validation.Rows)
                 {
-                    Date = dto.Date.ToUniversalTime(),
-                    ClientName = dto.ClientName,
-                    AmountPaid = dto.AmountPaid,
-                    Currency = dto.Currency,
-                    PaymentMethod = dto.PaymentMethod,
-                    IsHistorical = true,
-                    CreatedAt = DateTime.UtcNow
+                    if (dto == null) continue;
+
+                    var clientName = (dto.ClientName ?? "Unknown").Trim();
+                    if (string.IsNullOrWhiteSpace(clientName)) clientName = "Unknown";
+
+                    // Get-or-Create Client
+                    if (!clientLookup.TryGetValue(clientName, out var client))
+                    {
+                        client = new Client
+                        {
+                            Name = clientName,
+                            Address = "",
+                            MatriculeFiscal = "",
+                            Phone = "",
+                            CreatedAt = DateTime.UtcNow
+                        };
+                        _context.Clients.Add(client);
+                        await _context.SaveChangesAsync(); // flush to get Id
+                        clientLookup[clientName] = client;
+                    }
+
+                    _context.HistoricalRevenues.Add(new HistoricalRevenue
+                    {
+                        Date = dto.Date.ToUniversalTime(),
+                        ClientName = clientName,
+                        ClientId = client.Id,
+                        AmountPaid = dto.AmountPaid,
+                        Currency = string.IsNullOrWhiteSpace(dto.Currency) ? "TND" : dto.Currency.Trim(),
+                        PaymentMethod = dto.PaymentMethod?.Trim(),
+                        IsHistorical = true,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                    imported++;
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+
+                _logger.LogInformation(
+                    "Strict positional upload: {Count} revenue records imported by user {User}",
+                    imported, userId);
+
+                return Ok(new
+                {
+                    message = $"Successfully imported {imported} payment records.",
+                    imported,
+                    totalRows = validation.TotalRows
                 });
-                imported++;
             }
-
-            await _context.SaveChangesAsync();
-
-            _logger.LogInformation(
-                "Strict positional upload: {Count} revenue records imported by user {User}",
-                imported, userId);
-
-            return Ok(new
+            catch (Exception ex)
             {
-                message = $"Successfully imported {imported} payment records.",
-                imported,
-                totalRows = validation.TotalRows
-            });
+                await transaction.RollbackAsync();
+
+                _logger.LogError(ex,
+                    "Strict positional upload failed for user {User}. Imported={Imported}",
+                    userId, imported);
+
+                return StatusCode(500, new
+                {
+                    message = $"Import failed: {ex.Message}",
+                    details = ex.InnerException?.Message
+                });
+            }
         }
 
         // ═══════════════════════════════════════════════════════════
@@ -1004,7 +1448,7 @@ namespace ResourceManager.Controllers
 
         public class ImportRequest
         {
-            public string DataType { get; set; } = string.Empty; // "revenues", "expenses", "clients", "products"
+            public string DataType { get; set; } = string.Empty; // "revenues", "expenses", "clients", "products", "suppliers"
             public List<Dictionary<string, string>> Rows { get; set; } = new();
         }
 

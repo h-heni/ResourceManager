@@ -46,7 +46,24 @@
     "createdBy": "Créé par",
     "address": "Adresse",
     "email": "Email",
-    "phone": "Téléphone"
+    "phone": "Téléphone",
+    "deleting": "Deleting...",
+    "loadingData": "Loading data...",
+    "noResults": "No results found",
+    "confirmDelete": "Are you sure you want to delete this item?",
+    "deleteFailed": "Failed to delete item",
+    "createdAt": "Created at ",
+    "updatedBy": "Updated by ",
+    "updatedAt": "Updated at ",
+    "apply": "Apply",
+    "creating": "Creating",
+    "downloading": "Downloading",
+    "from": "From",
+    "hide": "Hide",
+    "select": "Select",
+    "show": "Show",
+    "to": "To",
+    "viewDetails": "View Details"
   },
   "auth": {
     "login": "Connexion",
@@ -67,6 +84,26 @@
       "email": "nom@entreprise.com",
       "password": "Créez un mot de passe (min. 6 car.)",
       "confirmPassword": "Confirmez votre mot de passe"
+    },
+    "messages": {
+      "accountCreated": "Account Created",
+      "backToLogin": "Back To Login",
+      "createAccount": "Create Account",
+      "createAccountSubtitle": "Create Account Subtitle",
+      "createAccountTitle": "Create Account Title",
+      "creatingAccount": "Creating Account",
+      "dismissError": "Dismiss Error",
+      "invalidServerResponse": "Invalid Server Response",
+      "loginFailedGeneric": "Login Failed Generic",
+      "noAccount": "No Account",
+      "passwordMin": "Password Min",
+      "passwordsMismatch": "Passwords Mismatch",
+      "pleaseWait": "Please Wait",
+      "rateLimit": "Rate Limit",
+      "retryIn": "Retry In",
+      "signInPrompt": "Sign In Prompt",
+      "signingIn": "Signing In",
+      "welcomeBack": "Welcome Back"
     }
   },
   "nav": {
@@ -85,7 +122,9 @@
     "profile": "Mon Profil",
     "signOut": "Déconnexion",
     "salesSection": "Ventes",
-    "purchasesSection": "Achats"
+    "purchasesSection": "Achats",
+    "dataManagement": "Data Management",
+    "selectLanguage": "Select Language"
   },
   "invoice": {
     "title": "Facture",
@@ -199,7 +238,18 @@
       "noQuoteSelected": "-- Aucun devis sélectionné --",
       "linkedDeliveryNotes": "Bons de livraison liés",
       "deliveryNotesHelp": "Sélectionnez les bons de livraison à inclure dans la facture. Les articles seront calculés en fonction des quantités livrées."
-    }
+    },
+    "messages": {
+      "archived": "Archived",
+      "confirmDelete": "Confirm Delete",
+      "deleteFailed": "Delete Failed",
+      "emailAutofillNotice": "Email Autofill Notice",
+      "empty": "Empty",
+      "enterNewLineHint": "Enter New Line Hint",
+      "formattingHint": "Formatting Hint"
+    },
+    "noTax": "No Tax",
+    "viewDetails": "View Details"
   },
   "quote": {
     "title": "Devis",
@@ -232,11 +282,54 @@
     "address": "Adresse",
     "phone": "Téléphone",
     "email": "Email",
-    "fiscalId": "Matricule fiscal"
+    "fiscalId": "Matricule fiscal",
+    "messages": {
+      "addTitle": "Add Title",
+      "confirmDelete": "Confirm Delete",
+      "create": "Create",
+      "editTitle": "Edit Title",
+      "emptySearch": "Empty Search",
+      "loading": "Loading",
+      "manage": "Manage",
+      "placeholders": {
+        "address": "Address",
+        "companyName": "Company Name",
+        "fiscalId": "Fiscal Id",
+        "phone": "Phone"
+      },
+      "saveChanges": "Save Changes",
+      "saveFailed": "Save Failed",
+      "searchPlaceholder": "Search Placeholder"
+    }
   },
   "supplier": {
     "title": "Fournisseurs",
-    "newSupplier": "Nouveau Fournisseur"
+    "newSupplier": "Nouveau Fournisseur",
+    "messages": {
+      "addTitle": "Add Title",
+      "address": "Address",
+      "companyName": "Company Name",
+      "confirmDelete": "Confirm Delete",
+      "create": "Create",
+      "editTitle": "Edit Title",
+      "empty": "Empty",
+      "fiscalId": "Fiscal Id",
+      "loading": "Loading",
+      "manage": "Manage",
+      "phone": "Phone",
+      "placeholders": {
+        "address": "Address",
+        "companyName": "Company Name",
+        "fiscalId": "Fiscal Id",
+        "phone": "Phone"
+      },
+      "saveChanges": "Save Changes",
+      "saveFailed": "Save Failed",
+      "searchPlaceholder": "Search Placeholder",
+      "uploadFailed": "Upload Failed",
+      "uploadInvoice": "Upload Invoice",
+      "uploadSuccess": "Upload Success"
+    }
   },
   "payment": {
     "title": "Paiements",
@@ -312,7 +405,40 @@
     "bodyHelp": "C'est le message par défaut lors de l'envoi de factures par email.",
     "signatureHelp": "Ce texte est ajouté à la fin de chaque email que vous envoyez.",
     "includeLogoInSignature": "Inclure le logo dans la signature email",
-    "uploadLogoFirst": "Téléchargez d'abord un logo dans Personnel & Entreprise"
+    "uploadLogoFirst": "Téléchargez d'abord un logo dans Personnel & Entreprise",
+    "allFilesConsistent": "All Files Consistent",
+    "allFilesPresent": "All Files Present",
+    "baseStoragePath": "Base Storage Path",
+    "baseStoragePathPlaceholder": "Base Storage Path Placeholder",
+    "baseStoragePathWarning": "Base Storage Path Warning",
+    "browse": "Browse",
+    "canBeRegenerated": "Can Be Regenerated",
+    "checkNow": "Check Now",
+    "checking": "Checking",
+    "fileConsistencyCheck": "File Consistency Check",
+    "fileConsistencyDesc": "File Consistency Desc",
+    "folderAccessible": "Folder Accessible",
+    "folderInaccessible": "Folder Inaccessible",
+    "loadingStorageConfig": "Loading Storage Config",
+    "missing": "Missing",
+    "mustBeReuploaded": "Must Be Reuploaded",
+    "noFolderSelected": "No Folder Selected",
+    "noStorageFolder": "No Storage Folder",
+    "noSubfolders": "No Subfolders",
+    "onDisk": "On Disk",
+    "parentFolder": "Parent Folder",
+    "pdfSignerPosition": "Pdf Signer Position",
+    "pdfStorageFolder": "Pdf Storage Folder",
+    "pdfStorageFolderDesc": "Pdf Storage Folder Desc",
+    "recoveryComplete": "Recovery Complete",
+    "recoveryUnexpectedError": "Recovery Unexpected Error",
+    "regenerateMissing": "Regenerate Missing",
+    "regeneratingPdfs": "Regenerating Pdfs",
+    "selectFolder": "Select Folder",
+    "signerPositionHelp": "Signer Position Help",
+    "signerPositionPlaceholder": "Signer Position Placeholder",
+    "totalRegistered": "Total Registered",
+    "useThisFolder": "Use This Folder"
   },
   "dashboard": {
     "title": "Tableau de bord",
@@ -350,7 +476,38 @@
     "failedPdf": "{{count}} échoué(s)",
     "manualUploadNeeded": "{{count}} fichier(s) téléversé(s) nécessitent un nouveau téléversement manuel",
     "uploadedFilesMissing": "{{count}} fichier(s) téléversé(s) manquants — doivent être retéléversés manuellement.",
-    "regenerating": "Régénération de {{count}} PDF(s) manquant(s)..."
+    "regenerating": "Régénération de {{count}} PDF(s) manquant(s)...",
+    "adminSubtitle": "Admin Subtitle",
+    "adminTitle": "Admin Title",
+    "companyBreakdown": "Company Breakdown",
+    "default": "Default",
+    "exchangeRate": "Exchange Rate",
+    "expenseBreakdown": "Expense Breakdown",
+    "expenses": "Expenses",
+    "globalSummary": "Global Summary",
+    "growthTrajectory": "Growth Trajectory",
+    "invoices": "Invoices",
+    "mixed": "Mixed",
+    "mixedModeDesc": "Mixed Mode Desc",
+    "net": "Net",
+    "netLabel": "Net Label",
+    "netResult": "Net Result",
+    "noData": "No Data",
+    "perCurrency": "Per Currency",
+    "purchasesOverview": "Purchases Overview",
+    "revenue": "Revenue",
+    "revenueBreakdown": "Revenue Breakdown",
+    "revenueLabel": "Revenue Label",
+    "revenueVsExpenses": "Revenue Vs Expenses",
+    "salesOverview": "Sales Overview",
+    "targetCurrency": "Target Currency",
+    "totalCompanies": "Total Companies",
+    "totalInvoices": "Total Invoices",
+    "totalRevenueLabel": "Total Revenue Label",
+    "totalUsers": "Total Users",
+    "unpaid": "Unpaid",
+    "unpaidInvoices": "Unpaid Invoices",
+    "users": "Users"
   },
   "notifications": {
     "title": "Notifications",
@@ -514,7 +671,8 @@
     "allClean": "Toutes les factures passent les vérifications !",
     "issues": "problème(s)",
     "fixNow": "Corriger →",
-    "consistencyFailed": "La vérification a échoué"
+    "consistencyFailed": "La vérification a échoué",
+    "pendingPayments": "Pending Payments"
   },
   "expense": {
     "title": "Autres dépenses",
@@ -587,6 +745,233 @@
       "consulting": "Conseil",
       "manufacturing": "Industrie",
       "agriculture": "Agriculture"
+    },
+    "addFirst": "Add First",
+    "createAndSave": "Create And Save",
+    "createAndUse": "Create And Use",
+    "createNew": "Create New",
+    "defaultPrice": "Default Price",
+    "descriptionPlaceholder": "Description Placeholder",
+    "namePlaceholder": "Name Placeholder",
+    "nameRequired": "Name Required",
+    "saveFailed": "Save Failed",
+    "sortedAZ": "Sorted AZ",
+    "tax": "Tax"
+  },
+  "createPage": {
+    "clientRequired": "Client Required",
+    "createFailed": "Create Failed",
+    "currencyHelp": "Currency Help",
+    "dateRequired": "Date Required",
+    "deliveryNotesHelp": "Delivery Notes Help",
+    "documentCurrency": "Document Currency",
+    "enterDescription": "Enter Description",
+    "enterNumber": "Enter Number",
+    "fixErrors": "Fix Errors",
+    "invoiceDate": "Invoice Date",
+    "itemsInvalid": "Items Invalid",
+    "itemsRequired": "Items Required",
+    "languageHelp": "Language Help",
+    "lastInvoice": "Last Invoice",
+    "linkQuote": "Link Quote",
+    "linkedDeliveryNotes": "Linked Delivery Notes",
+    "loadFailed": "Load Failed",
+    "noQuoteSelected": "No Quote Selected",
+    "numberRequired": "Number Required",
+    "pdfLanguage": "Pdf Language",
+    "saveButton": "Save Button",
+    "saving": "Saving",
+    "selectClient": "Select Client",
+    "selectQuote": "Select Quote",
+    "subtitleEdit": "Subtitle Edit",
+    "subtitleNew": "Subtitle New",
+    "suggested": "Suggested",
+    "titleEdit": "Title Edit",
+    "titleNew": "Title New",
+    "updateButton": "Update Button"
+  },
+  "dataManagement": {
+    "dropOrSelect": "Drop Or Select",
+    "export": "Export",
+    "exportClients": "Export Clients",
+    "exportDesc": "Export Desc",
+    "exportExpenses": "Export Expenses",
+    "exportProducts": "Export Products",
+    "exportRevenues": "Export Revenues",
+    "exportSuppliers": "Export Suppliers",
+    "import": "Import",
+    "importDesc": "Import Desc",
+    "selectFile": "Select File",
+    "subtitle": "Subtitle",
+    "title": "Title"
+  },
+  "devis": {
+    "descriptionPlaceholder": "Description Placeholder"
+  },
+  "language": {
+    "ar": "Ar",
+    "de": "De",
+    "en": "En",
+    "fr": "Fr"
+  },
+  "upload": {
+    "amount": "Amount",
+    "compressed": "Compressed",
+    "date": "Date",
+    "failed": "Failed",
+    "info": "Info",
+    "maxSize": "Max Size",
+    "onlyPdf": "Only Pdf",
+    "pdfFile": "Pdf File",
+    "saved": "Saved",
+    "submit": "Submit",
+    "subtitle": "Subtitle",
+    "success": "Success",
+    "supplierName": "Supplier Name",
+    "supplierPlaceholder": "Supplier Placeholder",
+    "tapToSelect": "Tap To Select",
+    "title": "Title",
+    "tooLarge": "Too Large",
+    "uploading": "Uploading"
+  },
+  "companySetup": {
+    "title": "Complétez votre profil",
+    "subtitle": "Parlez-nous de votre entreprise pour commencer",
+    "companyName": "Nom de l'entreprise",
+    "address": "Adresse",
+    "matriculeFiscal": "Matricule Fiscal",
+    "phone": "Téléphone",
+    "settingUp": "Configuration...",
+    "completeSetup": "Finaliser la configuration",
+    "setupFailed": "Échec de la création de l'entreprise",
+    "placeholders": {
+      "companyName": "Nom de votre entreprise",
+      "address": "Adresse professionnelle",
+      "matriculeFiscal": "MF123456",
+      "phone": "+216 XX XXX XXX"
     }
+  },
+  "companyInit": {
+    "title": "Commençons la Configuration",
+    "subtitle": "Nous vous guidons à travers le processus de configuration",
+    "steps": {
+      "companyInfo": "Info de l'entreprise",
+      "financialBranding": "Financier & Image",
+      "storageFinish": "Stockage & Finir"
+    },
+    "defaultVatRate": "Taux de TVA par défaut",
+    "customTaxEnable": "Activer Taxe/Timbre Personnalisé",
+    "uploadLogo": "Télécharger Logo",
+    "changeLogo": "Changer Logo",
+    "storageRequiredTitle": "Configuration du Stockage PDF Requise",
+    "storageRequiredMessage": "Choisissez un dossier pour stocker les PDFs générés. Vous pourrez parcourir et récupérer les fichiers plus tard.",
+    "storagePathExample": "Exemple: C:\\MaEntreprise\\Factures",
+    "setupSummary": "Résumé de la Configuration",
+    "notSet": "Non défini",
+    "selected": "Sélectionné",
+    "none": "Aucun",
+    "continue": "Continuer",
+    "completeSetup": "Terminer & Commencer",
+    "validation": {
+      "companyNameRequired": "Le nom de l'entreprise est requis",
+      "companyAddressRequired": "L'adresse de l'entreprise est requise",
+      "storagePathRequired": "Le chemin de stockage est requis",
+      "imageOnly": "Veuillez sélectionner un fichier image",
+      "logoMaxSize": "Le logo doit faire moins de 2 Mo",
+      "fileMaxSize": "Le fichier doit faire moins de 2 Mo"
+    },
+    "placeholders": {
+      "companyName": "Nom légal complet de votre entreprise",
+      "companyAddress": "Adresse, ville, code postal",
+      "fiscalId": "MF123456789",
+      "phone": "+216 XX XXX XXX",
+      "companyEmail": "contact@votreentreprise.com",
+      "baseStoragePath": "C:\\MaEntreprise\\ResourceManager\\PDFs"
+    },
+    "toast": {
+      "success": "Configuration terminée ! Bienvenue.",
+      "failed": "Échec de la configuration. Veuillez réessayer."
+    },
+    "messages": {
+      "setupErrorLog": "Erreur de configuration de l'entreprise:",
+      "submitFailed": "Échec de l'enregistrement des paramètres de l'entreprise"
+    }
+  },
+  "users": {
+    "actions": {
+      "addEmployee": "Add Employee",
+      "addTenant": "Add Tenant",
+      "createEmployee": "Create Employee",
+      "createTenant": "Create Tenant",
+      "creating": "Creating",
+      "deleteUser": "Delete User",
+      "resetPassword": "Reset Password",
+      "resetSettings": "Reset Settings",
+      "resetting": "Resetting"
+    },
+    "fields": {
+      "addressRequired": "Address Required",
+      "companyEmail": "Company Email",
+      "companyNameRequired": "Company Name Required",
+      "defaultCurrency": "Default Currency",
+      "defaultLanguage": "Default Language",
+      "emailRequired": "Email Required",
+      "employeeLimit": "Employee Limit",
+      "employeeLimitHint": "Employee Limit Hint",
+      "employeeLimitPlaceholder": "Employee Limit Placeholder",
+      "firstName": "First Name",
+      "firstNameRequired": "First Name Required",
+      "fiscalIdRequired": "Fiscal Id Required",
+      "lastName": "Last Name",
+      "lastNameRequired": "Last Name Required",
+      "newPasswordPlaceholder": "New Password Placeholder",
+      "passwordRequired": "Password Required"
+    },
+    "messages": {
+      "authRequired": "Auth Required",
+      "cannotDeleteSelf": "Cannot Delete Self",
+      "confirmDeleteManager": "Confirm Delete Manager",
+      "confirmDeleteUser": "Confirm Delete User",
+      "confirmResetSettings": "Confirm Reset Settings",
+      "deleteFailed": "Delete Failed",
+      "deleted": "Deleted",
+      "employeeCreateFailed": "Employee Create Failed",
+      "employeeCreated": "Employee Created",
+      "empty": "Empty",
+      "forbidden": "Forbidden",
+      "loadFailed": "Load Failed",
+      "loading": "Loading",
+      "manageManager": "Manage Manager",
+      "manageSuperAdmin": "Manage Super Admin",
+      "managerOnly": "Manager Only",
+      "passwordMin": "Password Min",
+      "passwordResetFailed": "Password Reset Failed",
+      "passwordResetSuccess": "Password Reset Success",
+      "resetSettingsFailed": "Reset Settings Failed",
+      "resetSettingsSuccess": "Reset Settings Success",
+      "resettingFor": "Resetting For",
+      "retry": "Retry",
+      "tenantCreateFailed": "Tenant Create Failed",
+      "tenantCreated": "Tenant Created"
+    },
+    "roles": {
+      "Employee": "Employee"
+    },
+    "sections": {
+      "companyDefaults": "Company Defaults",
+      "companyInfo": "Company Info",
+      "managerAccount": "Manager Account"
+    },
+    "status": {
+      "active": "Active"
+    },
+    "table": {
+      "company": "Company",
+      "notAvailable": "Not Available",
+      "role": "Role",
+      "status": "Status",
+      "user": "User"
+    },
+    "title": "Title"
   }
 }

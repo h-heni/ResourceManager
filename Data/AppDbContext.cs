@@ -64,6 +64,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<UserLoginRecord> UserLoginRecords { get; set; }
     public DbSet<HistoricalRevenue> HistoricalRevenues { get; set; }
     public DbSet<HistoricalExpense> HistoricalExpenses { get; set; }
+    public DbSet<PendingInvoice> PendingInvoices { get; set; }
 
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -95,6 +96,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<HistoricalRevenue>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
         builder.Entity<HistoricalExpense>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
         builder.Entity<CompanySettings>().HasQueryFilter(e => _isSuperAdmin || e.CompanyId == _currentCompanyId);
+        builder.Entity<PendingInvoice>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
 
         // RefreshToken indexes for fast lookup
         builder.Entity<RefreshToken>().HasIndex(e => e.Token).IsUnique();

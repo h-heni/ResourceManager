@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Plus, Search, Download, Trash2, Eye, DollarSign, X, Mail, Send, Calendar, Clock, Edit2, Archive, Filter, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { getErrorMessage } from '../utils/errorUtils';
 import { useAuth } from '../context/AuthContext';
 import InvoiceDetailView from '../components/InvoiceDetailView';
 import { formatCurrency } from '../lib/formatNumber';
@@ -94,16 +95,16 @@ export default function InvoicesPage() {
 
     const handleDelete = async (id: number) => {
         if (!isManager) {
-            alert("Only managers can delete invoices.");
+            alert(t('common.managerOnly'));
             return;
         }
-        if (!confirm("Are you sure you want to delete this invoice?")) return;
+        if (!confirm(t('invoice.messages.confirmDelete'))) return;
         try {
             await api.delete(`/Invoices/${id}`);
             fetchInvoices();
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Error deleting invoice", error);
-            alert(error.response?.data?.message || "Failed to delete invoice. Only managers can perform this action.");
+            alert(getErrorMessage(error, t('invoice.messages.deleteFailed')));
         }
     };
 
@@ -119,7 +120,7 @@ export default function InvoicesPage() {
             link.remove();
         } catch (error) {
             console.error("Error downloading PDF", error);
-            alert("Failed to download PDF");
+            alert(t('common.downloadFailed'));
         }
     };
 
@@ -203,11 +204,11 @@ export default function InvoicesPage() {
                 body: emailBody,
                 attachPdf: true
             });
-            alert(`✅ ${t('email.sentSuccess')}`);
+            alert(t('email.sentSuccess'));
             setShowEmailModal(false);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Error sending email", error);
-            alert(`❌ ${t('email.sendFailed')}: ${error.response?.data?.message || error.message}`);
+            alert(`${t('email.sendFailed')}: ${getErrorMessage(error)}`);
         } finally {
             setSendingEmail(false);
         }
@@ -218,7 +219,7 @@ export default function InvoicesPage() {
         
         const amount = parseFloat(paymentAmount);
         if (isNaN(amount) || amount <= 0) {
-            alert("Please enter a valid payment amount");
+            alert(t('supplierInvoice.invalidPaymentAmount'));
             return;
         }
 
@@ -244,11 +245,11 @@ export default function InvoicesPage() {
             fetchInvoices();
             
             if (isScheduledPayment) {
-                alert(`✅ ${t('payment.scheduledSuccess')}`);
+                alert(t('payment.scheduledSuccess'));
             }
         } catch (error) {
             console.error("Error adding payment", error);
-            alert("Failed to add payment");
+            alert(t('supplierInvoice.paymentFailed'));
         }
     };
 
@@ -274,7 +275,7 @@ export default function InvoicesPage() {
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-900">📋 {t('nav.invoices')}</h1>
+                    <h1 className="text-3xl font-bold text-gray-900">{t('nav.invoices')}</h1>
                     <p className="text-gray-500 mt-1">{t('invoice.pageDescription')}</p>
                 </div>
                 <button
@@ -309,7 +310,7 @@ export default function InvoicesPage() {
                         }`}
                     >
                         <Filter size={16} />
-                        {t('invoice.active') || 'Active'} ({activeCount})
+                        {t('supplierInvoice.activeInvoices')} ({activeCount})
                     </button>
                     <button
                         onClick={() => setViewMode('archived')}
@@ -320,41 +321,41 @@ export default function InvoicesPage() {
                         }`}
                     >
                         <Archive size={16} />
-                        {t('invoice.archived') || 'Paid / Archived'} ({archivedCount})
+                        {t('invoice.messages.archived')} ({archivedCount})
                     </button>
                 </div>
             </div>
 
             {loading ? (
-                <div className="text-center py-20 text-gray-500">Loading invoices...</div>
+                <div className="text-center py-20 text-gray-500">{t('common.loadingData')}</div>
             ) : (
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left">
+                        <table className="w-full min-w-[980px] text-left">
                             <thead>
                                 <tr className="bg-gray-50 border-b border-gray-100">
-                                    <th className="p-4 font-semibold text-gray-600">ID</th>
-                                    <th className="p-4 font-semibold text-gray-600">Client</th>
-                                    <th className="p-4 font-semibold text-gray-600">Date</th>
-                                    <th className="p-4 font-semibold text-gray-600 text-right">Total</th>
-                                    <th className="p-4 font-semibold text-gray-600 text-right">Paid</th>
-                                    <th className="p-4 font-semibold text-gray-600 text-right">Remaining</th>
-                                    <th className="p-4 font-semibold text-gray-600">Status</th>
-                                    <th className="p-4 font-semibold text-gray-600 text-right">Actions</th>
+                                    <th className="p-4 font-semibold text-gray-600">{t('invoice.number')}</th>
+                                    <th className="p-4 font-semibold text-gray-600">{t('invoice.client')}</th>
+                                    <th className="p-4 font-semibold text-gray-600">{t('invoice.date')}</th>
+                                    <th className="p-4 font-semibold text-gray-600 text-right">{t('invoice.total')}</th>
+                                    <th className="p-4 font-semibold text-gray-600 text-right">{t('invoice.amountPaid')}</th>
+                                    <th className="p-4 font-semibold text-gray-600 text-right">{t('invoice.remaining')}</th>
+                                    <th className="p-4 font-semibold text-gray-600">{t('common.status')}</th>
+                                    <th className="p-4 font-semibold text-gray-600 text-right">{t('common.actions')}</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {filteredInvoices.map((invoice) => (
                                     <tr key={invoice.id} className="hover:bg-gray-50 transition-colors group">
                                         <td className="p-4 font-medium text-[#065F46]">#{invoice.number}</td>
-                                        <td className="p-4 text-gray-900">{invoice.clientName || "Unknown"}</td>
-                                        <td className="p-4 text-gray-500">{invoice.date ? new Date(invoice.date).toLocaleDateString() : 'N/A'}</td>
+                                        <td className="p-4 text-gray-900">{invoice.clientName || t('common.unknown')}</td>
+                                        <td className="p-4 text-gray-500">{invoice.date ? new Date(invoice.date).toLocaleDateString() : t('users.table.notAvailable')}</td>
                                         <td className="p-4 text-gray-900 font-bold text-right">{formatCurrency(invoice.totalAmount, invoice.currencySymbol || DEFAULT_CURRENCY)}</td>
                                         <td className="p-4 text-emerald-600 font-semibold text-right">
                                             {formatCurrency(invoice.amountPaid, invoice.currencySymbol || DEFAULT_CURRENCY)}
                                             {invoice.payments?.some(p => p.status === 'Pending') && (
                                                 <div className="text-xs text-orange-500 font-normal mt-0.5">
-                                                    ⏰ {formatCurrency(invoice.payments.filter(p => p.status === 'Pending').reduce((sum, p) => sum + p.amount, 0), invoice.currencySymbol || DEFAULT_CURRENCY)} {t('payment.pending', 'pending')}
+                                                    {formatCurrency(invoice.payments.filter(p => p.status === 'Pending').reduce((sum, p) => sum + p.amount, 0), invoice.currencySymbol || DEFAULT_CURRENCY)} {t('payment.pending')}
                                                 </div>
                                             )}
                                         </td>
@@ -371,7 +372,7 @@ export default function InvoicesPage() {
                                                     <div className="flex flex-wrap gap-1 mt-1">
                                                         {invoice.payments.slice(0, 3).map((p, idx) => (
                                                             <span key={idx} className={`text-xs ${p.status === 'Pending' ? 'text-orange-500' : 'text-gray-500'}`} title={`${new Date(p.paymentDate).toLocaleDateString()}: ${p.amount} ${invoice.currencySymbol || DEFAULT_CURRENCY} (${p.status || 'Completed'})`}>
-                                                                {p.status === 'Pending' ? '⏰' : '💵'} {p.amount.toLocaleString()}
+                                                                {p.amount.toLocaleString()}
                                                             </span>
                                                         ))}
                                                         {invoice.payments.length > 3 && (
@@ -398,7 +399,7 @@ export default function InvoicesPage() {
                                                     <button
                                                         onClick={() => navigate(`/invoices/edit/${invoice.id}`)}
                                                         className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                                                        title={t('common.edit') || 'Edit'}
+                                                        title={t('common.edit')}
                                                     >
                                                         <Edit2 size={18} />
                                                     </button>
@@ -444,7 +445,7 @@ export default function InvoicesPage() {
                                 {filteredInvoices.length === 0 && (
                                     <tr>
                                         <td colSpan={8} className="p-12 text-center text-gray-500">
-                                            No invoices found.
+                                            {t('invoice.messages.empty')}
                                         </td>
                                     </tr>
                                 )}
@@ -459,7 +460,7 @@ export default function InvoicesPage() {
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-scale-up">
                         <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-xl font-bold">💵 {t('invoice.addPayment')}</h2>
+                            <h2 className="text-xl font-bold">{t('invoice.addPayment')}</h2>
                             <button onClick={() => setShowPaymentModal(false)} className="p-2 hover:bg-gray-100 rounded-full">
                                 <X size={20} />
                             </button>
@@ -516,7 +517,7 @@ export default function InvoicesPage() {
                                         className="w-full px-4 py-3 border border-amber-300 rounded-xl focus:ring-2 focus:ring-amber-500 bg-white outline-none"
                                     />
                                     <p className="text-xs text-amber-700 mt-2">
-                                        ⏰ {t('payment.scheduledInfo')}
+                                        {t('payment.scheduledInfo')}
                                     </p>
                                 </div>
                             )}
@@ -593,7 +594,7 @@ export default function InvoicesPage() {
                         <div className="mb-4 p-3 bg-emerald-50 rounded-xl border border-emerald-200">
                             <p className="text-xs text-emerald-700 flex items-center gap-1.5">
                                 <CheckCircle size={14} />
-                                Auto-filled from your email template settings. Review and send.
+                                {t('invoice.messages.emailAutofillNotice')}
                             </p>
                         </div>
                         
@@ -609,19 +610,19 @@ export default function InvoicesPage() {
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    📧 {t('email.recipient')} <span className="text-red-500">*</span>
+                                    {t('email.recipient')} <span className="text-red-500">*</span>
                                 </label>
                                 <input
                                     type="email"
                                     value={emailTo}
                                     onChange={(e) => setEmailTo(e.target.value)}
                                     className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-                                    placeholder="client@example.com"
+                                    placeholder={t('email.recipient')}
                                 />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    📝 {t('email.subject')}
+                                    {t('email.subject')}
                                 </label>
                                 <input
                                     type="text"
@@ -633,7 +634,7 @@ export default function InvoicesPage() {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    💬 {t('email.body')}
+                                    {t('email.body')}
                                 </label>
                                 <textarea
                                     value={emailBody}
@@ -643,13 +644,13 @@ export default function InvoicesPage() {
                                     placeholder={t('email.bodyPlaceholder')}
                                 />
                                 <div className="mt-1 text-xs text-gray-400 space-y-0.5">
-                                    <p>Press <kbd className="px-1 py-0.5 bg-gray-100 border rounded text-[10px]">Enter</kbd> for new lines</p>
-                                    <p>Formatting: <code className="text-[#065F46]">@strong(text)</code> <code className="text-[#065F46]">@underline(text)</code> <code className="text-[#065F46]">@italic(text)</code></p>
+                                    <p>{t('invoice.messages.enterNewLineHint')}</p>
+                                    <p>{t('invoice.messages.formattingHint')}</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2 text-sm text-gray-500">
                                 <input type="checkbox" id="attachPdf" checked disabled className="rounded" />
-                                <label htmlFor="attachPdf">📎 {t('email.attachPdf')}</label>
+                                <label htmlFor="attachPdf">{t('email.attachPdf')}</label>
                             </div>
                         </div>
 
@@ -667,7 +668,7 @@ export default function InvoicesPage() {
                                 className="px-6 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {sendingEmail ? (
-                                    <>⏳ {t('email.sending')}...</>
+                                    <>{t('email.sending')}...</>
                                 ) : (
                                     <>
                                         <Send size={16} />

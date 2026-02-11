@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Plus, Search, Trash2, Download, Eye, FileText, Package, Calendar, Filter, Archive } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { getErrorMessage } from '../utils/errorUtils';
 import { useAuth } from '../context/AuthContext';
 
 interface DeliveryNoteItem {
@@ -68,9 +69,9 @@ export default function DeliveryNotesPage() {
         try {
             await api.delete(`/DeliveryNotes/${id}`);
             fetchNotes();
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Error deleting delivery note", error);
-            alert(error.response?.data?.message || t('deliveryNote.deleteFailed'));
+            alert(getErrorMessage(error, t('deliveryNote.deleteFailed')));
         }
     };
 
