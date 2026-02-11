@@ -210,6 +210,10 @@ namespace ResourceManager.Models
         }
         public bool IsLocked { get; set; } = false;
         public string Status { get; set; } = "Unpaid"; // 'Paid', 'Unpaid', 'PartiallyPaid', 'Draft'
+        
+        // Token-based verification signature (Pro Invoice feature)
+        public string? VerificationToken { get; set; }
+        public DateTime? VerificationTokenCreatedAt { get; set; }
 
         public void CalculTotalAmount()
         {
@@ -500,6 +504,13 @@ namespace ResourceManager.Models
         
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime? UpdatedAt { get; set; }
+
+        // Local Storage Path & Profile Completion Guard
+        public string? BaseStoragePath { get; set; } // e.g. "C:\ResourceManager\Invoices"
+        public bool IsProfileComplete { get; set; } = false; // Forces manager to settings if false
+        
+        // Pro Invoice token signature
+        public bool ProInvoiceUseTokenSignature { get; set; } = false;
     }
 
     /// <summary>
@@ -734,6 +745,12 @@ namespace ResourceManager.Models
 
         /// <summary>Marks this record as imported historical data</summary>
         public bool IsHistorical { get; set; } = true;
+
+        /// <summary>Linked Client (get-or-create during import)</summary>
+        public int? ClientId { get; set; }
+
+        [ForeignKey("ClientId")]
+        public Client? Client { get; set; }
     }
 
     /// <summary>
@@ -762,6 +779,49 @@ namespace ResourceManager.Models
 
         /// <summary>Marks this record as imported historical data</summary>
         public bool IsHistorical { get; set; } = true;
+
+        /// <summary>Linked Supplier (get-or-create during import)</summary>
+        public int? FournisseurId { get; set; }
+
+        [ForeignKey("FournisseurId")]
+        public Fournisseur? Fournisseur { get; set; }
+    }
+
+    /// <summary>
+    /// Pending supplier invoice uploaded by employees. PDF content is GZip-compressed.
+    /// Manager syncs these to local disk via SyncToLocal endpoint.
+    /// </summary>
+    public class PendingInvoice : Shared
+    {
+        [Required]
+        [StringLength(200)]
+        public string SupplierName { get; set; } = string.Empty;
+
+        [Required]
+        public DateTime Date { get; set; }
+
+        [Required]
+        public decimal Amount { get; set; }
+
+        [Required]
+        [StringLength(255)]
+        public string FileName { get; set; } = string.Empty;
+
+        /// <summary>GZip-compressed PDF file content</summary>
+        [Required]
+        public byte[] Content { get; set; } = Array.Empty<byte>();
+
+        /// <summary>Original uncompressed file size in bytes</summary>
+        public long OriginalSize { get; set; }
+
+        /// <summary>True once synced to Manager's local disk</summary>
+        public bool IsProcessed { get; set; } = false;
+
+        /// <summary>Optional: linked Supplier from fournisseur table</summary>
+        public int? FournisseurId { get; set; }
+
+        [ForeignKey("FournisseurId")]
+        public Fournisseur? Fournisseur { get; set; }
     }
     
 }

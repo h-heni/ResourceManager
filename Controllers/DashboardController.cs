@@ -25,10 +25,12 @@ namespace ResourceManager.Controllers
             [FromQuery] string? currency = null,
             [FromQuery] string? mode = null,           // "single" (default) or "mixed"
             [FromQuery] string? targetCurrency = null,  // target for mixed mode
-            [FromQuery] decimal? exchangeRate = null)   // user-supplied rate for mixed mode
+            [FromQuery] decimal? exchangeRate = null,   // user-supplied rate for mixed mode
+            [FromQuery] int? year = null)               // optional year filter (defaults to current year)
         {
             var now = DateTime.UtcNow;
-            var startOfYear = new DateTime(now.Year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            var selectedYear = year ?? now.Year;
+            var startOfYear = new DateTime(selectedYear, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
             // Load all invoices for client-side aggregation (SQLite doesn't support Sum on decimal)
             var allInvoices = await _context.Invoices
@@ -37,7 +39,7 @@ namespace ResourceManager.Controllers
                 .ToListAsync();
 
             // Also load historical revenues
-            var allHistoricalRevenues = await _context.HistoricalRevenues.ToListAsync();
+            var allHistoricalRevenues = await _context.HistoricalRevenues.Include(h => h.Client).ToListAsync();
 
             // ═══ Multi-Currency: Determine available currencies ═══
             var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
@@ -252,13 +254,13 @@ namespace ResourceManager.Controllers
 
             var chart = Enumerable.Range(1, 12).Select(month => {
                 var monthPayments = allCompletedPayments
-                    .Where(x => x.Payment.PaymentDate.Month == month && x.Payment.PaymentDate.Year == now.Year);
+                    .Where(x => x.Payment.PaymentDate.Month == month && x.Payment.PaymentDate.Year == selectedYear);
                 var paymentAmount = isMixedMode
                     ? monthPayments.Sum(x => ConvertAmount(x.Payment.Amount, x.InvoiceCurrency))
                     : monthPayments.Sum(x => x.Payment.Amount);
                 // Add historical
                 var histAmount = historicalRevenueForChart
-                    .Where(h => h.Date.Month == month && h.Date.Year == now.Year)
+                    .Where(h => h.Date.Month == month && h.Date.Year == selectedYear)
                     .Sum(h => isMixedMode ? ConvertAmount(h.AmountPaid, h.Currency ?? defaultCurrency) : h.AmountPaid);
                 return new {
                     month,
@@ -269,13 +271,13 @@ namespace ResourceManager.Controllers
 
             // Monthly comparison (this month vs last month) — PAYMENT-BASED
             var thisMonthPayments = allCompletedPayments
-                .Where(x => x.Payment.PaymentDate.Year == now.Year && x.Payment.PaymentDate.Month == now.Month);
+                .Where(x => x.Payment.PaymentDate.Year == selectedYear && x.Payment.PaymentDate.Month == now.Month);
             var thisMonthRevenue = isMixedMode
                 ? thisMonthPayments.Sum(x => ConvertAmount(x.Payment.Amount, x.InvoiceCurrency))
                 : thisMonthPayments.Sum(x => x.Payment.Amount);
 
             int lastMonthNum = now.Month > 1 ? now.Month - 1 : 12;
-            int lastMonthYear = now.Month > 1 ? now.Year : now.Year - 1;
+            int lastMonthYear = now.Month > 1 ? selectedYear : selectedYear - 1;
             var lastMonthPayments = allCompletedPayments
                 .Where(x => x.Payment.PaymentDate.Year == lastMonthYear && x.Payment.PaymentDate.Month == lastMonthNum);
             var lastMonthRevenue = isMixedMode
@@ -317,7 +319,7 @@ namespace ResourceManager.Controllers
                 var otherAmt = otherExpensesByMonth.GetValueOrDefault(month, 0);
                 var supplierAmt = supplierExpensesByMonth.GetValueOrDefault(month, 0);
                 var histAmt = historicalExpenseForChart
-                    .Where(h => h.Date.Month == month && h.Date.Year == now.Year)
+                    .Where(h => h.Date.Month == month && h.Date.Year == selectedYear)
                     .Sum(h => isMixedMode ? ConvertAmount(h.AmountPaid, h.Currency ?? defaultCurrency) : h.AmountPaid);
                 return new {
                     month,
@@ -333,17 +335,43 @@ namespace ResourceManager.Controllers
                 .Select(g => new { status = g.Key, count = g.Count(), amount = g.Sum(i => i.TotalAmount ?? 0) })
                 .ToList();
 
-            // Top clients by PAID amount (payment-based)
-            var topClients = filteredInvoices
+            // Top clients by PAID amount (payment-based + historical) — filtered by selected year
+            var invoiceClientRevenue = filteredInvoices
                 .Where(i => i.ClientId.HasValue)
-                .GroupBy(i => i.ClientId)
-                .Select(g => new {
-                    clientId = g.Key,
-                    clientName = g.First().Client?.Name ?? "Unknown",
-                    totalInvoices = g.Count(),
-                    totalAmount = g.Sum(i => i.TotalAmount ?? 0),
-                    paidAmount = g.Sum(i => i.AmountPaid) // payment-based
+                .GroupBy(i => i.ClientId!.Value)
+                .Select(g => {
+                    var yearPayments = g.SelectMany(inv => inv.Payments ?? new List<Payment>())
+                        .Where(p => p.Status == "Completed" && p.PaymentDate.Year == selectedYear);
+                    return new {
+                        clientId = g.Key,
+                        clientName = g.First().Client?.Name ?? "Unknown",
+                        totalInvoices = g.Count(),
+                        totalAmount = g.Sum(i => i.TotalAmount ?? 0),
+                        paidAmount = yearPayments.Sum(p => p.Amount)
+                    };
                 })
+                .ToDictionary(c => c.clientId);
+
+            // Merge historical revenue into top clients
+            var historicalClientRevenue = allHistoricalRevenues
+                .Where(h => h.ClientId.HasValue && h.Date.Year == selectedYear)
+                .GroupBy(h => h.ClientId!.Value)
+                .ToDictionary(g => g.Key, g => new { paidAmount = g.Sum(h => h.AmountPaid), clientName = g.First().Client?.Name ?? g.First().ClientName });
+
+            var mergedClientIds = invoiceClientRevenue.Keys.Union(historicalClientRevenue.Keys).ToHashSet();
+            var topClients = mergedClientIds
+                .Select(id => {
+                    var inv = invoiceClientRevenue.GetValueOrDefault(id);
+                    var hist = historicalClientRevenue.GetValueOrDefault(id);
+                    return new {
+                        clientId = (int?)id,
+                        clientName = inv?.clientName ?? hist?.clientName ?? "Unknown",
+                        totalInvoices = inv?.totalInvoices ?? 0,
+                        totalAmount = inv?.totalAmount ?? 0m,
+                        paidAmount = (inv?.paidAmount ?? 0m) + (hist?.paidAmount ?? 0m)
+                    };
+                })
+                .Where(c => c.paidAmount > 0)
                 .OrderByDescending(c => c.paidAmount)
                 .Take(5)
                 .ToList();
@@ -374,6 +402,9 @@ namespace ResourceManager.Controllers
                 currencyBreakdownRevenue = isMixedMode ? currencyBreakdownRevenue : null,
                 currencyBreakdownExpense = isMixedMode ? currencyBreakdownExpense : null,
                 
+                // Year filter
+                selectedYear,
+
                 totalRevenue,
                 unpaidInvoices,
                 unpaidAmount,

@@ -79,7 +79,7 @@ interface Props {
     onClose: () => void;
     onEdit?: (id: number) => void;
     onDownloadPdf?: (id: number, number: number) => void;
-    onSendEmail?: (invoice: any) => void;
+    onSendEmail?: (invoice: InvoiceDetails) => void;
     isManager?: boolean;
 }
 
@@ -98,35 +98,34 @@ export default function InvoiceDetailView({
     const [activeTab, setActiveTab] = useState<'details' | 'items' | 'payments' | 'related'>('details');
 
     useEffect(() => {
+        const fetchInvoiceDetails = async () => {
+            try {
+                setLoading(true);
+                const res = await api.get(`/Invoices/${invoiceId}/details`);
+                setInvoice(res.data);
+            } catch (err: unknown) {
+                console.error('Error fetching invoice details:', err);
+                // Fallback to basic invoice data
+                try {
+                    const basicRes = await api.get(`/Invoices/${invoiceId}`);
+                    setInvoice({
+                        ...basicRes.data,
+                        items: basicRes.data.items || [],
+                        payments: basicRes.data.payments || [],
+                        relatedDeliveryNotes: []
+                    });
+                } catch {
+                    setError('Failed to load invoice details');
+                }
+            } finally {
+                setLoading(false);
+            }
+        };
         fetchInvoiceDetails();
     }, [invoiceId]);
 
-    const fetchInvoiceDetails = async () => {
-        try {
-            setLoading(true);
-            const res = await api.get(`/Invoices/${invoiceId}/details`);
-            setInvoice(res.data);
-        } catch (err: any) {
-            console.error('Error fetching invoice details:', err);
-            // Fallback to basic invoice data
-            try {
-                const basicRes = await api.get(`/Invoices/${invoiceId}`);
-                setInvoice({
-                    ...basicRes.data,
-                    items: basicRes.data.items || [],
-                    payments: basicRes.data.payments || [],
-                    relatedDeliveryNotes: []
-                });
-            } catch (fallbackErr) {
-                setError('Failed to load invoice details');
-            }
-        } finally {
-            setLoading(false);
-        }
-    };
-
     const getStatusBadge = (status: string) => {
-        const statusConfig: Record<string, { bg: string; text: string; icon: any }> = {
+        const statusConfig: Record<string, { bg: string; text: string; icon: typeof CheckCircle }> = {
             'Paid': { bg: 'bg-emerald-100', text: 'text-emerald-800', icon: CheckCircle },
             'PartiallyPaid': { bg: 'bg-blue-100', text: 'text-blue-800', icon: Clock },
             'Partial': { bg: 'bg-amber-100', text: 'text-amber-800', icon: Clock },

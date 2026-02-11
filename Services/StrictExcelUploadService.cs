@@ -13,9 +13,9 @@ namespace ResourceManager.Services
     /// with INTEGER keys 0, 1, 2, 3, 4 — NOT string keys "A","B","C".
     ///
     /// Column layout (by integer index):
-    ///   [0] Date          → dd/MM/yyyy (fr-FR culture)
+    ///   [0] Date          → Flexible: dd/MM/yyyy, MM/dd/yyyy, yyyy-MM-dd, dd-MM-yyyy
     ///   [1] Client Name   → non-empty string
-    ///   [2] Amount Paid   → French decimal, e.g. "13 017,00" (comma = decimal, NBSP = thousands)
+    ///   [2] Amount Paid   → Flexible: "6 922,00" (FR), "6,922.00" (US), "1500.50", "1500,50"
     ///   [3] Currency      → optional, defaults "TND"
     ///   [4] Payment Method → optional, defaults "Unknown"
     ///
@@ -25,7 +25,17 @@ namespace ResourceManager.Services
     /// </summary>
     public static class StrictExcelUploadService
     {
-        private static readonly CultureInfo FrenchCulture = new("fr-FR");
+        /// <summary>
+        /// Allowed date formats, tried in order. First match wins.
+        /// Covers French (dd/MM/yyyy), US (MM/dd/yyyy), ISO (yyyy-MM-dd), and dashed European (dd-MM-yyyy).
+        /// </summary>
+        private static readonly string[] AllowedDateFormats =
+        {
+            "dd/MM/yyyy",
+            "MM/dd/yyyy",
+            "yyyy-MM-dd",
+            "dd-MM-yyyy"
+        };
 
         public static StrictExcelValidationResult Parse(Stream stream)
         {
@@ -61,42 +71,40 @@ namespace ResourceManager.Services
                     }
 
                     // ───────────────────────────────────────────
-                    // Index 0: Date — e.g. "31/10/2024"
+                    // Index 0: Date (flexible multi-culture)
+                    // Accepts: 31/10/2024, 10/31/2024, 2024-10-31, 31-10-2024
                     // ───────────────────────────────────────────
                     if (string.IsNullOrWhiteSpace(col0))
                         return StrictExcelValidationResult.Failure(rowIndex, "Column 0 (Date)",
                             "Date is missing.");
 
-                    if (!DateTime.TryParseExact(col0, "dd/MM/yyyy", FrenchCulture,
-                            DateTimeStyles.None, out DateTime validDate))
+                    if (!FlexParseDate(col0, out DateTime validDate))
                     {
                         return StrictExcelValidationResult.Failure(rowIndex, "Column 0 (Date)",
-                            $"Invalid Date '{col0}'. Expected dd/MM/yyyy.");
+                            $"Invalid Date '{col0}'. Expected one of: dd/MM/yyyy, MM/dd/yyyy, yyyy-MM-dd, dd-MM-yyyy.");
                     }
 
                     // ───────────────────────────────────────────
-                    // Index 1: Client Name — e.g. "Laboratoire Biostyle"
+                    // Index 1: Client Name 
                     // ───────────────────────────────────────────
-                    string clientName = row.ContainsKey(1) ? row[1]?.ToString() : "";
+                    string clientName = row.ContainsKey(1) ? row[1]?.ToString() ?? "" : "";
                     if (string.IsNullOrWhiteSpace(clientName))
                         clientName = "Unknown";
 
                     // ───────────────────────────────────────────
-                    // Index 2: Amount Paid — e.g. "13 017,00"
+                    // Index 2: Amount Paid (flexible multi-culture)
+                    // Accepts: "6 922,00" | "6,922.00" | "1500.50" | "1500,50"
                     // If empty (like ";;" in CSV), treat as 0 — NOT an error.
                     // ───────────────────────────────────────────
                     decimal validAmount = 0;
-                    string amountStr = row.ContainsKey(2) ? row[2]?.ToString() : "";
+                    string amountRaw = row.ContainsKey(2) ? row[2]?.ToString() ?? "" : "";
 
-                    if (!string.IsNullOrWhiteSpace(amountStr))
+                    if (!string.IsNullOrWhiteSpace(amountRaw))
                     {
-                        // CRITICAL: Remove ALL whitespace (Space, NBSP \u00A0, etc.) in one Regex pass
-                        amountStr = Regex.Replace(amountStr, @"[\s\u00A0]+", "");
-
-                        if (!decimal.TryParse(amountStr, NumberStyles.Number, FrenchCulture, out validAmount))
+                        if (!FlexParseDecimal(amountRaw, out validAmount))
                         {
                             return StrictExcelValidationResult.Failure(rowIndex, "Column 2 (Amount)",
-                                $"Invalid Amount '{row[2]}'.");
+                                $"Invalid Amount '{amountRaw}'. Accepted formats: 6 922,00 | 6,922.00 | 1500.50 | 1500,50.");
                         }
                     }
                     // else: validAmount stays 0 (empty amount like ";;" is OK)
@@ -104,14 +112,14 @@ namespace ResourceManager.Services
                     // ───────────────────────────────────────────
                     // Index 3: Currency — optional, defaults "TND"
                     // ───────────────────────────────────────────
-                    string currency = row.ContainsKey(3) ? row[3]?.ToString() : "TND";
+                    string currency = row.ContainsKey(3) ? row[3]?.ToString() ?? "TND" : "TND";
                     if (string.IsNullOrWhiteSpace(currency))
                         currency = "TND";
 
                     // ───────────────────────────────────────────
                     // Index 4: Payment Method — optional, defaults "Unknown"
                     // ───────────────────────────────────────────
-                    string paymentMethod = row.ContainsKey(4) ? row[4]?.ToString() : "Unknown";
+                    string paymentMethod = row.ContainsKey(4) ? row[4]?.ToString() ?? "Unknown" : "Unknown";
                     if (string.IsNullOrWhiteSpace(paymentMethod))
                         paymentMethod = "Unknown";
 
@@ -139,6 +147,65 @@ namespace ResourceManager.Services
             }
 
             return StrictExcelValidationResult.Success(results);
+        }
+
+        // ────────────────────────────────────────────────
+        // Flexible Multi-Culture Parsing Helpers
+        // ────────────────────────────────────────────────
+
+        /// <summary>
+        /// Multi-culture decimal parser for dirty data.
+        ///
+        /// Algorithm:
+        ///   1. Remove all spaces and non-breaking spaces (\u00A0).
+        ///   2. If both comma AND dot are present (e.g. "1,200.50"), treat the dot
+        ///      as the decimal separator → strip commas.
+        ///   3. If only a comma is present (e.g. "1500,50"), replace it with a dot
+        ///      to form a standard decimal string.
+        ///   4. Parse with <see cref="CultureInfo.InvariantCulture"/>.
+        ///
+        /// Covers: "6 922,00" (FR), "6,922.00" (US), "1500.50", "1500,50".
+        /// </summary>
+        internal static bool FlexParseDecimal(string raw, out decimal result)
+        {
+            result = 0;
+            if (string.IsNullOrWhiteSpace(raw)) return false;
+
+            // Step 1: Strip ALL whitespace (regular space, NBSP \u00A0, tabs, etc.)
+            var cleaned = Regex.Replace(raw, @"[\s\u00A0]+", "");
+
+            bool hasComma = cleaned.Contains(',');
+            bool hasDot   = cleaned.Contains('.');
+
+            if (hasComma && hasDot)
+            {
+                // Step 2: Both present → dot is the decimal separator, commas are thousands
+                cleaned = cleaned.Replace(",", "");
+            }
+            else if (hasComma)
+            {
+                // Step 3: Only comma → it IS the decimal separator
+                cleaned = cleaned.Replace(",", ".");
+            }
+            // else: only dot or neither → already in standard format
+
+            // Step 4: Parse with InvariantCulture (dot = decimal)
+            return decimal.TryParse(cleaned, NumberStyles.Number, CultureInfo.InvariantCulture, out result);
+        }
+
+        /// <summary>
+        /// Multi-culture date parser.
+        /// Tries the four allowed formats in order; first match wins.
+        /// Covers: "31/10/2024" (FR), "10/31/2024" (US), "2024-10-31" (ISO), "31-10-2024".
+        /// </summary>
+        internal static bool FlexParseDate(string raw, out DateTime result)
+        {
+            return DateTime.TryParseExact(
+                raw.Trim(),
+                AllowedDateFormats,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out result);
         }
     }
 }

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using ResourceManager.Data;
@@ -11,9 +12,11 @@ using ResourceManager.Data;
 namespace ResourceManager.API.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260210224434_AddHistoricalRelationships")]
+    partial class AddHistoricalRelationships
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -360,9 +363,6 @@ namespace ResourceManager.API.Data.Migrations
                     b.Property<string>("BankRIB")
                         .HasColumnType("text");
 
-                    b.Property<string>("BaseStoragePath")
-                        .HasColumnType("text");
-
                     b.Property<int>("CompanyId")
                         .HasColumnType("integer");
 
@@ -430,9 +430,6 @@ namespace ResourceManager.API.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<bool>("IsProfileComplete")
-                        .HasColumnType("boolean");
-
                     b.Property<string>("LogoUrl")
                         .HasColumnType("text");
 
@@ -450,9 +447,6 @@ namespace ResourceManager.API.Data.Migrations
 
                     b.Property<string>("PrimaryColor")
                         .HasColumnType("text");
-
-                    b.Property<bool>("ProInvoiceUseTokenSignature")
-                        .HasColumnType("boolean");
 
                     b.Property<string>("SecondaryColor")
                         .HasColumnType("text");
@@ -1093,12 +1087,6 @@ namespace ResourceManager.API.Data.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<string>("VerificationToken")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("VerificationTokenCreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
                     b.HasKey("Id");
 
                     b.HasIndex("ClientId");
@@ -1362,75 +1350,6 @@ namespace ResourceManager.API.Data.Migrations
                     b.HasIndex("CreatedByUserId");
 
                     b.ToTable("PdfFileRecords");
-                });
-
-            modelBuilder.Entity("ResourceManager.Models.PendingInvoice", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("numeric");
-
-                    b.Property<int>("CompanyId")
-                        .HasColumnType("integer");
-
-                    b.Property<byte[]>("Content")
-                        .IsRequired()
-                        .HasColumnType("bytea");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("CreatedByUserId")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("Date")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("FileName")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<int?>("FournisseurId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsProcessed")
-                        .HasColumnType("boolean");
-
-                    b.Property<long>("OriginalSize")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("SupplierName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<bool>("Treated")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompanyId");
-
-                    b.HasIndex("CreatedByUserId");
-
-                    b.HasIndex("FournisseurId");
-
-                    b.ToTable("PendingInvoices");
                 });
 
             modelBuilder.Entity("ResourceManager.Models.ProductService", b =>
@@ -2058,29 +1977,6 @@ namespace ResourceManager.API.Data.Migrations
                     b.Navigation("Company");
 
                     b.Navigation("CreatedByUser");
-                });
-
-            modelBuilder.Entity("ResourceManager.Models.PendingInvoice", b =>
-                {
-                    b.HasOne("ResourceManager.Models.Company", "Company")
-                        .WithMany()
-                        .HasForeignKey("CompanyId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("ResourceManager.Models.ApplicationUser", "CreatedByUser")
-                        .WithMany()
-                        .HasForeignKey("CreatedByUserId");
-
-                    b.HasOne("ResourceManager.Models.Fournisseur", "Fournisseur")
-                        .WithMany()
-                        .HasForeignKey("FournisseurId");
-
-                    b.Navigation("Company");
-
-                    b.Navigation("CreatedByUser");
-
-                    b.Navigation("Fournisseur");
                 });
 
             modelBuilder.Entity("ResourceManager.Models.ProductService", b =>

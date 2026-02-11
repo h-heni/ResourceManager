@@ -313,7 +313,7 @@ export default function SuperAdminDashboard() {
             const raw = res.data;
             // Normalize: backend should return { countries, totalLogins } but guard against plain array
             if (Array.isArray(raw)) {
-                setCountries({ countries: raw, totalLogins: raw.reduce((s: number, c: any) => s + (c.count ?? 0), 0) });
+                setCountries({ countries: raw, totalLogins: raw.reduce((s: number, c: CountryEntry) => s + (c.count ?? 0), 0) });
             } else {
                 setCountries({
                     countries: Array.isArray(raw?.countries) ? raw.countries : [],

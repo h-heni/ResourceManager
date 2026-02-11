@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Plus, Trash2, Save, Package, FileText, History, User, Calendar, AlertCircle, CheckCircle } from 'lucide-react';
 import api from '../services/api';
 import { DEFAULT_CURRENCY, CURRENCY_OPTIONS, getCurrencySymbol } from '../lib/currencyUtils';
@@ -53,6 +54,7 @@ interface ValidationErrors {
 
 export default function DeliveryNoteCreatePage() {
     const navigate = useNavigate();
+    const { t } = useTranslation();
     const [loading, setLoading] = useState(false);
     const [pendingDevis, setPendingDevis] = useState<Devis[]>([]);
     const [selectedDevis, setSelectedDevis] = useState<Devis | null>(null);
@@ -89,46 +91,46 @@ export default function DeliveryNoteCreatePage() {
 
     useEffect(() => {
         fetchPendingDevis();
+        const fetchCurrencySettings = async () => {
+            try {
+                const res = await api.get('/Settings');
+                if (!pdfCurrency) {
+                    setPdfCurrency(res.data.currency || DEFAULT_CURRENCY);
+                    setPdfCurrencySymbol(res.data.currencySymbol || getCurrencySymbol(res.data.currency) || DEFAULT_CURRENCY);
+                }
+                if (!pdfLanguage) {
+                    setPdfLanguage(res.data.invoiceLanguage || 'fr');
+                }
+            } catch (error) {
+                console.error('Error fetching currency settings', error);
+            }
+        };
         fetchCurrencySettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-
-    const fetchCurrencySettings = async () => {
-        try {
-            const res = await api.get('/Settings');
-            if (!pdfCurrency) {
-                setPdfCurrency(res.data.currency || DEFAULT_CURRENCY);
-                setPdfCurrencySymbol(res.data.currencySymbol || getCurrencySymbol(res.data.currency) || DEFAULT_CURRENCY);
-            }
-            if (!pdfLanguage) {
-                setPdfLanguage(res.data.invoiceLanguage || 'fr');
-            }
-        } catch (error) {
-            console.error('Error fetching currency settings', error);
-        }
-    };
 
     // Validate form
     const validateForm = (): boolean => {
         const newErrors: ValidationErrors = {};
 
         if (!selectedDevisId) {
-            newErrors.devisId = 'Quote (Devis) selection is required';
+            newErrors.devisId = t('createPage.linkQuote');
         }
 
         if (!date) {
-            newErrors.date = 'Date is required';
+            newErrors.date = t('createPage.dateRequired');
         }
 
         const validItems = items.filter(item => item.description.trim() !== '');
         if (validItems.length === 0) {
-            newErrors.items = 'At least one item with description is required';
+            newErrors.items = t('createPage.itemsRequired');
         }
 
         const hasInvalidItems = items.some(item =>
             (item.description.trim() && item.quantity <= 0)
         );
         if (hasInvalidItems) {
-            newErrors.items = 'Items must have positive quantity';
+            newErrors.items = t('createPage.itemsInvalid');
         }
 
         // Over-delivery is allowed - just show info message, not blocking error
@@ -155,7 +157,7 @@ export default function DeliveryNoteCreatePage() {
         try {
             const res = await api.get('/Devis');
             const allDevis = Array.isArray(res.data) ? res.data : (res.data.data || []);
-            const draftDevis = allDevis.filter((d: any) =>
+            const draftDevis = allDevis.filter((d: { status: string; isDeleted?: boolean; treated?: boolean }) =>
                 (d.status === 'Draft' || d.status === 'Accepted') && !d.isDeleted && !d.treated
             );
             setPendingDevis(draftDevis);
@@ -172,7 +174,7 @@ export default function DeliveryNoteCreatePage() {
         }
         try {
             const res = await api.get('/DeliveryNotes');
-            let allNotes: any[] = [];
+            let allNotes: Array<{ id: number; devisId?: number; number?: string; date?: string }> = [];
             if (Array.isArray(res.data)) {
                 allNotes = res.data;
             } else if (res.data?.Data) {
@@ -183,8 +185,8 @@ export default function DeliveryNoteCreatePage() {
 
             // Filter delivery notes linked to this devis
             const linkedNoteIds = allNotes
-                .filter((dn: any) => dn.devisId === parseInt(devisId))
-                .map((dn: any) => dn.id);
+                .filter((dn: { id: number; devisId?: number }) => dn.devisId === parseInt(devisId))
+                .map((dn: { id: number; devisId?: number }) => dn.id);
 
             // Fetch full details for each delivery note
             const detailedNotes = await Promise.all(
@@ -260,9 +262,9 @@ export default function DeliveryNoteCreatePage() {
         setItems(items.filter((_, i) => i !== index));
     };
 
-    const updateItem = (index: number, field: keyof DeliveryItem, value: any) => {
+    const updateItem = (index: number, field: keyof DeliveryItem, value: string | number | boolean) => {
         const newItems = [...items];
-        (newItems[index] as any)[field] = value;
+        (newItems[index] as Record<string, string | number | boolean>)[field] = value;
         setItems(newItems);
     };
 
@@ -299,7 +301,7 @@ export default function DeliveryNoteCreatePage() {
             navigate('/delivery-notes');
         } catch (error) {
             console.error("Error creating BL", error);
-            alert("Failed to create Delivery Note");
+            alert(t('deliveryNote.messages.createFailed'));
         } finally {
             setLoading(false);
         }
@@ -313,24 +315,24 @@ export default function DeliveryNoteCreatePage() {
     }) ?? false;
 
     return (
-        <div className="max-w-4xl mx-auto space-y-6">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
+        <div className="max-w-4xl mx-auto space-y-6 px-2 sm:px-0">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start space-x-4">
                     <button onClick={() => navigate('/delivery-notes')} className="p-2 hover:bg-gray-100 rounded-full text-gray-500">
                         <ArrowLeft size={24} />
                     </button>
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900">New Delivery Note (BL)</h1>
-                        <p className="text-gray-500 text-sm">Create a delivery note for shipment</p>
+                        <h1 className="text-2xl font-bold text-gray-900">{t('deliveryNote.newDeliveryNote')}</h1>
+                        <p className="text-gray-500 text-sm">{t('deliveryNote.pageDescription')}</p>
                     </div>
                 </div>
                 <button
                     onClick={handleSubmit}
                     disabled={loading || allFullyDelivered}
-                    className="flex items-center px-6 py-3 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full sm:w-auto flex items-center justify-center px-6 py-3 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <Save size={20} className="mr-2" />
-                    {loading ? 'Saving...' : 'Save BL'}
+                    {loading ? t('common.saving') : t('deliveryNote.create')}
                 </button>
             </div>
 
@@ -341,7 +343,7 @@ export default function DeliveryNoteCreatePage() {
                         <div className="flex items-start space-x-3">
                             <AlertCircle className="text-red-500 mt-0.5" size={20} />
                             <div>
-                                <h4 className="font-semibold text-red-800">Please fix the following errors:</h4>
+                                <h4 className="font-semibold text-red-800">{t('createPage.fixErrors')}</h4>
                                 <ul className="list-disc list-inside text-sm text-red-700 mt-1">
                                     {Object.values(errors).map((error, idx) => (
                                         <li key={idx}>{error}</li>
@@ -358,9 +360,9 @@ export default function DeliveryNoteCreatePage() {
                         <div className="flex items-start space-x-3">
                             <AlertCircle className="text-amber-500 mt-0.5" size={20} />
                             <div>
-                                <h4 className="font-semibold text-amber-800">Info: Over-delivery detected</h4>
+                                <h4 className="font-semibold text-amber-800">{t('deliveryNote.messages.overDeliveryTitle')}</h4>
                                 <p className="text-sm text-amber-700 mt-1">
-                                    Some items exceed the remaining quantity to deliver. You can still save this delivery note.
+                                    {t('deliveryNote.messages.overDeliveryHelp')}
                                 </p>
                             </div>
                         </div>
@@ -370,7 +372,7 @@ export default function DeliveryNoteCreatePage() {
                 {/* Currency & Language Selection */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-[#065F46]/5 border border-emerald-100 rounded-xl">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Document Currency</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('createPage.documentCurrency')}</label>
                         <select
                             value={pdfCurrency}
                             onChange={e => {
@@ -383,21 +385,21 @@ export default function DeliveryNoteCreatePage() {
                                 <option key={opt.code} value={opt.code}>{opt.label}</option>
                             ))}
                         </select>
-                        <p className="text-xs text-gray-500 mt-1">Currency used on this delivery note's PDF</p>
+                        <p className="text-xs text-gray-500 mt-1">{t('createPage.currencyHelp')}</p>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">PDF Language</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('createPage.pdfLanguage')}</label>
                         <select
                             value={pdfLanguage}
                             onChange={e => setPdfLanguage(e.target.value)}
                             className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none transition-all"
                         >
-                            <option value="fr">Français</option>
-                            <option value="en">English</option>
-                            <option value="de">Deutsch</option>
-                            <option value="ar">العربية</option>
+                            <option value="fr">{t('language.fr')}</option>
+                            <option value="en">{t('language.en')}</option>
+                            <option value="de">{t('language.de')}</option>
+                            <option value="ar">{t('language.ar')}</option>
                         </select>
-                        <p className="text-xs text-gray-500 mt-1">Language used on this delivery note's PDF</p>
+                        <p className="text-xs text-gray-500 mt-1">{t('createPage.languageHelp')}</p>
                     </div>
                 </div>
 
@@ -415,7 +417,7 @@ export default function DeliveryNoteCreatePage() {
                                 }`}
                             required
                         >
-                            <option value="">-- Select a Quote --</option>
+                            <option value="">{t('createPage.noQuoteSelected')}</option>
                             {pendingDevis.map(devis => (
                                 <option key={devis.id} value={devis.id}>
                                     {devis.number} - {devis.clientName} ({(devis.totalAmount || 0).toLocaleString()} {pdfCurrencySymbol || DEFAULT_CURRENCY})
@@ -426,7 +428,7 @@ export default function DeliveryNoteCreatePage() {
                             <p className="text-xs text-red-600 mt-1">{errors.devisId}</p>
                         )}
                         {pendingDevis.length === 0 && (
-                            <p className="text-sm text-amber-600 mt-2">No quotes available. Create a quote first.</p>
+                            <p className="text-sm text-amber-600 mt-2">{t('deliveryNote.messages.noQuotes')}</p>
                         )}
                     </div>
 
@@ -450,7 +452,7 @@ export default function DeliveryNoteCreatePage() {
                                     {/* Quote items list */}
                                     {selectedDevis.devisItems && selectedDevis.devisItems.length > 0 && (
                                         <div className="mt-2 space-y-1">
-                                            <p className="text-xs font-semibold text-[#065F46] uppercase">Items:</p>
+                                            <p className="text-xs font-semibold text-[#065F46] uppercase">{t('deliveryNote.items')}:</p>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
                                                 {selectedDevis.devisItems.map((item, idx) => {
                                                     const key = item.description.toLowerCase().trim();
@@ -469,7 +471,7 @@ export default function DeliveryNoteCreatePage() {
                                                                 {fullyDelivered ? (
                                                                     <span className="flex items-center">
                                                                         <CheckCircle size={14} className="mr-1" />
-                                                                        Done
+                                                                        {t('deliveryNote.delivered')}
                                                                     </span>
                                                                 ) : (
                                                                     `${remaining}/${item.quantity}`
@@ -492,8 +494,8 @@ export default function DeliveryNoteCreatePage() {
                             <div className="flex items-center space-x-3">
                                 <CheckCircle className="text-green-600" size={20} />
                                 <div>
-                                    <h4 className="font-semibold text-green-800">All items fully delivered!</h4>
-                                    <p className="text-sm text-green-700">This quote has no remaining items to deliver.</p>
+                                    <h4 className="font-semibold text-green-800">{t('deliveryNote.messages.allDeliveredTitle')}</h4>
+                                    <p className="text-sm text-green-700">{t('deliveryNote.messages.allDeliveredHelp')}</p>
                                 </div>
                             </div>
                         </div>
@@ -501,7 +503,7 @@ export default function DeliveryNoteCreatePage() {
 
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                            BL Date <span className="text-red-500">*</span>
+                            {t('common.date')} <span className="text-red-500">*</span>
                         </label>
                         <input
                             type="date"
@@ -522,10 +524,10 @@ export default function DeliveryNoteCreatePage() {
                     <div className="border-t border-gray-100 pt-6">
                         <h3 className="text-lg font-bold text-gray-900 flex items-center mb-4">
                             <History className="mr-2 text-amber-500" size={20} />
-                            Previous Delivery Notes ({existingDeliveryNotes.length})
+                            {t('deliveryNote.messages.previousDeliveryNotes')} ({existingDeliveryNotes.length})
                         </h3>
                         <p className="text-sm text-gray-500 mb-3">
-                            Delivery notes already created for this quote:
+                            {t('deliveryNote.messages.previousDeliveryNotesHelp')}
                         </p>
                         <div className="space-y-3">
                             {existingDeliveryNotes.map(dn => (
@@ -535,7 +537,7 @@ export default function DeliveryNoteCreatePage() {
                                         <div className="flex items-center space-x-3 text-sm text-amber-600">
                                             <span className="flex items-center">
                                                 <Calendar size={14} className="mr-1" />
-                                                {dn.date ? new Date(dn.date).toLocaleDateString() : 'N/A'}
+                                                {dn.date ? new Date(dn.date).toLocaleDateString() : t('users.table.notAvailable')}
                                             </span>
                                             {dn.createdByUser && (
                                                 <span className="flex items-center">
@@ -570,7 +572,7 @@ export default function DeliveryNoteCreatePage() {
                 <div className="border-t border-gray-100 pt-6">
                     <h3 className="text-lg font-bold text-gray-900 flex items-center mb-4">
                         <Package className="mr-2 text-emerald-500" size={20} />
-                        BL Items <span className="text-red-500 ml-1">*</span>
+                        {t('deliveryNote.items')} <span className="text-red-500 ml-1">*</span>
                     </h3>
 
                     {errors.items && submitted && (
@@ -589,7 +591,7 @@ export default function DeliveryNoteCreatePage() {
                             return (
                                 <div key={index} className="grid grid-cols-2 md:grid-cols-12 gap-4 items-end p-4 md:p-0 bg-gray-50 md:bg-white rounded-xl md:rounded-none border border-gray-100 md:border-0 mb-4 md:mb-0">
                                     <div className="col-span-2 md:col-span-8">
-                                        <label className="text-xs font-semibold text-gray-500 mb-1 block">Description</label>
+                                        <label className="text-xs font-semibold text-gray-500 mb-1 block">{t('invoice.description')}</label>
                                         <input
                                             type="text"
                                             value={item.description}
@@ -615,7 +617,7 @@ export default function DeliveryNoteCreatePage() {
                                                 }`}
                                         />
                                         {exceedsRemaining && (
-                                            <p className="text-xs text-amber-600 mt-1">Exceeds quoted qty</p>
+                                            <p className="text-xs text-amber-600 mt-1">{t('deliveryNote.messages.exceedsQuote')}</p>
                                         )}
                                     </div>
                                     <div className="col-span-1 md:col-span-1 text-center flex items-center justify-center h-full pb-3">
@@ -636,7 +638,7 @@ export default function DeliveryNoteCreatePage() {
                     </div>
 
                     <button onClick={addItem} className="mt-4 flex items-center text-sm font-semibold text-[#065F46]">
-                        <Plus size={18} className="mr-1" /> Add Item
+                        <Plus size={18} className="mr-1" /> {t('invoice.addItem')}
                     </button>
                 </div>
             </div>

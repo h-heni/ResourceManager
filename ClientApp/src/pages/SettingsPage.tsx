@@ -10,6 +10,7 @@ import {
 import api from '../services/api';
 import { invalidateSettingsCache } from '../hooks/useSettings';
 import { DEFAULT_CURRENCY, CURRENCY_SYMBOL_MAP, CURRENCY_OPTIONS } from '../lib/currencyUtils';
+import { getErrorMessage } from '../utils/errorUtils';
 
 // ═══════════════════════════════════════════════════════════════
 // TYPES
@@ -42,6 +43,7 @@ interface CompanySettings {
     invoiceLanguage: string;
     hasSignatureImage: boolean;
     showSignatureOnPdf: boolean;
+    proInvoiceUseTokenSignature: boolean;
     bankName: string;
     bankBIC: string;
     bankIBAN: string;
@@ -51,6 +53,8 @@ interface CompanySettings {
     includeLogoInEmailSignature: boolean;
     fileSystemLanguage: string;
     fileSystemLanguageLocked: boolean;
+    baseStoragePath: string;
+    isProfileComplete: boolean;
 }
 
 const EMAIL_PLACEHOLDERS = [
@@ -75,7 +79,7 @@ type PdfTab = 'signature' | 'branding' | 'financial' | 'storage';
 
 export default function SettingsPage() {
     const { t } = useTranslation();
-    const { canManageSettings, logout, user, displayName } = useAuth();
+    const { canManageSettings, logout, user, displayName, updateProfileComplete } = useAuth();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -110,15 +114,20 @@ export default function SettingsPage() {
     const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
 
     // PDF Storage
-    const [storageConfig, setStorageConfig] = useState<any>(null);
+    const [storageConfig, setStorageConfig] = useState<{ baseFolderPath?: string; provider?: string } | null>(null);
     const [loadingStorage, setLoadingStorage] = useState(false);
-    const [consistencyReport, setConsistencyReport] = useState<any>(null);
+    const [consistencyReport, setConsistencyReport] = useState<{ missingFiles?: number; MissingFiles?: number; totalFiles?: number; TotalFiles?: number; existingFiles?: number; ExistingFiles?: number; missingFileDetails?: Array<{ id: number; documentType: string; documentNumber: string; fileName: string }> } | null>(null);
     const [checkingConsistency, setCheckingConsistency] = useState(false);
     const [newBasePath, setNewBasePath] = useState('');
     const [browsingFolders, setBrowsingFolders] = useState(false);
-    const [folderBrowser, setFolderBrowser] = useState<any>(null);
+    const [folderBrowser, setFolderBrowser] = useState<{ currentPath?: string; parent?: string; items?: Array<{ path: string; name: string; type: string }> } | null>(null);
+    const [browseTarget, setBrowseTarget] = useState<'storage' | 'basePath'>('storage');
     const [recovering, setRecovering] = useState(false);
     const [recoveryProgress, setRecoveryProgress] = useState<{ current: number; total: number; message: string } | null>(null);
+
+    // Confirmation dialog for locking base storage path
+    const [showBasePathLockConfirm, setShowBasePathLockConfirm] = useState(false);
+    const pendingSaveRef = useRef(false);
 
     // Password change
     const [currentPassword, setCurrentPassword] = useState('');
@@ -151,10 +160,12 @@ Best regards,
         pdfFooterText: '', showCompanyLogo: true,
         pdfSignatureText: '', pdfSignerPosition: '', invoiceLanguage: 'fr',
         hasSignatureImage: false, showSignatureOnPdf: false,
+        proInvoiceUseTokenSignature: false,
         bankName: '', bankBIC: '', bankIBAN: '',
         showBankName: true, showBankBIC: true, showBankIBAN: true,
         includeLogoInEmailSignature: false,
         fileSystemLanguage: '', fileSystemLanguageLocked: false,
+        baseStoragePath: '', isProfileComplete: false,
     });
     const [status, setStatus] = useState<{ type: 'success' | 'error' | 'warning'; message: string } | null>(null);
     const oauthCallbackProcessedRef = useRef(false);
@@ -184,13 +195,14 @@ Best regards,
             if (code && state && !oauthCallbackProcessedRef.current) {
                 oauthCallbackProcessedRef.current = true;
                 window.history.replaceState({}, document.title, window.location.pathname);
-                await handleOAuthCallback(code, state);
+                await handleOAuthCallback(code);
                 return;
             }
 
             await loadAll();
         };
         init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const loadAll = async () => {
@@ -251,6 +263,7 @@ Best regards,
                 invoiceLanguage: res.data.invoiceLanguage || 'fr',
                 hasSignatureImage: res.data.hasSignatureImage || false,
                 showSignatureOnPdf: res.data.showSignatureOnPdf ?? false,
+                proInvoiceUseTokenSignature: res.data.proInvoiceUseTokenSignature ?? false,
                 bankName: res.data.bankName || '',
                 bankBIC: res.data.bankBIC || '',
                 bankIBAN: res.data.bankIBAN || '',
@@ -260,6 +273,8 @@ Best regards,
                 includeLogoInEmailSignature: res.data.includeLogoInEmailSignature ?? false,
                 fileSystemLanguage: res.data.fileSystemLanguage || '',
                 fileSystemLanguageLocked: res.data.fileSystemLanguageLocked ?? false,
+                baseStoragePath: res.data.baseStoragePath || '',
+                isProfileComplete: res.data.isProfileComplete ?? false,
             });
             return { hasLogoData, hasSignatureImage };
         } catch {
@@ -298,11 +313,16 @@ Best regards,
     // ACTIONS
     // ═══════════════════════════════════════════════════════════════
 
-    const updateSetting = (key: keyof CompanySettings, value: any) => {
+    const updateSetting = (key: keyof CompanySettings, value: string | number | boolean) => {
         setSettings(prev => ({ ...prev, [key]: value }));
     };
 
-    const handleSave = async () => {
+    const handleSave = async (skipConfirm = false) => {
+        // If baseStoragePath is being set for the first time, ask for confirmation
+        if (!skipConfirm && settings.baseStoragePath && !settings.isProfileComplete) {
+            setShowBasePathLockConfirm(true);
+            return;
+        }
         setSaving(true);
         setStatus(null);
         try {
@@ -331,6 +351,7 @@ Best regards,
                 pdfSignerPosition: settings.pdfSignerPosition,
                 invoiceLanguage: settings.invoiceLanguage,
                 showSignatureOnPdf: settings.showSignatureOnPdf,
+                proInvoiceUseTokenSignature: settings.proInvoiceUseTokenSignature,
                 bankName: settings.bankName,
                 bankBIC: settings.bankBIC,
                 bankIBAN: settings.bankIBAN,
@@ -338,9 +359,15 @@ Best regards,
                 showBankBIC: settings.showBankBIC,
                 showBankIBAN: settings.showBankIBAN,
                 fileSystemLanguage: settings.fileSystemLanguage || undefined,
+                baseStoragePath: settings.baseStoragePath || undefined,
             });
             setStatus({ type: 'success', message: t('common.success', 'Settings saved successfully!') });
             invalidateSettingsCache(); // Clear stale currency cache
+
+            // If baseStoragePath was just set, update auth context so SettingsGuard unlocks
+            if (settings.baseStoragePath) {
+                updateProfileComplete(true, settings.baseStoragePath);
+            }
         } catch {
             setStatus({ type: 'error', message: t('common.error', 'Failed to save settings') });
         } finally { setSaving(false); }
@@ -356,7 +383,7 @@ Best regards,
         try {
             const formData = new FormData();
             formData.append('file', file);
-            await api.post('/Settings/logo', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+            await api.post('/Settings/logo', formData, { headers: { 'Content-Type': undefined } });
             setLogoPreview(URL.createObjectURL(file));
             setSettings(prev => ({ ...prev, hasLogoData: true }));
             setStatus({ type: 'success', message: 'Logo uploaded!' });
@@ -384,7 +411,7 @@ Best regards,
         try {
             const formData = new FormData();
             formData.append('file', file);
-            await api.post('/Settings/signature', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+            await api.post('/Settings/signature', formData, { headers: { 'Content-Type': undefined } });
             setSignaturePreview(URL.createObjectURL(file));
             setSettings(prev => ({ ...prev, hasSignatureImage: true, showSignatureOnPdf: true }));
             setStatus({ type: 'success', message: 'Signature uploaded!' });
@@ -410,20 +437,20 @@ Best regards,
             const currentUrl = window.location.origin + '/settings';
             const res = await api.get(`/Settings/email/oauth/connect?redirectUri=${encodeURIComponent(currentUrl)}`);
             if (res.data.authorizationUrl) window.location.href = res.data.authorizationUrl;
-        } catch (error: any) {
-            setStatus({ type: 'error', message: error.response?.data?.message || 'Failed to initiate Gmail connection' });
+        } catch (error: unknown) {
+            setStatus({ type: 'error', message: getErrorMessage(error, 'Failed to initiate Gmail connection') });
             setConnectingGmail(false);
         }
     };
 
-    const handleOAuthCallback = async (code: string, _state: string) => {
+    const handleOAuthCallback = async (code: string) => {
         setConnectingGmail(true);
         try {
             const currentUrl = window.location.origin + '/settings';
             const res = await api.post('/Settings/email/oauth/callback', { code, redirectUri: currentUrl });
             setStatus({ type: res.data.success ? 'success' : 'error', message: res.data.message || (res.data.success ? 'Gmail connected!' : 'Failed') });
-        } catch (error: any) {
-            setStatus({ type: 'error', message: error.response?.data?.message || 'Failed to complete Gmail connection' });
+        } catch (error: unknown) {
+            setStatus({ type: 'error', message: getErrorMessage(error, 'Failed to complete Gmail connection') });
         } finally {
             setConnectingGmail(false);
             await loadAll();
@@ -447,8 +474,8 @@ Best regards,
             const res = await api.post('/Settings/email/oauth/test');
             setStatus({ type: res.data.success ? 'success' : 'error', message: res.data.message });
             if (!res.data.success) await fetchOAuthStatus();
-        } catch (error: any) {
-            setStatus({ type: 'error', message: error.response?.data?.message || 'Gmail test failed' });
+        } catch (error: unknown) {
+            setStatus({ type: 'error', message: getErrorMessage(error, 'Gmail test failed') });
             await fetchOAuthStatus();
         } finally { setTestingOAuth(false); }
     };
@@ -463,8 +490,8 @@ Best regards,
             await api.post('/Auth/change-password', { currentPassword, newPassword });
             setStatus({ type: 'success', message: 'Password changed successfully!' });
             setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
-        } catch (error: any) {
-            setStatus({ type: 'error', message: error.response?.data?.message || 'Failed to change password' });
+        } catch (error: unknown) {
+            setStatus({ type: 'error', message: getErrorMessage(error, 'Failed to change password') });
         } finally { setChangingPassword(false); }
     };
 
@@ -544,8 +571,7 @@ Best regards,
                     continue;
                 }
 
-                // Fetch all entities of this type
-                let entities: any[] = [];
+                let entities: Array<Record<string, unknown>> = [];
                 try {
                     const listRes = await api.get(config.listEndpoint);
                     const data = listRes.data;
@@ -564,7 +590,7 @@ Best regards,
                     setRecoveryProgress({ current: regenerated + failed + skippedUploaded, total, message: `Regenerating ${missing.documentNumber}...` });
 
                     // Match by document number (try multiple field names for robustness)
-                    const entity = entities.find((e: any) => {
+                    const entity = entities.find((e: Record<string, unknown>) => {
                         const num = e.number || e.Number || e.invoiceNumber || e.devisNumber || '';
                         return num === missing.documentNumber;
                     });
@@ -582,9 +608,9 @@ Best regards,
                         // Regenerate PDF by calling the PDF endpoint (backend auto-saves to disk)
                         await api.get(config.pdfEndpoint(entityId), { responseType: 'blob' });
                         regenerated++;
-                    } catch (pdfErr: any) {
+                    } catch (pdfErr: unknown) {
                         failed++;
-                        const detail = pdfErr?.response?.data?.message || 'Server error during PDF generation';
+                        const detail = getErrorMessage(pdfErr, 'Server error during PDF generation');
                         errors.push(`${missing.documentNumber}: ${detail}`);
                     }
                 }
@@ -609,7 +635,7 @@ Best regards,
 
             // Refresh consistency report
             await handleCheckConsistency();
-        } catch (err) {
+        } catch {
             setStatus({ type: 'error', message: t('settings.recoveryUnexpectedError', 'Recovery failed: unexpected error. Please check your connection and try again.') });
             setRecoveryProgress(null);
         } finally {
@@ -1129,6 +1155,18 @@ Best regards,
                                                 placeholder={t('settings.signerPositionPlaceholder', 'E.g. Managing Director, CEO, Accountant')} />
                                             <p className="text-xs text-gray-500 mt-1">{t('settings.signerPositionHelp', 'Appears below the signature line on PDFs (e.g. job title or role)')}</p>
                                         </div>
+
+                                        <div className="flex items-center mt-4 pt-4 border-t border-gray-100">
+                                            <label className="flex items-center space-x-2 cursor-pointer">
+                                                <input type="checkbox" checked={settings.proInvoiceUseTokenSignature}
+                                                    onChange={e => updateSetting('proInvoiceUseTokenSignature', e.target.checked)}
+                                                    className="w-5 h-5 text-[#065F46] border-gray-300 rounded focus:ring-[#065F46]" />
+                                                <span className="text-sm font-medium text-gray-700">
+                                                    {t('settings.proInvoiceTokenSignature', 'Enable verification token on invoices (Pro)')}
+                                                </span>
+                                            </label>
+                                            <p className="text-xs text-gray-500 ml-3">{t('settings.proInvoiceTokenHelp', 'Adds a QR code & verification token to invoice PDFs for authenticity verification')}</p>
+                                        </div>
                                     </div>
                                 )}
 
@@ -1211,6 +1249,12 @@ Best regards,
                                             <DollarSign className="mr-2 text-[#065F46]" size={20} />
                                             {t('settings.financial', 'Financial Settings')}
                                         </h3>
+                                        {settings.isProfileComplete && (
+                                            <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl flex items-center gap-2">
+                                                <Lock size={16} className="text-gray-500" />
+                                                <span className="text-sm text-gray-600">Currency and tax settings are locked after initial setup. Bank information remains editable.</span>
+                                            </div>
+                                        )}
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.currency', 'Currency')}</label>
@@ -1218,7 +1262,7 @@ Best regards,
                                                     updateSetting('currency', e.target.value);
                                                     const sym = CURRENCY_SYMBOL_MAP[e.target.value];
                                                     if (sym) updateSetting('currencySymbol', sym);
-                                                }} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
+                                                }} disabled={settings.isProfileComplete} className={`w-full px-4 py-3 border border-gray-200 rounded-xl ${settings.isProfileComplete ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'bg-gray-50'}`}>
                                                     {CURRENCY_OPTIONS.map(opt => (
                                                         <option key={opt.code} value={opt.code}>{opt.label}</option>
                                                     ))}
@@ -1227,14 +1271,16 @@ Best regards,
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.currencySymbol', 'Currency Symbol')}</label>
                                                 <input type="text" value={settings.currencySymbol} onChange={e => updateSetting('currencySymbol', e.target.value)}
-                                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl" />
+                                                    disabled={settings.isProfileComplete}
+                                                    className={`w-full px-4 py-3 border border-gray-200 rounded-xl ${settings.isProfileComplete ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'bg-gray-50'}`} />
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">Default VAT Rate (%)</label>
                                                 <div className="flex items-center">
                                                     <input type="number" step="0.01" min="0" max="1" value={settings.defaultVatRate}
                                                         onChange={e => updateSetting('defaultVatRate', parseFloat(e.target.value) || 0)}
-                                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl" />
+                                                        disabled={settings.isProfileComplete}
+                                                        className={`w-full px-4 py-3 border border-gray-200 rounded-xl ${settings.isProfileComplete ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'bg-gray-50'}`} />
                                                     <span className="ml-3 text-gray-600">{(settings.defaultVatRate * 100).toFixed(0)}%</span>
                                                 </div>
                                             </div>
@@ -1247,8 +1293,8 @@ Best regards,
                                                     <p className="text-xs text-gray-500 mt-1">Configure a custom tax like Timbre Fiscal</p>
                                                 </div>
                                                 <label className="relative inline-flex items-center cursor-pointer">
-                                                    <input type="checkbox" checked={settings.customTaxEnabled} onChange={e => updateSetting('customTaxEnabled', e.target.checked)} className="sr-only peer" />
-                                                    <div className="w-11 h-6 bg-gray-300 peer-focus:ring-4 peer-focus:ring-[#065F46]/30 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#065F46]"></div>
+                                                    <input type="checkbox" checked={settings.customTaxEnabled} onChange={e => updateSetting('customTaxEnabled', e.target.checked)} disabled={settings.isProfileComplete} className="sr-only peer" />
+                                                    <div className={`w-11 h-6 bg-gray-300 peer-focus:ring-4 peer-focus:ring-[#065F46]/30 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#065F46] ${settings.isProfileComplete ? 'opacity-50 cursor-not-allowed' : ''}`}></div>
                                                 </label>
                                             </div>
                                             {settings.customTaxEnabled && (
@@ -1256,14 +1302,16 @@ Best regards,
                                                     <div>
                                                         <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.taxName', 'Tax Name')}</label>
                                                         <input type="text" value={settings.customTaxName} onChange={e => updateSetting('customTaxName', e.target.value)}
-                                                            className="w-full px-4 py-3 bg-white border border-amber-300 rounded-xl" />
+                                                            disabled={settings.isProfileComplete}
+                                                            className={`w-full px-4 py-3 border border-amber-300 rounded-xl ${settings.isProfileComplete ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'bg-white'}`} />
                                                     </div>
                                                     <div>
                                                         <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.taxAmount', 'Tax Amount')}</label>
                                                         <div className="flex items-center">
                                                             <input type="number" step="0.001" min="0" value={settings.customTaxAmount}
                                                                 onChange={e => updateSetting('customTaxAmount', parseFloat(e.target.value) || 0)}
-                                                                className="w-full px-4 py-3 bg-white border border-amber-300 rounded-xl" />
+                                                                disabled={settings.isProfileComplete}
+                                                                className={`w-full px-4 py-3 border border-amber-300 rounded-xl ${settings.isProfileComplete ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'bg-white'}`} />
                                                             <span className="ml-3 text-gray-600">{settings.currencySymbol}</span>
                                                         </div>
                                                     </div>
@@ -1372,6 +1420,62 @@ Best regards,
                                             </select>
                                         </div>
 
+                                        {/* Base Storage Path - Manager local sync destination */}
+                                        <div className={`p-5 rounded-xl border ${settings.baseStoragePath ? 'bg-gray-50 border-gray-200' : 'bg-amber-50 border-amber-200'}`}>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <label className="text-sm font-semibold text-gray-800">
+                                                    💾 {t('settings.baseStoragePath', 'Base Storage Path')}
+                                                </label>
+                                                {settings.baseStoragePath && (
+                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-700">
+                                                        🔒 Locked
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-xs text-gray-500 mb-3">
+                                                {settings.baseStoragePath
+                                                    ? 'This path is permanently locked. Employee-uploaded invoices will be synced here. Contact Super Admin to reset.'
+                                                    : '⚠️ Set the local directory where employee-uploaded supplier invoices will be synced. This cannot be changed once saved.'}
+                                            </p>
+                                            <div className="flex gap-2">
+                                                <input
+                                                    type="text"
+                                                    value={settings.baseStoragePath}
+                                                    onChange={e => updateSetting('baseStoragePath', e.target.value)}
+                                                    disabled={!!settings.baseStoragePath}
+                                                    placeholder={t('settings.baseStoragePathPlaceholder', 'e.g. C:\\ResourceManager\\Invoices')}
+                                                    className={`flex-1 px-4 py-3 border rounded-xl font-mono text-sm transition-all ${
+                                                        settings.baseStoragePath
+                                                            ? 'bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed'
+                                                            : 'bg-white border-amber-300 focus:ring-2 focus:ring-amber-500 outline-none'
+                                                    }`}
+                                                />
+                                                {!settings.baseStoragePath && (
+                                                    <button
+                                                        onClick={() => {
+                                                            if (folderBrowser) {
+                                                                setFolderBrowser(null);
+                                                            } else {
+                                                                setBrowseTarget('basePath');
+                                                                handleBrowseFolders(settings.baseStoragePath || undefined);
+                                                            }
+                                                        }}
+                                                        disabled={browsingFolders}
+                                                        className="flex items-center gap-2 px-4 py-3 bg-[#065F46] text-white rounded-xl hover:bg-[#047857] disabled:opacity-50 transition-colors text-sm font-medium whitespace-nowrap"
+                                                    >
+                                                        {browsingFolders ? <Loader2 size={16} className="animate-spin" /> : <FolderOpen size={16} />}
+                                                        Browse
+                                                    </button>
+                                                )}
+                                            </div>
+                                            {!settings.baseStoragePath && (
+                                                <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
+                                                    <AlertTriangle size={12} />
+                                                    {t('settings.baseStoragePathWarning', 'You must set this path to complete your profile setup. Type the full path or use Browse to select a folder.')}
+                                                </p>
+                                            )}
+                                        </div>
+
                                         {/* Current Folder + Change Folder (unified card) */}
                                         {loadingStorage ? (
                                             <div className="p-8 text-center text-gray-500"><Loader2 size={24} className="animate-spin mx-auto mb-2" />{t('settings.loadingStorageConfig', 'Loading storage config...')}</div>
@@ -1419,6 +1523,7 @@ Best regards,
                                                             if (folderBrowser) {
                                                                 setFolderBrowser(null);
                                                             } else {
+                                                                setBrowseTarget('storage');
                                                                 handleBrowseFolders(newBasePath || undefined);
                                                             }
                                                         }} disabled={browsingFolders}
@@ -1462,10 +1567,13 @@ Best regards,
                                                         {folderBrowser.items?.length === 0 && (
                                                             <p className="px-3 py-6 text-center text-gray-400 text-sm">{t('settings.noSubfolders', 'No subfolders found')}</p>
                                                         )}
-                                                        {folderBrowser.items?.map((item: any) => (
+                                                        {folderBrowser.items?.map((item: { path: string; name: string; type: string }) => (
                                                             <button key={item.path}
                                                                 onClick={() => {
                                                                     setNewBasePath(item.path);
+                                                                    if (browseTarget === 'basePath') {
+                                                                        updateSetting('baseStoragePath', item.path);
+                                                                    }
                                                                     handleBrowseFolders(item.path);
                                                                 }}
                                                                 className={`w-full px-3 py-2.5 text-left hover:bg-[#065F46]/5 rounded-lg flex items-center gap-2 text-sm transition-colors ${
@@ -1485,8 +1593,15 @@ Best regards,
                                                                 className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-200 rounded-lg transition-colors">
                                                                 {t('common.cancel', 'Cancel')}
                                                             </button>
-                                                            <button onClick={() => { handleSetBasePath(); setFolderBrowser(null); }}
-                                                                disabled={!newBasePath || newBasePath === storageConfig?.baseFolderPath}
+                                                            <button onClick={() => {
+                                                                if (browseTarget === 'basePath') {
+                                                                    if (newBasePath) updateSetting('baseStoragePath', newBasePath);
+                                                                } else {
+                                                                    handleSetBasePath();
+                                                                }
+                                                                setFolderBrowser(null);
+                                                            }}
+                                                                disabled={!newBasePath}
                                                                 className="px-4 py-2 bg-[#065F46] text-white text-sm rounded-lg hover:bg-[#047857] disabled:opacity-40 whitespace-nowrap font-medium transition-colors">
                                                                 {t('settings.useThisFolder', 'Use this folder')}
                                                             </button>
@@ -1542,9 +1657,9 @@ Best regards,
                                                         const hasMissing = missing > 0;
 
                                                         // Count by document type for detailed info
-                                                        const details: any[] = consistencyReport.missingFileDetails || [];
-                                                        const canRegenerate = details.filter((d: any) => ['Invoice', 'Quote', 'DeliveryNote'].includes(d.documentType)).length;
-                                                        const uploadedOnly = details.filter((d: any) => !['Invoice', 'Quote', 'DeliveryNote'].includes(d.documentType)).length;
+                                                        const details: Array<{ id: number; documentType: string; documentNumber: string; fileName: string }> = consistencyReport.missingFileDetails || [];
+                                                        const canRegenerate = details.filter((d: { documentType: string }) => ['Invoice', 'Quote', 'DeliveryNote'].includes(d.documentType)).length;
+                                                        const uploadedOnly = details.filter((d: { documentType: string }) => !['Invoice', 'Quote', 'DeliveryNote'].includes(d.documentType)).length;
 
                                                         return (
                                                             <div className={`p-4 rounded-xl ${hasMissing ? 'bg-amber-50 border border-amber-200' : 'bg-emerald-50 border border-emerald-200'}`}>
@@ -1606,6 +1721,50 @@ Best regards,
                     )}
                 </div>
             </div>
+
+            {/* Base Storage Path Lock Confirmation Dialog */}
+            {showBasePathLockConfirm && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowBasePathLockConfirm(false)}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="p-2.5 bg-amber-100 rounded-xl">
+                                <AlertTriangle size={24} className="text-amber-600" />
+                            </div>
+                            <h3 className="text-lg font-semibold text-gray-900">Confirm Storage Path</h3>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-2">
+                            You are about to set the base storage path to:
+                        </p>
+                        <p className="font-mono text-sm bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4 break-all">
+                            {settings.baseStoragePath}
+                        </p>
+                        <div className="p-3 bg-red-50 border border-red-200 rounded-lg mb-4">
+                            <p className="text-sm text-red-700 font-medium flex items-center gap-2">
+                                <Lock size={14} />
+                                This location cannot be modified later.
+                            </p>
+                            <p className="text-xs text-red-600 mt-1">Financial settings (currency, VAT rate, custom tax) will also be locked after this save.</p>
+                        </div>
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                onClick={() => setShowBasePathLockConfirm(false)}
+                                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setShowBasePathLockConfirm(false);
+                                    handleSave(true);
+                                }}
+                                className="px-4 py-2 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-700 font-medium transition-colors"
+                            >
+                                Confirm & Lock
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

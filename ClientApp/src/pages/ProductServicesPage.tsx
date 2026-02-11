@@ -146,7 +146,7 @@ export default function ProductServicesPage() {
     };
 
     const handleDelete = async (id: number) => {
-        if (!window.confirm(t('product.confirmDelete', 'Are you sure you want to delete this product?'))) return;
+        if (!window.confirm(t('product.confirmDelete'))) return;
         try {
             await api.delete(`/ProductServices/${id}`);
             fetchItems();

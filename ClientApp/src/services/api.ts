@@ -1,5 +1,6 @@
 import axios, { AxiosError } from 'axios';
 import type { InternalAxiosRequestConfig } from 'axios';
+import { getErrorStatus } from '../utils/errorUtils';
 
 // Use environment variable for API URL.
 // In production the frontend is served by nginx which reverse-proxies /api
@@ -12,6 +13,7 @@ const API_URL = import.meta.env.VITE_API_URL ?? '';
 // ═══════════════════════════════════════════════════════════════
 let accessToken: string | null = null;
 let isRefreshing = false;
+let isLoggingOut = false;  // Guard: prevents interceptor from redirecting during logout
 let failedQueue: Array<{
     resolve: (token: string | null) => void;
     reject: (error: unknown) => void;
@@ -23,6 +25,11 @@ export function setAccessToken(token: string | null) {
 
 export function getAccessToken(): string | null {
     return accessToken;
+}
+
+/** Mark the app as logging out — interceptor will not redirect or refresh */
+export function setLoggingOut(value: boolean) {
+    isLoggingOut = value;
 }
 
 function processQueue(error: unknown, token: string | null = null) {
@@ -74,6 +81,11 @@ api.interceptors.response.use(
     async (error: AxiosError) => {
         const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
+        // ─── If we're logging out, don't intercept anything ───
+        if (isLoggingOut) {
+            return Promise.reject(error);
+        }
+
         // ─── CRITICAL: Never intercept auth endpoints ───
         // Login 401 = wrong credentials → user needs to see the error.
         // Refresh 401 = expired session → handled below separately.
@@ -117,21 +129,25 @@ api.interceptors.response.use(
                 processQueue(null, newToken);
                 originalRequest.headers.Authorization = `Bearer ${newToken}`;
                 return api(originalRequest);
-            } catch (refreshError: any) {
+            } catch (refreshError: unknown) {
                 processQueue(refreshError, null);
 
                 // Only clear session on REAL auth failures (server explicitly rejected refresh).
                 // Network errors, timeouts, 5xx — keep session intact so user isn't kicked out.
-                const refreshStatus = refreshError?.response?.status;
+                const refreshStatus = getErrorStatus(refreshError);
                 const isRealAuthFailure = refreshStatus === 401 || refreshStatus === 403;
 
-                if (isRealAuthFailure) {
+                if (isRealAuthFailure && !isLoggingOut) {
                     setAccessToken(null);
                     localStorage.removeItem('user_email');
                     localStorage.removeItem('user_roles');
                     localStorage.removeItem('user_firstName');
                     localStorage.removeItem('user_lastName');
-                    window.location.href = '/login';
+                    localStorage.removeItem('user_isProfileComplete');
+                    localStorage.removeItem('user_baseStoragePath');
+                    // Dispatch event so AuthContext can handle navigation via React Router
+                    // instead of a hard page reload which causes blank-screen flashes
+                    window.dispatchEvent(new Event('auth:session-expired'));
                 }
 
                 return Promise.reject(refreshError);

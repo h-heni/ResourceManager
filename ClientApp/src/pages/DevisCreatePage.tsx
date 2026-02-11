@@ -80,52 +80,52 @@ export default function DevisCreatePage() {
 
     useEffect(() => {
         fetchClients();
-        fetchTaxSettings();
-    }, []);
-
-    const fetchTaxSettings = async () => {
-        try {
-            const res = await api.get('/Settings');
-            // Parse available VAT rates from JSON string
-            let vatRates = [0, 7, 13, 19];
+        const fetchTaxSettings = async () => {
             try {
-                if (res.data.availableVatRates) {
-                    vatRates = JSON.parse(res.data.availableVatRates);
-                }
-            } catch { /* keep defaults */ }
+                const res = await api.get('/Settings');
+                // Parse available VAT rates from JSON string
+                let vatRates = [0, 7, 13, 19];
+                try {
+                    if (res.data.availableVatRates) {
+                        vatRates = JSON.parse(res.data.availableVatRates);
+                    }
+                } catch { /* keep defaults */ }
 
-            const defaultRate = res.data.defaultVatRate ?? 0.19;
-            const defaultRateInt = Math.round(defaultRate * 100);
-            // Sort so default rate appears first in dropdown
-            const sortedRates = [...vatRates].sort((a, b) => {
-                if (a === defaultRateInt) return -1;
-                if (b === defaultRateInt) return 1;
-                return b - a; // descending for the rest
-            });
-            setTaxSettings({
-                customTaxEnabled: res.data.customTaxEnabled ?? true,
-                customTaxName: res.data.customTaxName || 'Timbre Fiscal',
-                customTaxAmount: res.data.customTaxAmount ?? 1.0,
-                defaultVatRate: defaultRate,
-                availableVatRates: sortedRates
-            });
-            // Update existing items default vatRate if they still have 19 (initial default)
-            setItems(prev => prev.map(item => ({
-                ...item,
-                vatRate: item.vatRate === 19 ? defaultRateInt : item.vatRate
-            })));
-            // Initialize per-document currency & language from company defaults
-            if (!pdfCurrency) {
-                setPdfCurrency(res.data.currency || DEFAULT_CURRENCY);
-                setPdfCurrencySymbol(res.data.currencySymbol || getCurrencySymbol(res.data.currency) || DEFAULT_CURRENCY);
+                const defaultRate = res.data.defaultVatRate ?? 0.19;
+                const defaultRateInt = Math.round(defaultRate * 100);
+                // Sort so default rate appears first in dropdown
+                const sortedRates = [...vatRates].sort((a, b) => {
+                    if (a === defaultRateInt) return -1;
+                    if (b === defaultRateInt) return 1;
+                    return b - a; // descending for the rest
+                });
+                setTaxSettings({
+                    customTaxEnabled: res.data.customTaxEnabled ?? true,
+                    customTaxName: res.data.customTaxName || 'Timbre Fiscal',
+                    customTaxAmount: res.data.customTaxAmount ?? 1.0,
+                    defaultVatRate: defaultRate,
+                    availableVatRates: sortedRates
+                });
+                // Update existing items default vatRate if they still have 19 (initial default)
+                setItems(prev => prev.map(item => ({
+                    ...item,
+                    vatRate: item.vatRate === 19 ? defaultRateInt : item.vatRate
+                })));
+                // Initialize per-document currency & language from company defaults
+                if (!pdfCurrency) {
+                    setPdfCurrency(res.data.currency || DEFAULT_CURRENCY);
+                    setPdfCurrencySymbol(res.data.currencySymbol || getCurrencySymbol(res.data.currency) || DEFAULT_CURRENCY);
+                }
+                if (!pdfLanguage) {
+                    setPdfLanguage(res.data.invoiceLanguage || 'fr');
+                }
+            } catch (error) {
+                console.error("Error fetching tax settings", error);
             }
-            if (!pdfLanguage) {
-                setPdfLanguage(res.data.invoiceLanguage || 'fr');
-            }
-        } catch (error) {
-            console.error("Error fetching tax settings", error);
-        }
-    };
+        };
+        fetchTaxSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const fetchClients = async () => {
         try {
@@ -258,7 +258,7 @@ export default function DevisCreatePage() {
             setShowCreateProduct(false);
         } catch (error) {
             console.error('Error creating product', error);
-            alert('Failed to create product');
+            alert(t('product.saveFailed'));
         } finally {
             setCreatingProduct(false);
         }
@@ -269,9 +269,9 @@ export default function DevisCreatePage() {
         setItems(items.filter((_, i) => i !== index));
     };
 
-    const updateItem = (index: number, field: keyof DevisItem, value: any) => {
+    const updateItem = (index: number, field: keyof DevisItem, value: string | number | boolean) => {
         const newItems = [...items];
-        (newItems[index] as any)[field] = value;
+        (newItems[index] as Record<string, string | number | boolean>)[field] = value;
         // Reset fromCatalog when user manually edits the description
         if (field === 'description') {
             newItems[index].fromCatalog = false;
@@ -328,31 +328,31 @@ export default function DevisCreatePage() {
             navigate('/quotes');
         } catch (error) {
             console.error("Error creating quote", error);
-            alert("Failed to create quote");
+            alert(t('quote.deleteError'));
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div className="max-w-4xl mx-auto space-y-6">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
+        <div className="max-w-4xl mx-auto space-y-6 px-2 sm:px-0">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start space-x-4">
                     <button onClick={() => navigate('/quotes')} className="p-2 hover:bg-gray-100 rounded-full text-gray-500">
                         <ArrowLeft size={24} />
                     </button>
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900">New Quote (Devis)</h1>
-                        <p className="text-gray-500 text-sm">Create a formal estimate for a client</p>
+                        <h1 className="text-2xl font-bold text-gray-900">{t('quote.newQuote')}</h1>
+                        <p className="text-gray-500 text-sm">{t('quote.title')}</p>
                     </div>
                 </div>
                 <button
                     onClick={handleSubmit}
                     disabled={loading}
-                    className="flex items-center px-6 py-3 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full sm:w-auto flex items-center justify-center px-6 py-3 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <Save size={20} className="mr-2" />
-                    {loading ? 'Saving...' : 'Save Quote'}
+                    {loading ? t('common.saving') : t('invoice.save')}
                 </button>
             </div>
 
@@ -364,7 +364,7 @@ export default function DevisCreatePage() {
                         <div className="flex items-start space-x-3">
                             <AlertCircle className="text-red-500 mt-0.5" size={20} />
                             <div>
-                                <h4 className="font-semibold text-red-800">Please fix the following errors:</h4>
+                                <h4 className="font-semibold text-red-800">{t('createPage.fixErrors')}</h4>
                                 <ul className="list-disc list-inside text-sm text-red-700 mt-1">
                                     {Object.values(errors).map((error, idx) => (
                                         <li key={idx}>{error}</li>
@@ -378,7 +378,7 @@ export default function DevisCreatePage() {
                 {/* Currency & Language Selection */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-[#065F46]/5 border border-[#065F46]/10 rounded-xl">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Document Currency</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('createPage.documentCurrency')}</label>
                         <select
                             value={pdfCurrency}
                             onChange={e => {
@@ -391,21 +391,21 @@ export default function DevisCreatePage() {
                                 <option key={opt.code} value={opt.code}>{opt.label}</option>
                             ))}
                         </select>
-                        <p className="text-xs text-gray-500 mt-1">Currency used on this quote's PDF</p>
+                        <p className="text-xs text-gray-500 mt-1">{t('createPage.currencyHelp')}</p>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">PDF Language</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('createPage.pdfLanguage')}</label>
                         <select
                             value={pdfLanguage}
                             onChange={e => setPdfLanguage(e.target.value)}
                             className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none transition-all"
                         >
-                            <option value="fr">Français</option>
-                            <option value="en">English</option>
-                            <option value="de">Deutsch</option>
-                            <option value="ar">العربية</option>
+                            <option value="fr">{t('language.fr')}</option>
+                            <option value="en">{t('language.en')}</option>
+                            <option value="de">{t('language.de')}</option>
+                            <option value="ar">{t('language.ar')}</option>
                         </select>
-                        <p className="text-xs text-gray-500 mt-1">Language used on this quote's PDF</p>
+                        <p className="text-xs text-gray-500 mt-1">{t('createPage.languageHelp')}</p>
                     </div>
                 </div>
 
@@ -421,7 +421,7 @@ export default function DevisCreatePage() {
                             className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none ${errors.clientId && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
                                 }`}
                         >
-                            <option value="">Select a client...</option>
+                            <option value="">{t('createPage.selectClient')}</option>
                             {clients.map(client => (
                                 <option key={client.id} value={client.id}>{client.name}</option>
                             ))}
@@ -467,7 +467,7 @@ export default function DevisCreatePage() {
                         {items.map((item, index) => (
                             <div key={index} className="grid grid-cols-2 md:grid-cols-12 gap-4 items-end p-4 md:p-0 bg-gray-50 md:bg-white rounded-xl md:rounded-none border border-gray-100 md:border-0 mb-4 md:mb-0">
                                 <div className="col-span-2 md:col-span-5 relative">
-                                    <label className="text-xs font-semibold text-gray-500 mb-1 block">Description</label>
+                                        <label className="text-xs font-semibold text-gray-500 mb-1 block">{t('invoice.description')}</label>
                                     <input
                                         type="text"
                                         value={item.description}
@@ -528,7 +528,7 @@ export default function DevisCreatePage() {
                                     )}
                                 </div>
                                 <div className="col-span-1 md:col-span-2">
-                                    <label className="text-xs font-semibold text-gray-500 mb-1 block">Qty</label>
+                                    <label className="text-xs font-semibold text-gray-500 mb-1 block">{t('invoice.qty')}</label>
                                     <input
                                         type="number"
                                         min="1"
@@ -539,7 +539,7 @@ export default function DevisCreatePage() {
                                     />
                                 </div>
                                 <div className="col-span-1 md:col-span-2">
-                                    <label className="text-xs font-semibold text-gray-500 mb-1 block">Price</label>
+                                    <label className="text-xs font-semibold text-gray-500 mb-1 block">{t('invoice.price')}</label>
                                     <input
                                         type="number"
                                         min="0"
@@ -551,7 +551,7 @@ export default function DevisCreatePage() {
                                     />
                                 </div>
                                 <div className="col-span-1 md:col-span-2 flex items-center space-x-2">
-                                    <label className="md:hidden text-xs font-semibold text-gray-500 mb-1 block">Tax</label>
+                                    <label className="md:hidden text-xs font-semibold text-gray-500 mb-1 block">{t('invoice.tax')}</label>
                                     <select
                                         value={item.tva ? item.vatRate : 0}
                                         onChange={e => {
@@ -580,22 +580,22 @@ export default function DevisCreatePage() {
                     </div>
 
                     <button onClick={addItem} className="mt-4 flex items-center text-sm font-semibold text-[#065F46]">
-                        <Plus size={18} className="mr-1" /> Add Item
+                        <Plus size={18} className="mr-1" /> {t('invoice.addItem')}
                     </button>
                 </div>
 
                 <div className="border-t border-gray-100 pt-6 flex justify-end">
                     <div className="w-full md:w-1/3 space-y-3">
                         <div className="flex justify-between text-gray-600">
-                            <span>Subtotal:</span>
+                            <span>{t('invoice.subtotal')}:</span>
                             <span>{calculateSubtotal().toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}</span>
                         </div>
                         <div className="flex justify-between text-gray-600">
-                            <span>Tax:</span>
+                            <span>{t('invoice.tax')}:</span>
                             <span>{(calculateTotal() - calculateSubtotal()).toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}</span>
                         </div>
                         <div className="border-t border-gray-200 pt-3 flex justify-between text-xl font-bold text-gray-900">
-                            <span>Total (incl. stamp):</span>
+                            <span>{t('invoice.total')}:</span>
                             <span className="text-[#065F46]">{calculateTotal().toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}</span>
                         </div>
                     </div>
@@ -669,7 +669,7 @@ export default function DevisCreatePage() {
                                     >
                                         {taxSettings.availableVatRates.map(rate => (
                                             <option key={rate} value={rate}>
-                                                {rate === 0 ? 'No TVA (0%)' : `TVA ${rate}%`}
+                                                {rate === 0 ? t('invoice.noTax') : `${t('invoice.tax')} ${rate}%`}
                                             </option>
                                         ))}
                                     </select>

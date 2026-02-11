@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Building, MapPin, Hash, Phone, Loader, CheckCircle } from 'lucide-react';
 import api from '../services/api';
+import { getErrorMessage } from '../utils/errorUtils';
 import { cn } from '../lib/utils';
 
 export default function CompanySetupPage() {
@@ -30,10 +31,10 @@ export default function CompanySetupPage() {
             // Clear the needsCompanySetup flag
             localStorage.removeItem('needsCompanySetup');
             navigate('/dashboard');
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error(err);
-            const msg = err.response?.data?.message || err.response?.data || "Failed to create company";
-            setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            const msg = getErrorMessage(err, 'Failed to create company');
+            setError(msg);
         } finally {
             setLoading(false);
         }

@@ -45,6 +45,7 @@ interface DashboardStats {
     selectedCurrency: string;
     availableCurrencies: string[];
     defaultCurrency: string;
+    selectedYear: number;
 
     totalRevenue: number;
     unpaidInvoices: number;
@@ -99,15 +100,23 @@ export default function DashboardPage() {
     const [mixedTargetCurrency, setMixedTargetCurrency] = useState<string>('');
     const [mixedExchangeRate, setMixedExchangeRate] = useState<string>('');
 
+    /* ─── Year filter state ─── */
+    const currentYear = new Date().getFullYear();
+    const [selectedYear, setSelectedYear] = useState<number>(currentYear);
+    const availableYears = Array.from({ length: currentYear - 2019 }, (_, i) => currentYear - i);
+
     /* ─── Data fetch (skipped for SuperAdmin) ─── */
-    const fetchStats = async (currency?: string, mixedMode?: boolean) => {
+    const fetchStats = async (currency?: string, mixedMode?: boolean, yearOverride?: number) => {
         if (isSuperAdmin) return;
+        const yearParam = yearOverride ?? selectedYear;
         try {
             let queryParam = '';
             if (mixedMode && mixedTargetCurrency && parseFloat(mixedExchangeRate) > 0) {
-                queryParam = `?mode=mixed&targetCurrency=${encodeURIComponent(mixedTargetCurrency)}&exchangeRate=${encodeURIComponent(mixedExchangeRate)}`;
+                queryParam = `?mode=mixed&targetCurrency=${encodeURIComponent(mixedTargetCurrency)}&exchangeRate=${encodeURIComponent(mixedExchangeRate)}&year=${yearParam}`;
             } else if (currency) {
-                queryParam = `?currency=${encodeURIComponent(currency)}`;
+                queryParam = `?currency=${encodeURIComponent(currency)}&year=${yearParam}`;
+            } else {
+                queryParam = `?year=${yearParam}`;
             }
             const [dashRes, expensesRes] = await Promise.allSettled([
                 api.get(`/Dashboard/stats${queryParam}`),
@@ -120,6 +129,7 @@ export default function DashboardPage() {
                     selectedCurrency: d.selectedCurrency || DEFAULT_CURRENCY,
                     availableCurrencies: d.availableCurrencies || [],
                     defaultCurrency: d.defaultCurrency || DEFAULT_CURRENCY,
+                    selectedYear: d.selectedYear || currentYear,
                     totalRevenue: d.totalRevenue || 0,
                     unpaidInvoices: d.unpaidInvoices || 0,
                     unpaidAmount: d.unpaidAmount || 0,
@@ -154,7 +164,7 @@ export default function DashboardPage() {
                     totalAll: ed.totalAll ?? 0,
                     totalThisMonth: ed.totalThisMonth ?? 0,
                     totalThisYear: ed.totalThisYear ?? 0,
-                    byCategory: (ed.byCategory || []).map((c: any) => ({ category: c.category, total: c.total, count: c.count })),
+                    byCategory: (ed.byCategory || []).map((c: { category: string; total: number; count: number }) => ({ category: c.category, total: c.total, count: c.count })),
                     count: ed.count ?? 0,
                 });
             }
@@ -165,7 +175,15 @@ export default function DashboardPage() {
         }
     };
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { if (!isSuperAdmin) fetchStats(); }, [isSuperAdmin]);
+
+    /* Re-fetch when year changes */
+    const handleYearChange = (yr: number) => {
+        setSelectedYear(yr);
+        setLoading(true);
+        fetchStats(activeCurrency || undefined, dashboardMode === 'mixed', yr);
+    };
 
     /* Re-fetch when currency changes */
     const handleCurrencyChange = (cur: string) => {
@@ -179,6 +197,7 @@ export default function DashboardPage() {
         if (!mixedTargetCurrency || !mixedExchangeRate || parseFloat(mixedExchangeRate) <= 0) return;
         setLoading(true);
         fetchStats(undefined, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [mixedTargetCurrency, mixedExchangeRate]);
 
     /* Switch dashboard mode */
@@ -189,6 +208,7 @@ export default function DashboardPage() {
             setLoading(true);
             fetchStats(activeCurrency || undefined);
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeCurrency]);
 
     /* ─── PDF recovery (manager only, existing logic) ─── */
@@ -207,7 +227,7 @@ export default function DashboardPage() {
                 const missingCount = report.missingFiles ?? report.MissingFiles ?? 0;
                 if (missingCount === 0) return;
 
-                const missingFiles: any[] = report.missingFileDetails || [];
+                const missingFiles: Array<{ id: number; documentType: string; documentNumber: string; fileName: string }> = report.missingFileDetails || [];
                 if (missingFiles.length === 0) return;
 
                 const typeConfig: Record<string, { listEndpoint: string; pdfEndpoint: (id: number) => string }> = {
@@ -232,7 +252,7 @@ export default function DashboardPage() {
                 let regenerated = 0;
                 let failed = 0;
 
-                const byType: Record<string, any[]> = {};
+                const byType: Record<string, Array<{ id: number; documentType: string; documentNumber: string; fileName: string }>> = {};
                 for (const f of regeneratable) {
                     if (!byType[f.documentType]) byType[f.documentType] = [];
                     byType[f.documentType].push(f);
@@ -240,7 +260,7 @@ export default function DashboardPage() {
 
                 for (const [docType, files] of Object.entries(byType)) {
                     const config = typeConfig[docType];
-                    let entities: any[] = [];
+                    let entities: Array<Record<string, unknown>> = [];
                     try {
                         const listRes = await api.get(config.listEndpoint);
                         const data = listRes.data;
@@ -251,7 +271,7 @@ export default function DashboardPage() {
                     }
 
                     for (const missing of files) {
-                        const entity = entities.find((e: any) => {
+                        const entity = entities.find((e: Record<string, unknown>) => {
                             const num = e.number || e.Number || e.invoiceNumber || e.devisNumber || '';
                             return num === missing.documentNumber;
                         });
@@ -394,12 +414,12 @@ export default function DashboardPage() {
     };
 
     /* Custom tooltip for Recharts */
-    const ChartTooltipContent = ({ active, payload, label }: any) => {
+    const ChartTooltipContent = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; name: string; color: string }>; label?: string }) => {
         if (!active || !payload?.length) return null;
         return (
             <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">
                 <p className="font-medium text-gray-900 mb-1">{label}</p>
-                {payload.map((entry: any, i: number) => (
+                {payload.map((entry: { value: number; name: string; color: string }, i: number) => (
                     <p key={i} className="text-gray-600" style={{ color: entry.color }}>
                         {entry.name}: {fmt(entry.value)}
                     </p>
@@ -458,6 +478,16 @@ export default function DashboardPage() {
                             ))}
                         </div>
                     )}
+                    {/* Year selector */}
+                    <select
+                        value={selectedYear}
+                        onChange={e => handleYearChange(Number(e.target.value))}
+                        className="px-3 py-1.5 text-sm font-medium rounded-lg bg-gray-100 border-0 text-gray-700 focus:ring-2 focus:ring-[#065F46] outline-none cursor-pointer"
+                    >
+                        {availableYears.map(yr => (
+                            <option key={yr} value={yr}>{yr}</option>
+                        ))}
+                    </select>
                 </div>
             </div>
 
@@ -643,50 +673,43 @@ export default function DashboardPage() {
                 </div>
             </div>
 
-            {/* Charts Row: Revenue, Expenses, Growth */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* Revenue Chart */}
+            {/* Charts Row: Revenue vs Expenses (merged), Growth */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Merged Revenue vs Expenses Chart */}
                 <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('dashboard.revenueLabel', 'Revenue')}</h3>
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-sm font-semibold text-gray-900">{t('dashboard.revenueVsExpenses', 'Revenue vs Expenses')}</h3>
+                        <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-1.5">
+                                <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: CHART_COLORS.revenue }} />
+                                <span className="text-[11px] text-gray-500">{t('dashboard.revenueLabel', 'Revenue')}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: CHART_COLORS.expenses }} />
+                                <span className="text-[11px] text-gray-500">{t('expense.totalExpenses', 'Expenses')}</span>
+                            </div>
+                        </div>
+                    </div>
                     {revenueExpenseChartData.length > 0 ? (
-                        <div className="h-[250px] w-full">
+                        <div className="h-[280px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={revenueExpenseChartData}>
+                                <BarChart data={revenueExpenseChartData} barGap={4}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
                                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94A3B8' }} />
-                                    <YAxis hide />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94A3B8' }} width={60} tickFormatter={(v: number) => formatNumber(v)} />
                                     <RechartsTooltip content={<ChartTooltipContent />} />
                                     <Bar dataKey="revenue" name={t('dashboard.revenueLabel', 'Revenue')} fill={CHART_COLORS.revenue} radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    ) : (
-                        <div className="h-[250px] flex items-center justify-center text-gray-400 text-sm">{t('common.noData')}</div>
-                    )}
-                </div>
-
-                {/* Expenses Chart */}
-                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-4">{t('expense.totalExpenses', 'Expenses')}</h3>
-                    {revenueExpenseChartData.length > 0 ? (
-                        <div className="h-[250px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={revenueExpenseChartData}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94A3B8' }} />
-                                    <YAxis hide />
-                                    <RechartsTooltip content={<ChartTooltipContent />} />
                                     <Bar dataKey="expenses" name={t('expense.totalExpenses', 'Expenses')} fill={CHART_COLORS.expenses} radius={[4, 4, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
                     ) : (
-                        <div className="h-[250px] flex items-center justify-center text-gray-400 text-sm">{t('common.noData')}</div>
+                        <div className="h-[280px] flex items-center justify-center text-gray-400 text-sm">{t('common.noData')}</div>
                     )}
                 </div>
 
                 {/* Growth Trajectory Chart */}
-                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm md:col-span-2 lg:col-span-1">
+                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-sm font-semibold text-gray-900">{t('dashboard.growthTrajectory', 'Growth')}</h3>
                         <span className={`text-xs font-semibold ${netResult >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
@@ -694,7 +717,7 @@ export default function DashboardPage() {
                         </span>
                     </div>
                     {growthTrajectoryData.filter(d => d.revenue > 0 || d.expenses > 0).length > 0 ? (
-                        <div className="h-[250px] w-full">
+                        <div className="h-[280px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                 <AreaChart data={growthTrajectoryData.map(d => ({
                                     name: monthNames[d.month - 1],
@@ -708,14 +731,14 @@ export default function DashboardPage() {
                                     </defs>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
                                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94A3B8' }} />
-                                    <YAxis hide />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94A3B8' }} width={60} tickFormatter={(v: number) => formatNumber(v)} />
                                     <RechartsTooltip content={<ChartTooltipContent />} />
                                     <Area type="monotone" dataKey="net" name={t('dashboard.netLabel', 'Net')} stroke={CHART_COLORS.net} strokeWidth={2.5} fill="url(#gradNet)" />
                                 </AreaChart>
                             </ResponsiveContainer>
                         </div>
                     ) : (
-                        <div className="h-[250px] flex items-center justify-center text-gray-400 text-sm">{t('common.noData')}</div>
+                        <div className="h-[280px] flex items-center justify-center text-gray-400 text-sm">{t('common.noData')}</div>
                     )}
                 </div>
             </div>

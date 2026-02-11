@@ -141,6 +141,35 @@ namespace ResourceManager.Controllers
         }
 
         // ═══════════════════════════════════════════════════════════════
+        // GET: api/SupplierInvoices/{id}/file — serve the invoice file
+        // ═══════════════════════════════════════════════════════════════
+        [HttpGet("{id}/file")]
+        public async Task<IActionResult> GetFile(int id)
+        {
+            var invoice = await _context.FournisseurInvoices.FindAsync(id);
+            if (invoice == null) return NotFound();
+            if (string.IsNullOrEmpty(invoice.FilePath)) return NotFound(new { message = "No file associated" });
+
+            string fullPath;
+            if (invoice.FilePath.StartsWith("/"))
+                fullPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", invoice.FilePath.TrimStart('/'));
+            else
+                fullPath = Path.Combine(_pdfStorage.GetBaseFolderPath(), invoice.FilePath);
+
+            if (!System.IO.File.Exists(fullPath))
+                return NotFound(new { message = "File not found on disk" });
+
+            var contentType = invoice.FileType?.ToLowerInvariant() switch
+            {
+                "image/png" => "image/png",
+                "image/jpeg" or "image/jpg" => "image/jpeg",
+                _ => "application/pdf"
+            };
+            var bytes = await System.IO.File.ReadAllBytesAsync(fullPath);
+            return File(bytes, contentType, invoice.FileName ?? "supplier-invoice.pdf");
+        }
+
+        // ═══════════════════════════════════════════════════════════════
         // POST: api/SupplierInvoices/upload
         // ═══════════════════════════════════════════════════════════════
         [HttpPost("upload")]
@@ -526,16 +555,8 @@ namespace ResourceManager.Controllers
                 if (!inv.TotalTTC.HasValue || inv.TotalTTC == 0)
                     invIssues.Add("Missing total amount (TTC)");
 
-                if (inv.Items.Any())
-                {
-                    var itemsTotalHT = inv.Items.Sum(i => i.TotalHT);
-                    var itemsTotalTTC = inv.Items.Sum(i => i.TotalTTC);
-                    if (inv.TotalHT.HasValue && Math.Abs(itemsTotalHT - inv.TotalHT.Value) > 1m)
-                        invIssues.Add($"Items subtotal ({itemsTotalHT:F2}) ≠ header HT ({inv.TotalHT:F2})");
-                    if (inv.TotalTTC.HasValue && Math.Abs(itemsTotalTTC - inv.TotalTTC.Value) > 1m)
-                        invIssues.Add($"Items total ({itemsTotalTTC:F2}) ≠ header TTC ({inv.TotalTTC:F2})");
-                }
-                else
+                // Line items are informational only — no total comparison checks
+                if (!inv.Items.Any())
                 {
                     invIssues.Add("No line items");
                 }

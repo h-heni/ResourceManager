@@ -16,6 +16,24 @@ using System.Threading.RateLimiting;
 // 1. Timezone Fix for Postgres
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
+// Load .env file if present (local development — Docker uses compose env vars)
+var envFile = Path.Combine(Directory.GetCurrentDirectory(), ".env");
+if (File.Exists(envFile))
+{
+    foreach (var line in File.ReadAllLines(envFile))
+    {
+        var trimmed = line.Trim();
+        if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith('#')) continue;
+        var eqIdx = trimmed.IndexOf('=');
+        if (eqIdx <= 0) continue;
+        var key = trimmed[..eqIdx].Trim();
+        var val = trimmed[(eqIdx + 1)..].Trim();
+        // Only set if not already defined (system env vars take precedence)
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable(key)))
+            Environment.SetEnvironmentVariable(key, val);
+    }
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
 // 2. SERILOG (Logs to Console + File + InMemory sink for admin dashboard)
@@ -47,11 +65,30 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
     options.Password.RequireDigit = false; // Adjust as needed
     options.Password.RequiredLength = 6;
+    // Lockout: 5 failed attempts → 30-second lockout (matches rate-limiter RetryAfter)
+    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromSeconds(30);
+    options.Lockout.MaxFailedAccessAttempts = 5;
+    options.Lockout.AllowedForNewUsers = true;
 })
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
 
 // 5. AUTHENTICATION (JWT Bearer only — Auth0 temporarily disabled)
+// Resolve JWT key: env var JWT_KEY > Jwt__Key > appsettings Jwt:Key
+var jwtKey = Environment.GetEnvironmentVariable("JWT_KEY")
+    ?? builder.Configuration["Jwt:Key"]
+    ?? throw new InvalidOperationException("JWT Key not configured. Set JWT_KEY env var or Jwt:Key in appsettings.");
+
+if (jwtKey.Length < 32)
+    throw new InvalidOperationException("JWT Key must be at least 32 characters for security. Current length: " + jwtKey.Length);
+
+// Write resolved key back so IConfiguration reads it everywhere consistently
+builder.Configuration["Jwt:Key"] = jwtKey;
+
+Log.Information("JWT key source: {Source}, length: {Length}",
+    Environment.GetEnvironmentVariable("JWT_KEY") != null ? "ENV" : "appsettings",
+    jwtKey.Length);
+
 builder.Services.AddAuthentication(options =>
 {
     // Default to JWT Bearer for API requests
@@ -69,7 +106,7 @@ builder.Services.AddAuthentication(options =>
         ValidateIssuerSigningKey = true,
         ValidIssuer = builder.Configuration["Jwt:Issuer"],
         ValidAudience = builder.Configuration["Jwt:Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured"))),
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
     };
 });
 
@@ -161,14 +198,14 @@ builder.Services.AddRateLimiter(options =>
             }));
 
     // Strict limiter for auth endpoints (login, signup, password reset)
+    // Fixed window of 30 seconds — matches the RetryAfter header sent to clients
     options.AddPolicy("AuthStrict", context =>
-        RateLimitPartition.GetSlidingWindowLimiter(
+        RateLimitPartition.GetFixedWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            _ => new SlidingWindowRateLimiterOptions
+            _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 10,
-                Window = TimeSpan.FromMinutes(5),
-                SegmentsPerWindow = 5,
+                PermitLimit = 5,
+                Window = TimeSpan.FromSeconds(30),
                 QueueLimit = 0
             }));
 

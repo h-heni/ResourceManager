@@ -2,13 +2,14 @@ import { useState, useRef, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     Download, Upload, FileSpreadsheet, AlertTriangle, CheckCircle,
-    FileText, Users, Package, DollarSign
+    FileText, Users, Package, DollarSign, Truck
 } from 'lucide-react';
 import api from '../services/api';
+import { getErrorMessage } from '../utils/errorUtils';
 import { useAuth } from '../context/AuthContext';
 
 /* ─── Types ─── */
-type DataType = 'revenues' | 'expenses' | 'clients' | 'products';
+type DataType = 'revenues' | 'expenses' | 'clients' | 'products' | 'suppliers';
 type ImportStep = 'upload' | 'preview' | 'result';
 
 interface ValidationError {
@@ -58,6 +59,13 @@ const DATA_TYPE_CONFIG: Record<DataType, {
         requiredColumns: ['Name', 'Price', 'Currency', 'TVA Rate'],
         optionalColumns: ['Description'],
         exampleRow: { Name: 'Product A', Description: 'Annual subscription', Price: '100', Currency: 'EUR', 'TVA Rate': '19' },
+    },
+    suppliers: {
+        label: 'Supplier',
+        icon: Truck,
+        requiredColumns: ['Name'],
+        optionalColumns: ['Matricule Fiscal', 'Phone Number', 'Address'],
+        exampleRow: { Name: 'Supplier X', 'Matricule Fiscal': 'MF789012', 'Phone Number': '+21699654321', Address: 'Sfax, Zone Industrielle' },
     },
 };
 
@@ -114,18 +122,6 @@ export default function DataManagementPage() {
 
     // ═══ CSV PARSING ═══
 
-    /** Auto-detect delimiter from the header line: try `;`, `,`, `\t` */
-    const detectDelimiter = (headerLine: string): string => {
-        // Strip BOM if present
-        const clean = headerLine.replace(/^\uFEFF/, '');
-        // Count occurrences of each candidate outside quoted fields
-        for (const delim of [';', ',', '\t']) {
-            // Quick heuristic: if splitting by this delimiter gives ≥2 fields, use it
-            if (parseCsvLineWith(clean, delim).length >= 2) return delim;
-        }
-        return ','; // fallback
-    };
-
     const parseCsvLineWith = (line: string, delimiter: string): string[] => {
         const result: string[] = [];
         let current = '';
@@ -157,8 +153,15 @@ export default function DataManagementPage() {
         const lines = clean.split(/\r?\n/).filter(l => l.trim().length > 0);
         if (lines.length < 2) return [];
 
-        // Auto-detect delimiter from the header row
-        const delimiter = detectDelimiter(lines[0]);
+        // Auto-detect delimiter from the header row (inlined to satisfy exhaustive-deps)
+        const detectDelim = (headerLine: string): string => {
+            const hClean = headerLine.replace(/^\uFEFF/, '');
+            for (const delim of [';', ',', '\t']) {
+                if (parseCsvLineWith(hClean, delim).length >= 2) return delim;
+            }
+            return ',';
+        };
+        const delimiter = detectDelim(lines[0]);
 
         // Parse header
         const headers = parseCsvLineWith(lines[0], delimiter);
@@ -193,8 +196,8 @@ export default function DataManagementPage() {
                     headers: { 'Content-Type': 'multipart/form-data' },
                 });
                 rows = res.data.rows ?? [];
-            } catch (error: any) {
-                const msg = error?.response?.data?.message || 'Failed to parse Excel file';
+            } catch (error: unknown) {
+                const msg = getErrorMessage(error, 'Failed to parse Excel file');
                 setImportResult({ success: false, message: msg });
                 if (fileInputRef.current) fileInputRef.current.value = '';
                 return;
@@ -223,8 +226,8 @@ export default function DataManagementPage() {
                 rows: rows,
             });
             setValidationResult(res.data);
-        } catch (error: any) {
-            const msg = error?.response?.data?.message || 'Validation failed';
+        } catch (error: unknown) {
+            const msg = getErrorMessage(error, 'Validation failed');
             setValidationResult({
                 errors: [{ row: 0, message: msg }],
                 validRows: [],
@@ -252,8 +255,8 @@ export default function DataManagementPage() {
             });
             setImportResult({ success: true, message: res.data.message });
             setImportStep('result');
-        } catch (error: any) {
-            const msg = error?.response?.data?.message || 'Import failed';
+        } catch (error: unknown) {
+            const msg = getErrorMessage(error, 'Import failed');
             setImportResult({ success: false, message: msg });
         } finally {
             setImportLoading(false);
@@ -269,22 +272,37 @@ export default function DataManagementPage() {
     }, []);
 
     // ═══ TEMPLATE DOWNLOAD ═══
-    const downloadTemplate = useCallback((type: DataType) => {
-        const config = DATA_TYPE_CONFIG[type];
-        const allColumns = [...config.requiredColumns, ...config.optionalColumns];
-        const headerLine = allColumns.join(',');
-        const exampleLine = allColumns.map(col => config.exampleRow[col] ?? '').join(',');
-        const csv = `${headerLine}\n${exampleLine}`;
-
-        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${type}_template.csv`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
+    const downloadTemplate = useCallback(async (type: DataType) => {
+        try {
+            const response = await api.get(`/DataManagement/template/${type}`, {
+                responseType: 'blob',
+            });
+            const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${type}_template.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+        } catch {
+            // Fallback: generate client-side with semicolons
+            const config = DATA_TYPE_CONFIG[type];
+            const allColumns = [...config.requiredColumns, ...config.optionalColumns];
+            const headerLine = allColumns.join(';');
+            const exampleLine = allColumns.map(col => config.exampleRow[col] ?? '').join(';');
+            const csv = `${headerLine}\n${exampleLine}`;
+            const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${type}_template.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+        }
     }, []);
 
     const config = DATA_TYPE_CONFIG[importType];
@@ -293,6 +311,7 @@ export default function DataManagementPage() {
         { key: 'expenses', label: t('dataManagement.exportExpenses', 'Paid Expenses'), icon: FileText, needsDate: true },
         { key: 'clients', label: t('dataManagement.exportClients', 'Clients'), icon: Users, needsDate: false },
         { key: 'products', label: t('dataManagement.exportProducts', 'Products'), icon: Package, needsDate: false },
+        { key: 'suppliers', label: t('dataManagement.exportSuppliers', 'Suppliers'), icon: Truck, needsDate: false },
     ];
 
     // Column info for preview table

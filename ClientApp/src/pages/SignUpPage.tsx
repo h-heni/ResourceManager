@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Mail, Lock, User, Building, ArrowRight, Loader } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import api from '../services/api';
+import { getErrorMessage } from '../utils/errorUtils';
 import { cn } from '../lib/utils';
 
 export default function SignUpPage() {
@@ -29,12 +30,12 @@ export default function SignUpPage() {
         setError('');
 
         if (formData.userPassword !== formData.confirmPassword) {
-            setError('Passwords do not match.');
+            setError(t('auth.messages.passwordsMismatch'));
             return;
         }
 
         if (formData.userPassword.length < 6) {
-            setError('Password must be at least 6 characters.');
+            setError(t('auth.messages.passwordMin'));
             return;
         }
 
@@ -48,12 +49,12 @@ export default function SignUpPage() {
                 userEmail: formData.userEmail,
                 userPassword: formData.userPassword,
             });
-            alert('Account created successfully! Please log in.');
+            alert(t('auth.messages.accountCreated'));
             navigate('/login');
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error(err);
-            const msg = err.response?.data?.message || err.response?.data || 'Registration failed';
-            setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            const msg = getErrorMessage(err, t('auth.signupError'));
+            setError(msg);
         } finally {
             setLoading(false);
         }
@@ -65,18 +66,18 @@ export default function SignUpPage() {
                 <div className="p-8">
                     <div className="text-center mb-8">
                         <Link to="/login" className="text-sm text-[#065F46] hover:underline mb-4 inline-block">
-                            &larr; Back to Login
+                            &larr; {t('auth.messages.backToLogin')}
                         </Link>
-                        <h1 className="text-2xl font-bold text-gray-900">Create your account</h1>
+                        <h1 className="text-2xl font-bold text-gray-900">{t('auth.messages.createAccountTitle')}</h1>
                         <p className="text-sm text-gray-500 mt-2">
-                            Set up your company workspace in seconds.
+                            {t('auth.messages.createAccountSubtitle')}
                         </p>
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-4">
                         {/* Company Name */}
                         <div className="space-y-1.5">
-                            <label className="text-sm font-medium text-gray-700">Company name</label>
+                            <label className="text-sm font-medium text-gray-700">{t('client.companyName')}</label>
                             <div className="relative">
                                 <Building className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                                 <input
@@ -93,7 +94,7 @@ export default function SignUpPage() {
                         {/* First + Last Name */}
                         <div className="grid grid-cols-2 gap-3">
                             <div className="space-y-1.5">
-                                <label className="text-sm font-medium text-gray-700">First name</label>
+                                <label className="text-sm font-medium text-gray-700">{t('users.fields.firstName')}</label>
                                 <div className="relative">
                                     <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                                     <input
@@ -107,7 +108,7 @@ export default function SignUpPage() {
                                 </div>
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-sm font-medium text-gray-700">Last name</label>
+                                <label className="text-sm font-medium text-gray-700">{t('users.fields.lastName')}</label>
                                 <div className="relative">
                                     <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                                     <input
@@ -124,7 +125,7 @@ export default function SignUpPage() {
 
                         {/* Email */}
                         <div className="space-y-1.5">
-                            <label className="text-sm font-medium text-gray-700">Email</label>
+                            <label className="text-sm font-medium text-gray-700">{t('common.email')}</label>
                             <div className="relative">
                                 <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                                 <input
@@ -141,7 +142,7 @@ export default function SignUpPage() {
 
                         {/* Password */}
                         <div className="space-y-1.5">
-                            <label className="text-sm font-medium text-gray-700">Password</label>
+                            <label className="text-sm font-medium text-gray-700">{t('auth.password')}</label>
                             <div className="relative">
                                 <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                                 <input
@@ -159,7 +160,7 @@ export default function SignUpPage() {
 
                         {/* Confirm Password */}
                         <div className="space-y-1.5">
-                            <label className="text-sm font-medium text-gray-700">Confirm password</label>
+                            <label className="text-sm font-medium text-gray-700">{t('settings.confirmPassword')}</label>
                             <div className="relative">
                                 <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                                 <input
@@ -194,11 +195,11 @@ export default function SignUpPage() {
                                 {loading ? (
                                     <>
                                         <Loader className="animate-spin h-5 w-5" />
-                                        <span>Creating account...</span>
+                                        <span>{t('auth.messages.creatingAccount')}</span>
                                     </>
                                 ) : (
                                     <>
-                                        <span>Create Account</span>
+                                        <span>{t('auth.messages.createAccount')}</span>
                                         <ArrowRight className="h-4 w-4" />
                                     </>
                                 )}

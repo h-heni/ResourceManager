@@ -401,6 +401,38 @@ namespace ResourceManager.Controllers
 
             return Ok(new { Message = "User updated successfully." });
         }
+
+        /// <summary>
+        /// Reset a Manager's settings (BaseStoragePath + IsProfileComplete).
+        /// SuperAdmin only. Forces the Manager to re-configure from scratch.
+        /// </summary>
+        [HttpPost("{id}/reset-settings")]
+        [Authorize(Roles = "SuperAdmin")]
+        public async Task<IActionResult> ResetUserSettings(string id)
+        {
+            var targetUser = await _userManager.FindByIdAsync(id);
+            if (targetUser == null)
+                return NotFound("User not found.");
+
+            var targetRoles = await _userManager.GetRolesAsync(targetUser);
+            if (!targetRoles.Contains("Manager") && !targetRoles.Contains("FreeUser"))
+                return BadRequest(new { Message = "Can only reset settings for Manager accounts." });
+
+            var settings = await _context.CompanySettings
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(s => s.CompanyId == targetUser.CompanyId);
+
+            if (settings == null)
+                return NotFound(new { Message = "No settings found for this user's company." });
+
+            settings.BaseStoragePath = null;
+            settings.IsProfileComplete = false;
+            settings.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { Message = "User settings reset. The Manager will be redirected to Settings on next login." });
+        }
     }
 
     public class ResetPasswordDto
