@@ -834,6 +834,72 @@
     "tooLarge": "Too Large",
     "uploading": "Uploading"
   },
+<<<<<<< HEAD
+=======
+  "companySetup": {
+    "title": "Complétez votre profil",
+    "subtitle": "Parlez-nous de votre entreprise pour commencer",
+    "companyName": "Nom de l'entreprise",
+    "address": "Adresse",
+    "matriculeFiscal": "Matricule Fiscal",
+    "phone": "Téléphone",
+    "settingUp": "Configuration...",
+    "completeSetup": "Finaliser la configuration",
+    "setupFailed": "Échec de la création de l'entreprise",
+    "placeholders": {
+      "companyName": "Nom de votre entreprise",
+      "address": "Adresse professionnelle",
+      "matriculeFiscal": "MF123456",
+      "phone": "+216 XX XXX XXX"
+    }
+  },
+  "companyInit": {
+    "title": "Commençons la Configuration",
+    "subtitle": "Nous vous guidons à travers le processus de configuration",
+    "steps": {
+      "companyInfo": "Info de l'entreprise",
+      "financialBranding": "Financier & Image",
+      "storageFinish": "Stockage & Finir"
+    },
+    "defaultVatRate": "Taux de TVA par défaut",
+    "customTaxEnable": "Activer Taxe/Timbre Personnalisé",
+    "uploadLogo": "Télécharger Logo",
+    "changeLogo": "Changer Logo",
+    "storageRequiredTitle": "Configuration du Stockage PDF Requise",
+    "storageRequiredMessage": "Choisissez un dossier pour stocker les PDFs générés. Vous pourrez parcourir et récupérer les fichiers plus tard.",
+    "storagePathExample": "Exemple: C:\\MaEntreprise\\Factures",
+    "setupSummary": "Résumé de la Configuration",
+    "notSet": "Non défini",
+    "selected": "Sélectionné",
+    "none": "Aucun",
+    "continue": "Continuer",
+    "completeSetup": "Terminer & Commencer",
+    "validation": {
+      "companyNameRequired": "Le nom de l'entreprise est requis",
+      "companyAddressRequired": "L'adresse de l'entreprise est requise",
+      "storagePathRequired": "Le chemin de stockage est requis",
+      "imageOnly": "Veuillez sélectionner un fichier image",
+      "logoMaxSize": "Le logo doit faire moins de 2 Mo",
+      "fileMaxSize": "Le fichier doit faire moins de 2 Mo"
+    },
+    "placeholders": {
+      "companyName": "Nom légal complet de votre entreprise",
+      "companyAddress": "Adresse, ville, code postal",
+      "fiscalId": "MF123456789",
+      "phone": "+216 XX XXX XXX",
+      "companyEmail": "contact@votreentreprise.com",
+      "baseStoragePath": "C:\\MaEntreprise\\ResourceManager\\PDFs"
+    },
+    "toast": {
+      "success": "Configuration terminée ! Bienvenue.",
+      "failed": "Échec de la configuration. Veuillez réessayer."
+    },
+    "messages": {
+      "setupErrorLog": "Erreur de configuration de l'entreprise:",
+      "submitFailed": "Échec de l'enregistrement des paramètres de l'entreprise"
+    }
+  },
+>>>>>>> copilot-worktree-2026-02-11T21-10-21
   "users": {
     "actions": {
       "addEmployee": "Add Employee",

@@ -834,6 +834,72 @@
     "tooLarge": "Too Large",
     "uploading": "Uploading"
   },
+<<<<<<< HEAD
+=======
+  "companySetup": {
+    "title": "Complete Your Profile",
+    "subtitle": "Tell us about your company to get started",
+    "companyName": "Company Name",
+    "address": "Address",
+    "matriculeFiscal": "Tax ID (Matricule Fiscal)",
+    "phone": "Phone",
+    "settingUp": "Setting up...",
+    "completeSetup": "Complete Setup",
+    "setupFailed": "Failed to create company",
+    "placeholders": {
+      "companyName": "Your Company Name",
+      "address": "Business Address",
+      "matriculeFiscal": "MF123456",
+      "phone": "+216 XX XXX XXX"
+    }
+  },
+  "companyInit": {
+    "title": "Let's Get You Set Up",
+    "subtitle": "We'll guide you through the setup process",
+    "steps": {
+      "companyInfo": "Company Info",
+      "financialBranding": "Financial & Branding",
+      "storageFinish": "Storage & Finish"
+    },
+    "defaultVatRate": "Default VAT Rate",
+    "customTaxEnable": "Enable Custom Tax/Stamp",
+    "uploadLogo": "Upload Logo",
+    "changeLogo": "Change Logo",
+    "storageRequiredTitle": "PDF Storage Setup Required",
+    "storageRequiredMessage": "Choose a folder to store generated PDFs. You'll be able to browse and recover files later.",
+    "storagePathExample": "Example: C:\\MyCompany\\Invoices",
+    "setupSummary": "Setup Summary",
+    "notSet": "Not set",
+    "selected": "Selected",
+    "none": "None",
+    "continue": "Continue",
+    "completeSetup": "Complete & Start",
+    "validation": {
+      "companyNameRequired": "Company name is required",
+      "companyAddressRequired": "Company address is required",
+      "storagePathRequired": "Storage path is required",
+      "imageOnly": "Please select an image file",
+      "logoMaxSize": "Logo must be under 2MB",
+      "fileMaxSize": "File must be under 2MB"
+    },
+    "placeholders": {
+      "companyName": "Your company's full legal name",
+      "companyAddress": "Street address, city, postal code",
+      "fiscalId": "MF123456789",
+      "phone": "+216 XX XXX XXX",
+      "companyEmail": "contact@yourcompany.com",
+      "baseStoragePath": "C:\\MyCompany\\ResourceManager\\PDFs"
+    },
+    "toast": {
+      "success": "Company setup complete! Welcome aboard.",
+      "failed": "Setup failed. Please try again."
+    },
+    "messages": {
+      "setupErrorLog": "Company setup error:",
+      "submitFailed": "Failed to save company settings"
+    }
+  },
+>>>>>>> copilot-worktree-2026-02-11T21-10-21
   "users": {
     "actions": {
       "addEmployee": "Add Employee",
