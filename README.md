@@ -39,13 +39,28 @@ cd ClientApp && npm install && npm run dev
 
 ## 📚 Documentation
 
+### Quick Start Guides
 | Document | Description | For |
 |----------|-------------|-----|
 | **[DEPLOYMENT-CHECKLIST.md](./DEPLOYMENT-CHECKLIST.md)** | ✅ Quick checklist for production deployment | DevOps, First-time deployers |
-| **[DEPLOYMENT.md](./DEPLOYMENT.md)** | 📖 Complete production deployment guide (17K) | DevOps, System Admins |
-| **[SECRETS.md](./SECRETS.md)** | 🔐 GitHub Secrets configuration guide | DevOps, CI/CD Setup |
+| **[QUICK_REFERENCE.md](./QUICK_REFERENCE.md)** | 📋 Command cheat sheet | Everyone |
+| **[PRODUCTION_DEPLOY.md](./PRODUCTION_DEPLOY.md)** | 🚀 Quick production setup (5 minutes) | DevOps |
+
+### Comprehensive Guides
+| Document | Description | For |
+|----------|-------------|-----|
+| **[DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)** | 📖 Complete deployment guide with architecture | DevOps, System Admins |
+| **[DEPLOYMENT.md](./DEPLOYMENT.md)** | 📖 VPS deployment procedures (17K) | DevOps, System Admins |
 | **[CI-CD.md](./CI-CD.md)** | 🚀 CI/CD pipeline architecture & workflows | Developers, DevOps |
+| **[SECRETS.md](./SECRETS.md)** | 🔐 GitHub Secrets configuration guide | DevOps, CI/CD Setup |
 | **[SETUP_GUIDE.md](./SETUP_GUIDE.md)** | 💻 Local development setup | Developers |
+
+### Reference Materials
+| Document | Description | For |
+|----------|-------------|-----|
+| **[ARCHITECTURE_DIAGRAM.txt](./ARCHITECTURE_DIAGRAM.txt)** | 🏗️ Visual system architecture diagrams | Everyone |
+| **[WORKFLOW-DIAGRAM.txt](./WORKFLOW-DIAGRAM.txt)** | 🔄 CI/CD workflow visualizations | DevOps |
+| **[IMPLEMENTATION_SUMMARY.md](./IMPLEMENTATION_SUMMARY.md)** | 📊 Configuration summary | Everyone |
 
 ---
 
