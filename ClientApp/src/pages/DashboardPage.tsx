@@ -127,7 +127,7 @@ export default function DashboardPage() {
             }
             const [dashRes, expensesRes, revenueRes] = await Promise.allSettled([
                 api.get(`/Dashboard/stats${queryParam}`),
-                api.get('/Expenses/summary'),
+                api.get(`/Expenses/summary?year=${yearParam}`),
                 api.get(`/Dashboard/revenue-summary${queryParam}`)
             ]);
 

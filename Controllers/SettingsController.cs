@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json.Serialization;
 using ResourceManager.Data;
 using ResourceManager.Models;
 using ResourceManager.Services;
@@ -876,7 +877,9 @@ namespace ResourceManager.Controllers
         public decimal? CustomTaxAmount { get; set; }
         public string? PdfFooterText { get; set; }
         public bool? ShowCompanyLogo { get; set; }
+        [JsonPropertyName("pdfSignatureText")]
         public string? PdfSignatureText { get; set; }
+        [JsonPropertyName("pdfSignerPosition")]
         public string? PdfSignerPosition { get; set; }
         public string? InvoiceLanguage { get; set; }
         

@@ -352,25 +352,32 @@ namespace ResourceManager.Controllers
                 .ToList();
 
             // Top clients by PAID amount (payment-based + historical) — filtered by selected year
+            decimal NormalizeAmount(decimal amount, string currency) =>
+                isMixedMode ? ConvertAmount(amount, currency) : amount;
+
             var invoiceClientRevenue = revenueInvoices
                 .Where(i => i.ClientId.HasValue)
                 .GroupBy(i => i.ClientId!.Value)
                 .Select(g => {
+                    var totalAmount = g.Sum(i => NormalizeAmount(i.TotalAmount ?? 0, i.Currency ?? defaultCurrency));
                     return new {
                         clientId = g.Key,
                         clientName = g.First().Client?.Name ?? "Unknown",
                         totalInvoices = g.Count(),
-                        totalAmount = g.Sum(i => i.TotalAmount ?? 0),
-                        paidAmount = g.Sum(i => i.TotalAmount ?? 0)
+                        totalAmount,
+                        paidAmount = totalAmount
                     };
                 })
                 .ToDictionary(c => c.clientId);
 
             // Merge historical revenue into top clients
-            var historicalClientRevenue = yearHistoricalRevenues
+            var historicalClientRevenue = historicalRevenueForChart
                 .Where(h => h.ClientId.HasValue)
                 .GroupBy(h => h.ClientId!.Value)
-                .ToDictionary(g => g.Key, g => new { paidAmount = g.Sum(h => h.AmountPaid), clientName = g.First().Client?.Name ?? g.First().ClientName });
+                .ToDictionary(g => g.Key, g => new {
+                    paidAmount = g.Sum(h => NormalizeAmount(h.AmountPaid, h.Currency ?? defaultCurrency)),
+                    clientName = g.First().Client?.Name ?? g.First().ClientName ?? "Unknown"
+                });
 
             var mergedClientIds = invoiceClientRevenue.Keys.Union(historicalClientRevenue.Keys).ToHashSet();
             var topClients = mergedClientIds
