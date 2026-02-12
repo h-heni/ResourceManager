@@ -1,0 +1,312 @@
+================================================================================
+ResourceManager - Production Architecture (2GB VPS)
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              INTERNET / USERS                                │
+└──────────────────────────────────┬──────────────────────────────────────────┘
+                                   │
+                                   │ Port 80 (HTTP)
+                                   ▼
+                    ┌──────────────────────────────┐
+                    │      HOST MACHINE (VPS)      │
+                    │      2GB RAM, 2 vCPU         │
+                    │      Ubuntu 22.04 LTS        │
+                    └──────────────┬───────────────┘
+                                   │
+                                   │ Docker Engine
+                                   │
+        ╔══════════════════════════╩═══════════════════════════╗
+        ║              DOCKER COMPOSE STACK                     ║
+        ║         (docker-compose.prod.yml)                     ║
+        ╚═══════════════════════════════════════════════════════╝
+                                   │
+        ┌──────────────────────────┴──────────────────────────┐
+        │                                                       │
+        ▼                                                       ▼
+╔═══════════════════════╗                        ╔═══════════════════════╗
+║  FRONTEND NETWORK     ║                        ║  BACKEND NETWORK      ║
+║  172.21.0.0/24        ║                        ║  172.20.0.0/24        ║
+╚═══════════════════════╝                        ╚═══════════════════════╝
+        │                                                       │
+        │                                                       │
+        ▼                                                       ▼
+
+┌─────────────────────┐                          ┌─────────────────────┐
+│   rm-web            │                          │   rm-postgres       │
+│   (Nginx + React)   │                          │   (PostgreSQL 16)   │
+├─────────────────────┤                          ├─────────────────────┤
+│ Image: nginx:alpine │                          │ Image: postgres:16  │
+│ Port: 80:80         │                          │ Port: 5432 (int)    │
+│ Memory: 128-384MB   │                          │ Memory: 384-768MB   │
+│ CPU: 0.1-0.5 cores  │                          │ CPU: 0.25-1.0 cores │
+│                     │                          │                     │
+│ Functions:          │                          │ Functions:          │
+│ • Serve React app   │                          │ • Data storage      │
+│ • Reverse proxy     │                          │ • Query processing  │
+│ • Static caching    │                          │ • ACID compliance   │
+│ • SSL termination   │                          │ • Multi-tenancy     │
+│ • Gzip compression  │                          │                     │
+└──────────┬──────────┘                          └──────────┬──────────┘
+           │                                                 │
+           │ /api/* → http://api:8080                        │
+           │                                                 │
+           │                                                 │
+           └─────────────────┬──────────────────────────────┘
+                             │
+                             ▼
+                  ┌────────────────────────┐
+                  │      rm-api            │
+                  │      (.NET 8 API)      │
+                  ├────────────────────────┤
+                  │ Image: custom build    │
+                  │ Port: 5000:8080        │
+                  │ Memory: 512-1024MB     │
+                  │ CPU: 0.5-1.5 cores     │
+                  │                        │
+                  │ Functions:             │
+                  │ • REST API endpoints   │
+                  │ • Business logic       │
+                  │ • JWT authentication   │
+                  │ • PDF generation       │
+                  │ • Email sending        │
+                  │ • Multi-tenant logic   │
+                  └────────┬───────────────┘
+                           │
+                           │ Connected to
+                           │ both networks
+                           │
+
+
+================================================================================
+VOLUMES (Persistent Storage)
+================================================================================
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    /var/lib/docker/volumes/                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  ┌──────────────────────────────┐         ┌────────────────────────────┐   │
+│  │  postgres_data               │         │  api-logs                   │   │
+│  │  (PostgreSQL database)       │         │  (Application logs)         │   │
+│  ├──────────────────────────────┤         ├────────────────────────────┤   │
+│  │  • Critical - must backup!   │         │  • Max 100MB (rotated)     │   │
+│  │  • Contains all app data     │         │  • Can be deleted safely   │   │
+│  │  • Size grows over time      │         │  • Used for debugging      │   │
+│  └──────────────────────────────┘         └────────────────────────────┘   │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+
+================================================================================
+RESOURCE ALLOCATION (Total 2GB RAM)
+================================================================================
+
+    0MB                                                                    2048MB
+     ├────────┼────────┼────────┼────────┼────────┼────────┼────────┼────────┤
+     │        │        │        │        │        │        │        │        │
+     │ ◄──────┴─PostgreSQL────► │        │                 │        │        │
+     │   384MB reserved         │ burst  │                 │        │        │
+     │                          │ 768MB  │                 │        │        │
+     │                                   │                 │        │        │
+     │                ◄─────────┴──.NET API─────────────►  │        │        │
+     │                          512MB reserved            │ burst  │        │
+     │                                                    │ 1024MB │        │
+     │                                                                       │
+     │  ◄─Nginx/React─►                                                     │
+     │  128MB reserved │                                                     │
+     │                │burst 384MB                                          │
+     │                                                                       │
+     │                                              ◄──System/Kernel──────► │
+     │                                                ~464MB remaining       │
+     └───────────────────────────────────────────────────────────────────────┘
+
+    Legend:
+    ├──┤  Reserved (guaranteed)
+    ├──►  Hard limit (OOM if exceeded)
+
+
+================================================================================
+NETWORK FLOW (Request Path)
+================================================================================
+
+    User Request
+         │
+         ▼
+    ┌─────────────┐
+    │   Browser   │
+    └──────┬──────┘
+           │ HTTP GET https://yourdomain.com/invoices
+           │
+           ▼
+    ┌─────────────┐
+    │ Port 80:80  │
+    └──────┬──────┘
+           │
+           ▼
+    ╔══════════════════╗
+    ║   rm-web         ║  ← Frontend Network (172.21.0.0/24)
+    ║   (Nginx)        ║
+    ╚══════┬═══════════╝
+           │
+           │ /api/invoices → http://rm-api:8080/api/invoices
+           │
+           ▼
+    ╔══════════════════╗
+    ║   rm-api         ║  ← Both Networks
+    ║   (.NET)         ║
+    ╚══════┬═══════════╝
+           │
+           │ SQL Query
+           │ SELECT * FROM Invoices WHERE CompanyId = ...
+           │
+           ▼
+    ╔══════════════════╗
+    ║   rm-postgres    ║  ← Backend Network (172.20.0.0/24)
+    ║   (PostgreSQL)   ║
+    ╚══════┬═══════════╝
+           │
+           │ Result Set
+           │
+           ▼
+    ╔══════════════════╗
+    ║   rm-api         ║
+    ║   JSON Response  ║
+    ╚══════┬═══════════╝
+           │
+           │ {"data": [...]}
+           │
+           ▼
+    ╔══════════════════╗
+    ║   rm-web         ║
+    ║   (proxy pass)   ║
+    ╚══════┬═══════════╝
+           │
+           │ HTTP 200 + JSON
+           │
+           ▼
+    ┌─────────────┐
+    │   Browser   │  → Renders React UI
+    └─────────────┘
+
+
+================================================================================
+SECURITY LAYERS
+================================================================================
+
+    Layer 1: Firewall (UFW)
+    ┌─────────────────────────────────────────┐
+    │  Ports: 22 (SSH), 80 (HTTP), 443 (HTTPS) │
+    │  Block all other incoming traffic        │
+    └─────────────────┬───────────────────────┘
+                      │
+    Layer 2: Network Isolation
+    ┌─────────────────────────────────────────┐
+    │  Frontend Network ≠ Backend Network      │
+    │  Web cannot directly access Database     │
+    └─────────────────┬───────────────────────┘
+                      │
+    Layer 3: Container Security
+    ┌─────────────────────────────────────────┐
+    │  • Non-root users                        │
+    │  • Capability dropping (CAP_DROP ALL)    │
+    │  • no-new-privileges flag                │
+    │  • Read-only root filesystem (where safe)│
+    └─────────────────┬───────────────────────┘
+                      │
+    Layer 4: Application Security
+    ┌─────────────────────────────────────────┐
+    │  • JWT authentication                    │
+    │  • Multi-tenant data isolation           │
+    │  • CORS restrictions                     │
+    │  • Input validation                      │
+    └─────────────────────────────────────────┘
+
+
+================================================================================
+DEPLOYMENT WORKFLOW
+================================================================================
+
+    Developer                     VPS Server
+    ┌─────────┐                  ┌──────────────────────┐
+    │  Local  │                  │   Docker Host        │
+    │  Machine│                  │   Ubuntu 22.04       │
+    └────┬────┘                  └──────────┬───────────┘
+         │                                  │
+         │ 1. git push                      │
+         │ ──────────────────►              │
+         │                                  │
+         │                       2. git pull│
+         │                       ◄──────────┤
+         │                                  │
+         │                    3. Build images
+         │                       docker compose build
+         │                                  │
+         │                    4. Start services
+         │                       docker compose up -d
+         │                                  │
+         │                       ┌──────────▼───────────┐
+         │                       │  rm-web              │
+         │                       │  rm-api              │
+         │                       │  rm-postgres         │
+         │                       └──────────────────────┘
+         │                                  │
+         │ 5. Verify deployment             │
+         │ curl http://server/health        │
+         │ ◄────────────────────────────────┤
+         │                                  │
+
+
+================================================================================
+BACKUP STRATEGY
+================================================================================
+
+    Daily (Automated via Cron)
+    ┌─────────────────────────────────────────┐
+    │  2:00 AM - Volume backup (tar.gz)       │
+    │  2:15 AM - SQL dump (pg_dump)           │
+    │  2:30 AM - Upload to S3 / external      │
+    └─────────────────────────────────────────┘
+
+    Weekly (Automated)
+    ┌─────────────────────────────────────────┐
+    │  Sunday 3:00 AM - Full system snapshot  │
+    │  Retention: 4 weeks                     │
+    └─────────────────────────────────────────┘
+
+    Retention Policy
+    ┌─────────────────────────────────────────┐
+    │  Daily backups:  Last 7 days            │
+    │  Weekly backups: Last 4 weeks           │
+    │  Monthly backups: Last 6 months         │
+    └─────────────────────────────────────────┘
+
+
+================================================================================
+MONITORING DASHBOARD (docker stats)
+================================================================================
+
+    CONTAINER      CPU %   MEM USAGE / LIMIT    MEM %   NET I/O
+    ┌────────────────────────────────────────────────────────────┐
+    │ rm-postgres   2.5%    256MB / 768MB       33%    1.2/2.1MB │
+    │ rm-api        15.3%   512MB / 1024MB      50%    3.4/1.8MB │
+    │ rm-web        0.8%    64MB / 384MB        17%    5.1/890KB │
+    └────────────────────────────────────────────────────────────┘
+
+    Health Status: All services HEALTHY ✓
+
+
+================================================================================
+SCALING PATH
+================================================================================
+
+    Current (2GB VPS)          →    4GB VPS             →    8GB+ VPS
+    ┌──────────────────┐            ┌──────────────────┐    ┌──────────────────┐
+    │ PostgreSQL: 768MB│            │ PostgreSQL: 1.5GB│    │ PostgreSQL: 3GB  │
+    │ API: 1024MB      │            │ API: 2GB         │    │ API: 3GB         │
+    │ Web: 384MB       │            │ Web: 512MB       │    │ Web: 512MB       │
+    │                  │            │ + Redis: 256MB   │    │ + Redis: 512MB   │
+    │                  │            │                  │    │ + Multiple APIs  │
+    └──────────────────┘            └──────────────────┘    └──────────────────┘
+         Single instance               Add caching            Load balancing
+
