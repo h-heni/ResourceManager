@@ -272,7 +272,7 @@ export default function DeliveryNoteCreatePage() {
 
     const updateItem = (index: number, field: keyof DeliveryItem, value: string | number | boolean) => {
         const newItems = [...items];
-        (newItems[index] as Record<string, string | number | boolean>)[field] = value;
+        (newItems[index] as unknown as Record<string, string | number | boolean>)[field] = value;
         setItems(newItems);
     };
 
