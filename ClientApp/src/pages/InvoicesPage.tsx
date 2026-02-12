@@ -64,6 +64,10 @@ export default function InvoicesPage() {
     
     // Archive filter state
     const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
+    const [availableYears, setAvailableYears] = useState<number[]>([]);
+    const [selectedYear, setSelectedYear] = useState<number | null>(null);
+    const [archivedInvoices, setArchivedInvoices] = useState<any[]>([]);
+    const [loadingArchive, setLoadingArchive] = useState(false);
     
     const navigate = useNavigate();
     const { user } = useAuth();
@@ -72,6 +76,7 @@ export default function InvoicesPage() {
 
     useEffect(() => {
         fetchInvoices();
+        fetchAvailableYears();
     }, []);
 
     // Refetch when a payment is confirmed/extended via NotificationBell
@@ -80,6 +85,13 @@ export default function InvoicesPage() {
         window.addEventListener('payment-status-changed', handler);
         return () => window.removeEventListener('payment-status-changed', handler);
     }, []);
+
+    // Fetch archived invoices when year changes or switching to archived view
+    useEffect(() => {
+        if (viewMode === 'archived' && selectedYear) {
+            fetchArchivedInvoices(selectedYear);
+        }
+    }, [viewMode, selectedYear]);
 
     const fetchInvoices = async () => {
         try {
@@ -90,6 +102,32 @@ export default function InvoicesPage() {
             console.error("Error fetching invoices", error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const fetchAvailableYears = async () => {
+        try {
+            const res = await api.get('/Archive/years');
+            const years = res.data.years || [];
+            setAvailableYears(years);
+            // Set default to latest year
+            if (years.length > 0 && res.data.latestYear) {
+                setSelectedYear(res.data.latestYear);
+            }
+        } catch (error) {
+            console.error("Error fetching available years", error);
+        }
+    };
+
+    const fetchArchivedInvoices = async (year: number) => {
+        setLoadingArchive(true);
+        try {
+            const res = await api.get(`/Archive/invoices?year=${year}`);
+            setArchivedInvoices(res.data.data || []);
+        } catch (error) {
+            console.error("Error fetching archived invoices", error);
+        } finally {
+            setLoadingArchive(false);
         }
     };
 
@@ -255,21 +293,23 @@ export default function InvoicesPage() {
 
 
 
-    const filteredInvoices = (invoices || []).filter(i => {
-        const numMatch = i.number?.toString().includes(search) ?? false;
-        const clientMatch = i.clientName?.toLowerCase().includes(search.toLowerCase()) ?? false;
-        const searchMatch = numMatch || clientMatch;
-        
-        // Archive filter: active shows non-Paid, archived shows Paid
-        if (viewMode === 'active') {
+    const filteredInvoices = viewMode === 'archived' 
+        ? archivedInvoices.filter(i => {
+            const numMatch = i.number?.toString().includes(search) ?? false;
+            const clientMatch = i.clientName?.toLowerCase().includes(search.toLowerCase()) ?? false;
+            return numMatch || clientMatch;
+          })
+        : (invoices || []).filter(i => {
+            const numMatch = i.number?.toString().includes(search) ?? false;
+            const clientMatch = i.clientName?.toLowerCase().includes(search.toLowerCase()) ?? false;
+            const searchMatch = numMatch || clientMatch;
+            
+            // Active shows non-Paid invoices
             return searchMatch && i.status !== 'Paid';
-        } else {
-            return searchMatch && i.status === 'Paid';
-        }
-    });
+          });
     
     const activeCount = (invoices || []).filter(i => i.status !== 'Paid').length;
-    const archivedCount = (invoices || []).filter(i => i.status === 'Paid').length;
+    const archivedCount = viewMode === 'archived' ? archivedInvoices.length : (invoices || []).filter(i => i.status === 'Paid').length;
 
     return (
         <div className="space-y-6">
@@ -299,7 +339,7 @@ export default function InvoicesPage() {
             </div>
 
             {/* Active / Archived Toggle */}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                 <div className="flex p-1 bg-gray-100 rounded-xl">
                     <button
                         onClick={() => setViewMode('active')}
@@ -324,9 +364,30 @@ export default function InvoicesPage() {
                         {t('invoice.messages.archived')} ({archivedCount})
                     </button>
                 </div>
+
+                {/* Year filter dropdown - only show when archived view is active */}
+                {viewMode === 'archived' && availableYears.length > 0 && (
+                    <div className="flex items-center gap-2">
+                        <label htmlFor="year-select" className="text-sm font-medium text-gray-600">
+                            {t('common.year', 'Year')}:
+                        </label>
+                        <select
+                            id="year-select"
+                            value={selectedYear || ''}
+                            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                            className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
+                        >
+                            {availableYears.map(year => (
+                                <option key={year} value={year}>
+                                    {year}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                )}
             </div>
 
-            {loading ? (
+            {(loading || (viewMode === 'archived' && loadingArchive)) ? (
                 <div className="text-center py-20 text-gray-500">{t('common.loadingData')}</div>
             ) : (
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -362,11 +423,17 @@ export default function InvoicesPage() {
                                         <td className="p-4 text-amber-600 font-semibold text-right">
                                             {invoice.remainingAmount > 0 ? formatCurrency(invoice.remainingAmount, invoice.currencySymbol || DEFAULT_CURRENCY) : '—'}
                                         </td>
-                                        <td className="p-4">
+                                         <td className="p-4">
                                             <div className="flex flex-col gap-1">
                                                 <span className={`px-3 py-1 text-xs font-semibold rounded-full inline-block w-fit ${getInvoiceStatusColor(invoice.status)}`}>
                                                     {invoice.status}
                                                 </span>
+                                                {/* Show source badge for historical data */}
+                                                {viewMode === 'archived' && invoice.source === 'historical' && (
+                                                    <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full inline-block w-fit">
+                                                        {t('common.imported', 'Imported')}
+                                                    </span>
+                                                )}
                                                 {/* Payment History Indicators */}
                                                 {invoice.payments && invoice.payments.length > 0 && (
                                                     <div className="flex flex-wrap gap-1 mt-1">
@@ -384,39 +451,73 @@ export default function InvoicesPage() {
                                         </td>
                                         <td className="p-4 text-right">
                                             <div className="flex items-center justify-end space-x-1">
-                                                {/* Add Payment - Everyone can add payments if not fully paid */}
-                                                {invoice.status !== 'Paid' && (
-                                                    <button
-                                                        onClick={() => openPaymentModal(invoice)}
-                                                        className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                                                        title={t('invoice.addPayment')}
-                                                    >
-                                                        <DollarSign size={18} />
-                                                    </button>
+                                                {/* Don't show action buttons for historical archived items */}
+                                                {!(viewMode === 'archived' && invoice.source === 'historical') && (
+                                                    <>
+                                                        {/* Add Payment - Everyone can add payments if not fully paid */}
+                                                        {invoice.status !== 'Paid' && (
+                                                            <button
+                                                                onClick={() => openPaymentModal(invoice)}
+                                                                className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                                                title={t('invoice.addPayment')}
+                                                            >
+                                                                <DollarSign size={18} />
+                                                            </button>
+                                                        )}
+                                                        {/* Edit Invoice - Only if not locked/paid/partially paid (payments registered) */}
+                                                        {isManager && !invoice.isLocked && invoice.status !== 'Paid' && invoice.status !== 'PartiallyPaid' && (
+                                                            <button
+                                                                onClick={() => navigate(`/invoices/edit/${invoice.id}`)}
+                                                                className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                                                                title={t('common.edit')}
+                                                            >
+                                                                <Edit2 size={18} />
+                                                            </button>
+                                                        )}
+                                                        {/* Send Email */}
+                                                        <button
+                                                            onClick={() => openEmailModal(invoice)}
+                                                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                            title={t('email.sendInvoice')}
+                                                        >
+                                                            <Mail size={18} />
+                                                        </button>
+                                                        {/* View Details (Eye icon now shows detail view, not PDF) */}
+                                                        <button
+                                                            onClick={() => handleViewDetails(invoice.id)}
+                                                            className="p-2 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
+                                                            title={t('invoice.viewDetails')}
+                                                        >
+                                                            <Eye size={18} />
+                                                        </button>
+                                                        {/* Download PDF */}
+                                                        <button
+                                                            onClick={() => handleDownloadPdf(invoice.id)}
+                                                            className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                                            title={t('invoice.downloadPdf')}
+                                                        >
+                                                            <Download size={18} />
+                                                        </button>
+                                                        {/* Delete button - Manager only, not locked, not paid */}
+                                                        {isManager && !invoice.isLocked && invoice.status !== 'Paid' && (
+                                                            <button
+                                                                onClick={() => handleDelete(invoice.id)}
+                                                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                                title={t('common.delete')}
+                                                            >
+                                                                <Trash2 size={18} />
+                                                            </button>
+                                                        )}
+                                                    </>
                                                 )}
-                                                {/* Edit Invoice - Only if not locked/paid/partially paid (payments registered) */}
-                                                {isManager && !invoice.isLocked && invoice.status !== 'Paid' && invoice.status !== 'PartiallyPaid' && (
-                                                    <button
-                                                        onClick={() => navigate(`/invoices/edit/${invoice.id}`)}
-                                                        className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                                                        title={t('common.edit')}
-                                                    >
-                                                        <Edit2 size={18} />
-                                                    </button>
+                                                {/* For historical items, show a view-only indicator */}
+                                                {viewMode === 'archived' && invoice.source === 'historical' && (
+                                                    <span className="text-xs text-gray-400 italic">
+                                                        {t('common.viewOnly', 'View only')}
+                                                    </span>
                                                 )}
-                                                {/* Send Email */}
-                                                <button
-                                                    onClick={() => openEmailModal(invoice)}
-                                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                    title={t('email.sendInvoice')}
-                                                >
-                                                    <Mail size={18} />
-                                                </button>
-                                                {/* View Details (Eye icon now shows detail view, not PDF) */}
-                                                <button
-                                                    onClick={() => handleViewDetails(invoice.id)}
-                                                    className="p-2 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
-                                                    title={t('invoice.viewDetails')}
+                                            </div>
+                                        </td>
                                                 >
                                                     <Eye size={18} />
                                                 </button>
