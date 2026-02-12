@@ -377,12 +377,20 @@ namespace ResourceManager.Services
             var fromLabel = lang switch { "fr" => "De", "de" => "Von", "ar" => "من", _ => "From" };
             var clientLabel = lang switch { "fr" => "Client", "de" => "Kunde", "ar" => "العميل", _ => "Client" };
 
+            var unknownClientName = lang switch { "fr" => "Client inconnu", "de" => "Unbekannter Kunde", "ar" => "عميل غير معروف", _ => "Unknown Client" };
             var owner = new Client
             {
                 Name = Settings.CompanyName,
                 Address = Settings.CompanyAddress,
                 MatriculeFiscal = Settings.CompanyTaxId,
                 Phone = Settings.CompanyPhone
+            };
+            var client = Model.Client ?? new Client
+            {
+                Name = unknownClientName,
+                Address = string.Empty,
+                MatriculeFiscal = string.Empty,
+                Phone = string.Empty
             };
             container.PaddingVertical(20).Column(column =>
             {
@@ -392,7 +400,7 @@ namespace ResourceManager.Services
                 {
                     row.RelativeItem().Component(new AddressComponent(fromLabel, owner));
                     row.ConstantItem(50);
-                    row.RelativeItem().Component(new AddressComponent(clientLabel, Model.Client!));
+                    row.RelativeItem().Component(new AddressComponent(clientLabel, client));
                 });
 
                 column.Item().Element(ComposeTable);

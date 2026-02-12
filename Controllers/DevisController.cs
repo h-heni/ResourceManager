@@ -322,7 +322,16 @@ namespace ResourceManager.Controllers
             }
 
             var document = new Document<Devis>(devis, pdfSettings);
-            var pdfData = document.GeneratePdf();
+            byte[] pdfData;
+            try
+            {
+                pdfData = document.GeneratePdf();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "PDF generation failed for quote {DevisId}", devis.Id);
+                return StatusCode(500, new { message = "Failed to generate PDF" });
+            }
 
             // Auto-register PDF in local storage
             try

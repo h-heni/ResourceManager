@@ -468,14 +468,22 @@ namespace ResourceManager.Controllers
             {
                 if (settings.FileSystemLanguageLocked)
                 {
-                    _logger.LogWarning("Attempt to change locked FileSystemLanguage for company {CompanyId}", user.CompanyId);
-                    return BadRequest(new { message = "File-system language is locked and cannot be changed." });
+                    if (!string.Equals(settings.FileSystemLanguage, dto.FileSystemLanguage, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _logger.LogWarning("Attempt to change locked FileSystemLanguage for company {CompanyId}", user.CompanyId);
+                        return BadRequest(new { message = "File-system language is locked and cannot be changed." });
+                    }
                 }
-                settings.FileSystemLanguage = dto.FileSystemLanguage;
-                settings.FileSystemLanguageLocked = true; // Lock immediately upon first set
+                else
+                {
+                    settings.FileSystemLanguage = dto.FileSystemLanguage;
+                    settings.FileSystemLanguageLocked = true; // Lock immediately upon first set
+                }
             }
             
             settings.UpdatedAt = DateTime.UtcNow;
+
+            _logger.LogInformation("Saving settings for company {CompanyId}", user.CompanyId);
 
             await _context.SaveChangesAsync();
 

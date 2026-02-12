@@ -644,7 +644,16 @@ namespace ResourceManager.Controllers
             }
 
             var document = new Document<Invoice>(invoice, pdfSettings);
-            var pdfData = document.GeneratePdf();
+            byte[] pdfData;
+            try
+            {
+                pdfData = document.GeneratePdf();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "PDF generation failed for invoice {InvoiceId}", invoice.Id);
+                return StatusCode(500, new { message = "Failed to generate PDF" });
+            }
 
             // Auto-register PDF in local storage
             try

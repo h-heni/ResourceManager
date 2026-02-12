@@ -83,6 +83,12 @@ interface ExpenseSummary {
     count: number;
 }
 
+interface RevenueSummary {
+    totalAllTime: number;
+    selectedYearTotal: number;
+    revenueByYear: { year: number; total: number }[];
+}
+
 export default function DashboardPage() {
     const { t } = useTranslation();
     const navigate = useNavigate();
@@ -90,6 +96,7 @@ export default function DashboardPage() {
 
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [expenseSummary, setExpenseSummary] = useState<ExpenseSummary | null>(null);
+    const [revenueSummary, setRevenueSummary] = useState<RevenueSummary | null>(null);
     const [loading, setLoading] = useState(true);
     const [activeCurrency, setActiveCurrency] = useState<string | null>(null);
     const [recoveryStatus, setRecoveryStatus] = useState<{ type: 'running' | 'success' | 'warning' | 'error'; message: string } | null>(null);
@@ -118,9 +125,10 @@ export default function DashboardPage() {
             } else {
                 queryParam = `?year=${yearParam}`;
             }
-            const [dashRes, expensesRes] = await Promise.allSettled([
+            const [dashRes, expensesRes, revenueRes] = await Promise.allSettled([
                 api.get(`/Dashboard/stats${queryParam}`),
-                api.get('/Expenses/summary')
+                api.get('/Expenses/summary'),
+                api.get(`/Dashboard/revenue-summary${queryParam}`)
             ]);
 
             if (dashRes.status === 'fulfilled') {
@@ -166,6 +174,15 @@ export default function DashboardPage() {
                     totalThisYear: ed.totalThisYear ?? 0,
                     byCategory: (ed.byCategory || []).map((c: { category: string; total: number; count: number }) => ({ category: c.category, total: c.total, count: c.count })),
                     count: ed.count ?? 0,
+                });
+            }
+
+            if (revenueRes.status === 'fulfilled') {
+                const rd = revenueRes.value.data;
+                setRevenueSummary({
+                    totalAllTime: rd.totalAllTime ?? 0,
+                    selectedYearTotal: rd.selectedYearTotal ?? 0,
+                    revenueByYear: rd.revenueByYear || [],
                 });
             }
         } catch (error) {
@@ -342,7 +359,9 @@ export default function DashboardPage() {
         t('months.oct', 'Oct'), t('months.nov', 'Nov'), t('months.dec', 'Dec')
     ], [t]);
 
-    const netResult = (stats?.totalRevenue ?? 0) - (stats?.totalExpenses ?? 0);
+    const selectedYearRevenue = revenueSummary?.selectedYearTotal ?? stats?.totalRevenue ?? 0;
+    const allTimeRevenue = revenueSummary?.totalAllTime ?? 0;
+    const netResult = selectedYearRevenue - (stats?.totalExpenses ?? 0);
 
     /* Recharts chart data */
     const revenueExpenseChartData = useMemo(() => {
@@ -360,7 +379,8 @@ export default function DashboardPage() {
     const statCards = [
         {
             title: t('dashboard.totalRevenue'),
-            value: stats ? fmt(stats.totalRevenue) : '-',
+            value: stats ? fmt(selectedYearRevenue) : '-',
+            subtitle: stats ? `${t('dashboard.allTime', 'All-time')}: ${fmt(allTimeRevenue)}` : undefined,
             icon: DollarSign,
             iconColor: CHART_COLORS.net,
         },
@@ -627,7 +647,7 @@ export default function DashboardPage() {
                     <h3 className="text-sm font-semibold text-gray-900 mb-3">{t('dashboard.salesOverview', 'Sales')}</h3>
                     <div className="grid grid-cols-3 gap-3">
                         <div className="text-center">
-                            <p className="text-lg font-bold text-gray-900">{formatNumber(stats?.totalRevenue ?? 0)}</p>
+                            <p className="text-lg font-bold text-gray-900">{formatNumber(selectedYearRevenue)}</p>
                             <p className="text-xs text-gray-500 mt-0.5">{cur} {t('dashboard.totalRevenueLabel', 'Revenue')}</p>
                         </div>
                         <div className="text-center">
@@ -643,6 +663,19 @@ export default function DashboardPage() {
                         <span>{t('dashboard.paidLabel', 'Paid')}: {stats?.paidInvoiceCount ?? 0}/{stats?.totalInvoiceCount ?? 0}</span>
                         <span>{t('dashboard.thisMonthLabel', 'This month')}: {fmt(stats?.thisMonthRevenue ?? 0)}</span>
                     </div>
+                    {revenueSummary?.revenueByYear?.length ? (
+                        <div className="mt-3 border-t border-gray-50 pt-2">
+                            <p className="text-[11px] text-gray-400 mb-2">{t('dashboard.revenueByYear', 'Revenue by year')}</p>
+                            <div className="flex flex-wrap gap-2">
+                                {revenueSummary.revenueByYear.map((entry) => (
+                                    <div key={entry.year} className="flex items-center gap-2 px-2 py-1 rounded-md bg-gray-50 border border-gray-100 text-[11px] text-gray-600">
+                                        <span className="font-medium text-gray-700">{entry.year}</span>
+                                        <span>{fmt(entry.total)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
                 </div>
 
                 {/* Purchases */}
@@ -785,8 +818,8 @@ export default function DashboardPage() {
                     {stats?.topClients && stats.topClients.length > 0 ? (
                         <div className="space-y-3">
                             {stats.topClients.map((client, idx) => {
-                                const maxAmount = stats.topClients[0]?.totalAmount || 1;
-                                const pct = Math.round((client.totalAmount / maxAmount) * 100);
+                                const totalRevenueForYear = selectedYearRevenue || 1;
+                                const pct = Math.round((client.totalAmount / totalRevenueForYear) * 100);
                                 return (
                                     <div key={client.clientId}>
                                         <div className="flex items-center justify-between text-sm mb-1">
@@ -809,7 +842,7 @@ export default function DashboardPage() {
                                         </div>
                                         <div className="ml-7 flex justify-between text-[11px] text-gray-400 mt-0.5">
                                             <span>{client.totalInvoices} {t('dashboard.invoicesLabel', 'invoices')}</span>
-                                            <span>{fmt(client.paidAmount)} {t('dashboard.paidLabel', 'paid')}</span>
+                                            <span>{fmt(client.totalAmount)} {t('dashboard.revenueLabel', 'revenue')}</span>
                                         </div>
                                     </div>
                                 );
