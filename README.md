@@ -72,14 +72,14 @@ cd ClientApp && npm install && npm run dev
 - Docker & Docker Compose
 - Nginx (reverse proxy)
 - GitHub Actions (CI/CD)
-- Docker Hub (image registry)
+- GitHub Container Registry (GHCR)
 
 ### Project Structure
 
 ```
 ResourceManager/
 ├── .github/workflows/        # CI/CD pipelines
-│   ├── ci.yml               # Build, test, push to Docker Hub
+│   ├── ci.yml               # Build, test, push to GHCR
 │   └── deploy.yml           # Zero-downtime VPS deployment
 ├── Controllers/             # API endpoints
 ├── Data/                    # EF Core context & migrations
@@ -136,8 +136,10 @@ Developer Push to GitHub
            │
            ▼
     ┌─────────────┐
-    │Push to Docker│
-    │     Hub     │
+    │Push to GHCR │
+    │  (GitHub    │
+    │  Container  │
+    │  Registry)  │
     └──────┬──────┘
            │
            ▼
@@ -188,8 +190,8 @@ POSTGRES_PASSWORD=your-strong-password
 JWT_KEY=your-secure-random-key-at-least-32-chars
 
 # Docker Images (updated by CI/CD)
-API_IMAGE=your-dockerhub-username/resourcemanager-api:latest
-WEB_IMAGE=your-dockerhub-username/resourcemanager-web:latest
+API_IMAGE=ghcr.io/h-heni/resourcemanager-api:latest
+WEB_IMAGE=ghcr.io/h-heni/resourcemanager-web:latest
 ```
 
 ### GitHub Secrets
@@ -198,11 +200,12 @@ Required for CI/CD deployment:
 
 | Secret | Description |
 |--------|-------------|
-| `DOCKERHUB_USERNAME` | Your Docker Hub username |
-| `DOCKERHUB_TOKEN` | Docker Hub access token |
 | `VPS_HOST` | VPS IP address or domain |
 | `VPS_USER` | SSH username (e.g., deploy) |
 | `VPS_SSH_KEY` | Private SSH key for authentication |
+| `GHCR_TOKEN` | GitHub Personal Access Token with `read:packages` scope (for VPS) |
+
+**Note**: `GITHUB_TOKEN` is automatically available for pushing images to GHCR.
 
 **👉 See [SECRETS.md](./SECRETS.md) for detailed setup instructions**
 
@@ -446,8 +449,8 @@ docker stats --no-stream
 
 **Images not pulling:**
 ```bash
-docker login docker.io
-docker pull your-username/resourcemanager-api:latest
+docker login ghcr.io
+docker pull ghcr.io/h-heni/resourcemanager-api:latest
 ```
 
 **👉 See [DEPLOYMENT.md](./DEPLOYMENT.md) for comprehensive troubleshooting**

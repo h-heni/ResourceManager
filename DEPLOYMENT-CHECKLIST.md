@@ -20,18 +20,17 @@ Quick checklist for deploying ResourceManager to production. Follow this after s
 - [ ] SSH connection tested successfully
 - [ ] No password required for SSH login
 
-### 3. Docker Hub Setup
-- [ ] Docker Hub account created
-- [ ] Access token generated (Read & Write permissions)
+### 3. GitHub Container Registry Setup
+- [ ] GitHub Personal Access Token generated
+- [ ] Token has `read:packages` scope
 - [ ] Token saved securely
 
 ### 4. GitHub Secrets Configuration
-- [ ] `DOCKERHUB_USERNAME` added
-- [ ] `DOCKERHUB_TOKEN` added
 - [ ] `VPS_HOST` added (IP or domain)
 - [ ] `VPS_USER` added (deploy user)
 - [ ] `VPS_SSH_KEY` added (private key content)
 - [ ] `VPS_PORT` added (if not 22)
+- [ ] `GHCR_TOKEN` added (for VPS to pull images)
 
 ### 5. GitHub Environment Setup
 - [ ] Production environment created
@@ -69,7 +68,7 @@ git push origin main
 ### Step 3: Wait for Build
 - [ ] Go to GitHub → Actions → CI/CD Pipeline
 - [ ] Wait for all jobs to complete (build, test, docker)
-- [ ] Verify Docker images pushed successfully
+- [ ] Verify Docker images pushed to GHCR successfully
 - [ ] Check for any errors in logs
 
 ### Step 4: Deploy to VPS
@@ -217,10 +216,10 @@ lsof -i :7175
 
 ### Issue: Images Not Pulling
 ```bash
-# Login to Docker Hub manually
-docker login docker.io -u your-username
+# Login to GHCR manually
+echo "$GHCR_TOKEN" | docker login ghcr.io -u h-heni --password-stdin
 # Try pulling manually
-docker pull your-username/resourcemanager-api:latest
+docker pull ghcr.io/h-heni/resourcemanager-api:latest
 ```
 
 ---

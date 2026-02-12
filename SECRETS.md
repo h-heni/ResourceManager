@@ -8,24 +8,6 @@ Quick reference for setting up GitHub Actions secrets for CI/CD pipeline.
 
 Go to your GitHub repository → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
 
-### Docker Hub Credentials
-
-| Secret Name | How to Get It | Example Value |
-|------------|---------------|---------------|
-| `DOCKERHUB_USERNAME` | Your Docker Hub username | `johndoe` |
-| `DOCKERHUB_TOKEN` | Docker Hub → Account Settings → Security → Access Tokens → New Token | `dckr_pat_xxxxx...` |
-
-**Steps to create Docker Hub token:**
-1. Go to [hub.docker.com](https://hub.docker.com)
-2. Click your profile → **Account Settings**
-3. Go to **Security** → **Access Tokens**
-4. Click **New Access Token**
-   - Description: `GitHub Actions ResourceManager`
-   - Permissions: **Read & Write** (or Read, Write, Delete)
-5. Click **Generate** and copy the token immediately (you won't see it again!)
-
----
-
 ### VPS Deployment Credentials
 
 | Secret Name | How to Get It | Example Value |
@@ -34,6 +16,28 @@ Go to your GitHub repository → **Settings** → **Secrets and variables** → 
 | `VPS_USER` | SSH username (recommended: `deploy`) | `deploy` |
 | `VPS_SSH_KEY` | SSH private key content | `-----BEGIN OPENSSH PRIVATE KEY-----\nxxxxxx...\n-----END OPENSSH PRIVATE KEY-----` |
 | `VPS_PORT` | SSH port (optional, defaults to 22) | `22` |
+| `GHCR_TOKEN` | GitHub Personal Access Token for VPS to pull images | `ghp_xxxxxxxxxxxxxxxxxxxx` |
+
+**Steps to create GitHub Personal Access Token (for GHCR):**
+
+1. Go to GitHub → **Settings** → **Developer settings** → **Personal access tokens** → **Tokens (classic)**
+2. Click **Generate new token** → **Generate new token (classic)**
+3. Set token details:
+   - **Note**: `ResourceManager VPS GHCR Access`
+   - **Expiration**: Choose appropriate duration (90 days recommended)
+   - **Scopes**: Select **read:packages** (allows pulling private images)
+4. Click **Generate token**
+5. Copy the token immediately (starts with `ghp_`) - you won't see it again!
+6. Add to GitHub Secrets as `GHCR_TOKEN`
+
+**VPS Setup for GHCR:**
+
+On your VPS, the deployment will automatically login to GHCR using this token:
+```bash
+echo $GHCR_TOKEN | docker login ghcr.io -u h-heni --password-stdin
+```
+
+---
 
 **Steps to create SSH key:**
 
@@ -106,23 +110,27 @@ This ensures production deployments require manual approval.
 
 Before running the CI/CD pipeline, verify you have:
 
-- [ ] `DOCKERHUB_USERNAME` - Your Docker Hub username
-- [ ] `DOCKERHUB_TOKEN` - Docker Hub access token (Read & Write)
 - [ ] `VPS_HOST` - VPS IP or domain
 - [ ] `VPS_USER` - SSH username (e.g., `deploy`)
 - [ ] `VPS_SSH_KEY` - Private SSH key (entire content including headers)
 - [ ] `VPS_PORT` - SSH port (if not 22)
+- [ ] `GHCR_TOKEN` - GitHub Personal Access Token with `read:packages` scope
 - [ ] Production environment created with protection rules
+
+**Note**: `GITHUB_TOKEN` is automatically available in GitHub Actions for pushing images to GHCR.
 
 ---
 
 ## Testing Secrets
 
-### Test Docker Hub Login
+### Test GitHub Container Registry Login
 
 ```bash
-# On your local machine
-echo "YOUR_DOCKERHUB_TOKEN" | docker login docker.io -u YOUR_DOCKERHUB_USERNAME --password-stdin
+# On your local machine (or VPS)
+echo "YOUR_GHCR_TOKEN" | docker login ghcr.io -u h-heni --password-stdin
+
+# Try pulling an image
+docker pull ghcr.io/h-heni/resourcemanager-api:latest
 ```
 
 ### Test SSH Connection
@@ -148,7 +156,6 @@ ssh -i ~/.ssh/resourcemanager_deploy YOUR_VPS_USER@YOUR_VPS_HOST
 - Use strong, unique passwords (minimum 32 characters)
 - Generate JWT_KEY with: `openssl rand -base64 48`
 - Use SSH keys instead of passwords
-- Enable 2FA on Docker Hub
 - Restrict environment to specific branches
 - Add required reviewers for production
 - Rotate secrets periodically (every 90 days)
@@ -165,12 +172,13 @@ ssh -i ~/.ssh/resourcemanager_deploy YOUR_VPS_USER@YOUR_VPS_HOST
 
 ## Rotating Secrets
 
-### Docker Hub Token Rotation
+### GitHub Personal Access Token Rotation
 
-1. Create a new token on Docker Hub
-2. Update `DOCKERHUB_TOKEN` secret in GitHub
-3. Run a test deployment
-4. Delete the old token on Docker Hub
+1. Create a new token on GitHub
+2. Update `GHCR_TOKEN` secret in GitHub repository settings
+3. Update token on VPS (login again with new token)
+4. Run a test deployment
+5. Delete the old token on GitHub
 
 ### SSH Key Rotation
 
@@ -184,11 +192,11 @@ ssh -i ~/.ssh/resourcemanager_deploy YOUR_VPS_USER@YOUR_VPS_HOST
 
 ## Troubleshooting
 
-### "unauthorized: authentication required" (Docker Hub)
+### "unauthorized: authentication required" (GHCR)
 
-- **Cause**: Wrong Docker Hub credentials
-- **Fix**: Verify `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` are correct
-- **Test**: Login manually with token: `echo $TOKEN | docker login -u $USERNAME --password-stdin`
+- **Cause**: Wrong GitHub token or insufficient permissions
+- **Fix**: Verify `GHCR_TOKEN` has `read:packages` scope
+- **Test**: Login manually with token: `echo $TOKEN | docker login ghcr.io -u h-heni --password-stdin`
 
 ### "Permission denied (publickey)" (SSH)
 
@@ -233,8 +241,8 @@ openssl rand -base64 32
 # Generate SSH key
 ssh-keygen -t ed25519 -C "github-deploy" -f ~/.ssh/deploy_key
 
-# Test Docker Hub login
-echo "TOKEN" | docker login docker.io -u USERNAME --password-stdin
+# Test GHCR login
+echo "TOKEN" | docker login ghcr.io -u h-heni --password-stdin
 
 # Test SSH
 ssh -i ~/.ssh/deploy_key USER@VPS_IP
