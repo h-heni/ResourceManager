@@ -1,0 +1,155 @@
+# ============================================
+# ResourceManager - Production Docker Compose with Reverse Proxy
+# ============================================
+# This is the production setup with a separate Nginx reverse proxy.
+# 
+# Architecture:
+#   Internet → nginx (port 80) → web (React) + api (.NET)
+#                                ↓
+#                            postgres_db
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml up -d
+#   docker compose -f docker-compose.prod.yml down
+#   docker compose -f docker-compose.prod.yml logs -f
+#
+# IMPORTANT: Create a .env file from .env.example before running!
+# ============================================
+
+services:
+  # ============================================
+  # PostgreSQL Database
+  # ============================================
+  postgres_db:
+    image: postgres:16-alpine
+    container_name: postgres_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-resourcemanager}
+      POSTGRES_USER: ${POSTGRES_USER:-rmuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    # No ports exposed — only accessible from internal network
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - rm-internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rmuser} -d ${POSTGRES_DB:-resourcemanager}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ============================================
+  # Backend API (.NET 8)
+  # ============================================
+  api:
+    image: ${API_IMAGE:-resourcemanager-api:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: resourcemanager-api
+    # No external port exposure — accessed via nginx reverse proxy
+    expose:
+      - "8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      # Connection string — uses container name 'postgres_db' as host
+      - CONNECTION_STRING=Host=postgres_db;Port=5432;Database=${POSTGRES_DB:-resourcemanager};Username=${POSTGRES_USER:-rmuser};Password=${POSTGRES_PASSWORD:?err};SSL Mode=Prefer
+      - ConnectionStrings__DefaultConnection=Host=postgres_db;Port=5432;Database=${POSTGRES_DB:-resourcemanager};Username=${POSTGRES_USER:-rmuser};Password=${POSTGRES_PASSWORD:?err};SSL Mode=Prefer
+      # JWT Configuration
+      - Jwt__Key=${JWT_KEY:?Set JWT_KEY in .env}
+      - Jwt__Issuer=${JWT_ISSUER:-ResourceManager}
+      - Jwt__Audience=${JWT_AUDIENCE:-ResourceManager-Users}
+      - Jwt__TokenExpirationInMinutes=${JWT_EXPIRATION:-15}
+      # Google Integration (Gmail API for email sending — NOT for OAuth)
+      - GoogleOptions__ClientId=${GOOGLE_CLIENT_ID:-}
+      - GoogleOptions__ClientSecret=${GOOGLE_CLIENT_SECRET:-}
+      - GoogleOptions__RefreshToken=${GOOGLE_REFRESH_TOKEN:-}
+    volumes:
+      - api-logs:/app/Logs
+      - api-data:/app/Data
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+    networks:
+      - rm-internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ============================================
+  # Frontend (React + Nginx for static files)
+  # ============================================
+  web:
+    image: ${WEB_IMAGE:-resourcemanager-web:latest}
+    build:
+      context: ./ClientApp
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=
+    container_name: resourcemanager-web
+    # No external port exposure — accessed via nginx reverse proxy
+    expose:
+      - "80"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - rm-internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================
+  # Nginx Reverse Proxy (Production Entry Point)
+  # ============================================
+  nginx:
+    image: ${NGINX_IMAGE:-resourcemanager-nginx:latest}
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: resourcemanager-nginx
+    ports:
+      - "80:80"
+      # For HTTPS (after SSL setup):
+      # - "443:443"
+    volumes:
+      # For Let's Encrypt certificates (uncomment after SSL setup):
+      # - ./certbot/conf:/etc/letsencrypt
+      # - ./certbot/www:/var/www/certbot
+      - nginx-logs:/var/log/nginx
+    depends_on:
+      - web
+      - api
+    networks:
+      - rm-internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  pgdata:
+    driver: local
+  api-logs:
+    driver: local
+  api-data:
+    driver: local
+  nginx-logs:
+    driver: local
+
+networks:
+  rm-internal:
+    driver: bridge
