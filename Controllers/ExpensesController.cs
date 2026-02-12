@@ -89,22 +89,23 @@ namespace ResourceManager.Controllers
                 }
             }
 
-            var allExpenses = await _context.OtherExpenses.ToListAsync();
-
-            // Include paid supplier invoices in expense totals
-            var allSupplierInvoices = await _context.FournisseurInvoices
-                .Include(si => si.Payments)
-                .ToListAsync();
-
+            var expensesQuery = _context.OtherExpenses.AsQueryable();
             if (year.HasValue)
             {
-                allExpenses = allExpenses
-                    .Where(e => e.Date.Year == selectedYear)
-                    .ToList();
-                allSupplierInvoices = allSupplierInvoices
-                    .Where(si => (si.InvoiceDate ?? si.CreatedAt).Year == selectedYear)
-                    .ToList();
+                expensesQuery = expensesQuery.Where(e => e.Date.Year == selectedYear);
             }
+            var allExpenses = await expensesQuery.ToListAsync();
+
+            // Include paid supplier invoices in expense totals
+            var supplierInvoicesQuery = _context.FournisseurInvoices
+                .Include(si => si.Payments)
+                .AsQueryable();
+            if (year.HasValue)
+            {
+                supplierInvoicesQuery = supplierInvoicesQuery
+                    .Where(si => (si.InvoiceDate ?? si.CreatedAt).Year == selectedYear);
+            }
+            var allSupplierInvoices = await supplierInvoicesQuery.ToListAsync();
 
             // ═══ Per-currency breakdown ═══
             var byCurrency = allExpenses
