@@ -1,5 +1,19 @@
 name: CI/CD Pipeline
 
+# ============================================
+# CI/CD Pipeline for ResourceManager
+# ============================================
+# This workflow handles:
+# 1. Build & test (runs on all branches/PRs)
+# 2. Docker image build & push (only on push to main/staging)
+# 3. Automatic deployment trigger via workflow_run (see deploy.yml)
+#
+# Job execution logic:
+# - backend & frontend: Always run
+# - docker: Only on push to main/staging (not PRs)
+# - deploy: Triggered automatically in deploy.yml via workflow_run
+# ============================================
+
 on:
   push:
     branches: [dev, staging, main]
@@ -196,52 +210,6 @@ jobs:
         continue-on-error: true
 
   # ============================================
-  # Deploy to Staging (automatic on staging branch)
+  # Deployment is automatically triggered via workflow_run
+  # in deploy.yml when CI completes successfully on main/staging
   # ============================================
-  deploy-staging:
-    name: Deploy to Staging
-    runs-on: ubuntu-latest
-    needs: [docker]
-    if: github.ref == 'refs/heads/staging'
-    environment: staging
-    
-    steps:
-      - name: Trigger staging deployment
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'deploy.yml',
-              ref: 'staging',
-              inputs: {
-                environment: 'staging',
-                tag: context.sha.substring(0, 7)
-              }
-            });
-            console.log('Triggered deploy.yml for staging');
-
-  deploy-production:
-    name: Deploy to Production
-    runs-on: ubuntu-latest
-    needs: [docker]
-    if: github.ref == 'refs/heads/main'
-    environment: production
-    
-    steps:
-      - name: Trigger production deployment
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'deploy.yml',
-              ref: 'main',
-              inputs: {
-                environment: 'production',
-                tag: context.sha.substring(0, 7)
-              }
-            });
-            console.log('Triggered deploy.yml for production');
