@@ -591,7 +591,7 @@ Best regards,
                     }
 
                     try {
-                        const entityId = entity.id || entity.Id;
+                        const entityId = (entity.id || entity.Id) as number;
                         // Delete the stale PDF record first
                         await api.delete(`/pdf-storage/files/${missing.id}`).catch(() => {});
                         // Regenerate PDF by calling the PDF endpoint (backend auto-saves to disk)
@@ -693,7 +693,7 @@ Best regards,
                         <p className="text-gray-500 text-sm">{t('settings.manage', 'Manage your company settings and preferences')}</p>
                     </div>
                 </div>
-                <button onClick={handleSave} disabled={saving}
+                <button onClick={() => handleSave()} disabled={saving}
                     className="flex items-center px-6 py-3 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all disabled:opacity-50">
                     {saving ? <Loader2 size={20} className="mr-2 animate-spin" /> : <Save size={20} className="mr-2" />}
                     {saving ? t('common.loading', 'Saving...') : t('common.save', 'Save Changes')}

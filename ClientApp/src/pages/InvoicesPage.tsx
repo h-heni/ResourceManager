@@ -174,7 +174,7 @@ export default function InvoicesPage() {
         if (!confirm(t('invoice.messages.confirmDelete'))) return;
         try {
             await api.delete(`/Invoices/${id}`);
-            fetchInvoices();
+            fetchInvoices(activePage, pageSize);
         } catch (error: unknown) {
             console.error("Error deleting invoice", error);
             alert(getErrorMessage(error, t('invoice.messages.deleteFailed')));
@@ -380,7 +380,7 @@ export default function InvoicesPage() {
                 status: isScheduledPayment ? 'Pending' : 'Completed'
             });
             setShowPaymentModal(false);
-            fetchInvoices();
+            fetchInvoices(activePage, pageSize);
             
             if (isScheduledPayment) {
                 alert(t('payment.scheduledSuccess'));
