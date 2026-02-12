@@ -28,7 +28,7 @@ namespace ResourceManager.Controllers
             if (page < 1) page = 1;
             if (size < 1) size = 20;
 
-            var query = _context.Fournisseurs.OrderBy(f => f.Name);
+            var query = _context.Fournisseurs.AsNoTracking().OrderBy(f => f.Name);
 
             var totalCount = await query.CountAsync();
             

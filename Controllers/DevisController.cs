@@ -33,6 +33,7 @@ namespace ResourceManager.Controllers
             if (size < 1) size = 20;
 
             var query = _context.Devis
+                .AsNoTracking()
                 .Include(d => d.Client)
                 .OrderByDescending(d => d.Date);
 

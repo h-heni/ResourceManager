@@ -41,6 +41,7 @@ namespace ResourceManager.Controllers
             if (size < 1) size = 20;
 
             var query = _context.Invoices
+                .AsNoTracking()
                 .Include(i => i.Client)
                 .Include(i => i.Payments)
                 .OrderByDescending(i => i.Date);
@@ -134,6 +135,7 @@ namespace ResourceManager.Controllers
         {
             // Load data first, then aggregate client-side (SQLite doesn't support Sum on decimal)
             var rawInvoices = await _context.Invoices
+                .AsNoTracking()
                 .Include(i => i.Client)
                 .Include(i => i.Payments)
                 .Where(i => i.DueDate.HasValue && i.DueDate.Value < DateTime.UtcNow && i.Status != "Paid")
@@ -168,6 +170,7 @@ namespace ResourceManager.Controllers
 
             // Load data first, then aggregate client-side (SQLite doesn't support Sum on decimal)
             var rawInvoices = await _context.Invoices
+                .AsNoTracking()
                 .Include(i => i.Client)
                 .Include(i => i.Payments)
                 .Where(i => i.DueDate.HasValue && i.DueDate.Value >= now && i.DueDate.Value <= futureDate && i.Status != "Paid")

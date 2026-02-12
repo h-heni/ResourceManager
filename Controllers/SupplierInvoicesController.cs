@@ -39,6 +39,7 @@ namespace ResourceManager.Controllers
             if (size < 1) size = 20;
 
             var query = _context.FournisseurInvoices
+                .AsNoTracking()
                 .Include(f => f.Fournisseur)
                 .Include(f => f.Items)
                 .Include(f => f.Payments)

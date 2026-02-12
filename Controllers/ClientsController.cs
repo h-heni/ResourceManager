@@ -22,7 +22,7 @@ namespace ResourceManager.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Client>>> GetClients()
         {
-            return await _context.Clients.OrderByDescending(c => c.CreatedAt).ToListAsync();
+            return await _context.Clients.AsNoTracking().OrderByDescending(c => c.CreatedAt).ToListAsync();
         }
 
     // GET: api/clients/5
