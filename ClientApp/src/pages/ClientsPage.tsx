@@ -34,9 +34,11 @@ export default function ClientsPage() {
         phone: ''
     });
 
+    /* eslint-disable react-hooks/exhaustive-deps */
     useEffect(() => {
         fetchClients();
     }, [page, size]);
+    /* eslint-enable react-hooks/exhaustive-deps */
 
     const fetchClients = async () => {
         try {

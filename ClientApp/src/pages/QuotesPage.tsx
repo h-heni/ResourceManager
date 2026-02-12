@@ -45,16 +45,20 @@ export default function QuotesPage() {
     const navigate = useNavigate();
     const { isManager } = useAuth();
 
+    /* eslint-disable react-hooks/exhaustive-deps */
     useEffect(() => {
         fetchQuotes();
     }, []);
+    /* eslint-enable react-hooks/exhaustive-deps */
 
     // Refetch when a payment is confirmed/extended via NotificationBell (cascade changes quote status)
+    /* eslint-disable react-hooks/exhaustive-deps */
     useEffect(() => {
         const handler = () => fetchQuotes();
         window.addEventListener('payment-status-changed', handler);
         return () => window.removeEventListener('payment-status-changed', handler);
     }, []);
+    /* eslint-enable react-hooks/exhaustive-deps */
 
     const fetchQuotes = async () => {
         try {

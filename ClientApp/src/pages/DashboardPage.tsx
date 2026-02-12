@@ -205,12 +205,13 @@ export default function DashboardPage() {
         }
     };
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    /* eslint-disable react-hooks/exhaustive-deps */
     useEffect(() => {
         if (isSuperAdmin || initialFetchDoneRef.current) return;
         initialFetchDoneRef.current = true;
         fetchStats();
     }, [isSuperAdmin]);
+    /* eslint-enable react-hooks/exhaustive-deps */
 
     /* Re-fetch when year changes */
     const handleYearChange = (yr: number) => {

@@ -125,7 +125,6 @@ export default function SettingsPage() {
 
     // Confirmation dialog for locking base storage path
     const [showBasePathLockConfirm, setShowBasePathLockConfirm] = useState(false);
-    const pendingSaveRef = useRef(false);
 
     // Password change
     const [currentPassword, setCurrentPassword] = useState('');

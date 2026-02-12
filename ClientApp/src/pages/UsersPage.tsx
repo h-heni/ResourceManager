@@ -57,9 +57,11 @@ export default function UsersPage() {
 
     const [newPassword, setNewPassword] = useState('');
 
+    /* eslint-disable react-hooks/exhaustive-deps */
     useEffect(() => {
         fetchUsers();
     }, []);
+    /* eslint-enable react-hooks/exhaustive-deps */
 
     const fetchUsers = async () => {
         setLoading(true);

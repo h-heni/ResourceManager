@@ -57,6 +57,7 @@ export default function DashboardLayout() {
     const userName = displayName || '';
 
     // Determine active section and auto-expand it when route changes
+    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         if (prevPathRef.current === location.pathname) return;
         prevPathRef.current = location.pathname;
@@ -78,6 +79,7 @@ export default function DashboardLayout() {
             setExpandedSections(prev => ({ ...prev, ...newExpanded }));
         }
     }, [location.pathname]);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     // Fetch company branding on mount
     useEffect(() => {
