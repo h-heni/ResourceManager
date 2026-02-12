@@ -1,0 +1,15 @@
+# Ignore test results
+*.json
+*.html
+*.xml
+*.csv
+
+# But keep summary examples
+!*-example.json
+
+# Ignore log files
+*.log
+
+# Ignore temporary files
+*.tmp
+*.temp

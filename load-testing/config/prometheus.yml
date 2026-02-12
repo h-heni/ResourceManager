@@ -1,0 +1,28 @@
+# Prometheus Configuration
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'resourcemanager-monitor'
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # PostgreSQL metrics
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'postgres_db'
+
+  # Add .NET API metrics if you enable Prometheus exporter in your API
+  # - job_name: 'dotnet-api'
+  #   static_configs:
+  #     - targets: ['resourcemanager-api:8080']
+  #   metrics_path: '/metrics'
