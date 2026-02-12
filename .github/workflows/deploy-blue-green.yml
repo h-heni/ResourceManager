@@ -100,6 +100,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
           source: "docker-compose.blue-green.yml,nginx/blue-green.conf,scripts/deploy-blue-green.sh,scripts/rollback-blue-green.sh"
           target: ${{ vars.DEPLOY_PATH || '/opt/resourcemanager' }}
 
@@ -113,6 +114,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
           envs: API_IMAGE,WEB_IMAGE,REGISTRY
           script: |
             set -e
@@ -151,6 +153,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
           script: |
             echo "--- Verifying deployment ---"
             curl -f http://localhost/health || exit 1
