@@ -3,7 +3,6 @@ using System.Diagnostics;
 using ResourceManager.Data;
 using ResourceManager.Models;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 
 namespace ResourceManager.Services;
 
@@ -510,12 +509,12 @@ public class SecurityMonitoringMiddleware
 
 public class UserCountryService
 {
-    private readonly IMemoryCache _cache;
+    private readonly ResourceManager.Application.Interfaces.ICacheService _cache;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<UserCountryService> _logger;
     private static readonly TimeSpan CacheDuration = TimeSpan.FromHours(24);
 
-    public UserCountryService(IMemoryCache cache, IHttpClientFactory httpClientFactory, ILogger<UserCountryService> logger)
+    public UserCountryService(ResourceManager.Application.Interfaces.ICacheService cache, IHttpClientFactory httpClientFactory, ILogger<UserCountryService> logger)
     {
         _cache = cache;
         _httpClientFactory = httpClientFactory;
@@ -534,31 +533,35 @@ public class UserCountryService
             return ("Local Network", "LO");
         }
 
-        var cacheKey = $"country_{ipAddress}";
-        if (_cache.TryGetValue(cacheKey, out (string Country, string Code) cached))
-            return cached;
-
-        try
-        {
-            using var client = _httpClientFactory.CreateClient();
-            client.Timeout = TimeSpan.FromSeconds(5);
-
-            // Free, no API key needed, 45 req/min limit
-            var response = await client.GetFromJsonAsync<IpApiResponse>($"http://ip-api.com/json/{ipAddress}?fields=status,country,countryCode");
-
-            if (response?.Status == "success" && !string.IsNullOrEmpty(response.Country))
+        var cacheKey = ResourceManager.Application.Interfaces.CacheKeys.GeoLocation(ipAddress);
+        
+        var result = await _cache.GetOrCreateAsync(
+            cacheKey,
+            async _ =>
             {
-                var result = (response.Country, response.CountryCode ?? "XX");
-                _cache.Set(cacheKey, result, CacheDuration);
-                return result;
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "IP geolocation failed for {IP}", ipAddress);
-        }
+                try
+                {
+                    using var client = _httpClientFactory.CreateClient();
+                    client.Timeout = TimeSpan.FromSeconds(5);
 
-        return ("Unknown", "XX");
+                    // Free, no API key needed, 45 req/min limit
+                    var response = await client.GetFromJsonAsync<IpApiResponse>($"http://ip-api.com/json/{ipAddress}?fields=status,country,countryCode");
+
+                    if (response?.Status == "success" && !string.IsNullOrEmpty(response.Country))
+                    {
+                        return new GeoLocationResult(response.Country, response.CountryCode ?? "XX");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "IP geolocation failed for {IP}", ipAddress);
+                }
+                
+                return new GeoLocationResult("Unknown", "XX");
+            },
+            absoluteExpiration: CacheDuration);
+
+        return result != null ? (result.Country, result.CountryCode) : ("Unknown", "XX");
     }
 
     private class IpApiResponse
@@ -567,4 +570,6 @@ public class UserCountryService
         public string? Country { get; set; }
         public string? CountryCode { get; set; }
     }
+
+    private record GeoLocationResult(string Country, string CountryCode);
 }

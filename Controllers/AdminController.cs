@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
+using ResourceManager.Application.Interfaces;
 using ResourceManager.Data;
 using ResourceManager.Models;
 using ResourceManager.Services;
@@ -24,7 +24,7 @@ public class AdminController : BaseApiController
     private readonly SessionTrackerService _sessionTracker;
     private readonly SecurityAlertService _securityAlerts;
     private readonly UserCountryService _countryService;
-    private readonly IMemoryCache _cache;
+    private readonly ICacheService _cache;
     private readonly ILogger<AdminController> _logger;
 
     public AdminController(
@@ -34,7 +34,7 @@ public class AdminController : BaseApiController
         SessionTrackerService sessionTracker,
         SecurityAlertService securityAlerts,
         UserCountryService countryService,
-        IMemoryCache cache,
+        ICacheService cache,
         ILogger<AdminController> logger)
     {
         _context = context;
@@ -136,49 +136,68 @@ public class AdminController : BaseApiController
     public async Task<IActionResult> GetUsersByCountry()
     {
         const string cacheKey = "admin_users_by_country";
-        if (_cache.TryGetValue(cacheKey, out object? cached))
-            return Ok(cached);
-
-        // Get distinct login IPs from login records
-        var loginRecords = await _context.UserLoginRecords
-            .GroupBy(r => new { r.UserId, r.IpAddress })
-            .Select(g => new { g.Key.UserId, g.Key.IpAddress, Country = g.Max(r => r.Country), CountryCode = g.Max(r => r.CountryCode) })
-            .ToListAsync();
-
-        // Aggregate by country (use already-resolved countries from DB)
-        var countryCounts = new Dictionary<string, (int Count, string Code)>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var record in loginRecords)
-        {
-            var country = record.Country ?? "Unknown";
-            var code = record.CountryCode ?? "XX";
-
-            if (countryCounts.TryGetValue(country, out var existing))
-                countryCounts[country] = (existing.Count + 1, code);
-            else
-                countryCounts[country] = (1, code);
-        }
-
-        var totalUsers = countryCounts.Values.Sum(v => v.Count);
-
-        var result = countryCounts
-            .OrderByDescending(kv => kv.Value.Count)
-            .Select(kv => new
+        
+        var response = await _cache.GetOrCreateAsync(
+            cacheKey,
+            async _ =>
             {
-                Country = kv.Key,
-                CountryCode = kv.Value.Code,
-                Count = kv.Value.Count,
-                Percentage = totalUsers > 0 ? Math.Round((double)kv.Value.Count / totalUsers * 100, 1) : 0
-            })
-            .ToList();
+                // Get distinct login IPs from login records
+                var loginRecords = await _context.UserLoginRecords
+                    .GroupBy(r => new { r.UserId, r.IpAddress })
+                    .Select(g => new { g.Key.UserId, g.Key.IpAddress, Country = g.Max(r => r.Country), CountryCode = g.Max(r => r.CountryCode) })
+                    .ToListAsync();
 
-        var response = new {
-            Countries = result,
-            TotalLogins = totalUsers
-        };
+                // Aggregate by country (use already-resolved countries from DB)
+                var countryCounts = new Dictionary<string, (int Count, string Code)>(StringComparer.OrdinalIgnoreCase);
 
-        _cache.Set(cacheKey, response, TimeSpan.FromHours(1));
+                foreach (var record in loginRecords)
+                {
+                    var country = record.Country ?? "Unknown";
+                    var code = record.CountryCode ?? "XX";
+
+                    if (countryCounts.TryGetValue(country, out var existing))
+                        countryCounts[country] = (existing.Count + 1, code);
+                    else
+                        countryCounts[country] = (1, code);
+                }
+
+                var totalUsers = countryCounts.Values.Sum(v => v.Count);
+
+                var result = countryCounts
+                    .OrderByDescending(kv => kv.Value.Count)
+                    .Select(kv => new UsersByCountryItem
+                    {
+                        Country = kv.Key,
+                        CountryCode = kv.Value.Code,
+                        Count = kv.Value.Count,
+                        Percentage = totalUsers > 0 ? Math.Round((double)kv.Value.Count / totalUsers * 100, 1) : 0
+                    })
+                    .ToList();
+
+                return new UsersByCountryResponse
+                {
+                    Countries = result,
+                    TotalLogins = totalUsers
+                };
+            },
+            absoluteExpiration: TimeSpan.FromHours(1));
+        
         return Ok(response);
+    }
+
+    // DTOs for cache serialization
+    private class UsersByCountryResponse
+    {
+        public List<UsersByCountryItem> Countries { get; set; } = new();
+        public int TotalLogins { get; set; }
+    }
+
+    private class UsersByCountryItem
+    {
+        public string Country { get; set; } = string.Empty;
+        public string CountryCode { get; set; } = string.Empty;
+        public int Count { get; set; }
+        public double Percentage { get; set; }
     }
 
     // ═══════════════════════════════════════════════════════════════

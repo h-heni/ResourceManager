@@ -12,6 +12,30 @@
 
 services:
   # ============================================
+  # Redis Cache
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: resourcemanager-redis
+    command: >
+      redis-server
+      --maxmemory ${REDIS_MAXMEMORY:-256mb}
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+    volumes:
+      - redis_data:/data
+    networks:
+      - rm-internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ============================================
   # PostgreSQL Database
   # ============================================
   postgres_db:
@@ -60,6 +84,9 @@ services:
       - GoogleOptions__ClientId=${GOOGLE_CLIENT_ID:-}
       - GoogleOptions__ClientSecret=${GOOGLE_CLIENT_SECRET:-}
       - GoogleOptions__RefreshToken=${GOOGLE_REFRESH_TOKEN:-}
+      # Redis Configuration
+      - Redis__ConnectionString=redis:6379,password=${REDIS_PASSWORD:?err},abortConnect=false
+      - Redis__InstanceName=ResourceManager_
       # Auth0 — temporarily disabled (HTTP deployment)
       # - Auth0__Domain=${AUTH0_DOMAIN:-}
       # - Auth0__ClientId=${AUTH0_CLIENT_ID:-}
@@ -69,6 +96,8 @@ services:
       - api-logs:/app/Logs
     depends_on:
       postgres_db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - rm-internal
@@ -108,6 +137,8 @@ services:
 
 volumes:
   pgdata:
+    driver: local
+  redis_data:
     driver: local
   api-logs:
     driver: local
