@@ -41,15 +41,6 @@
     "date": "التاريخ",
     "price": "السعر",
     "saving": "جاري الحفظ...",
-<<<<<<< HEAD
-    "deleting": "Deleting...",
-    "loadingData": "Loading data...",
-    "noResults": "No results found",
-    "confirmDelete": "Are you sure you want to delete this item?",
-    "deleteFailed": "Failed to delete item",
-    "createdBy": "Created by ",
-    "createdAt": "Created at ",
-=======
     "deleting": "جاري الحذف...",
     "loadingData": "جاري تحميل البيانات...",
     "noResults": "لم يتم العثور على نتائج",
@@ -73,24 +64,6 @@
     "show": "إظهار",
     "to": "إلى",
     "viewDetails": "عرض التفاصيل"
-  },
->>>>>>> copilot-worktree-2026-02-11T21-10-21
-    "updatedBy": "Updated by ",
-    "updatedAt": "Updated at ",
-    "address": "Address",
-    "phone": "Phone",
-    "appName": "Resource Manager",
-    "notes": "Notes",
-    "email": "Email",
-    "apply": "Apply",
-    "creating": "Creating",
-    "downloading": "Downloading",
-    "from": "From",
-    "hide": "Hide",
-    "select": "Select",
-    "show": "Show",
-    "to": "To",
-    "viewDetails": "View Details"
   },
   "auth": {
     "login": "تسجيل الدخول",

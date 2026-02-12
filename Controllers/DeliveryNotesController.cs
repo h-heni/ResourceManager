@@ -201,7 +201,16 @@ namespace ResourceManager.Controllers
                 languageOverride: note.PdfLanguage);
 
             var document = new Document<DeliveryNote>(note, pdfSettings);
-            var pdfData = document.GeneratePdf();
+            byte[] pdfData;
+            try
+            {
+                pdfData = document.GeneratePdf();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "PDF generation failed for delivery note {DeliveryNoteId}", note.Id);
+                return StatusCode(500, new { message = "Failed to generate PDF" });
+            }
 
             // Auto-register PDF in local storage
             try
