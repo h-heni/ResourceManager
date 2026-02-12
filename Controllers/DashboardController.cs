@@ -5,7 +5,6 @@ using ResourceManager.Data;
 using ResourceManager.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
-using System.Security.Claims;
 
 namespace ResourceManager.Controllers
 {
@@ -299,7 +298,11 @@ namespace ResourceManager.Controllers
                 .Select(i => i.ClientId!.Value)
                 .Distinct()
                 .Count();
-            var totalSuppliers = await _context.Fournisseurs.CountAsync();
+            var totalSuppliers = await _cache.GetOrCreateAsync("suppliers_count", async entry =>
+            {
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
+                return await _context.Fournisseurs.CountAsync();
+            });
             var supplierInvoicesCount = filteredSupplierInvoices.Count;
 
             // ═══ PAYMENT-BASED Expense Chart ═══
