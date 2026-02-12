@@ -63,7 +63,10 @@
     "select": "اختيار",
     "show": "إظهار",
     "to": "إلى",
-    "viewDetails": "عرض التفاصيل"
+    "viewDetails": "عرض التفاصيل",
+    "imported": "مستورد",
+    "viewOnly": "عرض فقط",
+    "year": "السنة"
   },
   "auth": {
     "login": "تسجيل الدخول",
@@ -249,7 +252,9 @@
       "formattingHint": "تلميح التنسيق"
     },
     "noTax": "بدون ضريبة",
-    "viewDetails": "عرض التفاصيل"
+    "viewDetails": "عرض التفاصيل",
+    "price": "السعر",
+    "save": "حفظ"
   },
   "quote": {
     "title": "عروض الأسعار",
@@ -257,8 +262,38 @@
     "quoteNumber": "رقم العرض",
     "convertToInvoice": "تحويل إلى فاتورة",
     "createDeliveryNote": "إنشاء سند تسليم",
-    "deleteError": "Failed to delete quote",
-    "noItems": "No items"
+    "deleteError": "فشل حذف عرض السعر",
+    "noItems": "لا توجد بنود",
+    "create": "إنشاء عرض سعر",
+    "pageDescription": "إدارة عروض الأسعار والاقتراحات لعملائك",
+    "noData": "لا توجد عروض أسعار",
+    "createFirst": "إنشاء عرض السعر الأول",
+    "active": "نشط",
+    "accepted": "مقبول",
+    "archived": "مؤرشف",
+    "searchPlaceholder": "البحث بالرقم أو العميل...",
+    "save": "حفظ عرض السعر",
+    "qtyLabel": "الكمية",
+    "items": "العناصر",
+    "quoteNumberLabel": "رقم العرض",
+    "taxRateLabel": "نسبة الضريبة %",
+    "unitPriceLabel": "السعر لكل وحدة",
+    "status": {
+      "Draft": "مسودة",
+      "Accepted": "مقبول",
+      "Completed": "مكتمل"
+    },
+    "confirmDelete": "هل أنت متأكد أنك تريد حذف عرض السعر هذا",
+    "deleteQuote": "حذف عرض السعر",
+    "downloadPdf": "تنزيل PDF",
+    "loading": "جار التحميل...",
+    "messages": {
+      "deleteErrorLog": "خطأ في حذف عرض السعر:",
+      "downloadErrorLog": "خطأ في تنزيل PDF لعرض السعر:",
+      "fetchErrorLog": "خطأ في جلب عرض السعر:"
+    },
+    "noItemsInQuote": "لا توجد عناصر في عرض السعر هذا",
+    "notAvailable": "غير متاح"
   },
   "deliveryNote": {
     "title": "سندات التسليم",
@@ -273,7 +308,19 @@
     "linkedDoc": "المستند المرتبط",
     "noData": "لا توجد سندات تسليم",
     "confirmDelete": "هل أنت متأكد أنك تريد حذف سند التسليم هذا؟",
-    "deleteFailed": "فشل حذف سند التسليم"
+    "deleteFailed": "فشل حذف سند التسليم",
+    "messages": {
+      "allDeliveredHelp": "تم تسليم جميع الكميات من عرض السعر هذا بالفعل.",
+      "allDeliveredTitle": "تم تسليم جميع العناصر",
+      "createFailed": "فشل إنشاء إذن التسليم",
+      "exceedsQuote": "الكمية المسلمة تتجاوز كمية عرض السعر",
+      "noQuotes": "لا توجد عروض أسعار متاحة",
+      "overDeliveryHelp": "عنصر أو أكثر يتجاوز كمية عرض السعر. يرجى تعديل الكميات.",
+      "overDeliveryTitle": "تم اكتشاف تسليم زائد",
+      "previousDeliveryNotes": "أذون التسليم السابقة",
+      "previousDeliveryNotesHelp": "الكميات التي تم تسليمها بالفعل في أذون التسليم السابقة.",
+      "totalDelivered": "إجمالي المسلم"
+    }
   },
   "client": {
     "title": "العملاء",
@@ -439,7 +486,9 @@
     "signerPositionHelp": "مساعدة موضع الموقع",
     "signerPositionPlaceholder": "عنصر نائب لموضع الموقع",
     "totalRegistered": "إجمالي المسجلين",
-    "useThisFolder": "استخدم هذا المجلد"
+    "useThisFolder": "استخدم هذا المجلد",
+    "proInvoiceTokenHelp": "الرمز المميز الظاهر في مستندات الفاتورة الشكلية الرسمية.",
+    "proInvoiceTokenSignature": "توقيع رمز الفاتورة الشكلية"
   },
   "dashboard": {
     "title": "لوحة التحكم",
@@ -508,7 +557,9 @@
     "totalUsers": "إجمالي المستخدمين",
     "unpaid": "غير مدفوعة",
     "unpaidInvoices": "الفواتير غير المدفوعة",
-    "users": "المستخدمون"
+    "users": "المستخدمون",
+    "revenueByYear": "الإيرادات السنوية",
+    "allTime": "جميع الأوقات"
   },
   "email": {
     "title": "إرسال بريد إلكتروني",
@@ -674,7 +725,8 @@
       "salary": "رواتب",
       "telecom": "اتصالات",
       "bankFees": "رسوم بنكية",
-      "other": "أخرى"
+      "other": "أخرى",
+      "supplier_invoices": "فواتير الموردين"
     },
     "totalExpenses": "إجمالي المصاريف",
     "thisMonth": "هذا الشهر",
@@ -911,5 +963,68 @@
       "user": "المستخدم"
     },
     "title": "العنوان"
+  },
+  "companyInit": {
+    "changeLogo": "تغيير الشعار",
+    "completeSetup": "إكمال الإعداد",
+    "continue": "متابعة",
+    "customTaxEnable": "تفعيل ضريبة/ختم مخصص",
+    "defaultVatRate": "نسبة ضريبة القيمة المضافة الافتراضية",
+    "messages": {
+      "setupErrorLog": "خطأ في إعداد الشركة:",
+      "submitFailed": "فشل حفظ إعدادات الشركة"
+    },
+    "none": "لا شيء",
+    "notSet": "غير محدد",
+    "placeholders": {
+      "baseStoragePath": "C:\\MyCompany\\ResourceManager\\PDFs",
+      "companyAddress": "عنوان الشارع المدينة الرمز البريدي",
+      "companyEmail": "contact@yourcompany.com",
+      "companyName": "الاسم القانوني الكامل لشركتك",
+      "fiscalId": "MF123456789",
+      "phone": "+216 XX XXX XXX"
+    },
+    "selected": "محدد",
+    "setupSummary": "ملخص الإعداد",
+    "steps": {
+      "companyInfo": "معلومات الشركة",
+      "financialBranding": "المالية والهوية",
+      "storageFinish": "التخزين والإنهاء"
+    },
+    "storagePathExample": "مثال: C:\\MyCompany\\Invoices",
+    "storageRequiredMessage": "اختر مجلدا لتخزين ملفات PDF المنشأة. ستتمكن من التصفح والاستعادة لاحقا.",
+    "storageRequiredTitle": "إعداد تخزين PDF مطلوب",
+    "subtitle": "سنرشدك خلال عملية الإعداد",
+    "title": "لنبدأ الإعداد",
+    "toast": {
+      "failed": "فشل الإعداد. يرجى المحاولة مرة أخرى.",
+      "success": "اكتمل إعداد الشركة! أهلا بك."
+    },
+    "uploadLogo": "رفع الشعار",
+    "validation": {
+      "companyAddressRequired": "عنوان الشركة مطلوب",
+      "companyNameRequired": "اسم الشركة مطلوب",
+      "fileMaxSize": "يجب أن يكون حجم الملف أقل من 2MB",
+      "imageOnly": "يرجى اختيار ملف صورة",
+      "logoMaxSize": "يجب أن يكون الشعار أقل من 2MB",
+      "storagePathRequired": "مسار التخزين مطلوب"
+    }
+  },
+  "companySetup": {
+    "address": "العنوان",
+    "companyName": "اسم الشركة",
+    "completeSetup": "إكمال الإعداد",
+    "matriculeFiscal": "المعرف الضريبي (Matricule Fiscal)",
+    "phone": "الهاتف",
+    "placeholders": {
+      "address": "عنوان العمل",
+      "companyName": "اسم شركتك",
+      "matriculeFiscal": "MF123456",
+      "phone": "+216 XX XXX XXX"
+    },
+    "settingUp": "جار الإعداد...",
+    "setupFailed": "فشل إنشاء الشركة",
+    "subtitle": "أخبرنا عن شركتك للبدء",
+    "title": "أكمل ملفك الشخصي"
   }
 }
