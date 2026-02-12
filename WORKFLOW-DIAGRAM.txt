@@ -1,0 +1,211 @@
+================================================================================
+                    CI/CD PIPELINE VISUAL WORKFLOW
+================================================================================
+
+CONTINUOUS INTEGRATION (ci.yml)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+┌─────────────────────────────────────────────────────────────────┐
+│           Developer Pushes Code to GitHub                        │
+│           (main, staging, or dev branch)                         │
+└───────────────────────┬─────────────────────────────────────────┘
+                        │
+                        ▼
+        ┌───────────────────────────────────┐
+        │    GitHub Actions Triggered       │
+        │    Workflow: CI/CD Pipeline       │
+        └───────────────┬───────────────────┘
+                        │
+        ┌───────────────┴────────────────┐
+        │                                │
+        ▼                                ▼
+┌─────────────────┐            ┌─────────────────┐
+│ BACKEND JOB     │            │ FRONTEND JOB    │
+│                 │            │                 │
+│ 1. Checkout     │            │ 1. Checkout     │
+│ 2. Setup .NET 8 │            │ 2. Setup Node20 │
+│ 3. Restore pkgs │            │ 3. npm install  │
+│ 4. Build Release│            │ 4. ESLint       │
+│ 5. Run Tests    │            │ 5. TypeScript   │
+│ 6. Upload       │            │ 6. npm build    │
+│    Results      │            │ 7. Upload dist  │
+└────────┬────────┘            └────────┬────────┘
+         │                              │
+         └──────────┬───────────────────┘
+                    │
+                    ▼
+        ┌───────────────────────────────┐
+        │    DOCKER BUILD & PUSH JOB    │
+        │    (main/staging only)        │
+        └───────────┬───────────────────┘
+                    │
+                    ├─────────────────────────────┐
+                    │                             │
+                    ▼                             ▼
+        ┌──────────────────┐         ┌──────────────────┐
+        │ Backend Image    │         │ Frontend Image   │
+        │                  │         │                  │
+        │ 1. Multi-stage   │         │ 1. Node build    │
+        │ 2. Alpine base   │         │ 2. Nginx prod    │
+        │ 3. Non-root      │         │ 3. ~25MB         │
+        │ 4. ~110MB        │         │ 4. Gzip enabled  │
+        └────────┬─────────┘         └────────┬─────────┘
+                 │                            │
+                 ▼                            ▼
+        ┌──────────────────┐         ┌──────────────────┐
+        │ Push to:         │         │ Push to:         │
+        │ • Docker Hub     │         │ • Docker Hub     │
+        │ • GHCR (backup)  │         │ • GHCR (backup)  │
+        └────────┬─────────┘         └────────┬─────────┘
+                 │                            │
+                 └──────────┬─────────────────┘
+                            │
+                            ▼
+                ┌───────────────────────┐
+                │  Trivy Security Scan  │
+                │  (vulnerability check)│
+                └───────────┬───────────┘
+                            │
+                            ▼
+                ┌───────────────────────┐
+                │   Images Ready on     │
+                │   Docker Hub + GHCR   │
+                └───────────────────────┘
+
+
+CONTINUOUS DEPLOYMENT (deploy.yml)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+┌─────────────────────────────────────────────────────────────────┐
+│        Manual Trigger via GitHub Actions UI                      │
+│        (Select environment: production/staging)                   │
+└───────────────────────┬─────────────────────────────────────────┘
+                        │
+                        ▼
+        ┌───────────────────────────────────┐
+        │   Deploy Workflow Starts          │
+        │   (Requires approval for prod)    │
+        └───────────────┬───────────────────┘
+                        │
+                        ▼
+        ┌───────────────────────────────────┐
+        │   1. Checkout Repository          │
+        │   2. Setup SSH Keys               │
+        │   3. Copy docker-compose files    │
+        └───────────────┬───────────────────┘
+                        │
+                        ▼
+        ┌───────────────────────────────────┐
+        │   SSH into VPS                    │
+        │   User: deploy@your-vps-ip        │
+        └───────────────┬───────────────────┘
+                        │
+                        ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  ZERO-DOWNTIME DEPLOYMENT                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Step 1: Login to Docker Hub                                    │
+│  ─────────────────────────────────                              │
+│  • Authenticate using DOCKERHUB_TOKEN                           │
+│  • Verify credentials                                           │
+│                                                                  │
+│  Step 2: Update .env file                                       │
+│  ────────────────────────                                       │
+│  • Set API_IMAGE=username/resourcemanager-api:latest           │
+│  • Set WEB_IMAGE=username/resourcemanager-web:latest           │
+│                                                                  │
+│  Step 3: Pull Latest Images                                     │
+│  ──────────────────────────                                     │
+│  • docker compose pull api web                                  │
+│  • Download from Docker Hub                                     │
+│                                                                  │
+│  Step 4: Rolling Update (ZERO DOWNTIME)                         │
+│  ─────────────────────────────────────                          │
+│  ┌──────────────────────────────────────────────┐              │
+│  │ Current State: 1 API container running       │              │
+│  └──────────────────────────────────────────────┘              │
+│                     │                                           │
+│                     ▼                                           │
+│  ┌──────────────────────────────────────────────┐              │
+│  │ Scale Up: Start 2nd API container            │              │
+│  │ • Old API still serves traffic                │              │
+│  │ • New API starting up in parallel             │              │
+│  └──────────────────────────────────────────────┘              │
+│                     │                                           │
+│                     ▼                                           │
+│  ┌──────────────────────────────────────────────┐              │
+│  │ Health Check: Wait for new API                │              │
+│  │ • Poll /health endpoint                       │              │
+│  │ • 30 attempts × 2 seconds = 60s max           │              │
+│  │ • Exit code 0 = healthy                       │              │
+│  └──────────────────────────────────────────────┘              │
+│                     │                                           │
+│         ┌───────────┴────────────┐                             │
+│         │                        │                             │
+│         ▼                        ▼                             │
+│  ┌────────────┐         ┌────────────────┐                    │
+│  │  SUCCESS   │         │    FAILURE     │                    │
+│  │  New API   │         │  Health Check  │                    │
+│  │  Healthy   │         │    Timeout     │                    │
+│  └─────┬──────┘         └────────┬───────┘                    │
+│        │                         │                             │
+│        ▼                         ▼                             │
+│  ┌──────────────┐      ┌──────────────────┐                   │
+│  │ Scale Down:  │      │ ROLLBACK:        │                   │
+│  │ Remove old   │      │ Scale back to 1  │                   │
+│  │ API (1 left) │      │ Keep old version │                   │
+│  └──────┬───────┘      └──────────────────┘                   │
+│         │                                                      │
+│         ▼                                                      │
+│  ┌──────────────────────────────────────────────┐            │
+│  │ Update Frontend (quick restart)              │            │
+│  │ • Nginx restarts quickly                      │            │
+│  └──────────────────────────────────────────────┘            │
+│                     │                                         │
+│                     ▼                                         │
+│  ┌──────────────────────────────────────────────┐            │
+│  │ Final Health Checks                           │            │
+│  │ • Verify API responding                       │            │
+│  │ • Verify Web responding                       │            │
+│  └──────────────────────────────────────────────┘            │
+│                     │                                         │
+│                     ▼                                         │
+│  ┌──────────────────────────────────────────────┐            │
+│  │ Cleanup Old Images                            │            │
+│  │ • Remove images older than 72h                │            │
+│  └──────────────────────────────────────────────┘            │
+│                                                               │
+└───────────────────────┬───────────────────────────────────────┘
+                        │
+                        ▼
+        ┌───────────────────────────────────┐
+        │   ✅ Deployment Complete           │
+        │   • Zero downtime achieved        │
+        │   • All services healthy          │
+        │   • Old images cleaned up         │
+        └───────────────────────────────────┘
+
+
+ENVIRONMENT FLOW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Development Branch (dev)
+   │
+   ├─ Push → CI runs (build + test) → No Docker push
+   │
+   ▼
+Staging Branch (staging)
+   │
+   ├─ Push → CI runs (build + test + Docker push) → staging images
+   ├─ Manual deploy → Staging VPS
+   ├─ QA Testing
+   │
+   ▼
+Production Branch (main)
+   │
+   ├─ Push → CI runs (build + test + Docker push) → latest images
+   ├─ Manual deploy → Production VPS (requires approval)
+   └─ Live in production
+
+================================================================================
