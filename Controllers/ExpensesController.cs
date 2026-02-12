@@ -24,6 +24,7 @@ namespace ResourceManager.Controllers
         public async Task<ActionResult<IEnumerable<object>>> GetExpenses()
         {
             var expenses = await _context.OtherExpenses
+                .AsNoTracking()
                 .OrderByDescending(e => e.Date)
                 .Select(e => new
                 {

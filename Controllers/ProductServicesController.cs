@@ -24,6 +24,7 @@ namespace ResourceManager.Controllers
         public async Task<ActionResult<IEnumerable<object>>> GetAll()
         {
             var items = await _context.ProductServices
+                .AsNoTracking()
                 .OrderBy(p => p.Name)
                 .Select(p => new
                 {
@@ -70,6 +71,7 @@ namespace ResourceManager.Controllers
                 return Ok(Array.Empty<object>());
 
             var results = await _context.ProductServices
+                .AsNoTracking()
                 .Where(p => p.Name.Contains(q) || (p.Description != null && p.Description.Contains(q)))
                 .OrderBy(p => p.Name)
                 .Take(20)

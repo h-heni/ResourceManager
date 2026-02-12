@@ -41,7 +41,7 @@ Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .Enrich.FromLogContext()
     .WriteTo.Console()
-    .WriteTo.File("Logs/log-.txt", rollingInterval: RollingInterval.Day)
+    .WriteTo.File("Logs/log-.txt", rollingInterval: RollingInterval.Day, retainedFileCountLimit: 14)
     .WriteTo.Sink(new InMemoryLogSink())
     .CreateLogger();
 
@@ -57,7 +57,15 @@ Log.Information("Database: PostgreSQL | Connection source: {Source}",
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
-    options.UseNpgsql(connectionString);
+    options.UseNpgsql(connectionString, npgsqlOptions =>
+    {
+        // Split multi-Include queries into separate SQL queries to avoid cartesian explosion
+        npgsqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+        // Connection resiliency: retry transient failures (network blips, connection pool exhaustion)
+        npgsqlOptions.EnableRetryOnFailure(maxRetryCount: 3, maxRetryDelay: TimeSpan.FromSeconds(5), errorCodesToAdd: null);
+        // Command timeout for long-running queries (30s default, increase if needed)
+        npgsqlOptions.CommandTimeout(30);
+    });
 });
 
 // This enables UserManager, RoleManager, and links them to EF Core

@@ -32,6 +32,7 @@ namespace ResourceManager.Controllers
             if (size < 1) size = 20;
 
             var query = _context.DeliveryNotes
+                .AsNoTracking()
                 .Include(dn => dn.Client)
                 .Include(dn => dn.Devis)
                 .Include(dn => dn.Invoice)

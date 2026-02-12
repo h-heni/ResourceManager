@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using ResourceManager.Data;
 using ResourceManager.Models;
 using Microsoft.AspNetCore.Authorization;
@@ -12,11 +13,13 @@ namespace ResourceManager.Controllers
     {
         private readonly AppDbContext _context;
         private readonly ILogger<DashboardController> _logger;
+        private readonly IMemoryCache _cache;
 
-        public DashboardController(AppDbContext context, ILogger<DashboardController> logger)
+        public DashboardController(AppDbContext context, ILogger<DashboardController> logger, IMemoryCache cache)
         {
             _context = context;
             _logger = logger;
+            _cache = cache;
         }
 
         // GET: api/dashboard/stats
@@ -33,20 +36,20 @@ namespace ResourceManager.Controllers
             var startOfYear = new DateTime(selectedYear, 1, 1, 0, 0, 0, DateTimeKind.Utc);
             var endOfYear = startOfYear.AddYears(1);
 
-            // Load all invoices for client-side aggregation (SQLite doesn't support Sum on decimal)
-            var allInvoices = await _context.Invoices
+            // Filter by year at the database level + AsNoTracking for read-only queries
+            var yearInvoices = await _context.Invoices
+                .AsNoTracking()
+                .Where(i => i.Date >= startOfYear && i.Date < endOfYear)
                 .Include(i => i.Payments)
                 .Include(i => i.Client)
                 .ToListAsync();
 
-            // Also load historical revenues
-            var allHistoricalRevenues = await _context.HistoricalRevenues.Include(h => h.Client).ToListAsync();
-            var yearInvoices = allInvoices
-                .Where(i => i.Date >= startOfYear && i.Date < endOfYear)
-                .ToList();
-            var yearHistoricalRevenues = allHistoricalRevenues
+            // Also load historical revenues (filtered by year at DB)
+            var yearHistoricalRevenues = await _context.HistoricalRevenues
+                .AsNoTracking()
                 .Where(h => h.Date >= startOfYear && h.Date < endOfYear)
-                .ToList();
+                .Include(h => h.Client)
+                .ToListAsync();
 
             // ═══ Multi-Currency: Determine available currencies ═══
             var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
@@ -68,32 +71,28 @@ namespace ResourceManager.Controllers
                 .Distinct()
                 .ToList();
 
-            var allSupplierInvoices = await _context.FournisseurInvoices
+            var yearSupplierInvoices = await _context.FournisseurInvoices
+                .AsNoTracking()
                 .Include(si => si.Payments)
                 .Include(si => si.Items)
                 .Include(si => si.Fournisseur)
+                .Where(si => (si.InvoiceDate != null && si.InvoiceDate >= startOfYear && si.InvoiceDate < endOfYear)
+                          || (si.InvoiceDate == null && si.CreatedAt >= startOfYear && si.CreatedAt < endOfYear))
                 .ToListAsync();
-            var yearSupplierInvoices = allSupplierInvoices
-                .Where(si =>
-                {
-                    var date = si.InvoiceDate ?? si.CreatedAt;
-                    return date >= startOfYear && date < endOfYear;
-                })
-                .ToList();
 
             var supplierCurrencies = yearSupplierInvoices
                 .Select(si => si.Currency ?? defaultCurrency)
                 .Distinct()
                 .ToList();
 
-            var allOtherExpenses = await _context.OtherExpenses.ToListAsync();
-            var allHistoricalExpenses = await _context.HistoricalExpenses.ToListAsync();
-            var yearOtherExpenses = allOtherExpenses
+            var yearOtherExpenses = await _context.OtherExpenses
+                .AsNoTracking()
                 .Where(e => e.Date >= startOfYear && e.Date < endOfYear)
-                .ToList();
-            var yearHistoricalExpenses = allHistoricalExpenses
+                .ToListAsync();
+            var yearHistoricalExpenses = await _context.HistoricalExpenses
+                .AsNoTracking()
                 .Where(h => h.Date >= startOfYear && h.Date < endOfYear)
-                .ToList();
+                .ToListAsync();
 
             var expenseCurrencies = yearOtherExpenses
                 .Select(e => e.Currency ?? defaultCurrency)
@@ -299,7 +298,11 @@ namespace ResourceManager.Controllers
                 .Select(i => i.ClientId!.Value)
                 .Distinct()
                 .Count();
-            var totalSuppliers = await _context.Fournisseurs.CountAsync();
+            var totalSuppliers = await _cache.GetOrCreateAsync("suppliers_count", async entry =>
+            {
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
+                return await _context.Fournisseurs.CountAsync();
+            });
             var supplierInvoicesCount = filteredSupplierInvoices.Count;
 
             // ═══ PAYMENT-BASED Expense Chart ═══
@@ -487,23 +490,39 @@ namespace ResourceManager.Controllers
                 return amount * exchangeRate!.Value;
             }
 
-            var invoices = await _context.Invoices.ToListAsync();
-            var historicalRevenues = await _context.HistoricalRevenues.ToListAsync();
-
-            var invoiceItems = invoices
-                .Where(i => !string.Equals(i.Status, "Draft", StringComparison.OrdinalIgnoreCase))
+            var invoices = await _context.Invoices
+                .AsNoTracking()
+                .Where(i => !string.Equals(i.Status, "Draft"))
                 .Select(i => new
                 {
                     Year = i.Date.Year,
-                    Currency = i.Currency ?? defaultCurrency,
+                    Currency = i.Currency,
                     Amount = i.TotalAmount ?? 0
+                })
+                .ToListAsync();
+            var historicalRevenues = await _context.HistoricalRevenues
+                .AsNoTracking()
+                .Select(h => new
+                {
+                    Year = h.Date.Year,
+                    Currency = h.Currency,
+                    Amount = h.AmountPaid
+                })
+                .ToListAsync();
+
+            var invoiceItems = invoices
+                .Select(i => new
+                {
+                    i.Year,
+                    Currency = i.Currency ?? defaultCurrency,
+                    i.Amount
                 });
 
             var historicalItems = historicalRevenues.Select(h => new
             {
-                Year = h.Date.Year,
+                h.Year,
                 Currency = h.Currency ?? defaultCurrency,
-                Amount = h.AmountPaid
+                h.Amount
             });
 
             var revenueItems = invoiceItems.Concat(historicalItems);
@@ -542,7 +561,7 @@ namespace ResourceManager.Controllers
         [Authorize(Roles = "SuperAdmin")]
         public async Task<IActionResult> GetAdminStats()
         {
-            var companies = await _context.Companies.Where(c => !c.IsDeleted).ToListAsync();
+            var companies = await _context.Companies.AsNoTracking().Where(c => !c.IsDeleted).ToListAsync();
             var result = new List<object>();
 
             foreach (var company in companies)
@@ -554,16 +573,19 @@ namespace ResourceManager.Controllers
 
                 // Fetch invoices for this company (bypass global filter via IgnoreQueryFilters)
                 var invoices = await _context.Invoices.IgnoreQueryFilters()
+                    .AsNoTracking()
                     .Include(i => i.Payments)
                     .Where(i => i.CompanyId == company.Id && !i.IsDeleted)
                     .ToListAsync();
 
                 var supplierInvoices = await _context.FournisseurInvoices.IgnoreQueryFilters()
+                    .AsNoTracking()
                     .Include(si => si.Payments)
                     .Where(si => si.CompanyId == company.Id && !si.IsDeleted)
                     .ToListAsync();
 
                 var otherExpenses = await _context.OtherExpenses.IgnoreQueryFilters()
+                    .AsNoTracking()
                     .Where(e => e.CompanyId == company.Id && !e.IsDeleted)
                     .ToListAsync();
 
@@ -626,6 +648,7 @@ namespace ResourceManager.Controllers
         {
             // Derive country from company address (last line or known patterns)
             var companies = await _context.Companies
+                .AsNoTracking()
                 .Where(c => !c.IsDeleted)
                 .Select(c => new { c.Id, c.Address })
                 .ToListAsync();

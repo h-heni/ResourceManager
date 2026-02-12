@@ -63,6 +63,10 @@ ENV ASPNETCORE_URLS=http://+:8080
 ENV ASPNETCORE_ENVIRONMENT=Production
 # Required for ICU globalization on Alpine
 ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+# GC tuning for low-memory VPS (Workstation GC uses less memory than Server GC)
+ENV DOTNET_gcServer=0
+# Thread pool: small spin limit on constrained VPS
+ENV DOTNET_ThreadPool_UnfairSemaphoreSpinLimit=6
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \

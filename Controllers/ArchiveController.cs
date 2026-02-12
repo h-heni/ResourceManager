@@ -101,6 +101,7 @@ namespace ResourceManager.Controllers
 
                 // Get regular invoices with Paid status
                 var regularInvoices = await _context.Invoices
+                    .AsNoTracking()
                     .Include(i => i.Client)
                     .Include(i => i.Payments)
                     .Where(i => i.Status == "Paid" && i.Date.Year == filterYear)
@@ -140,6 +141,7 @@ namespace ResourceManager.Controllers
 
                 // Get historical revenues
                 var historicalRevenues = await _context.HistoricalRevenues
+                    .AsNoTracking()
                     .Include(h => h.Client)
                     .Where(h => h.Date.Year == filterYear)
                     .ToListAsync();
@@ -200,6 +202,7 @@ namespace ResourceManager.Controllers
 
                 // Get other expenses
                 var otherExpenses = await _context.OtherExpenses
+                    .AsNoTracking()
                     .Where(e => e.Date.Year == filterYear)
                     .Select(e => new
                     {
@@ -218,6 +221,7 @@ namespace ResourceManager.Controllers
 
                 // Get paid supplier invoices
                 var supplierInvoices = await _context.FournisseurInvoices
+                    .AsNoTracking()
                     .Include(si => si.Fournisseur)
                     .Include(si => si.Payments)
                     .Where(si => si.Payments != null && si.Payments.Any(p => p.Status == "Completed"))
@@ -239,6 +243,7 @@ namespace ResourceManager.Controllers
 
                 // Get historical expenses
                 var historicalExpenses = await _context.HistoricalExpenses
+                    .AsNoTracking()
                     .Include(h => h.Fournisseur)
                     .Where(h => h.Date.Year == filterYear)
                     .Select(h => new
