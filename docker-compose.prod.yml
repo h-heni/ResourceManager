@@ -1,0 +1,99 @@
+# ============================================
+# ResourceManager - Production Overrides
+# ============================================
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# This file provides production-specific overrides:
+#   - Resource limits for 2GB RAM VPS
+#   - Optimized restart policies
+#   - Logging configuration
+#   - Security hardening
+# ============================================
+
+services:
+  postgres_db:
+    # Resource limits for 2GB RAM VPS (allocate ~512MB to DB)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          memory: 256M
+    
+    # Production logging (prevent disk fill-up)
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Automatic restart on failure
+    restart: always
+
+  api:
+    # Resource limits for API (allocate ~768MB)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 768M
+        reservations:
+          memory: 384M
+    
+    # Production environment
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      # Disable detailed errors in production
+      - ASPNETCORE_DETAILEDERRORS=false
+      # Enable performance optimizations
+      - DOTNET_gcServer=1
+      - DOTNET_gcConcurrent=1
+    
+    # Production logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    
+    # Automatic restart on failure
+    restart: always
+    
+    # Security: Read-only root filesystem where possible
+    # (Exclude /tmp, /app/Logs, /app/Data which need write access)
+    volumes:
+      - api-logs:/app/Logs
+      - api-data:/app/Data
+
+  web:
+    # Resource limits for Nginx (allocate ~256MB)
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          memory: 128M
+    
+    # Production logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+    
+    # Automatic restart on failure
+    restart: always
+
+volumes:
+  api-data:
+    driver: local
+
+# Production network with custom subnet (optional)
+networks:
+  rm-internal:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

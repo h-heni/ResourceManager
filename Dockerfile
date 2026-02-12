@@ -31,9 +31,11 @@ RUN dotnet publish ResourceManager.API.csproj -c Release -o /app/publish /p:UseA
 FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine AS runtime
 WORKDIR /app
 
-# Install native dependencies required by SkiaSharp/QuestPDF + Tesseract OCR + curl for healthcheck
-RUN apk add --no-cache \
+# Install ca-certificates first to fix TLS issues, then other dependencies
+RUN apk add --no-cache ca-certificates && \
+    apk add --no-cache \
     icu-libs \
+    icu-data-full \
     fontconfig \
     freetype \
     libstdc++ \

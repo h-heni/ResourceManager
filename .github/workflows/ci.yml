@@ -5,10 +5,13 @@ on:
     branches: [dev, staging, main]
   pull_request:
     branches: [dev, staging, main]
+  workflow_dispatch:  # Allow manual trigger
 
 env:
   DOTNET_VERSION: '8.0.x'
   NODE_VERSION: '20.x'
+  DOCKER_REGISTRY: docker.io
+  DOCKER_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
 
 jobs:
   # ============================================
@@ -88,13 +91,16 @@ jobs:
           path: ClientApp/dist
 
   # ============================================
-  # Docker Build (on main/staging only)
+  # Docker Build & Push (on main/staging only)
   # ============================================
   docker:
-    name: Docker Build
+    name: Docker Build & Push
     runs-on: ubuntu-latest
     needs: [backend, frontend]
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
+    permissions:
+      contents: read
+      packages: write
     
     steps:
       - name: Checkout code
@@ -103,8 +109,8 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Determine environment
-        id: env
+      - name: Determine environment and tags
+        id: meta
         run: |
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             echo "environment=production" >> $GITHUB_OUTPUT
@@ -112,37 +118,88 @@ jobs:
           elif [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
             echo "environment=staging" >> $GITHUB_OUTPUT
             echo "tag=staging" >> $GITHUB_OUTPUT
-          else
-            echo "environment=development" >> $GITHUB_OUTPUT
-            echo "tag=dev" >> $GITHUB_OUTPUT
           fi
+          # Generate version tag from commit SHA (short)
+          echo "version=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
 
-      - name: Build Backend Docker image
+      # Login to Docker Hub
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # Login to GitHub Container Registry (backup)
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Build and push Backend image
+      - name: Build & Push Backend Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
-          push: false
-          tags: ResourceManager-api:${{ steps.env.outputs.tag }}
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/resourcemanager-api:${{ steps.meta.outputs.tag }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/resourcemanager-api:${{ steps.meta.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/resourcemanager-api:${{ steps.meta.outputs.tag }}
+            ghcr.io/${{ github.repository_owner }}/resourcemanager-api:${{ steps.meta.outputs.version }}
           build-args: |
-            ENVIRONMENT=${{ steps.env.outputs.environment }}
+            ENVIRONMENT=${{ steps.meta.outputs.environment }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          platforms: linux/amd64
 
-      - name: Build Frontend Docker image
+      # Build and push Frontend image
+      - name: Build & Push Frontend Docker image
         uses: docker/build-push-action@v5
         with:
           context: ./ClientApp
           file: ./ClientApp/Dockerfile
-          push: false
-          tags: ResourceManager-web:${{ steps.env.outputs.tag }}
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/resourcemanager-web:${{ steps.meta.outputs.tag }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/resourcemanager-web:${{ steps.meta.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/resourcemanager-web:${{ steps.meta.outputs.tag }}
+            ghcr.io/${{ github.repository_owner }}/resourcemanager-web:${{ steps.meta.outputs.version }}
           build-args: |
-            VITE_API_URL=${{ vars.VITE_API_URL }}
+            VITE_API_URL=
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      # Security scanning (optional but recommended)
+      - name: Run Trivy vulnerability scanner on Backend
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/resourcemanager-api:${{ steps.meta.outputs.tag }}
+          format: 'sarif'
+          output: 'trivy-backend-results.sarif'
+        continue-on-error: true
+
+      - name: Run Trivy vulnerability scanner on Frontend
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/resourcemanager-web:${{ steps.meta.outputs.tag }}
+          format: 'sarif'
+          output: 'trivy-frontend-results.sarif'
+        continue-on-error: true
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: '.'
+        continue-on-error: true
 
   # ============================================
-  # Deploy (manual trigger for production)
+  # Deploy to Staging (automatic on staging branch)
   # ============================================
   deploy-staging:
     name: Deploy to Staging
@@ -152,12 +209,15 @@ jobs:
     environment: staging
     
     steps:
-      - name: Deploy notification
+      - name: Staging deployment placeholder
         run: |
-          echo "🚀 Ready to deploy to STAGING environment"
-          echo "Add your deployment commands here (SSH, Docker Compose, etc.)"
-          # Example: ssh user@staging-server 'cd /app && docker-compose pull && docker-compose up -d'
+          echo "🚀 Staging deployment would happen here"
+          echo "Configure staging environment in GitHub Settings > Environments"
+          echo "Add staging VPS credentials to secrets"
 
+  # ============================================
+  # Deploy to Production (manual approval required)
+  # ============================================
   deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
@@ -166,8 +226,8 @@ jobs:
     environment: production
     
     steps:
-      - name: Deploy notification
+      - name: Production deployment placeholder
         run: |
-          echo "🚀 Ready to deploy to PRODUCTION environment"
-          echo "Add your deployment commands here (SSH, Docker Compose, etc.)"
-          # Example: ssh user@prod-server 'cd /app && docker-compose pull && docker-compose up -d'
+          echo "🚀 Production deployment is handled by deploy.yml workflow"
+          echo "Docker images are now available on Docker Hub"
+          echo "Trigger deployment manually via GitHub Actions"
