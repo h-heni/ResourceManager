@@ -267,13 +267,38 @@ namespace ResourceManager.Controllers
             var record = await _context.PdfFileRecords.FindAsync(id);
             if (record == null) return NotFound();
 
-            if (!System.IO.File.Exists(record.FullPath))
+            var fullPath = record.FullPath;
+            if (string.IsNullOrWhiteSpace(fullPath) && !string.IsNullOrWhiteSpace(record.RelativePath))
             {
-                return NotFound(new { message = "File not found on disk", canRecover = !string.IsNullOrEmpty(record.CloudUrl) });
+                fullPath = Path.Combine(_pdfStorageService.GetBaseFolderPath(), record.RelativePath);
+            }
+            else if (!string.IsNullOrWhiteSpace(fullPath) && !Path.IsPathRooted(fullPath))
+            {
+                fullPath = Path.Combine(_pdfStorageService.GetBaseFolderPath(), fullPath);
             }
 
-            var fileBytes = await System.IO.File.ReadAllBytesAsync(record.FullPath);
-            return File(fileBytes, "application/pdf", record.FileName);
+            if (string.IsNullOrWhiteSpace(fullPath))
+            {
+                _logger.LogWarning("PDF record {RecordId} is missing a valid file path", id);
+                return NotFound(new { message = "File path not configured", canRecover = !string.IsNullOrEmpty(record.CloudUrl) });
+            }
+
+            try
+            {
+                if (!System.IO.File.Exists(fullPath))
+                {
+                    _logger.LogWarning("PDF file missing for record {RecordId}: {Path}", id, fullPath);
+                    return NotFound(new { message = "File not found on disk", canRecover = !string.IsNullOrEmpty(record.CloudUrl) });
+                }
+
+                var fileBytes = await System.IO.File.ReadAllBytesAsync(fullPath);
+                return File(fileBytes, "application/pdf", record.FileName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to load PDF for record {RecordId} from {Path}", id, fullPath);
+                return StatusCode(500, new { message = "Failed to load PDF file" });
+            }
         }
 
         /// <summary>

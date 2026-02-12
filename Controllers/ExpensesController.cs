@@ -67,11 +67,12 @@ namespace ResourceManager.Controllers
 
         // GET: api/expenses/summary
         [HttpGet("summary")]
-        public async Task<ActionResult> GetExpenseSummary()
+        public async Task<ActionResult> GetExpenseSummary([FromQuery] int? year = null)
         {
             var now = _time.GetUtcNow().DateTime;
-            var startOfMonth = new DateTime(now.Year, now.Month, 1);
-            var startOfYear = new DateTime(now.Year, 1, 1);
+            var selectedYear = year ?? now.Year;
+            var startOfMonth = new DateTime(selectedYear, now.Month, 1);
+            var startOfYear = new DateTime(selectedYear, 1, 1);
 
             // Determine company default currency
             var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
@@ -88,12 +89,23 @@ namespace ResourceManager.Controllers
                 }
             }
 
-            var allExpenses = await _context.OtherExpenses.ToListAsync();
+            var expensesQuery = _context.OtherExpenses.AsQueryable();
+            if (year.HasValue)
+            {
+                expensesQuery = expensesQuery.Where(e => e.Date.Year == selectedYear);
+            }
+            var allExpenses = await expensesQuery.ToListAsync();
 
             // Include paid supplier invoices in expense totals
-            var allSupplierInvoices = await _context.FournisseurInvoices
+            var supplierInvoicesQuery = _context.FournisseurInvoices
                 .Include(si => si.Payments)
-                .ToListAsync();
+                .AsQueryable();
+            if (year.HasValue)
+            {
+                supplierInvoicesQuery = supplierInvoicesQuery
+                    .Where(si => (si.InvoiceDate ?? si.CreatedAt).Year == selectedYear);
+            }
+            var allSupplierInvoices = await supplierInvoicesQuery.ToListAsync();
 
             // ═══ Per-currency breakdown ═══
             var byCurrency = allExpenses
