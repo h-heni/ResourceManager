@@ -117,6 +117,7 @@ namespace ResourceManager.Services
         private static readonly string HeaderDark = "#232323";
         private static readonly string TextGrey = "#666666";
         private static readonly string ZebraGrey = "#F0F0F0";
+        private static readonly CultureInfo MoneyCulture = CultureInfo.GetCultureInfo("en-US");
 
         private string CurrencyCode => Settings.CurrencySymbol;
 
@@ -155,26 +156,22 @@ namespace ResourceManager.Services
         
         private string FormatAmount(decimal value)
         {
-            // Tunisian format: space for thousands, comma for decimals (1 000,000 DT)
-            var tndFormat = new NumberFormatInfo
-            {
-                NumberGroupSeparator = "\u00A0", // non-breaking space
-                NumberDecimalSeparator = ",",
-                NumberGroupSizes = new[] { 3 }
-            };
-
-            return value.ToString("N3", tndFormat) + " " + CurrencyCode;
+            var currency = string.IsNullOrWhiteSpace(CurrencyCode) ? "EUR" : CurrencyCode.Trim();
+            return $"{value.ToString("N2", MoneyCulture)}\u00A0{currency}";
         }
+
         private static string FormatAmountWithoutCurrency(decimal value)
         {
-            var tndFormat = new NumberFormatInfo
-            {
-                NumberGroupSeparator = "\u00A0",
-                NumberDecimalSeparator = ",",
-                NumberGroupSizes = new[] { 3 }
-            };
+            return value.ToString("N2", MoneyCulture);
+        }
 
-            return value.ToString("N3", tndFormat);
+        private static float ResolveAmountFontSize(string formattedAmount, float baseFontSize = 10)
+        {
+            if (formattedAmount.Length >= 24) return Math.Max(7.5f, baseFontSize - 2.5f);
+            if (formattedAmount.Length >= 20) return Math.Max(8f, baseFontSize - 2f);
+            if (formattedAmount.Length >= 17) return Math.Max(8.5f, baseFontSize - 1.5f);
+            if (formattedAmount.Length >= 15) return Math.Max(9f, baseFontSize - 1f);
+            return baseFontSize;
         }
 
 
@@ -246,14 +243,21 @@ namespace ResourceManager.Services
                     });
 
                     // Show linked quote reference for invoices
-                    if (Model is Invoice invoice && invoice.DevisId.HasValue && invoice.Devis != null)
+                    if (Model is Invoice invoice && (invoice.DevisId.HasValue || !string.IsNullOrWhiteSpace(invoice.SourceDevisNumber)))
                     {
                         var refLabel = lang switch { "fr" => "Réf. Devis", "de" => "Angebot-Ref.", "ar" => "مرجع عرض السعر", _ => "Quote Ref." };
-                        column.Item().Text(text =>
+                        var quoteReference = !string.IsNullOrWhiteSpace(invoice.SourceDevisNumber)
+                            ? invoice.SourceDevisNumber
+                            : invoice.Devis?.Number;
+
+                        if (!string.IsNullOrWhiteSpace(quoteReference))
                         {
-                            text.Span($"{refLabel}: ").SemiBold();
-                            text.Span(invoice.Devis.Number);
-                        });
+                            column.Item().Text(text =>
+                            {
+                                text.Span($"{refLabel}: ").SemiBold();
+                                text.Span(quoteReference);
+                            });
+                        }
                     }
 
                     // Show linked quote reference for delivery notes
@@ -333,10 +337,10 @@ namespace ResourceManager.Services
                     {
                         columns.ConstantColumn(25);
                         columns.RelativeColumn(3);
-                        columns.RelativeColumn();
-                        columns.RelativeColumn();
-                        columns.RelativeColumn();
-                        columns.RelativeColumn();
+                        columns.ConstantColumn(55);
+                        columns.ConstantColumn(65);
+                        columns.ConstantColumn(110);
+                        columns.ConstantColumn(120);
                     });
                     table.Header(header =>
                     {
@@ -357,15 +361,28 @@ namespace ResourceManager.Services
                     {
                         var item = Model.Items[i];
                         var isEven = i % 2 == 0;
+                        var unitPriceFormatted = FormatAmount(item.Price ?? 0);
+                        var totalFormatted = FormatAmount(item.TotalItemHT);
+                        var unitPriceFontSize = ResolveAmountFontSize(unitPriceFormatted, 9.5f);
+                        var totalFontSize = ResolveAmountFontSize(totalFormatted, 9.5f);
+
                         table.Cell().Element(e => CellStyle(e, isEven)).AlignCenter().Text($"{i+ 1}");
                         table.Cell().Element(e => CellStyle(e, isEven)).Text(item.Description);
                         table.Cell().Element(e => CellStyle(e, isEven)).AlignRight().Text(item.Quantity?.ToString("N0", qtyFormat).Replace("\u0020", "\u00A0"));
                         table.Cell().Element(e => CellStyle(e, isEven)).AlignCenter().Text($"{item.TaxRate:P0}");
-                        table.Cell().Element(e => CellStyle(e, isEven)).AlignCenter().Text(FormatAmountWithoutCurrency(item.Price??0));
-                        table.Cell().Element(e => CellStyle(e, isEven)).AlignCenter().Text(FormatAmountWithoutCurrency(item.TotalItemHT));
+                        table.Cell().Element(e => CellStyle(e, isEven)).AlignRight().Text(text =>
+                        {
+                            text.DefaultTextStyle(x => x.FontSize(unitPriceFontSize));
+                            text.Span(unitPriceFormatted);
+                        });
+                        table.Cell().Element(e => CellStyle(e, isEven)).AlignRight().Text(text =>
+                        {
+                            text.DefaultTextStyle(x => x.FontSize(totalFontSize).SemiBold());
+                            text.Span(totalFormatted);
+                        });
                         static IContainer CellStyle(IContainer container,bool isEven)
                         {
-                            return container.Background(isEven ? ZebraGrey : Colors.White).PaddingVertical(5);
+                            return container.Background(isEven ? ZebraGrey : Colors.White).PaddingVertical(5).PaddingHorizontal(4);
                         }
                     }
                 }
@@ -414,26 +431,7 @@ namespace ResourceManager.Services
                     column.Item().PaddingTop(15).Element(compose => ComposeBankInfo(compose));
                 }
                 
-                // QR code + Signature row
-                column.Item().PaddingTop(20).Row(row =>
-                {
-                    // QR Code on the left (only for invoices)
-                    if (Model is Invoice)
-                    {
-                        row.ConstantItem(110).Column(qrCol =>
-                        {
-                            var qrBytes = GenerateQrCode();
-                            if (qrBytes.Length > 0)
-                            {
-                                qrCol.Item().Width(100).Height(100).Image(qrBytes).FitArea();
-                            }
-                        });
-                        row.ConstantItem(20); // spacer
-                    }
-                    
-                    // Signature on the right (takes remaining space)
-                    row.RelativeItem().Element(compose => ComposeSignature(compose));
-                });
+                column.Item().PaddingTop(30).Element(ComposeFooterSection);
             });
         }
 
@@ -544,43 +542,57 @@ namespace ResourceManager.Services
         }
 
         /// <summary>
-        /// Generate QR code containing invoice XML data as PNG bytes
+        /// Generate QR code containing invoice summary payload as PNG bytes
         /// </summary>
         byte[] GenerateQrCode()
         {
             try
             {
-                var xmlData = GenerateInvoiceXml();
-                if (string.IsNullOrEmpty(xmlData)) return Array.Empty<byte>();
-                
-                // Truncate for QR code size limits — include essential data
-                // Full XML could be too large for QR; include a compact summary  
-                var compactXml = new XElement("Inv",
-                    new XAttribute("n", Model.Number ?? ""),
-                    new XAttribute("d", Model.Date.ToString("yyyy-MM-dd")),
-                    new XElement("Co", Settings.CompanyName),
-                    new XElement("Cl", Model.Client?.Name ?? ""),
-                    new XElement("ST", Model.SubTotal?.ToString("F3") ?? "0"),
-                    new XElement("Tax", Model.TaxAmount?.ToString("F3") ?? "0"),
-                    new XElement("TTC", Model.TotalAmount?.ToString("F3") ?? "0"),
-                    new XElement("Cur", Settings.CurrencySymbol)
-                ).ToString();
+                if (Model is not Invoice) return Array.Empty<byte>();
+
+                var currency = string.IsNullOrWhiteSpace(Settings.CurrencySymbol) ? "EUR" : Settings.CurrencySymbol.Trim();
+                var secureUrl = BuildSecureVerificationUrl();
+                var qrPayload =
+                    "{" +
+                    $"\"invoiceNumber\":\"{EscapeJsonValue(Model.Number ?? string.Empty)}\"," +
+                    $"\"companyName\":\"{EscapeJsonValue(Settings.CompanyName ?? string.Empty)}\"," +
+                    $"\"totalAmount\":\"{(Model.TotalAmount ?? 0).ToString("F3", CultureInfo.InvariantCulture)}\"," +
+                    $"\"currency\":\"{EscapeJsonValue(currency)}\"," +
+                    $"\"secureUrl\":\"{EscapeJsonValue(secureUrl)}\"" +
+                    "}";
                 
                 using var qrGenerator = new QRCodeGenerator();
-                var qrCodeData = qrGenerator.CreateQrCode(compactXml, QRCodeGenerator.ECCLevel.M);
+                var qrCodeData = qrGenerator.CreateQrCode(qrPayload, QRCodeGenerator.ECCLevel.M);
                 using var qrCode = new PngByteQRCode(qrCodeData);
-                return qrCode.GetGraphic(5);
+                return qrCode.GetGraphic(8);
             }
             catch
             {
                 return Array.Empty<byte>();
             }
         }
+
+        private string BuildSecureVerificationUrl()
+        {
+            if (!string.IsNullOrWhiteSpace(Settings.VerificationUrl) && !string.IsNullOrWhiteSpace(Settings.VerificationToken))
+                return $"{Settings.VerificationUrl!.TrimEnd('/')}/{Settings.VerificationToken}";
+
+            if (!string.IsNullOrWhiteSpace(Settings.VerificationUrl))
+                return Settings.VerificationUrl!;
+
+            return string.Empty;
+        }
+
+        private static string EscapeJsonValue(string value)
+        {
+            return value
+                .Replace("\\", "\\\\")
+                .Replace("\"", "\\\"");
+        }
         void ComposeTotals(IContainer container)
         {
             var lang = Settings.InvoiceLanguage?.ToLower() ?? "fr";
 
-            // Translated labels
             var paymentMethodsLabel = lang switch { "fr" => "Modes de paiement", "de" => "Zahlungsmethoden", "ar" => "طرق الدفع", _ => "Payment Methods" };
             var paymentMethodsLine1 = lang switch { "fr" => "Virement bancaire / Chèque /", "de" => "Überweisung / Scheck /", "ar" => "تحويل بنكي / شيك /", _ => "Bank Transfer / Check /" };
             var paymentMethodsLine2 = lang switch { "fr" => "Traite / Espèces", "de" => "Wechsel / Bargeld", "ar" => "كمبيالة / نقد", _ => "Bank Draft / Cash" };
@@ -595,139 +607,674 @@ namespace ResourceManager.Services
                     if (Model is not Devis)
                     {
                         row.RelativeItem(2).Column(c =>
-                        {  
+                        {
                             c.Item().Text(paymentMethodsLabel).Bold().FontColor(BrandBlue);
                             c.Item().Text(paymentMethodsLine1);
                             c.Item().Text(paymentMethodsLine2);
                         });
                     }
-                    // Left Side: Terms
-                    row.RelativeItem(2).Column(c =>
-                    { });
-                    // Right Side: Numbers
+
+                    row.RelativeItem(2).Column(c => { });
+
                     row.RelativeItem(3).AlignRight().Column(c =>
                     {
-               
+                        var subtotalFormatted = FormatAmount(Model.SubTotal ?? 0);
+                        var taxFormatted = FormatAmount(Model.TaxAmount ?? 0);
+                        var totalFormatted = FormatAmount(Model.TotalAmount ?? 0);
+                        var subtotalFontSize = ResolveAmountFontSize(subtotalFormatted, 10f);
+                        var taxFontSize = ResolveAmountFontSize(taxFormatted, 10f);
+                        var totalFontSize = ResolveAmountFontSize(totalFormatted, 14f);
+
                         c.Item().Table(t =>
                         {
                             t.ColumnsDefinition(cols => { cols.RelativeColumn(); cols.RelativeColumn(); });
 
                             t.Cell().Padding(5).Text(subtotalLabel);
-                            t.Cell().AlignRight().Padding(5).Text(FormatAmount(Model.SubTotal??0));
+                            t.Cell().AlignRight().Padding(5).Text(text =>
+                            {
+                                text.DefaultTextStyle(x => x.FontSize(subtotalFontSize).SemiBold());
+                                text.Span(subtotalFormatted);
+                            });
 
-                            // Show actual tax rate: check if any items have TVA
                             var hasVat = Model.Items.Any(i => (i.TaxRate ?? 0) > 0);
-                            var vatLabelText = hasVat ? $"{vatPrefix} ({Model.Items.Where(i => (i.TaxRate ?? 0) > 0).Select(i => i.TaxRate ?? 0).First():P0})" : $"{vatPrefix} (0%)";
-                            t.Cell().Padding(5).Text(vatLabelText);
-                            t.Cell().AlignRight().Padding(5).Text(FormatAmount(Model.TaxAmount??0));
+                            var vatLabelText = hasVat
+                                ? $"{vatPrefix} ({Model.Items.Where(i => (i.TaxRate ?? 0) > 0).Select(i => i.TaxRate ?? 0).First():P0})"
+                                : $"{vatPrefix} (0%)";
 
-                            // Only show custom tax if enabled and has a value
+                            t.Cell().Padding(5).Text(vatLabelText);
+                            t.Cell().AlignRight().Padding(5).Text(text =>
+                            {
+                                text.DefaultTextStyle(x => x.FontSize(taxFontSize).SemiBold());
+                                text.Span(taxFormatted);
+                            });
+
                             if (Model.Tfiscal.HasValue && Model.Tfiscal.Value > 0)
                             {
                                 var taxName = Model.TfiscalName ?? Settings.CustomTaxName ?? "Timbre fiscal";
+                                var customTaxFormatted = FormatAmount(Model.Tfiscal.Value);
+                                var customTaxFontSize = ResolveAmountFontSize(customTaxFormatted, 10f);
+
                                 t.Cell().Padding(5).Text(taxName);
-                                t.Cell().AlignRight().Padding(5).Text(FormatAmount(Model.Tfiscal.Value));
+                                t.Cell().AlignRight().Padding(5).Text(text =>
+                                {
+                                    text.DefaultTextStyle(x => x.FontSize(customTaxFontSize).SemiBold());
+                                    text.Span(customTaxFormatted);
+                                });
                             }
 
                             t.Cell().ColumnSpan(2).PaddingTop(10).BorderTop(2).BorderColor(BrandBlue).PaddingTop(5).Row(r =>
                             {
                                 r.RelativeItem().Text(totalTtcLabel).Bold().FontSize(14).FontColor(BrandBlue);
-                                r.RelativeItem().AlignRight().Text(FormatAmount(Model.TotalAmount??0)).Bold().FontSize(14).FontColor(BrandBlue);
+                                r.RelativeItem().AlignRight().Text(text =>
+                                {
+                                    text.DefaultTextStyle(x => x.Bold().FontSize(totalFontSize).FontColor(BrandBlue));
+                                    text.Span(totalFormatted);
+                                });
                             });
                         });
-                 
                     });
-                    
                 }
-            
             });
         }
-        void ComposeSignature(IContainer container)
+
+        private string ResolveDefaultFooterText(string lang)
+        {
+            return lang switch
+            {
+                "fr" => "Merci pour votre confiance",
+                "de" => "Vielen Dank für Ihr Vertrauen",
+                "ar" => "شكراً لثقتكم",
+                _ => "Thank you for your business"
+            };
+        }
+
+        private string ResolveAuthorizedSignatureLabel(string lang)
+        {
+            return lang switch
+            {
+                "fr" => "Signature autorisée",
+                "de" => "Autorisierte Unterschrift",
+                "ar" => "التوقيع المعتمد",
+                _ => "Authorized Signature"
+            };
+        }
+
+        private void ComposeFooterSection(IContainer container)
         {
             var lang = Settings.InvoiceLanguage?.ToLower() ?? "fr";
-            var defaultThankYou = lang switch
+            var authorizedSignatureLabel = ResolveAuthorizedSignatureLabel(lang);
+            var footerText = !string.IsNullOrWhiteSpace(Settings.FooterText)
+                ? Settings.FooterText
+                : ResolveDefaultFooterText(lang);
+
+            var qrBytes = Model is Invoice ? GenerateQrCode() : Array.Empty<byte>();
+
+            container.Column(col =>
             {
-                "fr" => "MERCI POUR VOTRE CONFIANCE",
-                "de" => "VIELEN DANK FÜR IHR VERTRAUEN",
-                "ar" => "شكراً لثقتكم",
-                _ => "THANK YOU FOR YOUR BUSINESS"
-            };
-            var footerText = !string.IsNullOrWhiteSpace(Settings.FooterText) ? Settings.FooterText : defaultThankYou;
-            container.Row(row =>
-            {
-                row.RelativeItem().Column(c =>
+                col.Spacing(6);
+
+                col.Item().Row(row =>
                 {
-                    c.Item().PaddingTop(15).Text(footerText).FontSize(10).SemiBold();
+                    row.RelativeItem().Column(leftCol =>
+                    {
+                        if (qrBytes.Length > 0)
+                            leftCol.Item().Width(96).Height(96).Image(qrBytes).FitArea();
+                    });
+
+                    row.ConstantItem(20);
+                    row.RelativeItem().AlignRight().Element(sig => ComposeSignature(sig, authorizedSignatureLabel));
                 });
 
-                row.RelativeItem().AlignRight().Column(c =>
+                col.Item().Row(row =>
                 {
-                    // Vertical signature layout:
-                    // 1. Signature text (name/title entered by user)
-                    // 2. Horizontal line
-                    // 3. Signer position/title
-                    // 4. Signature/cachet image (if enabled)
-                    
-                    if (!string.IsNullOrEmpty(Settings.PdfSignatureText))
+                    row.RelativeItem().Text(footerText).FontSize(10).FontColor("#4A5568").Italic();
+                    row.ConstantItem(20);
+                    row.RelativeItem();
+                });
+            });
+        }
+
+        void ComposeSignature(IContainer container, string authorizedSignatureLabel)
+        {
+            var hasSignatureContent = !string.IsNullOrWhiteSpace(Settings.PdfSignatureText)
+                || !string.IsNullOrWhiteSpace(Settings.PdfSignerPosition)
+                || (Settings.ShowSignatureOnPdf && Settings.SignatureImageData?.Length > 0);
+
+            container.Column(sigCol =>
+            {
+                sigCol.Item().Width(220).AlignRight().LineHorizontal(2).LineColor("#E2E8F0");
+
+                sigCol.Item().PaddingTop(8).AlignRight().Column(innerCol =>
+                {
+                    if (!string.IsNullOrWhiteSpace(Settings.PdfSignatureText))
+                        innerCol.Item().AlignCenter().Text(Settings.PdfSignatureText).FontSize(16).Italic().Bold().FontColor("#1A202C");
+
+                    if (!string.IsNullOrWhiteSpace(Settings.PdfSignerPosition))
+                        innerCol.Item().PaddingTop(4).AlignCenter().Text(Settings.PdfSignerPosition).FontSize(10).FontColor(Colors.Grey.Medium);
+
+                    if (Settings.ShowSignatureOnPdf && Settings.SignatureImageData?.Length > 0)
+                        innerCol.Item().PaddingTop(6).AlignCenter().Width(120).Height(50).Image(Settings.SignatureImageData).FitArea();
+
+                    if (hasSignatureContent)
                     {
-                        c.Item().AlignCenter().PaddingTop(3).Text(Settings.PdfSignatureText).FontSize(9).SemiBold();;
+                        innerCol.Item().PaddingTop(8).AlignCenter().Text(authorizedSignatureLabel).FontSize(8).FontColor("#A0AEC0").LetterSpacing(0.5f);
                     }
-                    // 2. Horizontal line
-                    c.Item().BorderTop(1).BorderColor(Colors.Grey.Medium).PaddingTop(5);
-                    
-                    // 3. Signer position/title
-                    if (!string.IsNullOrEmpty(Settings.PdfSignerPosition))
+                    else
                     {
-                        c.Item().AlignCenter().PaddingTop(3).Text(Settings.PdfSignerPosition).FontSize(8).FontColor(Colors.Grey.Darken1);
-                    }
-                    
-                    // 4. Signature/cachet image if enabled
-                    if (Settings.ShowSignatureOnPdf && Settings.SignatureImageData != null && Settings.SignatureImageData.Length > 0)
-                    {
-                        c.Item().PaddingTop(5).AlignCenter().Width(140).Height(60).Image(Settings.SignatureImageData).FitArea();
+                        innerCol.Item().PaddingTop(16).AlignCenter().Width(160).BorderBottom(1).BorderColor("#CBD5E0").PaddingBottom(20);
+                        innerCol.Item().PaddingTop(6).AlignCenter().Text(authorizedSignatureLabel).FontSize(8).FontColor("#A0AEC0").LetterSpacing(0.5f);
                     }
                 });
             });
-            
-            // 5. Verification token (Pro Invoice feature)
-            if (!string.IsNullOrEmpty(Settings.VerificationToken))
+        }
+
+    }
+
+    /// <summary>
+    /// Generates a "Remaining Payment Notice" PDF for an invoice.
+    /// Shows invoice number, client, total, paid, remaining, due date & a professional reminder.
+    /// Reuses the same brand styling, colors, signature block, and currency from the invoice PDF.
+    /// </summary>
+    public class RemainingPaymentDocument : IDocument
+    {
+        public Invoice Invoice { get; }
+        public PdfSettings Settings { get; }
+
+        private string BrandBlue => Settings.PrimaryColor;
+        private static readonly string HeaderDark = "#232323";
+        private static readonly string TextGrey = "#666666";
+        private static readonly CultureInfo MoneyCulture = CultureInfo.GetCultureInfo("en-US");
+        private string CurrencyCode => Settings.CurrencySymbol;
+        private readonly byte[] LogoBytes;
+
+        public RemainingPaymentDocument(Invoice invoice, PdfSettings settings)
+        {
+            Invoice = invoice;
+            Settings = settings ?? new PdfSettings();
+            QuestPDF.Settings.License = LicenseType.Community;
+
+            if (Settings.LogoData != null && Settings.LogoData.Length > 0)
             {
-                container.PaddingTop(10).Row(row =>
-                {
-                    // QR Code with verification URL
-                    if (!string.IsNullOrEmpty(Settings.VerificationUrl))
-                    {
-                        try
-                        {
-                            using var qrGenerator = new QRCodeGenerator();
-                            var qrUrl = $"{Settings.VerificationUrl}/{Settings.VerificationToken}";
-                            var qrCodeData = qrGenerator.CreateQrCode(qrUrl, QRCodeGenerator.ECCLevel.M);
-                            using var qrCode = new PngByteQRCode(qrCodeData);
-                            var qrBytes = qrCode.GetGraphic(4);
-                            row.ConstantItem(70).Height(70).Image(qrBytes).FitArea();
-                        }
-                        catch
-                        {
-                            // QR generation failed — skip silently
-                        }
-                    }
-                    
-                    row.RelativeItem().PaddingLeft(8).AlignMiddle().Column(c =>
-                    {
-                        var tokenLabel = (Settings.InvoiceLanguage?.ToLower() ?? "fr") switch
-                        {
-                            "fr" => "Jeton de vérification",
-                            "de" => "Verifizierungstoken",
-                            "ar" => "رمز التحقق",
-                            _ => "Verification Token"
-                        };
-                        c.Item().Text(tokenLabel).FontSize(7).FontColor(Colors.Grey.Darken1);
-                        c.Item().Text(Settings.VerificationToken).FontSize(7).FontFamily("Courier New");
-                    });
-                });
+                LogoBytes = Settings.LogoData;
+            }
+            else
+            {
+                var logoPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images", "logo.png");
+                if (!File.Exists(logoPath))
+                    logoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot", "images", "logo.png");
+                LogoBytes = File.Exists(logoPath) ? File.ReadAllBytes(logoPath) : Array.Empty<byte>();
             }
         }
 
+        public DocumentMetadata GetMetadata() => DocumentMetadata.Default;
+        public DocumentSettings GetSettings() => DocumentSettings.Default;
+
+        private string FormatAmount(decimal value)
+        {
+            var currency = string.IsNullOrWhiteSpace(CurrencyCode) ? "EUR" : CurrencyCode.Trim();
+            return $"{value.ToString("N2", MoneyCulture)}\u00A0{currency}";
+        }
+
+        private static float ResolveAmountFontSize(string formatted, float baseFontSize = 10)
+        {
+            if (formatted.Length >= 24) return Math.Max(7.5f, baseFontSize - 2.5f);
+            if (formatted.Length >= 20) return Math.Max(8f, baseFontSize - 2f);
+            if (formatted.Length >= 17) return Math.Max(8.5f, baseFontSize - 1.5f);
+            if (formatted.Length >= 15) return Math.Max(9f, baseFontSize - 1f);
+            return baseFontSize;
+        }
+
+        public void Compose(IDocumentContainer container)
+        {
+            var lang = Settings.InvoiceLanguage?.ToLower() ?? "fr";
+
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.Margin(50);
+                page.DefaultTextStyle(x => x.FontSize(10).FontColor(TextGrey));
+
+                // ── Watermark ──
+                page.Background().AlignCenter().AlignMiddle()
+                    .Text(lang switch
+                    {
+                        "fr" => "Rappel de Paiement",
+                        "de" => "Zahlungserinnerung",
+                        "ar" => "تذكير بالدفع",
+                        _ => "Payment Reminder"
+                    })
+                    .FontSize(60)
+                    .Bold()
+                    .FontColor("#00000008");
+
+                page.Header().Element(ComposeHeader);
+                page.Content().Element(ComposeContent);
+
+                page.Footer().AlignCenter().Text(x =>
+                {
+                    x.CurrentPageNumber();
+                    x.Span(" / ");
+                    x.TotalPages();
+                });
+            });
+        }
+
+        private void ComposeHeader(IContainer container)
+        {
+            var lang = Settings.InvoiceLanguage?.ToLower() ?? "fr";
+            var title = lang switch
+            {
+                "fr" => "Avis de Reste à Payer",
+                "de" => "Restbetrag-Zahlungsaufforderung",
+                "ar" => "إشعار بالمبلغ المتبقي",
+                _ => "Remaining Payment Notice"
+            };
+
+            var culture = lang switch
+            {
+                "fr" => new CultureInfo("fr-FR"),
+                "de" => new CultureInfo("de-DE"),
+                "ar" => new CultureInfo("ar-TN"),
+                _ => new CultureInfo("en-US")
+            };
+
+            var dateLabel = lang switch { "fr" => "Date", "de" => "Datum", "ar" => "التاريخ", _ => "Date" };
+            var refLabel = lang switch { "fr" => "Réf. Facture", "de" => "Rechnungs-Nr.", "ar" => "رقم الفاتورة", _ => "Invoice Ref." };
+
+            container.Row(row =>
+            {
+                row.RelativeItem().Column(col =>
+                {
+                    col.Item().PaddingTop(20)
+                        .Text(title)
+                        .FontSize(20).Bold().FontColor(BrandBlue);
+
+                    col.Item().PaddingTop(2)
+                        .Text(Invoice.Number)
+                        .FontSize(15).Bold().FontColor(BrandBlue);
+
+                    col.Item().Text(text =>
+                    {
+                        text.Span($"{dateLabel}: ").SemiBold();
+                        text.Span(DateTime.UtcNow.ToString("D", culture));
+                    });
+
+                    col.Item().Text(text =>
+                    {
+                        text.Span($"{refLabel}: ").SemiBold();
+                        text.Span(Invoice.Number);
+                    });
+                });
+
+                if (Settings.ShowLogo && LogoBytes.Length > 0)
+                {
+                    row.ConstantItem(120).Height(120).Image(LogoBytes).FitUnproportionally();
+                }
+            });
+        }
+
+        private void ComposeContent(IContainer container)
+        {
+            var lang = Settings.InvoiceLanguage?.ToLower() ?? "fr";
+
+            var fromLabel = lang switch { "fr" => "De", "de" => "Von", "ar" => "من", _ => "From" };
+            var clientLabel = lang switch { "fr" => "Client", "de" => "Kunde", "ar" => "العميل", _ => "Client" };
+            var unknownClient = lang switch { "fr" => "Client inconnu", "de" => "Unbekannter Kunde", "ar" => "عميل غير معروف", _ => "Unknown Client" };
+
+            var owner = new Client
+            {
+                Name = Settings.CompanyName,
+                Address = Settings.CompanyAddress,
+                MatriculeFiscal = Settings.CompanyTaxId,
+                Phone = Settings.CompanyPhone
+            };
+            var client = Invoice.Client ?? new Client
+            {
+                Name = unknownClient,
+                Address = string.Empty,
+                MatriculeFiscal = string.Empty,
+                Phone = string.Empty
+            };
+
+            container.PaddingVertical(20).Column(column =>
+            {
+                column.Spacing(5);
+
+                // ── From / Client addresses ──
+                column.Item().Row(row =>
+                {
+                    row.RelativeItem().Component(new AddressComponent(fromLabel, owner));
+                    row.ConstantItem(50);
+                    row.RelativeItem().Component(new AddressComponent(clientLabel, client));
+                });
+
+                // ── Payment Summary Table ──
+                column.Item().PaddingTop(30).Element(ComposePaymentSummary);
+
+                // ── Professional Reminder Message ──
+                column.Item().PaddingTop(30).Element(ComposeReminderMessage);
+
+                // ── Bank info (if available) ──
+                if (HasBankInfo())
+                {
+                    column.Item().PaddingTop(15).Element(ComposeBankInfo);
+                }
+
+                column.Item().PaddingTop(30).Element(ComposeFooterSection);
+            });
+        }
+
+        private void ComposePaymentSummary(IContainer container)
+        {
+            var lang = Settings.InvoiceLanguage?.ToLower() ?? "fr";
+
+            var invoiceNumberLabel = lang switch { "fr" => "N° Facture", "de" => "Rechnungs-Nr.", "ar" => "رقم الفاتورة", _ => "Invoice Number" };
+            var clientNameLabel = lang switch { "fr" => "Client", "de" => "Kunde", "ar" => "العميل", _ => "Client" };
+            var invoiceDateLabel = lang switch { "fr" => "Date de facture", "de" => "Rechnungsdatum", "ar" => "تاريخ الفاتورة", _ => "Invoice Date" };
+            var dueDateLabel = lang switch { "fr" => "Date d'échéance", "de" => "Fälligkeitsdatum", "ar" => "تاريخ الاستحقاق", _ => "Due Date" };
+            var totalAmountLabel = lang switch { "fr" => "Montant Total TTC", "de" => "Gesamtbetrag", "ar" => "المبلغ الإجمالي", _ => "Total Amount" };
+            var paidAmountLabel = lang switch { "fr" => "Montant Payé", "de" => "Bezahlter Betrag", "ar" => "المبلغ المدفوع", _ => "Amount Paid" };
+            var remainingLabel = lang switch { "fr" => "Reste à Payer", "de" => "Restbetrag", "ar" => "المبلغ المتبقي", _ => "Remaining Balance" };
+            var notApplicable = lang switch { "fr" => "Non défini", "de" => "Nicht festgelegt", "ar" => "غير محدد", _ => "Not set" };
+
+            var culture = lang switch
+            {
+                "fr" => new CultureInfo("fr-FR"),
+                "de" => new CultureInfo("de-DE"),
+                "ar" => new CultureInfo("ar-TN"),
+                _ => new CultureInfo("en-US")
+            };
+
+            var totalFormatted = FormatAmount(Invoice.TotalAmount ?? 0);
+            var paidFormatted = FormatAmount(Invoice.AmountPaid);
+            var remainingFormatted = FormatAmount(Invoice.RemainingAmount);
+
+            container.Table(table =>
+            {
+                table.ColumnsDefinition(cols =>
+                {
+                    cols.RelativeColumn(3);
+                    cols.RelativeColumn(4);
+                });
+
+                // Helper for label rows
+                void AddRow(string label, string value, bool isAmount = false, bool isHighlight = false)
+                {
+                    table.Cell().Background("#F8F9FA").Border(1).BorderColor("#E2E8F0").Padding(10)
+                        .Text(label).SemiBold().FontSize(10).FontColor(HeaderDark);
+
+                    var cell = table.Cell().Background(isHighlight ? BrandBlue : Colors.White)
+                        .Border(1).BorderColor("#E2E8F0").Padding(10);
+
+                    if (isAmount)
+                    {
+                        var fontSize = ResolveAmountFontSize(value, isHighlight ? 14f : 11f);
+                        cell.AlignRight().Text(text =>
+                        {
+                            text.DefaultTextStyle(x => x
+                                .FontSize(fontSize)
+                                .Bold()
+                                .FontColor(isHighlight ? Colors.White : HeaderDark));
+                            text.Span(value);
+                        });
+                    }
+                    else
+                    {
+                        cell.Text(value).FontSize(10).FontColor(isHighlight ? Colors.White : HeaderDark);
+                    }
+                }
+
+                AddRow(invoiceNumberLabel, Invoice.Number);
+                AddRow(clientNameLabel, Invoice.Client?.Name ?? unknownClient(lang));
+                AddRow(invoiceDateLabel, Invoice.Date.ToString("D", culture));
+                AddRow(dueDateLabel, Invoice.DueDate?.ToString("D", culture) ?? notApplicable);
+
+                // Separator
+                table.Cell().ColumnSpan(2).PaddingVertical(5);
+
+                AddRow(totalAmountLabel, totalFormatted, isAmount: true);
+                AddRow(paidAmountLabel, paidFormatted, isAmount: true);
+                AddRow(remainingLabel, remainingFormatted, isAmount: true, isHighlight: true);
+            });
+        }
+
+        private static string unknownClient(string lang) => lang switch
+        {
+            "fr" => "Client inconnu",
+            "de" => "Unbekannter Kunde",
+            "ar" => "عميل غير معروف",
+            _ => "Unknown Client"
+        };
+
+        private void ComposeReminderMessage(IContainer container)
+        {
+            var lang = Settings.InvoiceLanguage?.ToLower() ?? "fr";
+
+            var reminderTitle = lang switch
+            {
+                "fr" => "Rappel de paiement",
+                "de" => "Zahlungserinnerung",
+                "ar" => "تذكير بالدفع",
+                _ => "Payment Reminder"
+            };
+
+            var reminderBody = lang switch
+            {
+                "fr" => "Nous vous rappelons que le solde mentionné ci-dessus reste dû au titre de la facture référencée. " +
+                        "Nous vous prions de bien vouloir procéder au règlement dans les meilleurs délais. " +
+                        "Si le paiement a déjà été effectué, veuillez ne pas tenir compte de cet avis.",
+                "de" => "Wir möchten Sie daran erinnern, dass der oben genannte Restbetrag für die referenzierte Rechnung fällig ist. " +
+                        "Bitte veranlassen Sie die Zahlung baldmöglichst. " +
+                        "Sollte die Zahlung bereits erfolgt sein, betrachten Sie dieses Schreiben als gegenstandslos.",
+                "ar" => "نود تذكيركم بأن المبلغ المتبقي المذكور أعلاه مستحق بموجب الفاتورة المشار إليها. " +
+                        "يرجى إجراء الدفع في أقرب وقت ممكن. " +
+                        "إذا كان الدفع قد تم بالفعل، يرجى تجاهل هذا الإشعار.",
+                _ => "This is a friendly reminder that the outstanding balance shown above remains due for the referenced invoice. " +
+                     "We kindly request that you arrange payment at your earliest convenience. " +
+                     "If payment has already been made, please disregard this notice."
+            };
+
+            container.Background("#FFFBEB").Border(1).BorderColor("#FDE68A").Padding(15).Column(col =>
+            {
+                col.Item().Text(reminderTitle).Bold().FontSize(12).FontColor("#92400E");
+                col.Item().PaddingTop(8).Text(reminderBody).FontSize(10).FontColor("#78350F").LineHeight(1.5f);
+            });
+        }
+
+        private string ResolveDefaultFooterText(string lang)
+        {
+            return lang switch
+            {
+                "fr" => "Merci pour votre confiance",
+                "de" => "Vielen Dank für Ihr Vertrauen",
+                "ar" => "شكراً لثقتكم",
+                _ => "Thank you for your business"
+            };
+        }
+
+        private string ResolveAuthorizedSignatureLabel(string lang)
+        {
+            return lang switch
+            {
+                "fr" => "Signature autorisée",
+                "de" => "Autorisierte Unterschrift",
+                "ar" => "التوقيع المعتمد",
+                _ => "Authorized Signature"
+            };
+        }
+
+        private byte[] GenerateQrCode()
+        {
+            try
+            {
+                var currency = string.IsNullOrWhiteSpace(Settings.CurrencySymbol) ? "EUR" : Settings.CurrencySymbol.Trim();
+                var secureUrl = BuildSecureVerificationUrl();
+                var qrPayload =
+                    "{" +
+                    $"\"invoiceNumber\":\"{EscapeJsonValue(Invoice.Number ?? string.Empty)}\"," +
+                    $"\"companyName\":\"{EscapeJsonValue(Settings.CompanyName ?? string.Empty)}\"," +
+                    $"\"totalAmount\":\"{(Invoice.TotalAmount ?? 0).ToString("F3", CultureInfo.InvariantCulture)}\"," +
+                    $"\"currency\":\"{EscapeJsonValue(currency)}\"," +
+                    $"\"secureUrl\":\"{EscapeJsonValue(secureUrl)}\"" +
+                    "}";
+
+                using var qrGenerator = new QRCodeGenerator();
+                var qrCodeData = qrGenerator.CreateQrCode(qrPayload, QRCodeGenerator.ECCLevel.M);
+                using var qrCode = new PngByteQRCode(qrCodeData);
+                return qrCode.GetGraphic(8);
+            }
+            catch
+            {
+                return Array.Empty<byte>();
+            }
+        }
+
+        private string BuildSecureVerificationUrl()
+        {
+            if (!string.IsNullOrWhiteSpace(Settings.VerificationUrl) && !string.IsNullOrWhiteSpace(Settings.VerificationToken))
+                return $"{Settings.VerificationUrl!.TrimEnd('/')}/{Settings.VerificationToken}";
+
+            if (!string.IsNullOrWhiteSpace(Settings.VerificationUrl))
+                return Settings.VerificationUrl!;
+
+            return string.Empty;
+        }
+
+        private static string EscapeJsonValue(string value)
+        {
+            return value
+                .Replace("\\", "\\\\")
+                .Replace("\"", "\\\"");
+        }
+
+        private void ComposeFooterSection(IContainer container)
+        {
+            var lang = Settings.InvoiceLanguage?.ToLower() ?? "fr";
+            var authorizedSignatureLabel = ResolveAuthorizedSignatureLabel(lang);
+            var footerText = !string.IsNullOrWhiteSpace(Settings.FooterText)
+                ? Settings.FooterText
+                : ResolveDefaultFooterText(lang);
+
+            var qrBytes = GenerateQrCode();
+
+            container.Column(col =>
+            {
+                col.Spacing(6);
+
+                col.Item().Row(row =>
+                {
+                    row.RelativeItem().Column(leftCol =>
+                    {
+                        if (qrBytes.Length > 0)
+                            leftCol.Item().Width(96).Height(96).Image(qrBytes).FitArea();
+                    });
+
+                    row.ConstantItem(20);
+                    row.RelativeItem().AlignRight().Element(sig => ComposeSignature(sig, authorizedSignatureLabel));
+                });
+
+                col.Item().Row(row =>
+                {
+                    row.RelativeItem().Text(footerText).FontSize(10).FontColor("#4A5568").Italic();
+                    row.ConstantItem(20);
+                    row.RelativeItem();
+                });
+            });
+        }
+
+        private void ComposeSignature(IContainer container, string authorizedSignatureLabel)
+        {
+            var hasSignatureContent = !string.IsNullOrWhiteSpace(Settings.PdfSignatureText)
+                || !string.IsNullOrWhiteSpace(Settings.PdfSignerPosition)
+                || (Settings.ShowSignatureOnPdf && Settings.SignatureImageData?.Length > 0);
+
+            container.Column(sigCol =>
+            {
+                sigCol.Item().Width(220).AlignRight().LineHorizontal(2).LineColor("#E2E8F0");
+
+                sigCol.Item().PaddingTop(8).AlignRight().Column(innerCol =>
+                {
+                    if (!string.IsNullOrWhiteSpace(Settings.PdfSignatureText))
+                    {
+                        innerCol.Item().AlignCenter().Text(Settings.PdfSignatureText).FontSize(16).Italic().Bold().FontColor("#1A202C");
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(Settings.PdfSignerPosition))
+                    {
+                        innerCol.Item().PaddingTop(4).AlignCenter().Text(Settings.PdfSignerPosition).FontSize(10).FontColor(Colors.Grey.Medium);
+                    }
+
+                    if (Settings.ShowSignatureOnPdf && Settings.SignatureImageData?.Length > 0)
+                    {
+                        innerCol.Item().PaddingTop(6).AlignCenter().Width(120).Height(50).Image(Settings.SignatureImageData).FitArea();
+                    }
+
+                    if (hasSignatureContent)
+                    {
+                        innerCol.Item().PaddingTop(8).AlignCenter().Text(authorizedSignatureLabel).FontSize(8).FontColor("#A0AEC0").LetterSpacing(0.5f);
+                    }
+                    else
+                    {
+                        innerCol.Item().PaddingTop(16).AlignCenter().Width(160).BorderBottom(1).BorderColor("#CBD5E0").PaddingBottom(20);
+                        innerCol.Item().PaddingTop(6).AlignCenter().Text(authorizedSignatureLabel).FontSize(8).FontColor("#A0AEC0").LetterSpacing(0.5f);
+                    }
+                });
+            });
+        }
+
+        private bool HasBankInfo()
+        {
+            return (!string.IsNullOrEmpty(Settings.BankName) && Settings.ShowBankName)
+                || (!string.IsNullOrEmpty(Settings.BankBIC) && Settings.ShowBankBIC)
+                || (!string.IsNullOrEmpty(Settings.BankRIB) && Settings.ShowBankRIB)
+                || (!string.IsNullOrEmpty(Settings.BankIBAN) && Settings.ShowBankIBAN);
+        }
+
+        private void ComposeBankInfo(IContainer container)
+        {
+            var lang = Settings.InvoiceLanguage?.ToLower() ?? "fr";
+            var bankLabel = lang switch { "fr" => "Coordonnées bancaires", "de" => "Bankverbindung", "ar" => "المعلومات البنكية", _ => "Bank Details" };
+
+            container.Background("#F8F9FA").Border(1).BorderColor("#E0E0E0").Padding(10).Column(col =>
+            {
+                col.Item().Text(bankLabel).Bold().FontSize(9).FontColor(BrandBlue);
+                col.Item().PaddingTop(4).Row(row =>
+                {
+                    if (!string.IsNullOrEmpty(Settings.BankName) && Settings.ShowBankName)
+                    {
+                        row.RelativeItem().Column(c =>
+                        {
+                            c.Item().Text(lang switch { "fr" => "Banque", "de" => "Bank", "ar" => "البنك", _ => "Bank" }).FontSize(7).FontColor("#999");
+                            c.Item().Text(Settings.BankName).FontSize(9).SemiBold();
+                        });
+                    }
+                    if (!string.IsNullOrEmpty(Settings.BankBIC) && Settings.ShowBankBIC)
+                    {
+                        row.RelativeItem().Column(c =>
+                        {
+                            c.Item().Text("BIC / SWIFT").FontSize(7).FontColor("#999");
+                            c.Item().Text(Settings.BankBIC).FontSize(9).SemiBold();
+                        });
+                    }
+                    if (!string.IsNullOrEmpty(Settings.BankRIB) && Settings.ShowBankRIB)
+                    {
+                        row.RelativeItem().Column(c =>
+                        {
+                            c.Item().Text("RIB").FontSize(7).FontColor("#999");
+                            c.Item().Text(Settings.BankRIB).FontSize(9).SemiBold();
+                        });
+                    }
+                    if (!string.IsNullOrEmpty(Settings.BankIBAN) && Settings.ShowBankIBAN)
+                    {
+                        row.RelativeItem().Column(c =>
+                        {
+                            c.Item().Text("IBAN").FontSize(7).FontColor("#999");
+                            c.Item().Text(Settings.BankIBAN).FontSize(9).SemiBold();
+                        });
+                    }
+                });
+            });
+        }
     }
 
 }

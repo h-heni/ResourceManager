@@ -74,12 +74,16 @@ export default function DevisCreatePage() {
     // Form State
     const [clientId, setClientId] = useState('');
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [quoteNumber, setQuoteNumber] = useState('');
+    const [lastQuoteNumber, setLastQuoteNumber] = useState('');
+    const [suggestedQuoteNumber, setSuggestedQuoteNumber] = useState('');
     const [items, setItems] = useState<DevisItem[]>([
         { description: '', quantity: 1, price: 0, tva: true, vatRate: 19, fromCatalog: false }
     ]);
 
     useEffect(() => {
         fetchClients();
+        fetchLastQuoteNumber();
         const fetchTaxSettings = async () => {
             try {
                 const res = await api.get('/Settings');
@@ -129,10 +133,22 @@ export default function DevisCreatePage() {
 
     const fetchClients = async () => {
         try {
-            const res = await api.get('/Clients');
-            setClients(res.data);
+            const res = await api.get('/Clients?size=9999');
+            const data = res.data;
+            setClients(Array.isArray(data) ? data : (data.data || []));
         } catch (error) {
             console.error("Error fetching clients", error);
+        }
+    };
+
+    const fetchLastQuoteNumber = async () => {
+        try {
+            const res = await api.get('/Devis/last-number');
+            setLastQuoteNumber(res.data.lastNumber || '');
+            setSuggestedQuoteNumber(res.data.suggestedNumber || '');
+            setQuoteNumber(res.data.suggestedNumber || '');
+        } catch (error) {
+            console.error('Error fetching last quote number', error);
         }
     };
 
@@ -271,11 +287,23 @@ export default function DevisCreatePage() {
 
     const updateItem = (index: number, field: keyof DevisItem, value: string | number | boolean) => {
         const newItems = [...items];
-        (newItems[index] as Record<string, string | number | boolean>)[field] = value;
-        // Reset fromCatalog when user manually edits the description
+        const current = newItems[index];
+        if (!current) return;
+
         if (field === 'description') {
-            newItems[index].fromCatalog = false;
+            newItems[index] = { ...current, description: String(value), fromCatalog: false };
+        } else if (field === 'quantity') {
+            newItems[index] = { ...current, quantity: Number(value) };
+        } else if (field === 'price') {
+            newItems[index] = { ...current, price: Number(value) };
+        } else if (field === 'tva') {
+            newItems[index] = { ...current, tva: Boolean(value) };
+        } else if (field === 'vatRate') {
+            newItems[index] = { ...current, vatRate: Number(value) };
+        } else if (field === 'fromCatalog') {
+            newItems[index] = { ...current, fromCatalog: Boolean(value) };
         }
+
         setItems(newItems);
     };
 
@@ -307,7 +335,7 @@ export default function DevisCreatePage() {
         setLoading(true);
         try {
             const payload = {
-                number: "DEV-" + Date.now().toString().slice(-6),
+                number: quoteNumber.trim(),
                 date: new Date(date),
                 clientId: parseInt(clientId),
                 currency: pdfCurrency || undefined,
@@ -410,6 +438,25 @@ export default function DevisCreatePage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            {t('quote.quoteNumber')}
+                        </label>
+                        <input
+                            type="text"
+                            value={quoteNumber}
+                            onChange={e => setQuoteNumber(e.target.value)}
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                        />
+                        {(lastQuoteNumber || suggestedQuoteNumber) && (
+                            <p className="text-xs text-gray-500 mt-1">
+                                {lastQuoteNumber && <span>{t('createPage.lastInvoice')} <span className="font-medium text-[#065F46]">{lastQuoteNumber}</span></span>}
+                                {suggestedQuoteNumber && (
+                                    <span> — {t('createPage.suggested')} <span className="font-medium text-green-600">{suggestedQuoteNumber}</span></span>
+                                )}
+                            </p>
+                        )}
+                    </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                             Client <span className="text-red-500">*</span>

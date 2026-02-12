@@ -47,12 +47,15 @@ interface DevisItem {
 interface Devis {
     id: number;
     number: string;
+    Number?: string;
     clientId: number;
     clientName: string;
     status: string;
     totalAmount: number;
     devisItems?: DevisItem[];
 }
+
+const getDevisNumber = (devis: Devis) => devis.number || devis.Number || '';
 
 // Validation errors interface
 interface ValidationErrors {
@@ -278,8 +281,9 @@ export default function InvoiceCreatePage() {
 
     const fetchClients = async () => {
         try {
-            const res = await api.get('/Clients');
-            setClients(res.data);
+            const res = await api.get('/Clients?size=9999');
+            const data = res.data;
+            setClients(Array.isArray(data) ? data : (data.data || []));
         } catch (error) {
             console.error("Error fetching clients", error);
         }
@@ -427,6 +431,11 @@ export default function InvoiceCreatePage() {
             const quote = res.data;
             setSelectedQuoteData(quote);
 
+            // Inherit currency & language from the quote
+            if (quote.currency) setPdfCurrency(quote.currency);
+            if (quote.currencySymbol) setPdfCurrencySymbol(quote.currencySymbol);
+            if (quote.pdfLanguage) setPdfLanguage(quote.pdfLanguage);
+
             // Pre-fill items from quote
             if (quote.devisItems && quote.devisItems.length > 0) {
                 setItems(quote.devisItems.map((item: { description: string; quantity: number; price: number; tva: boolean; vatRate?: number }) => ({
@@ -496,11 +505,23 @@ export default function InvoiceCreatePage() {
 
     const updateItem = (index: number, field: keyof InvoiceItem, value: string | number | boolean) => {
         const newItems = [...items];
-        (newItems[index] as Record<string, string | number | boolean>)[field] = value;
-        // Reset fromCatalog when user manually edits the description
+        const current = newItems[index];
+        if (!current) return;
+
         if (field === 'description') {
-            newItems[index].fromCatalog = false;
+            newItems[index] = { ...current, description: String(value), fromCatalog: false };
+        } else if (field === 'quantity') {
+            newItems[index] = { ...current, quantity: Number(value) };
+        } else if (field === 'price') {
+            newItems[index] = { ...current, price: Number(value) };
+        } else if (field === 'tva') {
+            newItems[index] = { ...current, tva: Boolean(value) };
+        } else if (field === 'vatRate') {
+            newItems[index] = { ...current, vatRate: Number(value) };
+        } else if (field === 'fromCatalog') {
+            newItems[index] = { ...current, fromCatalog: Boolean(value) };
         }
+
         setItems(newItems);
     };
 
@@ -536,9 +557,6 @@ export default function InvoiceCreatePage() {
                 clientId: parseInt(clientId),
                 devisId: selectedQuoteId ? parseInt(selectedQuoteId) : null,
                 deliveryNoteIds: selectedDeliveryNoteIds.length > 0 ? selectedDeliveryNoteIds : null,
-                currency: pdfCurrency || undefined,
-                currencySymbol: pdfCurrencySymbol || undefined,
-                pdfLanguage: pdfLanguage || undefined,
                 items: items
                     .filter(item => item.description.trim() !== '')
                     .map(item => ({
@@ -608,43 +626,29 @@ export default function InvoiceCreatePage() {
                     </div>
                 )}
 
-                {/* Currency & Language Selection */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-[#065F46]/5 border border-[#065F46]/10 rounded-xl">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                            {t('createPage.documentCurrency')}
-                        </label>
-                        <select
-                            value={pdfCurrency}
-                            onChange={e => {
-                                setPdfCurrency(e.target.value);
-                                setPdfCurrencySymbol(getCurrencySymbol(e.target.value));
-                            }}
-                            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none transition-all"
-                        >
-                            {CURRENCY_OPTIONS.map(opt => (
-                                <option key={opt.code} value={opt.code}>{opt.label}</option>
-                            ))}
-                        </select>
-                        <p className="text-xs text-gray-500 mt-1">{t('createPage.currencyHelp')}</p>
+                {/* Currency & Language (inherited from Quote - read-only) */}
+                {selectedQuoteId && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-[#065F46]/5 border border-[#065F46]/10 rounded-xl">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {t('createPage.documentCurrency')}
+                            </label>
+                            <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-600">
+                                {CURRENCY_OPTIONS.find(c => c.code === pdfCurrency)?.label || pdfCurrency || t('createPage.inheritedFromQuote', 'Inherited from quote')}
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">{t('createPage.currencyFromQuote', 'Currency is inherited from the linked quote')}</p>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                {t('createPage.pdfLanguage')}
+                            </label>
+                            <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-600">
+                                {pdfLanguage === 'fr' ? t('language.fr') : pdfLanguage === 'en' ? t('language.en') : pdfLanguage === 'de' ? t('language.de') : pdfLanguage === 'ar' ? t('language.ar') : pdfLanguage || t('createPage.inheritedFromQuote', 'Inherited from quote')}
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">{t('createPage.languageFromQuote', 'Language is inherited from the linked quote')}</p>
+                        </div>
                     </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                            {t('createPage.pdfLanguage')}
-                        </label>
-                        <select
-                            value={pdfLanguage}
-                            onChange={e => setPdfLanguage(e.target.value)}
-                            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none transition-all"
-                        >
-                            <option value="fr">{t('language.fr')}</option>
-                            <option value="en">{t('language.en')}</option>
-                            <option value="de">{t('language.de')}</option>
-                            <option value="ar">{t('language.ar')}</option>
-                        </select>
-                        <p className="text-xs text-gray-500 mt-1">{t('createPage.languageHelp')}</p>
-                    </div>
-                </div>
+                )}
 
                 {/* Invoice Info */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -706,7 +710,7 @@ export default function InvoiceCreatePage() {
                             <option value="">{t('createPage.noQuoteSelected')}</option>
                             {quotes.map(quote => (
                                 <option key={quote.id} value={quote.id}>
-                                    {t('createPage.selectQuote', { number: quote.number, amount: (quote.totalAmount || 0).toLocaleString() + ' ' + (pdfCurrencySymbol || DEFAULT_CURRENCY) })}
+                                    {t('createPage.selectQuote', { number: getDevisNumber(quote), amount: (quote.totalAmount || 0).toLocaleString() + ' ' + (pdfCurrencySymbol || DEFAULT_CURRENCY) })}
                                 </option>
                             ))}
                         </select>

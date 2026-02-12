@@ -13,36 +13,51 @@ namespace ResourceManager.Controllers
         private readonly AppDbContext _context;
         private readonly SupabaseStorageService _storageService;
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly ILogger<FournisseursController> _logger;
 
-        public FournisseursController(AppDbContext context, SupabaseStorageService storageService, UserManager<ApplicationUser> userManager)
+        public FournisseursController(AppDbContext context, SupabaseStorageService storageService, UserManager<ApplicationUser> userManager, ILogger<FournisseursController> logger)
         {
             _context = context;
             _storageService = storageService;
             _userManager = userManager;
+            _logger = logger;
         }
 
         // GET: api/fournisseurs
         [HttpGet]
         public async Task<IActionResult> GetFournisseurs([FromQuery] int page = 1, [FromQuery] int size = 20)
         {
-            if (page < 1) page = 1;
-            if (size < 1) size = 20;
+            try
+            {
+                if (page < 1) page = 1;
+                if (size < 1) size = 20;
 
-            var query = _context.Fournisseurs.AsNoTracking().OrderBy(f => f.Name);
+                var query = _context.Fournisseurs.AsNoTracking().OrderBy(f => f.Name);
 
-            var totalCount = await query.CountAsync();
-            
-            var list = await query
-                .Skip((page - 1) * size)
-                .Take(size)
-                .ToListAsync();
+                var totalCount = await query.CountAsync();
+                
+                var list = await query
+                    .Skip((page - 1) * size)
+                    .Take(size)
+                    .ToListAsync();
 
-            return Ok(new {
-                Data = list,
-                Page = page,
-                Size = size,
-                TotalCount = totalCount
-            });
+                return Ok(new {
+                    Data = list,
+                    Page = page,
+                    Size = size,
+                    TotalCount = totalCount
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching suppliers (fournisseurs)");
+                return Ok(new {
+                    Data = Array.Empty<object>(),
+                    Page = page,
+                    Size = size,
+                    TotalCount = 0
+                });
+            }
         }
 
         // GET: api/fournisseurs/{id}

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using ResourceManager.Data;
@@ -11,9 +12,11 @@ using ResourceManager.Data;
 namespace ResourceManager.API.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260212161112_AddSourceDevisNumberAndDocumentIndexes")]
+    partial class AddSourceDevisNumberAndDocumentIndexes
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -511,6 +514,12 @@ namespace ResourceManager.API.Data.Migrations
                     b.Property<string>("CreatedByUserId")
                         .HasColumnType("text");
 
+                    b.Property<string>("Currency")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CurrencySymbol")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("Date")
                         .HasColumnType("timestamp without time zone");
 
@@ -528,6 +537,9 @@ namespace ResourceManager.API.Data.Migrations
 
                     b.Property<string>("Number")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PdfLanguage")
                         .HasColumnType("text");
 
                     b.Property<bool>("Treated")
@@ -994,13 +1006,6 @@ namespace ResourceManager.API.Data.Migrations
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int?>("InvoiceId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("InvoiceNumber")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
@@ -1010,6 +1015,10 @@ namespace ResourceManager.API.Data.Migrations
                     b.Property<string>("PaymentMethod")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Reference")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<bool>("Treated")
                         .HasColumnType("boolean");
@@ -1025,12 +1034,6 @@ namespace ResourceManager.API.Data.Migrations
 
                     b.HasIndex("Date")
                         .HasDatabaseName("IX_HistoricalRevenues_Date");
-
-                    b.HasIndex("InvoiceId");
-
-                    b.HasIndex("CompanyId", "InvoiceId")
-                        .IsUnique()
-                        .HasFilter("\"InvoiceId\" IS NOT NULL");
 
                     b.HasIndex("CompanyId", "IsDeleted")
                         .HasDatabaseName("IX_HistoricalRevenues_CompanyId_IsDeleted");
@@ -1058,6 +1061,12 @@ namespace ResourceManager.API.Data.Migrations
                     b.Property<string>("CreatedByUserId")
                         .HasColumnType("text");
 
+                    b.Property<string>("Currency")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CurrencySymbol")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("Date")
                         .HasColumnType("timestamp without time zone");
 
@@ -1078,6 +1087,9 @@ namespace ResourceManager.API.Data.Migrations
 
                     b.Property<string>("Number")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PdfLanguage")
                         .HasColumnType("text");
 
                     b.Property<string>("SourceDevisNumber")
@@ -1993,18 +2005,11 @@ namespace ResourceManager.API.Data.Migrations
                         .WithMany()
                         .HasForeignKey("CreatedByUserId");
 
-                    b.HasOne("ResourceManager.Models.Invoice", "Invoice")
-                        .WithMany()
-                        .HasForeignKey("InvoiceId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.Navigation("Client");
 
                     b.Navigation("Company");
 
                     b.Navigation("CreatedByUser");
-
-                    b.Navigation("Invoice");
                 });
 
             modelBuilder.Entity("ResourceManager.Models.Invoice", b =>

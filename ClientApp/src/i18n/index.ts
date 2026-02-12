@@ -6,6 +6,7 @@ import en from './locales/en.json';
 import fr from './locales/fr.json';
 import de from './locales/de.json';
 import ar from './locales/ar.json';
+import { validateTranslationResources } from './translationValidator';
 
 const resources = {
   en: { translation: en },
@@ -13,6 +14,28 @@ const resources = {
   de: { translation: de },
   ar: { translation: ar }
 };
+
+if (import.meta.env.DEV) {
+  const translationMap = Object.fromEntries(
+    Object.entries(resources).map(([language, value]) => [language, value.translation as Record<string, unknown>])
+  );
+
+  const validation = validateTranslationResources(translationMap, 'en');
+
+  if (!validation.isValid) {
+    console.warn('[i18n] Translation key mismatch detected compared to en locale.');
+    for (const [language, keys] of Object.entries(validation.missingByLanguage)) {
+      if (keys.length > 0) {
+        console.warn(`[i18n] Missing keys in ${language}:`, keys);
+      }
+    }
+    for (const [language, keys] of Object.entries(validation.extraByLanguage)) {
+      if (keys.length > 0) {
+        console.warn(`[i18n] Extra keys in ${language}:`, keys);
+      }
+    }
+  }
+}
 
 function applyDocumentLanguage(lang: string): void {
   if (typeof document === 'undefined') return;

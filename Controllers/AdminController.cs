@@ -57,32 +57,40 @@ public class AdminController : BaseApiController
     [HttpGet("health")]
     public async Task<IActionResult> GetHealth()
     {
-        var snapshot = _metrics.GetSnapshot();
-
-        // Check database connectivity
-        string dbStatus = "Healthy";
         try
         {
-            await _context.Database.CanConnectAsync();
-        }
-        catch
-        {
-            dbStatus = "Down";
-            snapshot.Status = "Degraded";
-        }
+            var snapshot = _metrics.GetSnapshot();
 
-        return Ok(new
+            // Check database connectivity
+            string dbStatus = "Healthy";
+            try
+            {
+                await _context.Database.CanConnectAsync();
+            }
+            catch
+            {
+                dbStatus = "Down";
+                snapshot.Status = "Degraded";
+            }
+
+            return Ok(new
+            {
+                snapshot.Status,
+                snapshot.UptimeSeconds,
+                snapshot.TotalRequests,
+                snapshot.AverageResponseTimeMs,
+                ErrorRate = snapshot.ErrorRate24h,
+                Errors24h = snapshot.ErrorCount24h,
+                DatabaseConnected = dbStatus == "Healthy",
+                Timestamp = snapshot.ServerStartedAt,
+                LogCounts = InMemoryLogSink.GetCountsByLevel()
+            });
+        }
+        catch (Exception ex)
         {
-            snapshot.Status,
-            snapshot.UptimeSeconds,
-            snapshot.TotalRequests,
-            snapshot.AverageResponseTimeMs,
-            ErrorRate = snapshot.ErrorRate24h,
-            Errors24h = snapshot.ErrorCount24h,
-            DatabaseConnected = dbStatus == "Healthy",
-            Timestamp = snapshot.ServerStartedAt,
-            LogCounts = InMemoryLogSink.GetCountsByLevel()
-        });
+            _logger.LogError(ex, "Error fetching health status");
+            return Ok(new { Status = "Unknown", DatabaseConnected = false });
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -99,29 +107,37 @@ public class AdminController : BaseApiController
         [FromQuery] int pageSize = 50,
         [FromQuery] string? level = null)
     {
-        if (page < 1) page = 1;
-        if (pageSize < 1 || pageSize > 100) pageSize = 50;
-
-        var logs = InMemoryLogSink.GetLogs(page, pageSize, level);
-        var totalCount = InMemoryLogSink.GetTotalCount(level);
-
-        return Ok(new
+        try
         {
-            items = logs.Select(l => new
+            if (page < 1) page = 1;
+            if (pageSize < 1 || pageSize > 100) pageSize = 50;
+
+            var logs = InMemoryLogSink.GetLogs(page, pageSize, level);
+            var totalCount = InMemoryLogSink.GetTotalCount(level);
+
+            return Ok(new
             {
-                l.Id,
-                l.Timestamp,
-                l.Level,
-                l.Message,
-                l.Source,
-                l.ExceptionType
-            }),
-            totalCount,
-            page,
-            pageSize,
-            totalPages = (int)Math.Ceiling((double)totalCount / pageSize),
-            countsByLevel = InMemoryLogSink.GetCountsByLevel()
-        });
+                items = logs.Select(l => new
+                {
+                    l.Id,
+                    l.Timestamp,
+                    l.Level,
+                    l.Message,
+                    l.Source,
+                    l.ExceptionType
+                }),
+                totalCount,
+                page,
+                pageSize,
+                totalPages = (int)Math.Ceiling((double)totalCount / pageSize),
+                countsByLevel = InMemoryLogSink.GetCountsByLevel()
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching logs");
+            return Ok(new { items = Array.Empty<object>(), totalCount = 0, page, pageSize, totalPages = 0, countsByLevel = new Dictionary<string, int>() });
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -135,6 +151,8 @@ public class AdminController : BaseApiController
     [HttpGet("users-by-country")]
     public async Task<IActionResult> GetUsersByCountry()
     {
+        try
+        {
         const string cacheKey = "admin_users_by_country";
         
         var response = await _cache.GetOrCreateAsync(
@@ -183,6 +201,12 @@ public class AdminController : BaseApiController
             absoluteExpiration: TimeSpan.FromHours(1));
         
         return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching users by country");
+            return Ok(new { Countries = Array.Empty<object>(), TotalLogins = 0 });
+        }
     }
 
     // DTOs for cache serialization
@@ -210,28 +234,36 @@ public class AdminController : BaseApiController
     [HttpGet("live-users")]
     public IActionResult GetLiveUsers()
     {
-        var snapshot = _sessionTracker.GetSnapshot();
-
-        // Map to shape expected by frontend LiveUsersData interface
-        return Ok(new
+        try
         {
-            ActiveCount = snapshot.TotalConnected,
-            Users = snapshot.Sessions.Select(s => new
+            var snapshot = _sessionTracker.GetSnapshot();
+
+            // Map to shape expected by frontend LiveUsersData interface
+            return Ok(new
             {
-                UserId = s.Email, // frontend uses email as identifier
-                s.Email,
-                s.Role,
-                IpAddress = s.IpAddress ?? "unknown",
-                s.LastActivity,
-                SessionDurationMinutes = (DateTime.UtcNow - s.LastActivity).TotalMinutes
-            }),
-            ByRole = new Dictionary<string, int>
-            {
-                ["SuperAdmin"] = snapshot.SuperAdminCount,
-                ["Manager"] = snapshot.ManagerCount,
-                ["Employee"] = snapshot.EmployeeCount
-            }
-        });
+                ActiveCount = snapshot.TotalConnected,
+                Users = snapshot.Sessions.Select(s => new
+                {
+                    UserId = s.Email, // frontend uses email as identifier
+                    s.Email,
+                    s.Role,
+                    IpAddress = s.IpAddress ?? "unknown",
+                    s.LastActivity,
+                    SessionDurationMinutes = (DateTime.UtcNow - s.LastActivity).TotalMinutes
+                }),
+                ByRole = new Dictionary<string, int>
+                {
+                    ["SuperAdmin"] = snapshot.SuperAdminCount,
+                    ["Manager"] = snapshot.ManagerCount,
+                    ["Employee"] = snapshot.EmployeeCount
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching live users");
+            return Ok(new { ActiveCount = 0, Users = Array.Empty<object>(), ByRole = new Dictionary<string, int>() });
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -247,21 +279,29 @@ public class AdminController : BaseApiController
         [FromQuery] int pageSize = 50,
         [FromQuery] string? severity = null)
     {
-        if (page < 1) page = 1;
-        if (pageSize < 1 || pageSize > 100) pageSize = 50;
-
-        var alerts = _securityAlerts.GetAlerts(page, pageSize, severity);
-        var totalCount = _securityAlerts.GetTotalCount(severity);
-
-        return Ok(new
+        try
         {
-            items = alerts,
-            totalCount,
-            page,
-            pageSize,
-            totalPages = (int)Math.Ceiling((double)totalCount / pageSize),
-            countsBySeverity = _securityAlerts.GetCountsBySeverity()
-        });
+            if (page < 1) page = 1;
+            if (pageSize < 1 || pageSize > 100) pageSize = 50;
+
+            var alerts = _securityAlerts.GetAlerts(page, pageSize, severity);
+            var totalCount = _securityAlerts.GetTotalCount(severity);
+
+            return Ok(new
+            {
+                items = alerts,
+                totalCount,
+                page,
+                pageSize,
+                totalPages = (int)Math.Ceiling((double)totalCount / pageSize),
+                countsBySeverity = _securityAlerts.GetCountsBySeverity()
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching security alerts");
+            return Ok(new { items = Array.Empty<object>(), totalCount = 0, page, pageSize, totalPages = 0, countsBySeverity = new Dictionary<string, int>() });
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -275,6 +315,8 @@ public class AdminController : BaseApiController
     [HttpGet("overview")]
     public async Task<IActionResult> GetOverview()
     {
+        try
+        {
         var health = _metrics.GetSnapshot();
         var liveUsers = _sessionTracker.GetSnapshot();
         var alertSummary = _securityAlerts.GetCountsBySeverity();
@@ -330,5 +372,11 @@ public class AdminController : BaseApiController
             RecentAlerts = _securityAlerts.GetAlerts(1, 5),
             RecentLogs = InMemoryLogSink.GetLogs(1, 5)
         });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching admin overview");
+            return Ok(new { Health = new { Status = "Unknown" }, LiveUsers = new { ActiveCount = 0 }, TotalAlertCount = 0, TotalLogCount = 0 });
+        }
     }
 }

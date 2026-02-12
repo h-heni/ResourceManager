@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ResourceManager.Data;
+using ResourceManager.DTOs;
 using ResourceManager.Models;
 using System.Globalization;
 
@@ -92,10 +93,16 @@ namespace ResourceManager.Controllers
         /// Supports year filtering.
         /// </summary>
         [HttpGet("invoices")]
-        public async Task<ActionResult> GetArchivedInvoices([FromQuery] int? year)
+        public async Task<ActionResult<PaginatedResponseDto<object>>> GetArchivedInvoices(
+            [FromQuery] int? year,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20)
         {
             try
             {
+                if (page < 1) page = 1;
+                if (pageSize < 1) pageSize = 20;
+
                 // Determine the year to filter by
                 int filterYear = year ?? DateTime.UtcNow.Year;
 
@@ -104,6 +111,7 @@ namespace ResourceManager.Controllers
                     .AsNoTracking()
                     .Include(i => i.Client)
                     .Include(i => i.Payments)
+                    .Include(i => i.Devis)
                     .Where(i => i.Status == "Paid" && i.Date.Year == filterYear)
                     .ToListAsync();
 
@@ -126,8 +134,8 @@ namespace ResourceManager.Controllers
                         TotalAmount = i.TotalAmount,
                         ClientName = i.Client != null ? i.Client.Name : "Unknown",
                         ClientId = i.ClientId,
-                        Currency = i.Currency ?? "",
-                        CurrencySymbol = i.CurrencySymbol ?? "",
+                        Currency = i.Devis?.Currency ?? "",
+                        CurrencySymbol = i.Devis?.CurrencySymbol ?? "",
                         AmountPaid = i.Payments != null ? i.Payments.Where(p => p.Status == "Completed").Sum(p => p.Amount) : 0m,
                         RemainingAmount = i.TotalAmount - (i.Payments != null ? i.Payments.Where(p => p.Status == "Completed").Sum(p => p.Amount) : 0m),
                         Status = i.Status ?? "Paid",
@@ -143,6 +151,7 @@ namespace ResourceManager.Controllers
                 var historicalRevenues = await _context.HistoricalRevenues
                     .AsNoTracking()
                     .Include(h => h.Client)
+                    .Include(h => h.Invoice)
                     .Where(h => h.Date.Year == filterYear)
                     .ToListAsync();
 
@@ -150,6 +159,8 @@ namespace ResourceManager.Controllers
                 {
                     h.Id,
                     Number = "H" + h.Id.ToString(), // Historical data doesn't have invoice numbers, use H + ID
+                    InvoiceId = h.InvoiceId,
+                    InvoiceNumber = h.Invoice != null ? h.Invoice.Number : h.InvoiceNumber,
                     Date = h.Date,
                     TotalAmount = h.AmountPaid,
                     ClientName = h.ClientName,
@@ -159,7 +170,7 @@ namespace ResourceManager.Controllers
                     AmountPaid = h.AmountPaid,
                     RemainingAmount = 0m,
                     Status = "Paid",
-                    Reference = h.Reference ?? "",
+                    Reference = h.Invoice != null ? h.Invoice.Number : h.InvoiceNumber ?? "",
                     PaymentMethod = h.PaymentMethod ?? "Cash",
                     Source = "historical",
                     Year = h.Date.Year,
@@ -170,15 +181,23 @@ namespace ResourceManager.Controllers
                 var combinedList = new List<object>();
                 combinedList.AddRange(regularInvoiceData);
                 combinedList.AddRange(historicalRevenueData);
-                
-                var sorted = combinedList.OrderByDescending(x => ((dynamic)x).Date).ToList();
 
-                return Ok(new
+                var sorted = combinedList.OrderByDescending(x => ((dynamic)x).Date).ToList();
+                var totalCount = sorted.Count;
+                var pagedItems = sorted
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+
+                var response = new PaginatedResponseDto<object>
                 {
-                    year = filterYear,
-                    count = sorted.Count,
-                    data = sorted
-                });
+                    Items = pagedItems,
+                    TotalCount = totalCount,
+                    Page = page,
+                    PageSize = pageSize
+                };
+
+                return Ok(response);
             }
             catch (Exception ex)
             {

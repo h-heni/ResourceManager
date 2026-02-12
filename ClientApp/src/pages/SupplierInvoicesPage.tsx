@@ -86,11 +86,6 @@ interface ConsistencyIssue {
     issues: string[];
 }
 
-interface Supplier {
-    id: number;
-    name: string;
-}
-
 // localStorage key
 const AUTOSAVE_KEY = 'supplier-invoice-draft';
 
@@ -850,47 +845,47 @@ export default function SupplierInvoicesPage() {
                         </button>
                     </div>
                 ) : (
-                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                        <table className="w-full">
-                            <thead className="bg-gray-50">
+                    <div className="rm-table-card">
+                        <table className="rm-table">
+                            <thead>
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{t('supplierInvoice.invoiceNumber', 'Invoice #')}</th>
-                                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{t('supplierInvoice.supplier', 'Supplier')}</th>
-                                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{t('common.date', 'Date')}</th>
-                                    <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">{t('invoice.totalTTC', 'Total TTC')}</th>
-                                    <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">{t('supplierInvoice.paid', 'Paid')}</th>
-                                    <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">{t('supplierInvoice.remaining', 'Remaining')}</th>
-                                    <th className="px-6 py-3 text-center text-xs font-semibold text-gray-500 uppercase">{t('common.status', 'Status')}</th>
-                                    <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">{t('common.actions', 'Actions')}</th>
+                                    <th>{t('supplierInvoice.invoiceNumber', 'Invoice #')}</th>
+                                    <th>{t('supplierInvoice.supplier', 'Supplier')}</th>
+                                    <th>{t('common.date', 'Date')}</th>
+                                    <th className="rm-th-number">{t('invoice.totalTTC', 'Total TTC')}</th>
+                                    <th className="rm-th-number">{t('supplierInvoice.paid', 'Paid')}</th>
+                                    <th className="rm-th-number">{t('supplierInvoice.remaining', 'Remaining')}</th>
+                                    <th className="text-center">{t('common.status', 'Status')}</th>
+                                    <th className="rm-th-actions">{t('common.actions', 'Actions')}</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-100">
+                            <tbody>
                                 {filteredInvoices.map(inv => (
-                                    <tr key={inv.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-6 py-4">
+                                    <tr key={inv.id}>
+                                        <td className="rm-cell-text">
                                             <div className="font-medium text-gray-900">{inv.invoiceNumber || '—'}</div>
                                             <div className="text-xs text-gray-400">{inv.fileName}</div>
                                         </td>
-                                        <td className="px-6 py-4 text-sm text-gray-600">{inv.fournisseurName || '—'}</td>
-                                        <td className="px-6 py-4 text-sm text-gray-600">
+                                        <td className="rm-cell-text text-sm text-gray-600">{inv.fournisseurName || '—'}</td>
+                                        <td className="rm-cell-text text-sm text-gray-600">
                                             {inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString() : '—'}
                                         </td>
-                                        <td className="px-6 py-4 text-right font-medium text-gray-900">
+                                        <td className="rm-cell-currency">
                                             {inv.totalTTC != null ? formatCurrency(inv.totalTTC, inv.currencySymbol || DEFAULT_CURRENCY) : '—'}
                                         </td>
-                                        <td className="px-6 py-4 text-right text-sm">
+                                        <td className="rm-cell-currency text-sm">
                                             {inv.amountPaid > 0 ? (
                                                 <span className="text-emerald-600 font-medium">{formatCurrency(inv.amountPaid, inv.currencySymbol || DEFAULT_CURRENCY)}</span>
                                             ) : (
                                                 <span className="text-gray-400">—</span>
                                             )}
                                             {inv.pendingAmount > 0 && (
-                                                <div className="text-xs text-amber-500 mt-0.5" title={t('supplierInvoice.pendingPayments', 'Pending payments awaiting confirmation')}>
+                                                <div className="text-xs text-amber-500 mt-0.5 whitespace-nowrap" title={t('supplierInvoice.pendingPayments', 'Pending payments awaiting confirmation')}>
                                                     ⏰ {formatCurrency(inv.pendingAmount, inv.currencySymbol || DEFAULT_CURRENCY)}
                                                 </div>
                                             )}
                                         </td>
-                                        <td className="px-6 py-4 text-right text-sm">
+                                        <td className="rm-cell-currency text-sm">
                                             {inv.remainingAmount > 0 ? (
                                                 <span className="text-amber-600 font-medium">{formatCurrency(inv.remainingAmount, inv.currencySymbol || DEFAULT_CURRENCY)}</span>
                                             ) : inv.totalTTC ? (
@@ -899,7 +894,7 @@ export default function SupplierInvoicesPage() {
                                                 <span className="text-gray-400">—</span>
                                             )}
                                         </td>
-                                        <td className="px-6 py-4 text-center">
+                                        <td className="px-4 py-3 text-center whitespace-nowrap">
                                             <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getPaymentStatusColor(inv.paymentStatus)}`}>
                                                 {getPaymentStatusEmoji(inv.paymentStatus)} {t(`supplierInvoice.paymentStatus.${inv.paymentStatus}`, inv.paymentStatus)}
                                             </span>
@@ -927,7 +922,7 @@ export default function SupplierInvoicesPage() {
                                                 </div>
                                             )}
                                         </td>
-                                        <td className="px-6 py-4 text-right">
+                                        <td className="rm-cell-actions">
                                             <div className="flex justify-end gap-1">
                                                 {inv.paymentStatus !== 'Paid' && (
                                                     <button
@@ -981,20 +976,20 @@ export default function SupplierInvoicesPage() {
                                     const currencies = Object.keys(byCurrency);
                                     return currencies.map(cur => (
                                         <tr key={cur}>
-                                            <td colSpan={3} className="px-6 py-3 text-sm font-semibold text-gray-700 text-right">
+                                            <td colSpan={3} className="px-4 py-3 text-sm font-semibold text-gray-700 text-right whitespace-nowrap">
                                                 {currencies.length > 1 ? `${t('common.total', 'Total')} (${cur})` : t('common.total', 'Total')}
                                             </td>
-                                            <td className="px-6 py-3 text-right font-bold text-gray-900">
+                                            <td className="px-4 py-3 text-right font-bold text-gray-900 tabular-nums whitespace-nowrap">
                                                 {formatCurrency(byCurrency[cur].totalTTC, cur)}
                                             </td>
-                                            <td className="px-6 py-3 text-right font-semibold text-emerald-600">
+                                            <td className="px-4 py-3 text-right font-semibold text-emerald-600 tabular-nums whitespace-nowrap">
                                                 {formatCurrency(byCurrency[cur].paid, cur)}
                                             </td>
-                                            <td className="px-6 py-3 text-right font-semibold text-amber-600">
+                                            <td className="px-4 py-3 text-right font-semibold text-amber-600 tabular-nums whitespace-nowrap">
                                                 {formatCurrency(byCurrency[cur].remaining, cur)}
                                             </td>
-                                            <td className="px-6 py-3"></td>
-                                            <td className="px-6 py-3"></td>
+                                            <td className="px-4 py-3"></td>
+                                            <td className="px-4 py-3"></td>
                                         </tr>
                                     ));
                                 })()}

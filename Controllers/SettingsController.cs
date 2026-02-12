@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
 using ResourceManager.Data;
 using ResourceManager.Models;
@@ -397,6 +398,10 @@ namespace ResourceManager.Controllers
             var user = await GetCurrentUserAsync(_userManager);
             if (user == null) return Unauthorized();
 
+            // Log incoming signature fields for debugging
+            _logger.LogInformation("UpdateSettings received - PdfSignatureText: '{SignatureText}' (IsNull: {IsNull}), PdfSignerPosition: '{SignerPosition}' (IsNull: {IsNull2})",
+                dto.PdfSignatureText, dto.PdfSignatureText == null, dto.PdfSignerPosition, dto.PdfSignerPosition == null);
+
             var settings = await _context.CompanySettings
                 .FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
 
@@ -450,8 +455,21 @@ namespace ResourceManager.Controllers
             if (dto.CustomTaxAmount.HasValue) settings.CustomTaxAmount = dto.CustomTaxAmount.Value;
             if (dto.PdfFooterText != null) settings.PdfFooterText = dto.PdfFooterText;
             if (dto.ShowCompanyLogo.HasValue) settings.ShowCompanyLogo = dto.ShowCompanyLogo.Value;
-            if (dto.PdfSignatureText != null) settings.PdfSignatureText = dto.PdfSignatureText;
-            if (dto.PdfSignerPosition != null) settings.PdfSignerPosition = dto.PdfSignerPosition;
+            
+            // Signature fields - always save when provided (empty string clears the field)
+            // Frontend sends trimmed strings (empty string = clear, non-empty = set value)
+            if (dto.PdfSignatureText != null)
+            {
+                settings.PdfSignatureText = string.IsNullOrWhiteSpace(dto.PdfSignatureText) ? null : dto.PdfSignatureText.Trim();
+            }
+            if (dto.PdfSignerPosition != null)
+            {
+                settings.PdfSignerPosition = string.IsNullOrWhiteSpace(dto.PdfSignerPosition) ? null : dto.PdfSignerPosition.Trim();
+            }
+            
+            _logger.LogInformation("Signature fields saved - Text: '{SignatureText}', Position: '{SignerPosition}'", 
+                settings.PdfSignatureText ?? "(null)", settings.PdfSignerPosition ?? "(null)");
+            
             if (dto.InvoiceLanguage != null) settings.InvoiceLanguage = dto.InvoiceLanguage;
             if (dto.ShowSignatureOnPdf.HasValue) settings.ShowSignatureOnPdf = dto.ShowSignatureOnPdf.Value;
             if (dto.BankName != null) settings.BankName = dto.BankName;
@@ -877,10 +895,15 @@ namespace ResourceManager.Controllers
         public decimal? CustomTaxAmount { get; set; }
         public string? PdfFooterText { get; set; }
         public bool? ShowCompanyLogo { get; set; }
-        [JsonPropertyName("pdfSignatureText")]
+        
+        /// <summary>Signature name/text displayed on PDF (e.g., "John Smith")</summary>
+        [MaxLength(100, ErrorMessage = "Signature text cannot exceed 100 characters")]
         public string? PdfSignatureText { get; set; }
-        [JsonPropertyName("pdfSignerPosition")]
+        
+        /// <summary>Signer position/title displayed on PDF (e.g., "Managing Director")</summary>
+        [MaxLength(100, ErrorMessage = "Signer position cannot exceed 100 characters")]
         public string? PdfSignerPosition { get; set; }
+        
         public string? InvoiceLanguage { get; set; }
         
         // File-system language (set once, immutable after lock)

@@ -41,10 +41,13 @@ namespace ResourceManager.Controllers
             if (currentRoles.Contains("SuperAdmin"))
             {
                 // SuperAdmin sees ALL (excluding soft-deleted users)
-                var users = await _userManager.Users
+                var query = _userManager.Users
                     .Include(u => u.Profile)
                     .Include(u => u.Company)
-                    .Where(u => u.Profile == null || !u.Profile.IsDeleted)
+                    .Where(u => u.Profile == null || !u.Profile.IsDeleted);
+
+                var users = await query
+                    .OrderByDescending(u => u.Profile != null ? u.Profile.CreatedAt : DateTime.MinValue)
                     .ToListAsync();
                     
                 var result = new List<object>();
@@ -62,16 +65,19 @@ namespace ResourceManager.Controllers
                         Role = roles.FirstOrDefault() ?? "Employee"
                     });
                 }
-               return Ok(result);
+               return Ok(new { Data = result });
             }
             else
             {
                 // Manager/FreeUser sees ONLY their company's employees (excluding soft-deleted)
                 var companyId = currentUser.CompanyId;
-                var users = await _userManager.Users
+                var query = _userManager.Users
                     .Where(u => u.CompanyId == companyId)
                     .Where(u => u.Profile == null || !u.Profile.IsDeleted)
-                    .Include(u => u.Profile)
+                    .Include(u => u.Profile);
+
+                var users = await query
+                    .OrderByDescending(u => u.Profile != null ? u.Profile.CreatedAt : DateTime.MinValue)
                     .ToListAsync();
                     
                 var result = new List<object>();
@@ -87,7 +93,7 @@ namespace ResourceManager.Controllers
                         Role = roles.FirstOrDefault() ?? "Employee"
                     });
                 }
-                return Ok(result);
+                return Ok(new { Data = result });
             }
         }
 

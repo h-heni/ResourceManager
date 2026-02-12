@@ -18,6 +18,7 @@ namespace ResourceManager.Services
     ///   [2] Amount Paid   → Flexible: "6 922,00" (FR), "6,922.00" (US), "1500.50", "1500,50"
     ///   [3] Currency      → optional, defaults "TND"
     ///   [4] Payment Method → optional, defaults "Unknown"
+    ///   [5] InvoiceNumber → optional (used by revenue linkage workflow)
     ///
     /// Atomic: first invalid cell → immediate abort with row + column number.
     /// Empty amounts (like ";;" in CSV) → treated as 0, not an error.
@@ -123,6 +124,11 @@ namespace ResourceManager.Services
                     if (string.IsNullOrWhiteSpace(paymentMethod))
                         paymentMethod = "Unknown";
 
+                    // ───────────────────────────────────────────
+                    // Index 5: InvoiceNumber — optional
+                    // ───────────────────────────────────────────
+                    string invoiceNumber = row.ContainsKey(5) ? row[5]?.ToString() ?? "" : "";
+
                     // ── All cells passed → construct DTO ──
                     results.Add(new StrictRevenueRowDto
                     {
@@ -130,7 +136,8 @@ namespace ResourceManager.Services
                         ClientName = clientName,
                         AmountPaid = validAmount,
                         Currency = currency,
-                        PaymentMethod = paymentMethod
+                        PaymentMethod = paymentMethod,
+                        InvoiceNumber = invoiceNumber.Trim()
                     });
                 }
             }

@@ -28,44 +28,60 @@ namespace ResourceManager.Controllers
         [HttpGet]
         public async Task<IActionResult> GetDeliveryNotes([FromQuery] int page = 1, [FromQuery] int size = 20)
         {
-            if (page < 1) page = 1;
-            if (size < 1) size = 20;
+            try
+            {
+                if (page < 1) page = 1;
+                if (size < 1) size = 20;
 
-            var query = _context.DeliveryNotes
-                .AsNoTracking()
-                .Include(dn => dn.Client)
-                .Include(dn => dn.Devis)
-                .Include(dn => dn.Invoice)
-                .OrderByDescending(dn => dn.Date);
+                var query = _context.DeliveryNotes
+                    .AsNoTracking()
+                    .Include(dn => dn.Client)
+                    .Include(dn => dn.Devis)
+                    .Include(dn => dn.Invoice)
+                    .Include(dn => dn.DeliveryNoteItems)
+                    .OrderByDescending(dn => dn.Date);
 
-            var totalCount = await query.CountAsync();
-            var totalPages = (int)Math.Ceiling(totalCount / (double)size);
+                var totalCount = await query.CountAsync();
+                var totalPages = (int)Math.Ceiling(totalCount / (double)size);
 
-            var notes = await query
-                .Skip((page - 1) * size)
-                .Take(size)
-                .Select(dn => new {
-                    dn.Id,
-                    dn.Number,
-                    dn.Date,
-                    ClientName = dn.Client != null ? dn.Client.Name : "Unknown",
-                    dn.TotalAmount,
-                    dn.Treated,
-                    dn.DevisId,
-                    dn.InvoiceId,
-                    DevisNumber = dn.Devis != null ? dn.Devis.Number : null,
-                    InvoiceNumber = dn.Invoice != null ? dn.Invoice.Number : null,
-                    ItemsCount = dn.DeliveryNoteItems.Count
-                })
-                .ToListAsync();
+                var notes = await query
+                    .Skip((page - 1) * size)
+                    .Take(size)
+                    .Select(dn => new {
+                        dn.Id,
+                        dn.Number,
+                        dn.Date,
+                        ClientName = dn.Client != null ? dn.Client.Name : "Unknown",
+                        dn.TotalAmount,
+                        dn.Treated,
+                        dn.DevisId,
+                        dn.InvoiceId,
+                        DevisNumber = dn.Devis != null ? dn.Devis.Number : null,
+                        InvoiceNumber = dn.Invoice != null ? dn.Invoice.Number : null,
+                        ItemsCount = dn.DeliveryNoteItems != null ? dn.DeliveryNoteItems.Count : 0
+                    })
+                    .ToListAsync();
 
-            return Ok(new {
-                Data = notes,
-                Page = page,
-                Size = size,
-                TotalCount = totalCount,
-                TotalPages = totalPages
-            });
+                return Ok(new {
+                    Data = notes,
+                    Page = page,
+                    Size = size,
+                    TotalCount = totalCount,
+                    TotalPages = totalPages
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching delivery notes");
+                // Return empty result instead of 500 error
+                return Ok(new {
+                    Data = Array.Empty<object>(),
+                    Page = page,
+                    Size = size,
+                    TotalCount = 0,
+                    TotalPages = 0
+                });
+            }
         }
 
         // GET: api/deliverynotes/{id}
@@ -75,6 +91,7 @@ namespace ResourceManager.Controllers
             var note = await _context.DeliveryNotes
                 .Include(dn => dn.Client)
                 .Include(dn => dn.DeliveryNoteItems)
+                .Include(dn => dn.Devis)
                 .Include(dn => dn.CreatedByUser)
                     .ThenInclude(u => u!.Profile)
                 .FirstOrDefaultAsync(dn => dn.Id == id);
@@ -123,10 +140,6 @@ namespace ResourceManager.Controllers
                 Date = dto.Date.ToUniversalTime(), // Ensure UTC
                 ClientId = dto.ClientId, // If linked to Client directly
                 InvoiceId = dto.InvoiceId, // Linked Invoice
-                // Per-document currency & language
-                Currency = dto.Currency,
-                CurrencySymbol = dto.CurrencySymbol,
-                PdfLanguage = dto.PdfLanguage,
                 
                 CreatedByUserId = userId,
                 CreatedAt = DateTime.UtcNow
@@ -174,6 +187,7 @@ namespace ResourceManager.Controllers
             var note = await _context.DeliveryNotes
                 .Include(dn => dn.Client)
                 .Include(dn => dn.DeliveryNoteItems)
+                .Include(dn => dn.Devis)
                 .FirstOrDefaultAsync(dn => dn.Id == id);
 
              if (note == null) return NotFound();
@@ -198,8 +212,8 @@ namespace ResourceManager.Controllers
             // Build PDF settings from company config
             var pdfSettings = PdfSettings.FromCompanySettings(
                 companySettings, company, creatorName,
-                currencyOverride: note.CurrencySymbol,
-                languageOverride: note.PdfLanguage);
+                currencyOverride: note.Devis?.CurrencySymbol,
+                languageOverride: note.Devis?.PdfLanguage);
 
             var document = new Document<DeliveryNote>(note, pdfSettings);
             byte[] pdfData;

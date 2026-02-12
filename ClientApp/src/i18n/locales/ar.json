@@ -68,6 +68,15 @@
     "viewOnly": "عرض فقط",
     "year": "السنة"
   },
+  "pagination": {
+    "previous": "السابق",
+    "next": "التالي",
+    "showing": "عرض",
+    "to": "إلى",
+    "of": "من",
+    "results": "نتيجة",
+    "page": "صفحة"
+  },
   "auth": {
     "login": "تسجيل الدخول",
     "logout": "تسجيل الخروج",
@@ -163,6 +172,7 @@
     "deleteInvoice": "حذف الفاتورة",
     "sendByEmail": "إرسال بالبريد الإلكتروني",
     "downloadPdf": "تحميل PDF",
+    "remainingPaymentPdf": "إشعار بالمبلغ المتبقي",
     "markAsPaid": "وضع علامة كمدفوعة",
     "addPayment": "إضافة دفعة",
     "paymentHistory": "سجل الدفعات",
@@ -559,7 +569,8 @@
     "unpaidInvoices": "الفواتير غير المدفوعة",
     "users": "المستخدمون",
     "revenueByYear": "الإيرادات السنوية",
-    "allTime": "جميع الأوقات"
+    "allTime": "جميع الأوقات",
+    "lastYear": "السنة الماضية"
   },
   "email": {
     "title": "إرسال بريد إلكتروني",

@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 import { useSettings } from '../hooks/useSettings';
+import Pagination from '../components/Pagination';
 
 interface ProductServiceItem {
     id: number;
@@ -30,6 +31,10 @@ export default function ProductServicesPage() {
     const [items, setItems] = useState<ProductServiceItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
+    const [page, setPage] = useState(1);
+    const [size, setSize] = useState(20);
+    const [totalCount, setTotalCount] = useState(0);
+    const [totalPages, setTotalPages] = useState(0);
 
     // Modal state
     const [showModal, setShowModal] = useState(false);
@@ -53,14 +58,17 @@ export default function ProductServicesPage() {
     const fetchItems = useCallback(async () => {
         try {
             setLoading(true);
-            const res = await api.get('/ProductServices');
-            setItems(res.data);
+            const res = await api.get(`/ProductServices?page=${page}&size=${size}`);
+            const data = res.data;
+            setItems(data.data || []);
+            setTotalCount(data.totalCount || 0);
+            setTotalPages(data.totalPages || 0);
         } catch (err) {
             console.error('Failed to fetch products:', err);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [page, size]);
 
     const fetchTaxSettings = useCallback(async () => {
         try {
@@ -247,6 +255,18 @@ export default function ProductServicesPage() {
                         </div>
                     ))}
                 </div>
+            )}
+
+            {/* Pagination */}
+            {!search && (
+                <Pagination
+                    page={page}
+                    totalPages={totalPages}
+                    totalCount={totalCount}
+                    size={size}
+                    onPageChange={setPage}
+                    onSizeChange={(s) => { setSize(s); setPage(1); }}
+                />
             )}
 
             {/* Create/Edit Modal - matches DevisCreatePage "Create New Product" modal */}

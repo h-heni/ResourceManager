@@ -6,6 +6,7 @@ using ResourceManager.DTOs;
 using Microsoft.AspNetCore.Identity;
 using ResourceManager.Services;
 using QuestPDF.Fluent;
+using System.Text.RegularExpressions;
 
 
 
@@ -13,6 +14,8 @@ namespace ResourceManager.Controllers
 {
     public class DevisController : BaseApiController
     {
+        private const string DevisNumberPrefix = "DV";
+        private const string InvoiceNumberPrefix = "FA";
         private readonly AppDbContext _context;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ILocalPdfStorageService _pdfStorageService;
@@ -25,46 +28,96 @@ namespace ResourceManager.Controllers
             _logger = logger;
         }
 
+        // GET: api/devis/last-number - Get the last quote number for suggestion
+        [HttpGet("last-number")]
+        public async Task<IActionResult> GetLastDevisNumber()
+        {
+            var userId = _userManager.GetUserId(User);
+            if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null) return Unauthorized();
+
+            var year = DateTime.UtcNow.Year;
+            var yearSuffix = (year % 100).ToString("D2");
+            var prefix = $"{DevisNumberPrefix}{yearSuffix}-";
+
+            var yearNumbers = await _context.Devis
+                .AsNoTracking()
+                .Where(d => d.CompanyId == user.CompanyId && d.Date.Year == year && d.Number.StartsWith(prefix))
+                .Select(d => d.Number)
+                .ToListAsync();
+
+            var nextSequence = 1;
+            foreach (var number in yearNumbers)
+            {
+                var match = Regex.Match(number, $"^{Regex.Escape(prefix)}(\\d+)$", RegexOptions.IgnoreCase);
+                if (match.Success && int.TryParse(match.Groups[1].Value, out var sequence))
+                {
+                    nextSequence = Math.Max(nextSequence, sequence + 1);
+                }
+            }
+
+            var lastNumber = nextSequence > 1 ? $"{prefix}{(nextSequence - 1):D3}" : string.Empty;
+            var suggestedNumber = $"{prefix}{nextSequence:D3}";
+
+            return Ok(new { lastNumber, suggestedNumber });
+        }
+
         // GET: api/devis
         [HttpGet]
         public async Task<IActionResult> GetDevis([FromQuery] int page = 1, [FromQuery] int size = 20)
         {
-            if (page < 1) page = 1;
-            if (size < 1) size = 20;
+            try
+            {
+                if (page < 1) page = 1;
+                if (size < 1) size = 20;
 
-            var query = _context.Devis
-                .AsNoTracking()
-                .Include(d => d.Client)
-                .OrderByDescending(d => d.Date);
+                var query = _context.Devis
+                    .AsNoTracking()
+                    .Include(d => d.Client)
+                    .OrderByDescending(d => d.Date);
 
-            var totalCount = await query.CountAsync();
-            var totalPages = (int)Math.Ceiling(totalCount / (double)size);
+                var totalCount = await query.CountAsync();
+                var totalPages = (int)Math.Ceiling(totalCount / (double)size);
 
-            var devisList = await query
-                .Skip((page - 1) * size)
-                .Take(size)
-                .Select(d => new {
-                    d.Id,
-                    d.Number,
-                    d.Date,
-                    ClientName = d.Client != null ? d.Client.Name : "Unknown",
-                    d.TotalAmount,
-                    d.Status,
-                    d.Treated,
-                    d.CreatedByUserId,
-                    d.ClientId,
-                    d.Currency,
-                    d.CurrencySymbol
-                })
-                .ToListAsync();
+                var devisList = await query
+                    .Skip((page - 1) * size)
+                    .Take(size)
+                    .Select(d => new {
+                        d.Id,
+                        d.Number,
+                        d.Date,
+                        ClientName = d.Client != null ? d.Client.Name : "Unknown",
+                        d.TotalAmount,
+                        d.Status,
+                        d.Treated,
+                        d.CreatedByUserId,
+                        d.ClientId,
+                        d.Currency,
+                        d.CurrencySymbol
+                    })
+                    .ToListAsync();
 
-            return Ok(new {
-                Data = devisList,
-                Page = page,
-                Size = size,
-                TotalCount = totalCount,
-                TotalPages = totalPages
-            });
+                return Ok(new {
+                    Data = devisList,
+                    Page = page,
+                    Size = size,
+                    TotalCount = totalCount,
+                    TotalPages = totalPages
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching quotes (devis)");
+                return Ok(new {
+                    Data = Array.Empty<object>(),
+                    Page = page,
+                    Size = size,
+                    TotalCount = 0,
+                    TotalPages = 0
+                });
+            }
         }
 
         // GET: api/devis/{id}
@@ -128,39 +181,59 @@ namespace ResourceManager.Controllers
             var companySettings = await _context.CompanySettings
                 .FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
 
-            var devis = new Devis
-            {
-                Number = dto.Number,
-                Date = dto.Date.ToUniversalTime(),
-                ClientId = dto.ClientId,
-                CreatedByUserId = userId,
-                CreatedAt = DateTime.UtcNow,
-                Status = "Draft",
-                // Per-document currency & language
-                Currency = dto.Currency ?? companySettings?.Currency,
-                CurrencySymbol = dto.CurrencySymbol ?? companySettings?.CurrencySymbol,
-                PdfLanguage = dto.PdfLanguage ?? companySettings?.InvoiceLanguage,
-                // Apply custom tax from company settings
-                Tfiscal = companySettings?.CustomTaxEnabled == true ? companySettings.CustomTaxAmount : 0,
-                TfiscalName = companySettings?.CustomTaxName ?? "Timbre Fiscal"
-            };
+            var devisDate = dto.Date.ToUniversalTime();
+            var maxAttempts = 5;
+            Devis? devis = null;
 
-            foreach (var itemDto in dto.Items)
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                devis.DevisItems.Add(new DevisItem
+                var generatedNumber = await GenerateNextDevisNumberAsync(user.CompanyId, devisDate.Year);
+                devis = new Devis
                 {
-                    Description = itemDto.Description,
-                    Quantity = itemDto.Quantity,
-                    Price = itemDto.Price,
-                    Tva = itemDto.Tva,
-                    VatRate = itemDto.VatRate
-                });
+                    Number = generatedNumber,
+                    Date = devisDate,
+                    ClientId = dto.ClientId,
+                    CreatedByUserId = userId,
+                    CreatedAt = DateTime.UtcNow,
+                    Status = "Draft",
+                    Currency = dto.Currency ?? companySettings?.Currency,
+                    CurrencySymbol = dto.CurrencySymbol ?? companySettings?.CurrencySymbol,
+                    PdfLanguage = dto.PdfLanguage ?? companySettings?.InvoiceLanguage,
+                    Tfiscal = companySettings?.CustomTaxEnabled == true ? companySettings.CustomTaxAmount : 0,
+                    TfiscalName = companySettings?.CustomTaxName ?? "Timbre Fiscal"
+                };
+
+                foreach (var itemDto in dto.Items)
+                {
+                    devis.DevisItems.Add(new DevisItem
+                    {
+                        Description = itemDto.Description,
+                        Quantity = itemDto.Quantity,
+                        Price = itemDto.Price,
+                        Tva = itemDto.Tva,
+                        VatRate = itemDto.VatRate
+                    });
+                }
+
+                devis.CalculTotalAmount();
+                _context.Devis.Add(devis);
+
+                try
+                {
+                    await _context.SaveChangesAsync();
+                    break;
+                }
+                catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex) && attempt < maxAttempts)
+                {
+                    _logger.LogWarning(ex, "Quote number collision for company {CompanyId}, retry {Attempt}", user.CompanyId, attempt);
+                    _context.ChangeTracker.Clear();
+                }
             }
 
-            devis.CalculTotalAmount();
-
-            _context.Devis.Add(devis);
-            await _context.SaveChangesAsync();
+            if (devis == null || devis.Id == 0)
+            {
+                return Conflict(new { message = "Failed to generate a unique quote number. Please retry." });
+            }
 
             // Return safe projection without sensitive user data
             return CreatedAtAction(nameof(GetDevisById), new { id = devis.Id }, new {
@@ -193,10 +266,22 @@ namespace ResourceManager.Controllers
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
+            if (string.IsNullOrWhiteSpace(dto.Number))
+            {
+                return BadRequest(new { message = "Quote number is required." });
+            }
+
             var devis = await _context.Devis.Include(d => d.DevisItems).FirstOrDefaultAsync(d => d.Id == id);
             if (devis == null) return NotFound();
 
             if (devis.Status == "Accepted") return BadRequest("Cannot modify an accepted quote.");
+
+            var duplicateNumberExists = await _context.Devis
+                .AnyAsync(d => d.Id != id && d.CompanyId == devis.CompanyId && d.Number == dto.Number);
+            if (duplicateNumberExists)
+            {
+                return Conflict(new { message = "Quote number already exists for this company." });
+            }
 
             devis.Number = dto.Number;
             devis.Date = dto.Date.ToUniversalTime();
@@ -245,14 +330,27 @@ namespace ResourceManager.Controllers
 
             if (devis == null) return NotFound();
 
+            var alreadyConverted = await _context.Invoices
+                .AsNoTracking()
+                .AnyAsync(i => i.DevisId == devis.Id);
+            if (alreadyConverted)
+            {
+                return Conflict(new { message = "An invoice already exists for this quote." });
+            }
+
             // Create new invoice
             var userId = _userManager.GetUserId(User);
+            var user = string.IsNullOrEmpty(userId) ? null : await _userManager.FindByIdAsync(userId);
+            if (user == null) return Unauthorized();
+
+            var invoiceNumber = await GenerateNextInvoiceNumberAsync(user.CompanyId, DateTime.UtcNow.Year);
             var invoice = new Invoice
             {
-                Number = $"INV-FROM-{devis.Number}", // Or generate new sequence
+                Number = invoiceNumber,
                 Date = DateTime.UtcNow,
                 ClientId = devis.ClientId,
                 DevisId = devis.Id, // Link original Devis
+                SourceDevisNumber = devis.Number,
                 CreatedByUserId = userId,
                 CreatedAt = DateTime.UtcNow,
                 Status = "Unpaid"
@@ -277,9 +375,16 @@ namespace ResourceManager.Controllers
             devis.UpdatedAt = DateTime.UtcNow;
 
             _context.Invoices.Add(invoice);
-            await _context.SaveChangesAsync();
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+            {
+                return Conflict(new { message = "Failed to create invoice due to duplicate number. Please retry." });
+            }
 
-            return Ok(new { InvoiceId = invoice.Id, Message = "Converted successfully" });
+            return Ok(new { InvoiceId = invoice.Id, InvoiceNumber = invoice.Number, SourceQuoteNumber = invoice.SourceDevisNumber, Message = "Converted successfully" });
         }
         // GET: api/devis/{id}/pdf
         [HttpGet("{id}/pdf")]
@@ -352,6 +457,63 @@ namespace ResourceManager.Controllers
             }
 
             return File(pdfData, "application/pdf", $"Devis_{devis.Number}.pdf");
+        }
+
+        private async Task<string> GenerateNextDevisNumberAsync(int companyId, int year)
+        {
+            var yearSuffix = (year % 100).ToString("D2");
+            var prefix = $"{DevisNumberPrefix}{yearSuffix}-";
+
+            var existingYearNumbers = await _context.Devis
+                .AsNoTracking()
+                .Where(d => d.CompanyId == companyId && d.Date.Year == year && d.Number.StartsWith(prefix))
+                .Select(d => d.Number)
+                .ToListAsync();
+
+            var maxSequence = 0;
+            foreach (var number in existingYearNumbers)
+            {
+                var match = Regex.Match(number, $"^{Regex.Escape(prefix)}(\\d+)$", RegexOptions.IgnoreCase);
+                if (match.Success && int.TryParse(match.Groups[1].Value, out var sequence))
+                {
+                    maxSequence = Math.Max(maxSequence, sequence);
+                }
+            }
+
+            return $"{prefix}{(maxSequence + 1):D3}";
+        }
+
+        private async Task<string> GenerateNextInvoiceNumberAsync(int companyId, int year)
+        {
+            var yearSuffix = (year % 100).ToString("D2");
+            var prefix = $"{InvoiceNumberPrefix}{yearSuffix}-";
+
+            var existingYearNumbers = await _context.Invoices
+                .AsNoTracking()
+                .Where(i => i.CompanyId == companyId && i.Date.Year == year && i.Number.StartsWith(prefix))
+                .Select(i => i.Number)
+                .ToListAsync();
+
+            var maxSequence = 0;
+            foreach (var number in existingYearNumbers)
+            {
+                var match = Regex.Match(number, $"^{Regex.Escape(prefix)}(\\d+)$", RegexOptions.IgnoreCase);
+                if (match.Success && int.TryParse(match.Groups[1].Value, out var sequence))
+                {
+                    maxSequence = Math.Max(maxSequence, sequence);
+                }
+            }
+
+            return $"{prefix}{(maxSequence + 1):D3}";
+        }
+
+        private static bool IsUniqueConstraintViolation(DbUpdateException exception)
+        {
+            var message = exception.InnerException?.Message ?? exception.Message;
+            return message.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase)
+                   || message.Contains("duplicate", StringComparison.OrdinalIgnoreCase)
+                   || message.Contains("2601", StringComparison.OrdinalIgnoreCase)
+                   || message.Contains("2627", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

@@ -68,6 +68,15 @@
     "viewOnly": "Nur Ansicht",
     "year": "Jahr"
   },
+  "pagination": {
+    "previous": "Zurück",
+    "next": "Weiter",
+    "showing": "Anzeige",
+    "to": "bis",
+    "of": "von",
+    "results": "Ergebnisse",
+    "page": "Seite"
+  },
   "auth": {
     "login": "Anmelden",
     "logout": "Abmelden",
@@ -163,6 +172,7 @@
     "deleteInvoice": "Rechnung löschen",
     "sendByEmail": "Per E-Mail senden",
     "downloadPdf": "PDF herunterladen",
+    "remainingPaymentPdf": "Restbetrag-Zahlungsaufforderung",
     "markAsPaid": "Als bezahlt markieren",
     "addPayment": "Zahlung hinzufügen",
     "paymentHistory": "Zahlungsverlauf",
@@ -559,6 +569,7 @@
     "unpaidInvoices": "Unbezahlte Rechnungen",
     "users": "Benutzer",
     "allTime": "Alle Zeiten",
+    "lastYear": "Letztes Jahr",
     "revenueByYear": "Umsatz nach Jahr"
   },
   "email": {

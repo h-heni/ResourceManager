@@ -393,10 +393,7 @@ app.UseAuthorization();
 // Session tracking middleware (tracks active authenticated users)
 app.UseMiddleware<SessionTrackingMiddleware>();
 
-// Health check endpoint for Docker/K8s
-app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
-   .AllowAnonymous()
-   .WithTags("Health");
+// Health check handled by HealthController (includes DB connectivity check)
 
 // Endpoints
 app.MapControllers();

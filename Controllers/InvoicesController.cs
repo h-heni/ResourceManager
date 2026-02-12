@@ -8,11 +8,13 @@ using ResourceManager.Services;
 using Microsoft.AspNetCore.Identity;
 using QuestPDF.Fluent;
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 
 namespace ResourceManager.Controllers
 {
     public class InvoicesController : BaseApiController
     {
+        private const string InvoiceNumberPrefix = "FA";
         private readonly AppDbContext _context;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ILogger<InvoicesController> _logger;
@@ -35,94 +37,165 @@ namespace ResourceManager.Controllers
 
         // GET: api/invoices
         [HttpGet]
-        public async Task<IActionResult> GetInvoices([FromQuery] int page = 1, [FromQuery] int size = 20)
+        public async Task<IActionResult> GetInvoices([FromQuery] int page = 1, [FromQuery] int size = 20, [FromQuery] bool includePaid = true)
         {
-            if (page < 1) page = 1;
-            if (size < 1) size = 20;
+            try
+            {
+                if (page < 1) page = 1;
+                if (size < 1) size = 20;
 
-            var query = _context.Invoices
-                .AsNoTracking()
-                .Include(i => i.Client)
-                .Include(i => i.Payments)
-                .OrderByDescending(i => i.Date);
+                var query = _context.Invoices
+                    .AsNoTracking()
+                    .Include(i => i.Client)
+                    .Include(i => i.Payments)
+                    .Include(i => i.Devis)
+                    .AsQueryable();
 
-            var totalCount = await query.CountAsync();
-            var totalPages = (int)Math.Ceiling(totalCount / (double)size);
+                if (!includePaid)
+                {
+                    query = query.Where(i => i.Status != "Paid");
+                }
 
-            // Load data first, then aggregate client-side (SQLite doesn't support Sum on decimal)
-            var rawInvoices = await query
-                .Skip((page - 1) * size)
-                .Take(size)
-                .ToListAsync();
+                query = query.OrderByDescending(i => i.Date);
 
-            var invoices = rawInvoices.Select(i => new {
-                i.Id,
-                i.Number,
-                i.Date,
-                i.DueDate,
-                ClientName = i.Client?.Name ?? "Unknown",
-                ClientEmail = i.Client?.Email,
-                i.TotalAmount,
-                i.Status,
-                i.IsLocked,
-                i.Treated,
-                i.DevisId,
-                i.Currency,
-                i.CurrencySymbol,
-                i.PdfLanguage,
-                AmountPaid = i.Payments?.Where(p => p.Status == "Completed").Sum(p => p.Amount) ?? 0,
-                PendingAmount = i.Payments?.Where(p => p.Status == "Pending").Sum(p => p.Amount) ?? 0,
-                RemainingAmount = (i.TotalAmount ?? 0) - (i.Payments?.Where(p => p.Status == "Completed").Sum(p => p.Amount) ?? 0),
-                IsOverdue = i.DueDate.HasValue && i.DueDate.Value < DateTime.UtcNow && i.Status != "Paid",
-                DaysUntilDue = i.DueDate.HasValue ? (int)(i.DueDate.Value - DateTime.UtcNow).TotalDays : (int?)null,
-                Payments = i.Payments?.Select(p => new {
-                    p.Id,
-                    p.Amount,
-                    p.PaymentDate,
-                    p.Notes,
-                    p.Status
-                }).OrderByDescending(p => p.PaymentDate).ToList()
-            }).ToList();
+                var totalCount = await query.CountAsync();
+                var totalPages = (int)Math.Ceiling(totalCount / (double)size);
 
-            return Ok(new {
-                Data = invoices,
-                Page = page,
-                Size = size,
-                TotalCount = totalCount,
-                TotalPages = totalPages
-            });
+                // Load data first, then aggregate client-side (SQLite doesn't support Sum on decimal)
+                var rawInvoices = await query
+                    .Skip((page - 1) * size)
+                    .Take(size)
+                    .ToListAsync();
+
+                var invoices = rawInvoices.Select(i => {
+                    var payments = i.Payments ?? new List<Payment>();
+                    var amountPaid = payments.Where(p => p.Status == "Completed").Sum(p => p.Amount);
+                    var pendingAmount = payments.Where(p => p.Status == "Pending").Sum(p => p.Amount);
+                    
+                    return new {
+                        i.Id,
+                        i.Number,
+                        InvoiceNumber = i.Number,
+                        i.Date,
+                        i.DueDate,
+                        ClientName = i.Client?.Name ?? "Unknown",
+                        ClientEmail = i.Client?.Email,
+                        i.TotalAmount,
+                        i.Status,
+                        i.IsLocked,
+                        i.Treated,
+                        i.DevisId,
+                        i.SourceDevisNumber,
+                        Currency = i.Devis?.Currency,
+                        CurrencySymbol = i.Devis?.CurrencySymbol,
+                        PdfLanguage = i.Devis?.PdfLanguage,
+                        AmountPaid = amountPaid,
+                        PendingAmount = pendingAmount,
+                        RemainingAmount = (i.TotalAmount ?? 0) - amountPaid,
+                        IsOverdue = i.DueDate.HasValue && i.DueDate.Value < DateTime.UtcNow && i.Status != "Paid",
+                        DaysUntilDue = i.DueDate.HasValue ? (int)(i.DueDate.Value - DateTime.UtcNow).TotalDays : (int?)null,
+                        Payments = payments.Select(p => new {
+                            p.Id,
+                            p.Amount,
+                            p.PaymentDate,
+                            p.Notes,
+                            p.Status
+                        }).OrderByDescending(p => p.PaymentDate).ToList()
+                    };
+                }).ToList();
+
+                return Ok(new {
+                    Data = invoices,
+                    Items = invoices,
+                    Page = page,
+                    Size = size,
+                    PageSize = size,
+                    TotalCount = totalCount,
+                    TotalPages = totalPages
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching invoices");
+                // Return empty result instead of 500 error
+                return Ok(new {
+                    Data = Array.Empty<object>(),
+                    Page = page,
+                    Size = size,
+                    TotalCount = 0,
+                    TotalPages = 0
+                });
+            }
+        }
+
+        // GET: api/invoices/archived/count?year=2026
+        [HttpGet("archived/count")]
+        public async Task<IActionResult> GetArchivedInvoicesCount([FromQuery] int? year = null)
+        {
+            try
+            {
+                var userId = _userManager.GetUserId(User);
+                if (string.IsNullOrEmpty(userId))
+                    return Unauthorized();
+
+                var user = await _userManager.FindByIdAsync(userId);
+                if (user == null)
+                    return Unauthorized();
+
+                var selectedYear = year ?? DateTime.UtcNow.Year;
+
+                var archivedCount = await _context.Invoices
+                    .AsNoTracking()
+                    .Where(i => i.CompanyId == user.CompanyId)
+                    .Where(i => i.Date.Year == selectedYear)
+                    .Where(i => i.Status == "Paid" || i.Treated)
+                    .CountAsync();
+
+                return Ok(new
+                {
+                    count = archivedCount,
+                    year = selectedYear
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching archived invoices count for year {Year}", year);
+                return StatusCode(500, new { message = "Failed to retrieve archived invoices count" });
+            }
         }
 
         // GET: api/invoices/last-number - Get the last invoice number for suggestion
         [HttpGet("last-number")]
         public async Task<IActionResult> GetLastInvoiceNumber()
         {
-            var lastInvoice = await _context.Invoices
-                .OrderByDescending(i => i.Id)
-                .Select(i => new { i.Number })
-                .FirstOrDefaultAsync();
+            var userId = _userManager.GetUserId(User);
+            if (string.IsNullOrEmpty(userId)) return Unauthorized();
 
-            var stamp = DateTime.UtcNow.ToString("yy");
-            string suggestedNumber;
-            string lastNumber = lastInvoice?.Number ?? "";
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null) return Unauthorized();
 
-            if (string.IsNullOrEmpty(lastNumber))
+            var year = DateTime.UtcNow.Year;
+            var yearSuffix = (year % 100).ToString("D2");
+            var prefix = $"{InvoiceNumberPrefix}{yearSuffix}-";
+
+            var yearNumbers = await _context.Invoices
+                .AsNoTracking()
+                .Where(i => i.CompanyId == user.CompanyId && i.Date.Year == year && i.Number.StartsWith(prefix))
+                .Select(i => i.Number)
+                .ToListAsync();
+
+            var nextSequence = 1;
+            foreach (var number in yearNumbers)
             {
-                suggestedNumber = $"FA{stamp}-001";
-            }
-            else
-            {
-                // Try to extract and increment the number
-                var parts = lastNumber.Split('-');
-                if (parts.Length >= 2 && int.TryParse(parts[^1], out int num))
+                var match = Regex.Match(number, $"^{Regex.Escape(prefix)}(\\d+)$", RegexOptions.IgnoreCase);
+                if (match.Success && int.TryParse(match.Groups[1].Value, out var sequence))
                 {
-                    suggestedNumber = $"{string.Join("-", parts[..^1])}-{(num + 1):D3}";
-                }
-                else
-                {
-                    suggestedNumber = $"FA{stamp}-001";
+                    nextSequence = Math.Max(nextSequence, sequence + 1);
                 }
             }
+
+            var lastNumber = nextSequence > 1 ? $"{prefix}{(nextSequence - 1):D3}" : string.Empty;
+            var suggestedNumber = $"{prefix}{nextSequence:D3}";
 
             return Ok(new { lastNumber, suggestedNumber });
         }
@@ -202,6 +275,7 @@ namespace ResourceManager.Controllers
                 .Include(i => i.Client)
                 .Include(i => i.InvoiceItems)
                 .Include(i => i.Payments)
+                .Include(i => i.Devis)
                 .FirstOrDefaultAsync(i => i.Id == id);
 
             if (invoice == null) return NotFound();
@@ -218,6 +292,7 @@ namespace ResourceManager.Controllers
                 .Include(i => i.InvoiceItems)
                 .Include(i => i.Payments)
                 .Include(i => i.CreatedByUser)
+                .Include(i => i.Devis)
                 .FirstOrDefaultAsync(i => i.Id == id);
 
             if (invoice == null) return NotFound();
@@ -269,6 +344,7 @@ namespace ResourceManager.Controllers
             {
                 invoice.Id,
                 invoice.Number,
+                InvoiceNumber = invoice.Number,
                 invoice.Date,
                 invoice.DueDate,
                 totalAmount = invoice.TotalAmount,
@@ -283,9 +359,9 @@ namespace ResourceManager.Controllers
                 invoice.Status,
                 invoice.IsLocked,
                 invoice.Treated,
-                invoice.Currency,
-                invoice.CurrencySymbol,
-                invoice.PdfLanguage,
+                Currency = invoice.Devis?.Currency,
+                CurrencySymbol = invoice.Devis?.CurrencySymbol,
+                PdfLanguage = invoice.Devis?.PdfLanguage,
                 amountPaid,
                 remainingAmount = (invoice.TotalAmount ?? 0) - amountPaid,
                 payments = invoice.Payments?.Select(p => new
@@ -307,6 +383,7 @@ namespace ResourceManager.Controllers
                     vat = i.TaxRate
                 }).ToList(),
                 devisId = invoice.DevisId,
+                sourceDevisNumber = invoice.SourceDevisNumber,
                 relatedDevis,
                 relatedDeliveryNotes,
                 invoice.CreatedAt,
@@ -330,18 +407,43 @@ namespace ResourceManager.Controllers
             // Get company settings for custom tax
             var companySettings = await _context.CompanySettings
                 .FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
+
+            var normalizedNumber = dto.Number?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(normalizedNumber))
+            {
+                normalizedNumber = await GenerateNextInvoiceNumberAsync(user.CompanyId, dto.Date.ToUniversalTime().Year);
+            }
+
+            var duplicateNumberExists = await _context.Invoices
+                .AnyAsync(i => i.CompanyId == user.CompanyId && i.Number == normalizedNumber);
+            if (duplicateNumberExists)
+            {
+                return Conflict(new { message = "Invoice number already exists for this company." });
+            }
+
+            string? sourceDevisNumber = null;
+            if (dto.DevisId.HasValue && dto.DevisId.Value > 0)
+            {
+                var linkedDevis = await _context.Devis
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(d => d.Id == dto.DevisId.Value);
+
+                if (linkedDevis == null)
+                {
+                    return BadRequest(new { message = "Linked quote was not found." });
+                }
+
+                sourceDevisNumber = linkedDevis.Number;
+            }
             
             var invoice = new Invoice
             {
-                Number = dto.Number,
+                Number = normalizedNumber,
                 Date = dto.Date.ToUniversalTime(), // Ensure UTC
                 DueDate = dto.DueDate?.ToUniversalTime(), // Payment due date
                 ClientId = dto.ClientId,
                 DevisId = dto.DevisId,
-                // Per-document currency & language (fallback to company settings)
-                Currency = dto.Currency ?? companySettings?.Currency,
-                CurrencySymbol = dto.CurrencySymbol ?? companySettings?.CurrencySymbol,
-                PdfLanguage = dto.PdfLanguage ?? companySettings?.InvoiceLanguage,
+                SourceDevisNumber = sourceDevisNumber,
                 // Apply custom tax from company settings
                 Tfiscal = companySettings?.CustomTaxEnabled == true ? companySettings.CustomTaxAmount : 0,
                 TfiscalName = companySettings?.CustomTaxName ?? "Timbre Fiscal",
@@ -365,7 +467,14 @@ namespace ResourceManager.Controllers
             invoice.CalculTotalAmount();
 
             _context.Invoices.Add(invoice);
-            await _context.SaveChangesAsync(); // Save first to get Invoice ID
+            try
+            {
+                await _context.SaveChangesAsync(); // Save first to get Invoice ID
+            }
+            catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+            {
+                return Conflict(new { message = "Invoice number already exists for this company." });
+            }
 
             // Link Delivery Notes if provided
             if (dto.DeliveryNoteIds != null && dto.DeliveryNoteIds.Any())
@@ -402,10 +511,12 @@ namespace ResourceManager.Controllers
             return CreatedAtAction(nameof(GetInvoice), new { id = invoice.Id }, new {
                 invoice.Id,
                 invoice.Number,
+                InvoiceNumber = invoice.Number,
                 invoice.Date,
                 invoice.DueDate,
                 invoice.ClientId,
                 invoice.DevisId,
+                invoice.SourceDevisNumber,
                 invoice.Status,
                 invoice.SubTotal,
                 invoice.TaxAmount,
@@ -416,9 +527,9 @@ namespace ResourceManager.Controllers
                 invoice.RemainingAmount,
                 invoice.IsOverdue,
                 invoice.DaysUntilDue,
-                invoice.Currency,
-                invoice.CurrencySymbol,
-                invoice.PdfLanguage,
+                Currency = invoice.Devis?.Currency,
+                CurrencySymbol = invoice.Devis?.CurrencySymbol,
+                PdfLanguage = invoice.Devis?.PdfLanguage,
                 InvoiceItems = invoice.InvoiceItems.Select(i => new {
                     i.Id,
                     i.Description,
@@ -450,15 +561,23 @@ namespace ResourceManager.Controllers
                  return BadRequest("Invoice cannot be modified after payments have been registered.");
              }
 
-             invoice.Number = dto.Number;
+             var normalizedNumber = dto.Number?.Trim() ?? string.Empty;
+             if (string.IsNullOrWhiteSpace(normalizedNumber))
+             {
+                 return BadRequest(new { message = "Invoice number is required." });
+             }
+
+             var duplicateNumberExists = await _context.Invoices
+                 .AnyAsync(i => i.Id != id && i.CompanyId == invoice.CompanyId && i.Number == normalizedNumber);
+             if (duplicateNumberExists)
+             {
+                 return Conflict(new { message = "Invoice number already exists for this company." });
+             }
+
+             invoice.Number = normalizedNumber;
              invoice.Date = dto.Date.ToUniversalTime();
              invoice.DueDate = dto.DueDate?.ToUniversalTime();
              invoice.ClientId = dto.ClientId;
-             
-             // Update per-document currency & language
-             if (dto.Currency != null) invoice.Currency = dto.Currency;
-             if (dto.CurrencySymbol != null) invoice.CurrencySymbol = dto.CurrencySymbol;
-             if (dto.PdfLanguage != null) invoice.PdfLanguage = dto.PdfLanguage;
              
              // Update Items: Simple strategy - remove all and re-add. 
              // Production apps might want diffing, but for this task, replacement is standard for documents.
@@ -595,8 +714,8 @@ namespace ResourceManager.Controllers
             var invoice = await _context.Invoices
                                 .Include(i => i.Client)
                                 .Include(i => i.InvoiceItems)
+                                .Include(i => i.Devis)
                                 .FirstOrDefaultAsync(i => i.Id == id);
-
             if (invoice == null) return NotFound();
 
             // Get company settings for PDF customization
@@ -619,8 +738,8 @@ namespace ResourceManager.Controllers
             // Build PDF settings from company config
             var pdfSettings = PdfSettings.FromCompanySettings(
                 companySettings, company, creatorName,
-                currencyOverride: invoice.CurrencySymbol,
-                languageOverride: invoice.PdfLanguage);
+                currencyOverride: invoice.Devis?.CurrencySymbol,
+                languageOverride: invoice.Devis?.PdfLanguage);
             
             // Apply custom tax settings to invoice if not already set
             if (invoice.Tfiscal == null || invoice.TfiscalName == null)
@@ -678,6 +797,63 @@ namespace ResourceManager.Controllers
             return File(pdfData, "application/pdf", $"Facture_{invoice.Number}.pdf");
         }
 
+        // GET: api/invoices/{id}/remaining-payment-pdf
+        [HttpGet("{id}/remaining-payment-pdf")]
+        public async Task<IActionResult> GetRemainingPaymentPdf(int id)
+        {
+            var invoice = await _context.Invoices
+                .Include(i => i.Client)
+                .Include(i => i.InvoiceItems)
+                .Include(i => i.Payments)
+                .Include(i => i.Devis)
+                .FirstOrDefaultAsync(i => i.Id == id);
+
+            if (invoice == null) return NotFound();
+
+            var userId = _userManager.GetUserId(User);
+            if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null) return Unauthorized();
+
+            var userProfile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
+            var creatorName = userProfile != null
+                ? $"{userProfile.FirstName} {userProfile.LastName}".Trim()
+                : user.UserName ?? "";
+
+            var companySettings = await _context.CompanySettings
+                .FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
+            var company = await _context.Companies.FindAsync(user.CompanyId);
+
+            // Use Quote currency (EffectiveCurrencySymbol) as requested
+            var pdfSettings = PdfSettings.FromCompanySettings(
+                companySettings, company, creatorName,
+                currencyOverride: invoice.EffectiveCurrencySymbol,
+                languageOverride: invoice.EffectivePdfLanguage);
+
+            var guardKey = $"remaining:{invoice.Id}";
+            if (!PdfGenerationGuard.TryEnter(guardKey))
+            {
+                return StatusCode(429, new { message = "PDF generation already in progress" });
+            }
+
+            try
+            {
+                var document = new RemainingPaymentDocument(invoice, pdfSettings);
+                var pdfData = document.GeneratePdf();
+                return File(pdfData, "application/pdf", $"Reste_a_payer_{invoice.Number}.pdf");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Remaining payment PDF generation failed for invoice {InvoiceId}", invoice.Id);
+                return StatusCode(500, new { message = "Failed to generate remaining payment PDF" });
+            }
+            finally
+            {
+                PdfGenerationGuard.Exit(guardKey);
+            }
+        }
+
         // GET: api/invoices/verify/{token} - Public verification endpoint
         [AllowAnonymous]
         [HttpGet("verify/{token}")]
@@ -689,6 +865,7 @@ namespace ResourceManager.Controllers
             var invoice = await _context.Invoices
                 .IgnoreQueryFilters()
                 .Include(i => i.Client)
+                .Include(i => i.Devis)
                 .FirstOrDefaultAsync(i => i.VerificationToken == token && !i.IsDeleted);
 
             if (invoice == null)
@@ -705,7 +882,7 @@ namespace ResourceManager.Controllers
                 date = invoice.Date,
                 dueDate = invoice.DueDate,
                 totalAmount = invoice.TotalAmount,
-                currency = invoice.CurrencySymbol ?? "DT",
+                currency = invoice.Devis?.CurrencySymbol ?? "DT",
                 clientName = invoice.Client?.Name,
                 companyName = company?.Name,
                 status = invoice.Status,
@@ -720,6 +897,7 @@ namespace ResourceManager.Controllers
             var invoice = await _context.Invoices
                 .Include(i => i.Client)
                 .Include(i => i.InvoiceItems)
+                .Include(i => i.Devis)
                 .FirstOrDefaultAsync(i => i.Id == id);
 
             if (invoice == null) return NotFound();
@@ -924,6 +1102,39 @@ namespace ResourceManager.Controllers
             }
             
             return result;
+        }
+
+        private async Task<string> GenerateNextInvoiceNumberAsync(int companyId, int year)
+        {
+            var yearSuffix = (year % 100).ToString("D2");
+            var prefix = $"{InvoiceNumberPrefix}{yearSuffix}-";
+
+            var existingYearNumbers = await _context.Invoices
+                .AsNoTracking()
+                .Where(i => i.CompanyId == companyId && i.Date.Year == year && i.Number.StartsWith(prefix))
+                .Select(i => i.Number)
+                .ToListAsync();
+
+            var maxSequence = 0;
+            foreach (var number in existingYearNumbers)
+            {
+                var match = Regex.Match(number, $"^{Regex.Escape(prefix)}(\\d+)$", RegexOptions.IgnoreCase);
+                if (match.Success && int.TryParse(match.Groups[1].Value, out var sequence))
+                {
+                    maxSequence = Math.Max(maxSequence, sequence);
+                }
+            }
+
+            return $"{prefix}{(maxSequence + 1):D3}";
+        }
+
+        private static bool IsUniqueConstraintViolation(DbUpdateException exception)
+        {
+            var message = exception.InnerException?.Message ?? exception.Message;
+            return message.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase)
+                   || message.Contains("duplicate", StringComparison.OrdinalIgnoreCase)
+                   || message.Contains("2601", StringComparison.OrdinalIgnoreCase)
+                   || message.Contains("2627", StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>

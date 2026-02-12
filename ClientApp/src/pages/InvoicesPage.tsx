@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Search, Download, Trash2, Eye, DollarSign, X, Mail, Send, Calendar, Clock, Edit2, Archive, Filter, CheckCircle } from 'lucide-react';
+import { Plus, Search, Download, Trash2, Eye, DollarSign, X, Mail, Send, Calendar, Clock, Edit2, Archive, Filter, CheckCircle, FileWarning } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { getErrorMessage } from '../utils/errorUtils';
 import { useAuth } from '../context/AuthContext';
 import InvoiceDetailView from '../components/InvoiceDetailView';
+import Pagination from '../components/Pagination';
 import { formatCurrency } from '../lib/formatNumber';
 import { DEFAULT_CURRENCY } from '../lib/currencyUtils';
 import { getInvoiceStatusColor } from '../lib/utils';
@@ -21,19 +22,23 @@ interface Payment {
 
 interface Invoice {
     id: number;
-    number: number;
+    number?: string;
+    Number?: string;
+    invoiceNumber?: string;
+    invoiceId?: number;
+    source?: 'invoice' | 'historical';
     date: string;
     dueDate?: string;
     totalAmount: number;
     clientName: string;
     clientEmail?: string;
     status: string;
-    isLocked: boolean;
-    treated: boolean;
+    isLocked?: boolean;
+    treated?: boolean;
     devisId?: number;
     amountPaid: number;
     remainingAmount: number;
-    payments: Payment[];
+    payments?: Payment[];
     currency?: string;
     currencySymbol?: string;
 }
@@ -61,43 +66,68 @@ export default function InvoicesPage() {
     // Invoice detail view state
     const [showDetailView, setShowDetailView] = useState(false);
     const [detailInvoiceId, setDetailInvoiceId] = useState<number | null>(null);
+    const activeDownloadIdsRef = useRef<Set<number>>(new Set());
     
     // Archive filter state
     const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
     const [availableYears, setAvailableYears] = useState<number[]>([]);
     const [selectedYear, setSelectedYear] = useState<number | null>(null);
-    const [archivedInvoices, setArchivedInvoices] = useState<any[]>([]);
+    const [archivedInvoices, setArchivedInvoices] = useState<Invoice[]>([]);
     const [loadingArchive, setLoadingArchive] = useState(false);
+    const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<number | null>(null);
+    const [activePage, setActivePage] = useState(1);
+    const [archivedPage, setArchivedPage] = useState(1);
+    const [pageSize, setPageSize] = useState(20);
+    const [activeTotalCount, setActiveTotalCount] = useState(0);
+    const [archivedTotalCount, setArchivedTotalCount] = useState(0);
+    const [invoiceNumberSort, setInvoiceNumberSort] = useState<'asc' | 'desc'>('asc');
     
     const navigate = useNavigate();
     const { user } = useAuth();
+    const activeTotalPages = Math.max(1, Math.ceil(activeTotalCount / pageSize));
+    const archivedTotalPages = Math.max(1, Math.ceil(archivedTotalCount / pageSize));
+    const currentPage = viewMode === 'archived' ? archivedPage : activePage;
+    const currentTotalCount = viewMode === 'archived' ? archivedTotalCount : activeTotalCount;
+    const currentTotalPages = viewMode === 'archived' ? archivedTotalPages : activeTotalPages;
 
     const isManager = user?.roles?.includes('Manager') || user?.roles?.includes('SuperAdmin') || user?.roles?.includes('FreeUser');
 
     useEffect(() => {
-        fetchInvoices();
+        fetchInvoices(1, pageSize);
         fetchAvailableYears();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Refetch when a payment is confirmed/extended via NotificationBell
     useEffect(() => {
-        const handler = () => fetchInvoices();
+        const handler = () => fetchInvoices(activePage, pageSize);
         window.addEventListener('payment-status-changed', handler);
         return () => window.removeEventListener('payment-status-changed', handler);
-    }, []);
+    }, [activePage, pageSize]);
 
     // Fetch archived invoices when year changes or switching to archived view
     useEffect(() => {
         if (viewMode === 'archived' && selectedYear) {
-            fetchArchivedInvoices(selectedYear);
+            fetchArchivedInvoices(selectedYear, archivedPage, pageSize);
         }
-    }, [viewMode, selectedYear]);
+    }, [viewMode, selectedYear, archivedPage, pageSize]);
 
-    const fetchInvoices = async () => {
+    // Fetch active invoices when active page/pageSize changes
+    useEffect(() => {
+        if (viewMode === 'active') {
+            fetchInvoices(activePage, pageSize);
+        }
+    }, [viewMode, activePage, pageSize]);
+
+    const fetchInvoices = async (page: number, size: number) => {
         try {
-            const res = await api.get('/Invoices');
-            const data = Array.isArray(res.data) ? res.data : (res.data.data || []);
-            setInvoices(data);
+            const res = await api.get(`/Invoices?page=${page}&size=${size}&includePaid=false`);
+            const payload = res.data || {};
+            const items = payload.items || payload.data || [];
+            const totalCount = payload.totalCount ?? payload.TotalCount ?? 0;
+
+            setInvoices(items);
+            setActiveTotalCount(totalCount);
         } catch (error) {
             console.error("Error fetching invoices", error);
         } finally {
@@ -119,11 +149,16 @@ export default function InvoicesPage() {
         }
     };
 
-    const fetchArchivedInvoices = async (year: number) => {
+    const fetchArchivedInvoices = async (year: number, page: number, size: number) => {
         setLoadingArchive(true);
         try {
-            const res = await api.get(`/Archive/invoices?year=${year}`);
-            setArchivedInvoices(res.data.data || []);
+            const res = await api.get(`/Archive/invoices?year=${year}&page=${page}&pageSize=${size}`);
+            const payload = res.data || {};
+            const items = payload.items || [];
+            const totalCount = payload.totalCount ?? 0;
+
+            setArchivedInvoices(items);
+            setArchivedTotalCount(totalCount);
         } catch (error) {
             console.error("Error fetching archived invoices", error);
         } finally {
@@ -146,19 +181,84 @@ export default function InvoicesPage() {
         }
     };
 
-    const handleDownloadPdf = async (id: number, number: string | number) => {
+    const resolveInvoiceNumber = (invoice?: Partial<Invoice> | null): string | null => {
+        if (!invoice) return null;
+        const rawNumber = invoice.number || invoice.Number || invoice.invoiceNumber;
+        if (!rawNumber) return null;
+        const normalized = String(rawNumber).trim();
+        return normalized.length > 0 ? normalized : null;
+    };
+
+    const buildInvoiceFileName = (invoice: Partial<Invoice> | null, id: number): string => {
+        const resolvedNumber = resolveInvoiceNumber(invoice);
+        return `Facture_${resolvedNumber ?? id}.pdf`;
+    };
+
+    const resolveLinkedInvoiceNumber = (invoice?: Partial<Invoice> | null): string | null => {
+        if (!invoice) return null;
+        const linkedNumber = invoice.invoiceNumber;
+        if (linkedNumber && String(linkedNumber).trim().length > 0) {
+            return String(linkedNumber).trim();
+        }
+
+        if (invoice.source === 'historical') {
+            return null;
+        }
+
+        return resolveInvoiceNumber(invoice);
+    };
+
+    const handleDownloadPdf = async (id: number, invoice?: Partial<Invoice> | null) => {
+        if (loading || (viewMode === 'archived' && loadingArchive)) {
+            return;
+        }
+
+        setDownloadingInvoiceId(id);
         try {
             const res = await api.get(`/Invoices/${id}/pdf`, { responseType: 'blob' });
             const url = window.URL.createObjectURL(new Blob([res.data]));
             const link = document.createElement('a');
             link.href = url;
-            link.setAttribute('download', `Facture_${number}.pdf`);
+            link.setAttribute('download', buildInvoiceFileName(invoice ?? null, id));
             document.body.appendChild(link);
             link.click();
             link.remove();
+            window.URL.revokeObjectURL(url);
         } catch (error) {
             console.error("Error downloading PDF", error);
             alert(t('common.downloadFailed'));
+        } finally {
+            setDownloadingInvoiceId(null);
+        }
+    };
+
+    const handleDownloadRemainingPdf = async (id: number, invoice?: Partial<Invoice> | null) => {
+        if (loading || (viewMode === 'archived' && loadingArchive)) {
+            return;
+        }
+        if (activeDownloadIdsRef.current.has(id)) {
+            return;
+        }
+
+        activeDownloadIdsRef.current.add(id);
+        setDownloadingInvoiceId(id);
+        try {
+            const res = await api.get(`/Invoices/${id}/remaining-payment-pdf`, { responseType: 'blob' });
+            const url = window.URL.createObjectURL(new Blob([res.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            const num = resolveInvoiceNumber(invoice ?? null) ?? id;
+            link.setAttribute('download', `Reste_a_payer_${num}.pdf`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Error downloading remaining payment PDF', error);
+            alert(t('common.downloadFailed'));
+        } finally {
+            activeDownloadIdsRef.current.delete(id);
+            setDownloadingInvoiceId(null);
         }
     };
 
@@ -196,7 +296,7 @@ export default function InvoicesPage() {
             // Replace @ placeholders with actual values
             const replacements: Record<string, string> = {
                 '@ClientName': invoice.clientName || t('common.client'),
-                '@InvoiceNumber': invoice.number.toLocaleString() || '',
+                '@InvoiceNumber': resolveInvoiceNumber(invoice) || String(invoice.id),
                 '@TotalAmount': `${invoice.totalAmount?.toLocaleString()} ${invoice.currencySymbol || settingsData.currencySymbol || DEFAULT_CURRENCY}`,
                 '@DueDate': invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : (invoice.date ? new Date(invoice.date).toLocaleDateString() : 'N/A'),
                 '@CompanyName': settingsData.companyName || t('common.company'),
@@ -217,10 +317,10 @@ export default function InvoicesPage() {
         } catch {
             // Fallback if settings fetch fails
             setEmailTo('');
-            setEmailSubject(`${t('invoice.title')} #${invoice.number} - ${invoice.clientName || t('common.client')}`);
+            setEmailSubject(`${t('invoice.title')} #${resolveInvoiceNumber(invoice) || invoice.id} - ${invoice.clientName || t('common.client')}`);
             setEmailBody(
                 `${t('email.greeting')} ${invoice.clientName || t('common.client')},\n\n` +
-                `${t('email.invoiceAttached')} #${invoice.number} ${t('email.forAmount')} ${invoice.totalAmount?.toLocaleString()} ${invoice.currencySymbol || DEFAULT_CURRENCY}.\n\n` +
+                `${t('email.invoiceAttached')} #${resolveInvoiceNumber(invoice) || invoice.id} ${t('email.forAmount')} ${invoice.totalAmount?.toLocaleString()} ${invoice.currencySymbol || DEFAULT_CURRENCY}.\n\n` +
                 `${t('email.regards')},\n${t('common.company')}`
             );
         }
@@ -296,20 +396,31 @@ export default function InvoicesPage() {
     const filteredInvoices = viewMode === 'archived' 
         ? archivedInvoices.filter(i => {
             const numMatch = i.number?.toString().includes(search) ?? false;
+            const altNumMatch = i.invoiceNumber?.toString().includes(search) ?? false;
             const clientMatch = i.clientName?.toLowerCase().includes(search.toLowerCase()) ?? false;
-            return numMatch || clientMatch;
+            return numMatch || altNumMatch || clientMatch;
           })
         : (invoices || []).filter(i => {
             const numMatch = i.number?.toString().includes(search) ?? false;
+            const altNumMatch = i.invoiceNumber?.toString().includes(search) ?? false;
             const clientMatch = i.clientName?.toLowerCase().includes(search.toLowerCase()) ?? false;
-            const searchMatch = numMatch || clientMatch;
+            const searchMatch = numMatch || altNumMatch || clientMatch;
             
-            // Active shows non-Paid invoices
-            return searchMatch && i.status !== 'Paid';
+            return searchMatch;
           });
+
+    const sortedInvoices = [...filteredInvoices].sort((a, b) => {
+        const aValue = (resolveLinkedInvoiceNumber(a) || '').toLowerCase();
+        const bValue = (resolveLinkedInvoiceNumber(b) || '').toLowerCase();
+        if (aValue === bValue) return 0;
+        if (invoiceNumberSort === 'asc') {
+            return aValue > bValue ? 1 : -1;
+        }
+        return aValue < bValue ? 1 : -1;
+    });
     
-    const activeCount = (invoices || []).filter(i => i.status !== 'Paid').length;
-    const archivedCount = viewMode === 'archived' ? archivedInvoices.length : (invoices || []).filter(i => i.status === 'Paid').length;
+            const activeCount = activeTotalCount;
+            const archivedCount = archivedTotalCount;
 
     return (
         <div className="space-y-6">
@@ -342,7 +453,10 @@ export default function InvoicesPage() {
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                 <div className="flex p-1 bg-gray-100 rounded-xl">
                     <button
-                        onClick={() => setViewMode('active')}
+                        onClick={() => {
+                            setViewMode('active');
+                            setActivePage(1);
+                        }}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                             viewMode === 'active'
                                 ? 'bg-white shadow-sm text-[#065F46]'
@@ -353,7 +467,10 @@ export default function InvoicesPage() {
                         {t('supplierInvoice.activeInvoices')} ({activeCount})
                     </button>
                     <button
-                        onClick={() => setViewMode('archived')}
+                        onClick={() => {
+                            setViewMode('archived');
+                            setArchivedPage(1);
+                        }}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                             viewMode === 'archived'
                                 ? 'bg-white shadow-sm text-emerald-600'
@@ -374,7 +491,10 @@ export default function InvoicesPage() {
                         <select
                             id="year-select"
                             value={selectedYear || ''}
-                            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                            onChange={(e) => {
+                                setArchivedPage(1);
+                                setSelectedYear(parseInt(e.target.value));
+                            }}
                             className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
                         >
                             {availableYears.map(year => (
@@ -390,66 +510,83 @@ export default function InvoicesPage() {
             {(loading || (viewMode === 'archived' && loadingArchive)) ? (
                 <div className="text-center py-20 text-gray-500">{t('common.loadingData')}</div>
             ) : (
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <table className="w-full min-w-[980px] text-left">
+                <div className="rm-table-card overflow-x-auto">
+                        <table className="rm-table">
+                            <colgroup>
+                                <col style={{ width: '15%' }} />
+                                <col style={{ width: '16%' }} />
+                                <col style={{ width: '10%' }} />
+                                <col style={{ width: '14%' }} />
+                                <col style={{ width: '12%' }} />
+                                <col style={{ width: '10%' }} />
+                                <col style={{ width: '10%' }} />
+                                <col style={{ width: '13%' }} />
+                            </colgroup>
                             <thead>
-                                <tr className="bg-gray-50 border-b border-gray-100">
-                                    <th className="p-4 font-semibold text-gray-600">{t('invoice.number')}</th>
-                                    <th className="p-4 font-semibold text-gray-600">{t('invoice.client')}</th>
-                                    <th className="p-4 font-semibold text-gray-600">{t('invoice.date')}</th>
-                                    <th className="p-4 font-semibold text-gray-600 text-right">{t('invoice.total')}</th>
-                                    <th className="p-4 font-semibold text-gray-600 text-right">{t('invoice.amountPaid')}</th>
-                                    <th className="p-4 font-semibold text-gray-600 text-right">{t('invoice.remaining')}</th>
-                                    <th className="p-4 font-semibold text-gray-600">{t('common.status')}</th>
-                                    <th className="p-4 font-semibold text-gray-600 text-right">{t('common.actions')}</th>
+                                <tr>
+                                    <th
+                                        className="cursor-pointer select-none"
+                                        onClick={() => setInvoiceNumberSort(prev => prev === 'asc' ? 'desc' : 'asc')}
+                                    >
+                                        {t('invoice.invoiceNumber', 'Invoice #')} {invoiceNumberSort === 'asc' ? '↑' : '↓'}
+                                    </th>
+                                    <th>{t('invoice.client')}</th>
+                                    <th>{t('invoice.date')}</th>
+                                    <th className="rm-th-number">{t('invoice.total')}</th>
+                                    <th className="rm-th-number">{t('invoice.amountPaid')}</th>
+                                    <th className="rm-th-number">{t('invoice.remaining')}</th>
+                                    <th>{t('common.status')}</th>
+                                    <th className="rm-th-actions">{t('common.actions')}</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {filteredInvoices.map((invoice) => (
-                                    <tr key={invoice.id} className="hover:bg-gray-50 transition-colors group">
-                                        <td className="p-4 font-medium text-[#065F46]">#{invoice.number}</td>
-                                        <td className="p-4 text-gray-900">{invoice.clientName || t('common.unknown')}</td>
-                                        <td className="p-4 text-gray-500">{invoice.date ? new Date(invoice.date).toLocaleDateString() : t('users.table.notAvailable')}</td>
-                                        <td className="p-4 text-gray-900 font-bold text-right">{formatCurrency(invoice.totalAmount, invoice.currencySymbol || DEFAULT_CURRENCY)}</td>
-                                        <td className="p-4 text-emerald-600 font-semibold text-right">
+                            <tbody>
+                                {sortedInvoices.map((invoice) => (
+                                    <tr key={invoice.id} className="group">
+                                        <td className="rm-cell-text font-semibold text-[#065F46]">
+                                            {invoice.source === 'historical' && invoice.invoiceId ? (
+                                                <button
+                                                    type="button"
+                                                    className="hover:underline truncate block"
+                                                    onClick={() => handleViewDetails(invoice.invoiceId!)}
+                                                    title={resolveLinkedInvoiceNumber(invoice) || undefined}
+                                                >
+                                                    #{resolveLinkedInvoiceNumber(invoice) || invoice.id}
+                                                </button>
+                                            ) : (
+                                                <span className="truncate block" title={resolveInvoiceNumber(invoice) || String(invoice.id)}>
+                                                    #{resolveInvoiceNumber(invoice) || invoice.id}
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td className="rm-cell-text text-gray-900">
+                                            <span className="truncate block" title={invoice.clientName || undefined}>
+                                                {invoice.clientName || t('common.unknown')}
+                                            </span>
+                                        </td>
+                                        <td className="rm-cell-text text-gray-500">{invoice.date ? new Date(invoice.date).toLocaleDateString() : t('users.table.notAvailable')}</td>
+                                        <td className="rm-cell-currency">{formatCurrency(invoice.totalAmount, invoice.currencySymbol || DEFAULT_CURRENCY)}</td>
+                                        <td className="rm-cell-currency text-emerald-600">
                                             {formatCurrency(invoice.amountPaid, invoice.currencySymbol || DEFAULT_CURRENCY)}
                                             {invoice.payments?.some(p => p.status === 'Pending') && (
                                                 <div className="text-xs text-orange-500 font-normal mt-0.5">
-                                                    {formatCurrency(invoice.payments.filter(p => p.status === 'Pending').reduce((sum, p) => sum + p.amount, 0), invoice.currencySymbol || DEFAULT_CURRENCY)} {t('payment.pending')}
+                                                    +{formatCurrency(invoice.payments.filter(p => p.status === 'Pending').reduce((sum, p) => sum + p.amount, 0), invoice.currencySymbol || DEFAULT_CURRENCY)} {t('payment.pending')}
                                                 </div>
                                             )}
                                         </td>
-                                        <td className="p-4 text-amber-600 font-semibold text-right">
+                                        <td className="rm-cell-currency text-amber-600">
                                             {invoice.remainingAmount > 0 ? formatCurrency(invoice.remainingAmount, invoice.currencySymbol || DEFAULT_CURRENCY) : '—'}
                                         </td>
-                                         <td className="p-4">
-                                            <div className="flex flex-col gap-1">
-                                                <span className={`px-3 py-1 text-xs font-semibold rounded-full inline-block w-fit ${getInvoiceStatusColor(invoice.status)}`}>
-                                                    {invoice.status}
+                                        <td className="rm-cell-text">
+                                            <span className={`px-3 py-1 text-xs font-semibold rounded-full inline-block ${getInvoiceStatusColor(invoice.status)}`}>
+                                                {invoice.status}
+                                            </span>
+                                            {viewMode === 'archived' && invoice.source === 'historical' && (
+                                                <span className="ml-1 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full inline-block">
+                                                    {t('common.imported', 'Imported')}
                                                 </span>
-                                                {/* Show source badge for historical data */}
-                                                {viewMode === 'archived' && invoice.source === 'historical' && (
-                                                    <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full inline-block w-fit">
-                                                        {t('common.imported', 'Imported')}
-                                                    </span>
-                                                )}
-                                                {/* Payment History Indicators */}
-                                                {invoice.payments && invoice.payments.length > 0 && (
-                                                    <div className="flex flex-wrap gap-1 mt-1">
-                                                        {invoice.payments.slice(0, 3).map((p, idx) => (
-                                                            <span key={idx} className={`text-xs ${p.status === 'Pending' ? 'text-orange-500' : 'text-gray-500'}`} title={`${new Date(p.paymentDate).toLocaleDateString()}: ${p.amount} ${invoice.currencySymbol || DEFAULT_CURRENCY} (${p.status || 'Completed'})`}>
-                                                                {p.amount.toLocaleString()}
-                                                            </span>
-                                                        ))}
-                                                        {invoice.payments.length > 3 && (
-                                                            <span className="text-xs text-gray-400">+{invoice.payments.length - 3} more</span>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
+                                            )}
                                         </td>
-                                        <td className="p-4 text-right">
+                                        <td className="rm-cell-actions">
                                             <div className="flex items-center justify-end space-x-1">
                                                 {/* Don't show action buttons for historical archived items */}
                                                 {!(viewMode === 'archived' && invoice.source === 'historical') && (
@@ -492,12 +629,24 @@ export default function InvoicesPage() {
                                                         </button>
                                                         {/* Download PDF */}
                                                         <button
-                                                            onClick={() => handleDownloadPdf(invoice.id)}
+                                                            onClick={() => handleDownloadPdf(invoice.id, invoice)}
+                                                            disabled={loading || (viewMode === 'archived' && loadingArchive) || downloadingInvoiceId === invoice.id}
                                                             className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                                                             title={t('invoice.downloadPdf')}
                                                         >
                                                             <Download size={18} />
                                                         </button>
+                                                        {/* Remaining Payment PDF - only for partially paid / unpaid */}
+                                                        {(invoice.status === 'PartiallyPaid' || (invoice.status === 'Unpaid' && invoice.remainingAmount > 0)) && (
+                                                            <button
+                                                                onClick={() => handleDownloadRemainingPdf(invoice.id, invoice)}
+                                                                disabled={downloadingInvoiceId === invoice.id}
+                                                                className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                                                                title={t('invoice.remainingPaymentPdf', 'Remaining Payment Notice')}
+                                                            >
+                                                                <FileWarning size={18} />
+                                                            </button>
+                                                        )}
                                                         {/* Delete button - Manager only, not locked, not paid */}
                                                         {isManager && !invoice.isLocked && invoice.status !== 'Paid' && (
                                                             <button
@@ -520,16 +669,35 @@ export default function InvoicesPage() {
                                         </td>
                                     </tr>
                                 ))}
-                                {filteredInvoices.length === 0 && (
+                                {sortedInvoices.length === 0 && (
                                     <tr>
-                                        <td colSpan={8} className="p-12 text-center text-gray-500">
+                                        <td colSpan={8} className="px-4 py-12 text-center text-gray-500">
                                             {t('invoice.messages.empty')}
                                         </td>
                                     </tr>
                                 )}
                             </tbody>
                         </table>
-                    </div>
+                    {!search && (
+                        <Pagination
+                            page={currentPage}
+                            totalPages={currentTotalPages}
+                            totalCount={currentTotalCount}
+                            size={pageSize}
+                            onPageChange={(p) => {
+                                if (viewMode === 'archived') {
+                                    setArchivedPage(p);
+                                } else {
+                                    setActivePage(p);
+                                }
+                            }}
+                            onSizeChange={(s) => {
+                                setPageSize(s);
+                                setActivePage(1);
+                                setArchivedPage(1);
+                            }}
+                        />
+                    )}
                 </div>
             )}
 
@@ -678,7 +846,7 @@ export default function InvoicesPage() {
                         
                         <div className="mb-4 p-4 bg-blue-50 rounded-xl border border-blue-100">
                             <p className="text-sm text-blue-800">
-                                📄 {t('invoice.title')} <span className="font-bold">#{emailInvoice.number}</span> - {emailInvoice.clientName || t('common.client')}
+                                📄 {t('invoice.title')} <span className="font-bold">#{resolveInvoiceNumber(emailInvoice) || emailInvoice.id}</span> - {emailInvoice.clientName || t('common.client')}
                             </p>
                             <p className="text-sm text-blue-700 mt-1">
                                 💰 {t('invoice.total')}: <span className="font-bold">{formatCurrency(emailInvoice.totalAmount, emailInvoice.currencySymbol || DEFAULT_CURRENCY)}</span>
@@ -771,7 +939,7 @@ export default function InvoicesPage() {
                         setShowDetailView(false);
                         navigate(`/invoices/edit/${id}`);
                     }}
-                    onDownloadPdf={(id, number) => handleDownloadPdf(id, number)}
+                    onDownloadPdf={(id, number) => handleDownloadPdf(id, { id, number: String(number) })}
                     onSendEmail={(invoice) => {
                         setShowDetailView(false);
                         openEmailModal(invoice);

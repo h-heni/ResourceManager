@@ -43,25 +43,42 @@ namespace ResourceManager.Controllers
         /// GET: api/pdf-storage/config - Get current PDF storage configuration
         /// </summary>
         [HttpGet("config")]
-        public IActionResult GetStorageConfig()
+        public async Task<IActionResult> GetStorageConfig()
         {
-            var basePath = _pdfStorageService.GetBaseFolderPath();
-            var exists = Directory.Exists(basePath);
-            
-            return Ok(new
+            try
             {
-                baseFolderPath = basePath,
-                folderExists = exists,
-                folderStructure = new
+                var user = await GetCurrentUserAsync(_userManager);
+                if (user == null) return Unauthorized();
+
+                var settings = await _context.CompanySettings
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
+
+                var basePath = !string.IsNullOrWhiteSpace(settings?.BaseStoragePath)
+                    ? settings!.BaseStoragePath!
+                    : _pdfStorageService.GetBaseFolderPath();
+                var exists = Directory.Exists(basePath);
+                
+                return Ok(new
                 {
-                    description = "PDFs are organized in the following structure:",
-                    clientDocuments = "[CompanyName]/[Year]/Clients/[ClientName]/[Month]/[DocumentType]/",
-                    fournisseurDocuments = "[CompanyName]/[Year]/Fournisseurs/[FournisseurName]/[Month]/Invoices/",
-                    documentTypes = new[] { "Factures", "BonsLivraison", "Devis" },
-                    months = new[] { "Janvier", "Février", "Mars", "Avril", "Mai", "Juin", 
-                                    "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre" }
-                }
-            });
+                    baseFolderPath = basePath,
+                    folderExists = exists,
+                    folderStructure = new
+                    {
+                        description = "PDFs are organized in the following structure:",
+                        clientDocuments = "[CompanyName]/[Year]/Clients/[ClientName]/[Month]/[DocumentType]/",
+                        fournisseurDocuments = "[CompanyName]/[Year]/Fournisseurs/[FournisseurName]/[Month]/Invoices/",
+                        documentTypes = new[] { "Factures", "BonsLivraison", "Devis" },
+                        months = new[] { "Janvier", "Février", "Mars", "Avril", "Mai", "Juin", 
+                                        "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre" }
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching storage config");
+                return StatusCode(500, new { message = "Failed to retrieve storage configuration" });
+            }
         }
 
         /// <summary>
@@ -75,10 +92,33 @@ namespace ResourceManager.Controllers
                 return BadRequest(new { message = "Base folder path is required" });
             }
 
+            var user = await GetCurrentUserAsync(_userManager);
+            if (user == null) return Unauthorized();
+
+            var settings = await _context.CompanySettings
+                .FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
+
+            if (settings == null)
+            {
+                settings = new CompanySettings { CompanyId = user.CompanyId };
+                _context.CompanySettings.Add(settings);
+            }
+
+            if (!string.IsNullOrEmpty(settings.BaseStoragePath) &&
+                !string.Equals(settings.BaseStoragePath, dto.BaseFolderPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(new { message = "Storage Path is locked and cannot be changed." });
+            }
+
             var success = await _pdfStorageService.SetBaseFolderPathAsync(dto.BaseFolderPath);
             
             if (success)
             {
+                settings.BaseStoragePath = dto.BaseFolderPath;
+                settings.IsProfileComplete = true;
+                settings.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+
                 _logger.LogInformation("PDF storage base folder updated to: {Path}", dto.BaseFolderPath);
                 return Ok(new
                 {
@@ -106,30 +146,38 @@ namespace ResourceManager.Controllers
         [HttpGet("check-consistency")]
         public async Task<IActionResult> CheckFileConsistency()
         {
-            var user = await GetCurrentUserAsync(_userManager);
-            if (user == null) return Unauthorized();
-
-            var report = await _pdfStorageService.CheckFileConsistencyAsync(user.CompanyId);
-
-            return Ok(new
+            try
             {
-                report.CheckedAt,
-                report.TotalFiles,
-                report.ExistingFiles,
-                report.MissingFiles,
-                hasMissingFiles = report.MissingFiles > 0,
-                missingFileDetails = report.MissingFileRecords.Select(f => new
+                var user = await GetCurrentUserAsync(_userManager);
+                if (user == null) return Unauthorized();
+
+                var report = await _pdfStorageService.CheckFileConsistencyAsync(user.CompanyId);
+
+                return Ok(new
                 {
-                    f.Id,
-                    f.FileName,
-                    f.RelativePath,
-                    f.DocumentType,
-                    f.DocumentNumber,
-                    f.DocumentDate,
-                    f.HasCloudBackup,
-                    canRecover = f.HasCloudBackup
-                })
-            });
+                    report.CheckedAt,
+                    report.TotalFiles,
+                    report.ExistingFiles,
+                    report.MissingFiles,
+                    hasMissingFiles = report.MissingFiles > 0,
+                    missingFileDetails = report.MissingFileRecords.Select(f => new
+                    {
+                        f.Id,
+                        f.FileName,
+                        f.RelativePath,
+                        f.DocumentType,
+                        f.DocumentNumber,
+                        f.DocumentDate,
+                        f.HasCloudBackup,
+                        canRecover = f.HasCloudBackup
+                    })
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking file consistency");
+                return Ok(new { CheckedAt = DateTime.UtcNow, TotalFiles = 0, ExistingFiles = 0, MissingFiles = 0, hasMissingFiles = false, missingFileDetails = Array.Empty<object>() });
+            }
         }
 
         /// <summary>
@@ -214,48 +262,56 @@ namespace ResourceManager.Controllers
         [HttpGet("files")]
         public async Task<IActionResult> GetAllFiles([FromQuery] string? documentType = null, [FromQuery] int page = 1, [FromQuery] int size = 50)
         {
-            var user = await GetCurrentUserAsync(_userManager);
-            if (user == null) return Unauthorized();
-
-            var query = _context.PdfFileRecords
-                .Where(r => r.CompanyId == user.CompanyId && !r.IsDeleted);
-
-            if (!string.IsNullOrEmpty(documentType) && Enum.TryParse<PdfDocumentType>(documentType, true, out var docType))
+            try
             {
-                query = query.Where(r => r.DocumentType == docType);
-            }
+                var user = await GetCurrentUserAsync(_userManager);
+                if (user == null) return Unauthorized();
 
-            var totalCount = await query.CountAsync();
-            
-            var files = await query
-                .OrderByDescending(r => r.DocumentDate)
-                .Skip((page - 1) * size)
-                .Take(size)
-                .Select(r => new
+                var query = _context.PdfFileRecords
+                    .Where(r => r.CompanyId == user.CompanyId && !r.IsDeleted);
+
+                if (!string.IsNullOrEmpty(documentType) && Enum.TryParse<PdfDocumentType>(documentType, true, out var docType))
                 {
-                    r.Id,
-                    r.FileName,
-                    r.RelativePath,
-                    r.DocumentType,
-                    r.DocumentNumber,
-                    r.DocumentDate,
-                    r.ClientName,
-                    r.FournisseurName,
-                    r.FileSizeBytes,
-                    r.CreatedAt,
-                    hasCloudBackup = !string.IsNullOrEmpty(r.CloudUrl),
-                    fileExists = System.IO.File.Exists(r.FullPath)
-                })
-                .ToListAsync();
+                    query = query.Where(r => r.DocumentType == docType);
+                }
 
-            return Ok(new
+                var totalCount = await query.CountAsync();
+                
+                var files = await query
+                    .OrderByDescending(r => r.DocumentDate)
+                    .Skip((page - 1) * size)
+                    .Take(size)
+                    .Select(r => new
+                    {
+                        r.Id,
+                        r.FileName,
+                        r.RelativePath,
+                        r.DocumentType,
+                        r.DocumentNumber,
+                        r.DocumentDate,
+                        r.ClientName,
+                        r.FournisseurName,
+                        r.FileSizeBytes,
+                        r.CreatedAt,
+                        hasCloudBackup = !string.IsNullOrEmpty(r.CloudUrl),
+                        fileExists = System.IO.File.Exists(r.FullPath)
+                    })
+                    .ToListAsync();
+
+                return Ok(new
+                {
+                    data = files,
+                    page,
+                    size,
+                    totalCount,
+                    totalPages = (int)Math.Ceiling(totalCount / (double)size)
+                });
+            }
+            catch (Exception ex)
             {
-                data = files,
-                page,
-                size,
-                totalCount,
-                totalPages = (int)Math.Ceiling(totalCount / (double)size)
-            });
+                _logger.LogError(ex, "Error fetching PDF files");
+                return Ok(new { data = Array.Empty<object>(), page, size, totalCount = 0, totalPages = 0 });
+            }
         }
 
         /// <summary>

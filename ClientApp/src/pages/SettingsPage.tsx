@@ -114,14 +114,12 @@ export default function SettingsPage() {
     const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
 
     // PDF Storage
-    const [storageConfig, setStorageConfig] = useState<{ baseFolderPath?: string; provider?: string } | null>(null);
-    const [loadingStorage, setLoadingStorage] = useState(false);
     const [consistencyReport, setConsistencyReport] = useState<{ missingFiles?: number; MissingFiles?: number; totalFiles?: number; TotalFiles?: number; existingFiles?: number; ExistingFiles?: number; missingFileDetails?: Array<{ id: number; documentType: string; documentNumber: string; fileName: string }> } | null>(null);
     const [checkingConsistency, setCheckingConsistency] = useState(false);
     const [newBasePath, setNewBasePath] = useState('');
     const [browsingFolders, setBrowsingFolders] = useState(false);
     const [folderBrowser, setFolderBrowser] = useState<{ currentPath?: string; parent?: string; items?: Array<{ path: string; name: string; type: string }> } | null>(null);
-    const [browseTarget, setBrowseTarget] = useState<'storage' | 'basePath'>('storage');
+    const [browseTarget, setBrowseTarget] = useState<'basePath'>('basePath');
     const [recovering, setRecovering] = useState(false);
     const [recoveryProgress, setRecoveryProgress] = useState<{ current: number; total: number; message: string } | null>(null);
 
@@ -208,7 +206,7 @@ Best regards,
     const loadAll = async () => {
         // Fetch settings first to check hasLogoData/hasSignatureImage flags
         const [settingsData] = await Promise.allSettled([
-            fetchSettings(), fetchOAuthStatus(), fetchStorageConfig()
+            fetchSettings(), fetchOAuthStatus()
         ]);
 
         // Only fetch logo/signature blobs if the backend confirms they exist (avoids 404s)
@@ -276,6 +274,7 @@ Best regards,
                 baseStoragePath: res.data.baseStoragePath || '',
                 isProfileComplete: res.data.isProfileComplete ?? false,
             });
+            setNewBasePath(res.data.baseStoragePath || '');
             return { hasLogoData, hasSignatureImage };
         } catch {
             setStatus({ type: 'error', message: t('settings.loadFailed', 'Failed to load settings') });
@@ -297,16 +296,6 @@ Best regards,
             const res = await api.get('/Settings/signature', { responseType: 'blob' });
             if (res.data.size > 0) setSignaturePreview(URL.createObjectURL(res.data));
         } catch { /* no signature */ }
-    };
-
-    const fetchStorageConfig = async () => {
-        setLoadingStorage(true);
-        try {
-            const res = await api.get('/pdf-storage/config');
-            setStorageConfig(res.data);
-            setNewBasePath(res.data.baseFolderPath || '');
-        } catch { /* ignore */ }
-        finally { setLoadingStorage(false); }
     };
 
     // ═══════════════════════════════════════════════════════════════
@@ -347,8 +336,9 @@ Best regards,
                 customTaxAmount: settings.customTaxAmount,
                 pdfFooterText: settings.pdfFooterText,
                 showCompanyLogo: settings.showCompanyLogo,
-                pdfSignatureText: settings.pdfSignatureText,
-                pdfSignerPosition: settings.pdfSignerPosition,
+                // Signature fields - always send (trimmed), empty string is valid for clearing
+                pdfSignatureText: settings.pdfSignatureText?.trim() ?? '',
+                pdfSignerPosition: settings.pdfSignerPosition?.trim() ?? '',
                 invoiceLanguage: settings.invoiceLanguage,
                 showSignatureOnPdf: settings.showSignatureOnPdf,
                 proInvoiceUseTokenSignature: settings.proInvoiceUseTokenSignature,
@@ -641,15 +631,6 @@ Best regards,
         } finally {
             setRecovering(false);
         }
-    };
-
-    const handleSetBasePath = async () => {
-        if (!newBasePath) return;
-        try {
-            await api.put('/pdf-storage/config', { baseFolderPath: newBasePath });
-            setStatus({ type: 'success', message: 'PDF storage folder updated' });
-            await fetchStorageConfig();
-        } catch { setStatus({ type: 'error', message: 'Failed to update storage folder' }); }
     };
 
     const handleBrowseFolders = async (path?: string) => {
@@ -1142,18 +1123,20 @@ Best regards,
 
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.pdfSignature', 'PDF Signature Text')}</label>
-                                            <input type="text" value={settings.pdfSignatureText || ''} onChange={e => updateSetting('pdfSignatureText', e.target.value)}
+                                            <input type="text" value={settings.pdfSignatureText} onChange={e => updateSetting('pdfSignatureText', e.target.value)}
+                                                maxLength={100}
                                                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
-                                                placeholder={t('settings.signaturePlaceholder', 'E.g. Authorized Signatory, Company Director')} />
-                                            <p className="text-xs text-gray-500 mt-1">{t('settings.signatureTextHelp', 'This text appears below the signature image on PDFs')}</p>
+                                                placeholder={t('settings.signaturePlaceholder', 'E.g. John Smith')} />
+                                            <p className="text-xs text-gray-500 mt-1">{t('settings.signatureNameHelp', 'The name that appears bold on the PDF signature')}</p>
                                         </div>
 
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.pdfSignerPosition', 'Signer Position / Title')}</label>
-                                            <input type="text" value={settings.pdfSignerPosition || ''} onChange={e => updateSetting('pdfSignerPosition', e.target.value)}
+                                            <input type="text" value={settings.pdfSignerPosition} onChange={e => updateSetting('pdfSignerPosition', e.target.value)}
+                                                maxLength={100}
                                                 className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
                                                 placeholder={t('settings.signerPositionPlaceholder', 'E.g. Managing Director, CEO, Accountant')} />
-                                            <p className="text-xs text-gray-500 mt-1">{t('settings.signerPositionHelp', 'Appears below the signature line on PDFs (e.g. job title or role)')}</p>
+                                            <p className="text-xs text-gray-500 mt-1">{t('settings.signerPositionHelp', 'Appears below the signature name on PDFs (e.g. job title or role)')}</p>
                                         </div>
 
                                         <div className="flex items-center mt-4 pt-4 border-t border-gray-100">
@@ -1476,70 +1459,6 @@ Best regards,
                                             )}
                                         </div>
 
-                                        {/* Current Folder + Change Folder (unified card) */}
-                                        {loadingStorage ? (
-                                            <div className="p-8 text-center text-gray-500"><Loader2 size={24} className="animate-spin mx-auto mb-2" />{t('settings.loadingStorageConfig', 'Loading storage config...')}</div>
-                                        ) : (
-                                            <div className="bg-white border border-gray-200 rounded-xl p-6">
-                                                <div className="flex items-center gap-3 mb-4">
-                                                    <div className="p-2.5 bg-[#065F46]/5 rounded-xl">
-                                                        <FolderOpen size={22} className="text-[#065F46]" />
-                                                    </div>
-                                                    <div>
-                                                        <h4 className="font-semibold text-gray-800">{t('settings.pdfStorageFolder', 'PDF Storage Folder')}</h4>
-                                                        <p className="text-xs text-gray-500">{t('settings.pdfStorageFolderDesc', 'Where generated PDFs are saved on the server')}</p>
-                                                    </div>
-                                                </div>
-
-                                                {/* Current path display */}
-                                                {storageConfig?.baseFolderPath && (
-                                                    <div className={`flex items-center gap-3 p-3 rounded-lg border mb-4 ${storageConfig.folderExists ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
-                                                        <FolderOpen className={storageConfig.folderExists ? 'text-emerald-600' : 'text-red-500'} size={18} />
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="font-mono text-sm truncate">{storageConfig.baseFolderPath}</p>
-                                                            <p className={`text-xs mt-0.5 ${storageConfig.folderExists ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                                {storageConfig.folderExists
-                                                                    ? t('settings.folderAccessible', 'Folder exists and is accessible')
-                                                                    : t('settings.folderInaccessible', 'Folder does not exist or is inaccessible')}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {!storageConfig?.baseFolderPath && (
-                                                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg mb-4 flex items-center gap-2">
-                                                        <AlertTriangle size={16} className="text-amber-600 flex-shrink-0" />
-                                                        <p className="text-sm text-amber-700">{t('settings.noStorageFolder', 'No storage folder configured. Type a path or browse to select one.')}</p>
-                                                    </div>
-                                                )}
-
-                                                {/* Path input + Browse button */}
-                                                <div className="flex gap-2">
-                                                    <div className="flex-1 relative">
-                                                        <input type="text" value={newBasePath} onChange={e => setNewBasePath(e.target.value)}
-                                                            placeholder={t('settings.selectFolder', 'Enter or browse for a folder path...')}
-                                                            className="w-full pl-3 pr-24 py-2.5 bg-gray-50 border border-gray-200 rounded-lg font-mono text-sm focus:ring-2 focus:ring-[#065F46] focus:border-[#065F46]/30 outline-none transition-colors" />
-                                                        <button onClick={() => {
-                                                            if (folderBrowser) {
-                                                                setFolderBrowser(null);
-                                                            } else {
-                                                                setBrowseTarget('storage');
-                                                                handleBrowseFolders(newBasePath || undefined);
-                                                            }
-                                                        }} disabled={browsingFolders}
-                                                            className="absolute right-1.5 top-1.5 bottom-1.5 px-3 bg-[#065F46] text-white rounded-md hover:bg-[#047857] disabled:opacity-50 flex items-center gap-1.5 text-sm font-medium transition-colors">
-                                                            {browsingFolders ? <Loader2 size={14} className="animate-spin" /> : <FolderOpen size={14} />}
-                                                            {t('settings.browse', 'Browse')}
-                                                        </button>
-                                                    </div>
-                                                    <button onClick={handleSetBasePath} disabled={!newBasePath || newBasePath === storageConfig?.baseFolderPath}
-                                                        className="px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 whitespace-nowrap transition-colors">
-                                                        <Save size={16} />{t('common.save', 'Save')}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
-
                                         {/* Folder Browser Modal */}
                                         {folderBrowser && (
                                             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setFolderBrowser(null)}>
@@ -1594,10 +1513,8 @@ Best regards,
                                                                 {t('common.cancel', 'Cancel')}
                                                             </button>
                                                             <button onClick={() => {
-                                                                if (browseTarget === 'basePath') {
-                                                                    if (newBasePath) updateSetting('baseStoragePath', newBasePath);
-                                                                } else {
-                                                                    handleSetBasePath();
+                                                                if (browseTarget === 'basePath' && newBasePath) {
+                                                                    updateSetting('baseStoragePath', newBasePath);
                                                                 }
                                                                 setFolderBrowser(null);
                                                             }}

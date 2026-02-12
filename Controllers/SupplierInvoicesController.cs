@@ -35,60 +35,74 @@ namespace ResourceManager.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int size = 20)
         {
-            if (page < 1) page = 1;
-            if (size < 1) size = 20;
-
-            var query = _context.FournisseurInvoices
-                .AsNoTracking()
-                .Include(f => f.Fournisseur)
-                .Include(f => f.Items)
-                .Include(f => f.Payments)
-                .OrderByDescending(f => f.CreatedAt);
-
-            var totalCount = await query.CountAsync();
-            var list = await query
-                .Skip((page - 1) * size)
-                .Take(size)
-                .ToListAsync();
-
-            var result = list.Select(f => new
+            try
             {
-                f.Id,
-                f.FileName,
-                f.InvoiceNumber,
-                f.InvoiceDate,
-                f.DueDate,
-                f.TotalHT,
-                f.TotalTTC,
-                f.TVA,
-                f.ExtractionStatus,
-                f.ConfidenceScore,
-                f.CreatedAt,
-                FournisseurName = f.Fournisseur != null ? f.Fournisseur.Name : null,
-                f.FournisseurId,
-                ItemCount = f.Items.Count,
-                f.AmountPaid,
-                f.PendingAmount,
-                f.RemainingAmount,
-                f.PaymentStatus,
-                PaymentCount = f.Payments.Count,
-                f.FilePath,
-                f.IsDeleted,
-                f.Currency,
-                f.CurrencySymbol,
-                Payments = f.Payments.OrderByDescending(p => p.PaymentDate).Select(p => new
+                if (page < 1) page = 1;
+                if (size < 1) size = 20;
+
+                var query = _context.FournisseurInvoices
+                    .AsNoTracking()
+                    .Include(f => f.Fournisseur)
+                    .Include(f => f.Items)
+                    .Include(f => f.Payments)
+                    .OrderByDescending(f => f.CreatedAt);
+
+                var totalCount = await query.CountAsync();
+                var list = await query
+                    .Skip((page - 1) * size)
+                    .Take(size)
+                    .ToListAsync();
+
+                var result = list.Select(f => new
                 {
-                    p.Id, p.Amount, p.PaymentDate, p.Notes, p.Status, p.IsScheduled, p.CreatedAt
-                })
-            });
+                    f.Id,
+                    f.FileName,
+                    f.InvoiceNumber,
+                    f.InvoiceDate,
+                    f.DueDate,
+                    f.TotalHT,
+                    f.TotalTTC,
+                    f.TVA,
+                    f.ExtractionStatus,
+                    f.ConfidenceScore,
+                    f.CreatedAt,
+                    FournisseurName = f.Fournisseur != null ? f.Fournisseur.Name : null,
+                    f.FournisseurId,
+                    ItemCount = f.Items != null ? f.Items.Count : 0,
+                    f.AmountPaid,
+                    f.PendingAmount,
+                    f.RemainingAmount,
+                    f.PaymentStatus,
+                    PaymentCount = f.Payments != null ? f.Payments.Count : 0,
+                    f.FilePath,
+                    f.IsDeleted,
+                    f.Currency,
+                    f.CurrencySymbol,
+                    Payments = f.Payments != null ? f.Payments.OrderByDescending(p => p.PaymentDate).Select(p => new
+                    {
+                        p.Id, p.Amount, p.PaymentDate, p.Notes, p.Status, p.IsScheduled, p.CreatedAt
+                    }) : Enumerable.Empty<object>()
+                });
 
-            return Ok(new
+                return Ok(new
+                {
+                    Data = result,
+                    Page = page,
+                    Size = size,
+                    TotalCount = totalCount
+                });
+            }
+            catch (Exception ex)
             {
-                Data = result,
-                Page = page,
-                Size = size,
-                TotalCount = totalCount
-            });
+                _logger.LogError(ex, "Error fetching supplier invoices");
+                return Ok(new
+                {
+                    Data = Array.Empty<object>(),
+                    Page = page,
+                    Size = size,
+                    TotalCount = 0
+                });
+            }
         }
 
         // ═══════════════════════════════════════════════════════════════

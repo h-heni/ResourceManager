@@ -127,27 +127,45 @@ namespace ResourceManager.Controllers
         /// </summary>
         [HttpGet]
         [Authorize(Roles = "Manager,SuperAdmin")]
-        public async Task<IActionResult> GetPendingInvoices()
+        public async Task<IActionResult> GetPendingInvoices([FromQuery] int page = 1, [FromQuery] int size = 20)
         {
-            var invoices = await _context.PendingInvoices
-                .Where(p => !p.IsProcessed)
-                .OrderByDescending(p => p.CreatedAt)
-                .Select(p => new
-                {
-                    p.Id,
-                    p.SupplierName,
-                    p.Date,
-                    p.Amount,
-                    p.FileName,
-                    p.OriginalSize,
-                    CompressedSize = p.Content.Length,
-                    p.IsProcessed,
-                    p.CreatedAt,
-                    p.CreatedByUserId
-                })
-                .ToListAsync();
+            try
+            {
+                if (page < 1) page = 1;
+                if (size < 1) size = 20;
 
-            return Ok(invoices);
+                var query = _context.PendingInvoices
+                    .Where(p => !p.IsProcessed)
+                    .OrderByDescending(p => p.CreatedAt);
+
+                var totalCount = await query.CountAsync();
+                var totalPages = (int)Math.Ceiling(totalCount / (double)size);
+
+                var invoices = await query
+                    .Skip((page - 1) * size)
+                    .Take(size)
+                    .Select(p => new
+                    {
+                        p.Id,
+                        p.SupplierName,
+                        p.Date,
+                        p.Amount,
+                        p.FileName,
+                        p.OriginalSize,
+                        CompressedSize = p.Content != null ? p.Content.Length : 0,
+                        p.IsProcessed,
+                        p.CreatedAt,
+                        p.CreatedByUserId
+                    })
+                    .ToListAsync();
+
+                return Ok(new { Data = invoices, Page = page, Size = size, TotalCount = totalCount, TotalPages = totalPages });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching pending invoices");
+                return Ok(new { Data = Array.Empty<object>(), Page = page, Size = size, TotalCount = 0, TotalPages = 0 });
+            }
         }
 
         /// <summary>
@@ -158,11 +176,19 @@ namespace ResourceManager.Controllers
         [Authorize(Roles = "Manager,SuperAdmin")]
         public async Task<IActionResult> GetPendingCount()
         {
-            var count = await _context.PendingInvoices
-                .Where(p => !p.IsProcessed)
-                .CountAsync();
+            try
+            {
+                var count = await _context.PendingInvoices
+                    .Where(p => !p.IsProcessed)
+                    .CountAsync();
 
-            return Ok(new { count });
+                return Ok(new { count });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching pending invoices count");
+                return Ok(new { count = 0 });
+            }
         }
 
         /// <summary>

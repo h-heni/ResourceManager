@@ -21,26 +21,44 @@ namespace ResourceManager.Controllers
 
         // GET: api/productservices
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<object>>> GetAll()
+        public async Task<ActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int size = 20)
         {
-            var items = await _context.ProductServices
-                .AsNoTracking()
-                .OrderBy(p => p.Name)
-                .Select(p => new
-                {
-                    p.Id,
-                    p.Name,
-                    p.Description,
-                    p.DefaultUnitPrice,
-                    p.Type,
-                    p.Category,
-                    p.VatApplicable,
-                    p.CreatedAt,
-                    p.TvaRate
-                })
-                .ToListAsync();
+            try
+            {
+                if (page < 1) page = 1;
+                if (size < 1) size = 20;
 
-            return Ok(items);
+                var query = _context.ProductServices
+                    .AsNoTracking()
+                    .OrderBy(p => p.Name);
+
+                var totalCount = await query.CountAsync();
+                var totalPages = (int)Math.Ceiling(totalCount / (double)size);
+
+                var items = await query
+                    .Skip((page - 1) * size)
+                    .Take(size)
+                    .Select(p => new
+                    {
+                        p.Id,
+                        p.Name,
+                        p.Description,
+                        p.DefaultUnitPrice,
+                        p.Type,
+                        p.Category,
+                        p.VatApplicable,
+                        p.CreatedAt,
+                        p.TvaRate
+                    })
+                    .ToListAsync();
+
+                return Ok(new { Data = items, Page = page, Size = size, TotalCount = totalCount, TotalPages = totalPages });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching product services");
+                return Ok(new { Data = Array.Empty<object>(), Page = page, Size = size, TotalCount = 0, TotalPages = 0 });
+            }
         }
 
         // GET: api/productservices/5

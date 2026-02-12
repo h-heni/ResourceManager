@@ -195,10 +195,21 @@ jobs:
     environment: staging
     
     steps:
-      - name: Staging deployment placeholder
-        run: |
-          echo "🚀 Ready to deploy to STAGING environment"
-          echo "Images pushed to GHCR - deploy via deploy.yml workflow"
+      - name: Trigger staging deployment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'deploy.yml',
+              ref: 'staging',
+              inputs: {
+                environment: 'staging',
+                tag: context.sha.substring(0, 7)
+              }
+            });
+            console.log('Triggered deploy.yml for staging');
 
   deploy-production:
     name: Deploy to Production
@@ -208,7 +219,18 @@ jobs:
     environment: production
     
     steps:
-      - name: Production deployment placeholder
-        run: |
-          echo "🚀 Ready to deploy to PRODUCTION environment"
-          echo "Images pushed to GHCR - deploy via deploy.yml workflow"
+      - name: Trigger production deployment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'deploy.yml',
+              ref: 'main',
+              inputs: {
+                environment: 'production',
+                tag: context.sha.substring(0, 7)
+              }
+            });
+            console.log('Triggered deploy.yml for production');

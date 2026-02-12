@@ -98,6 +98,20 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<CompanySettings>().HasQueryFilter(e => _isSuperAdmin || e.CompanyId == _currentCompanyId);
         builder.Entity<PendingInvoice>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
 
+        builder.Entity<HistoricalRevenue>()
+            .HasOne(e => e.Invoice)
+            .WithMany()
+            .HasForeignKey(e => e.InvoiceId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.Entity<HistoricalRevenue>()
+            .HasIndex(e => e.InvoiceId);
+
+        builder.Entity<HistoricalRevenue>()
+            .HasIndex(e => new { e.CompanyId, e.InvoiceId })
+            .IsUnique()
+            .HasFilter("\"InvoiceId\" IS NOT NULL");
+
         // RefreshToken indexes for fast lookup
         builder.Entity<RefreshToken>().HasIndex(e => e.Token).IsUnique();
         builder.Entity<RefreshToken>().HasIndex(e => e.UserId);
@@ -105,6 +119,14 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         // UserLoginRecord indexes
         builder.Entity<UserLoginRecord>().HasIndex(e => e.UserId);
         builder.Entity<UserLoginRecord>().HasIndex(e => e.IpAddress);
+
+        // Business document number uniqueness per company
+        builder.Entity<Invoice>()
+            .HasIndex(e => new { e.CompanyId, e.Number })
+            .IsUnique();
+        builder.Entity<Devis>()
+            .HasIndex(e => new { e.CompanyId, e.Number })
+            .IsUnique();
     }
 
     // 3. AUTO-FILL COMPANY ID ON SAVE

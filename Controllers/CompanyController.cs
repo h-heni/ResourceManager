@@ -15,11 +15,13 @@ namespace ResourceManager.Controllers
     {
         private readonly AppDbContext _context;
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly ILogger<CompanyController> _logger;
 
-        public CompanyController(AppDbContext context, UserManager<ApplicationUser> userManager)
+        public CompanyController(AppDbContext context, UserManager<ApplicationUser> userManager, ILogger<CompanyController> logger)
         {
             _context = context;
             _userManager = userManager;
+            _logger = logger;
         }
 
         /// <summary>
@@ -83,15 +85,26 @@ namespace ResourceManager.Controllers
         [HttpGet("my")]
         public async Task<IActionResult> GetMyCompany()
         {
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
-            var user = await _userManager.FindByIdAsync(userId);
-            
-            if (user == null || user.CompanyId == 0)
-                return NotFound("No company found");
+            try
+            {
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (string.IsNullOrEmpty(userId)) return Unauthorized();
+                var user = await _userManager.FindByIdAsync(userId);
+                
+                if (user == null || user.CompanyId == 0)
+                    return NotFound("No company found");
 
-            var company = await _context.Companies.FindAsync(user.CompanyId);
-            return Ok(company);
+                var company = await _context.Companies.FindAsync(user.CompanyId);
+                if (company == null)
+                    return NotFound("Company not found");
+
+                return Ok(company);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching company details");
+                return StatusCode(500, new { message = "Failed to retrieve company details" });
+            }
         }
     }
 

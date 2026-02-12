@@ -38,6 +38,7 @@ interface NavItem {
     icon: React.ComponentType<{ size?: number; className?: string }>;
     label: string;
     path: string;
+    badge?: number;
 }
 
 export default function DashboardLayout() {
@@ -50,6 +51,7 @@ export default function DashboardLayout() {
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [companyName, setCompanyName] = useState<string>('');
     const [companyLogo, setCompanyLogo] = useState<string | null>(null);
+    const [archivedInvoiceCount, setArchivedInvoiceCount] = useState(0);
     const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
     const prevPathRef = useRef(location.pathname);
     const userName = displayName || '';
@@ -117,6 +119,32 @@ export default function DashboardLayout() {
         };
     }, []);
 
+    useEffect(() => {
+        if (isSuperAdmin) return;
+
+        let isMounted = true;
+        const year = new Date().getFullYear();
+
+        const fetchArchivedInvoiceCount = async () => {
+            try {
+                const response = await api.get(`/Invoices/archived/count?year=${year}`);
+                if (isMounted) {
+                    setArchivedInvoiceCount(response.data?.count ?? 0);
+                }
+            } catch {
+                if (isMounted) {
+                    setArchivedInvoiceCount(0);
+                }
+            }
+        };
+
+        fetchArchivedInvoiceCount();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [isSuperAdmin]);
+
     // userName is derived directly from displayName (no sync effect needed)
 
     // Dynamic browser tab: title + favicon from company branding
@@ -166,7 +194,7 @@ export default function DashboardLayout() {
                 { icon: Users, label: t('nav.clients'), path: '/clients' },
                 { icon: CreditCard, label: t('nav.quotes'), path: '/quotes' },
                 { icon: Truck, label: t('nav.deliveryNotes'), path: '/delivery-notes' },
-                { icon: FileText, label: t('nav.invoices'), path: '/invoices' },
+                { icon: FileText, label: t('nav.invoices'), path: '/invoices', badge: archivedInvoiceCount },
                 { icon: Package, label: t('nav.products'), path: '/products' },
             ]
         },
@@ -219,6 +247,16 @@ export default function DashboardLayout() {
                 )}>
                     {item.label}
                 </span>
+                {sidebarOpen && typeof item.badge === 'number' && item.badge > 0 && (
+                    <span
+                        className={cn(
+                            'ml-auto rounded-full px-2 py-0.5 text-xs font-semibold leading-none',
+                            active ? 'bg-white/20 text-white' : 'bg-[#ECFDF5] text-[#065F46]'
+                        )}
+                    >
+                        {item.badge}
+                    </span>
+                )}
             </button>
         );
     };

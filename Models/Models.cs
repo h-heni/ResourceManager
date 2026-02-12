@@ -157,14 +157,19 @@ namespace ResourceManager.Models
         public DateTime? DueDate { get; set; } // Payment due date - nullable for backwards compatibility
         public int? ClientId { get; set; }
         
-        // Per-document currency & language (overrides company defaults)
-        public string? Currency { get; set; }
-        public string? CurrencySymbol { get; set; }
-        public string? PdfLanguage { get; set; }
         [ForeignKey("ClientId")]
         public virtual Client? Client { get; set; }
         public int? DevisId { get; set; }
         public Devis? Devis { get; set; } = null!;
+
+        // Currency & Language inherited from linked Quote (backward compat: falls back to company settings)
+        [NotMapped]
+        public string? EffectiveCurrency => Devis?.Currency;
+        [NotMapped]
+        public string? EffectiveCurrencySymbol => Devis?.CurrencySymbol;
+        [NotMapped]
+        public string? EffectivePdfLanguage => Devis?.PdfLanguage;
+        public string? SourceDevisNumber { get; set; }
         public ICollection<InvoiceItem> InvoiceItems { get; set; } = new List<InvoiceItem>();
         public ICollection<Payment> Payments { get; set; } = new List<Payment>();
 
@@ -271,13 +276,16 @@ namespace ResourceManager.Models
         public string Number { get; set; } = string.Empty; // e.g. DN-2023-001
         public DateTime Date { get; set; }
         
-        // Per-document currency & language (overrides company defaults)
-        public string? Currency { get; set; }
-        public string? CurrencySymbol { get; set; }
-        public string? PdfLanguage { get; set; }
-        
         public int? DevisId { get; set; }
         public Devis? Devis { get; set; } = null!;
+
+        // Currency & Language inherited from linked Quote (backward compat: falls back to company settings)
+        [NotMapped]
+        public string? EffectiveCurrency => Devis?.Currency;
+        [NotMapped]
+        public string? EffectiveCurrencySymbol => Devis?.CurrencySymbol;
+        [NotMapped]
+        public string? EffectivePdfLanguage => Devis?.PdfLanguage;
         public ICollection<DeliveryNoteItem> DeliveryNoteItems { get; set; } = new List<DeliveryNoteItem>();
         [NotMapped] // Tell EF Core NOT to try and map this to the database
         public List<IItem> Items 
@@ -488,9 +496,6 @@ namespace ResourceManager.Models
         // File-system language (set once, immutable after confirmation)
         public string? FileSystemLanguage { get; set; }
         public bool FileSystemLanguageLocked { get; set; } = false;
-        
-        // PDF Storage configuration
-        public string? PdfBaseFolderPath { get; set; } // User-selected base folder for PDFs
         
         // Gmail OAuth tokens (NO App Passwords - uses proper OAuth 2.0)
         public string? GmailAccessToken { get; set; }
@@ -740,8 +745,8 @@ namespace ResourceManager.Models
         [StringLength(50)]
         public string? PaymentMethod { get; set; }
 
-        [StringLength(200)]
-        public string? Reference { get; set; }
+        [StringLength(100)]
+        public string? InvoiceNumber { get; set; }
 
         /// <summary>Marks this record as imported historical data</summary>
         public bool IsHistorical { get; set; } = true;
@@ -751,6 +756,11 @@ namespace ResourceManager.Models
 
         [ForeignKey("ClientId")]
         public Client? Client { get; set; }
+
+        public int? InvoiceId { get; set; }
+
+        [ForeignKey("InvoiceId")]
+        public Invoice? Invoice { get; set; }
     }
 
     /// <summary>

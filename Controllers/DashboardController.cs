@@ -31,10 +31,12 @@ namespace ResourceManager.Controllers
             [FromQuery] decimal? exchangeRate = null,   // user-supplied rate for mixed mode
             [FromQuery] int? year = null)               // optional year filter (defaults to current year)
         {
-            var now = DateTime.UtcNow;
-            var selectedYear = year ?? now.Year;
-            var startOfYear = new DateTime(selectedYear, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-            var endOfYear = startOfYear.AddYears(1);
+            try
+            {
+                var now = DateTime.UtcNow;
+                var selectedYear = year ?? now.Year;
+                var startOfYear = new DateTime(selectedYear, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+                var endOfYear = startOfYear.AddYears(1);
 
             // Filter by year at the database level + AsNoTracking for read-only queries
             var yearInvoices = await _context.Invoices
@@ -42,6 +44,7 @@ namespace ResourceManager.Controllers
                 .Where(i => i.Date >= startOfYear && i.Date < endOfYear)
                 .Include(i => i.Payments)
                 .Include(i => i.Client)
+                .Include(i => i.Devis)
                 .ToListAsync();
 
             // Also load historical revenues (filtered by year at DB)
@@ -67,7 +70,7 @@ namespace ResourceManager.Controllers
             }
 
             var invoiceCurrencies = yearInvoices
-                .Select(i => i.Currency ?? defaultCurrency)
+                .Select(i => i.Devis?.Currency ?? defaultCurrency)
                 .Distinct()
                 .ToList();
 
@@ -143,7 +146,7 @@ namespace ResourceManager.Controllers
 
                 foreach (var invoice in revenueInvoices)
                 {
-                    var invCurrency = invoice.Currency ?? defaultCurrency;
+                    var invCurrency = invoice.Devis?.Currency ?? defaultCurrency;
                     var invoiceTotal = invoice.TotalAmount ?? 0;
                     totalRevenue += ConvertAmount(invoiceTotal, invCurrency);
                     if (!currencyBreakdownRevenue.ContainsKey(invCurrency))
@@ -163,7 +166,7 @@ namespace ResourceManager.Controllers
             else
             {
                 filteredInvoices = yearInvoices
-                    .Where(i => (i.Currency ?? defaultCurrency) == selectedCurrency)
+                    .Where(i => (i.Devis?.Currency ?? defaultCurrency) == selectedCurrency)
                     .ToList();
 
                 revenueInvoices = filteredInvoices
@@ -271,7 +274,7 @@ namespace ResourceManager.Controllers
             var revenueByMonth = revenueInvoices
                 .GroupBy(i => i.Date.Month)
                 .ToDictionary(g => g.Key, g => isMixedMode
-                    ? g.Sum(i => ConvertAmount(i.TotalAmount ?? 0, i.Currency ?? defaultCurrency))
+                    ? g.Sum(i => ConvertAmount(i.TotalAmount ?? 0, i.Devis?.Currency ?? defaultCurrency))
                     : g.Sum(i => i.TotalAmount ?? 0));
 
             var chart = Enumerable.Range(1, 12).Select(month => {
@@ -362,7 +365,7 @@ namespace ResourceManager.Controllers
                 .Where(i => i.ClientId.HasValue)
                 .GroupBy(i => i.ClientId!.Value)
                 .Select(g => {
-                    var totalAmount = g.Sum(i => NormalizeAmount(i.TotalAmount ?? 0, i.Currency ?? defaultCurrency));
+                    var totalAmount = g.Sum(i => NormalizeAmount(i.TotalAmount ?? 0, i.Devis?.Currency ?? defaultCurrency));
                     return new {
                         clientId = g.Key,
                         clientName = g.First().Client?.Name ?? "Unknown",
@@ -452,6 +455,44 @@ namespace ResourceManager.Controllers
                 paidInvoiceCount,
                 mostBoughtProducts = allSupplierItems
             });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching dashboard stats");
+                // Return empty/default dashboard data instead of 500 error
+                return Ok(new {
+                    selectedCurrency = currency ?? "TND",
+                    availableCurrencies = new[] { currency ?? "TND" },
+                    defaultCurrency = "TND",
+                    isMixedMode = false,
+                    exchangeRate = (decimal?)null,
+                    currencyBreakdownRevenue = (object?)null,
+                    currencyBreakdownExpense = (object?)null,
+                    selectedYear = year ?? DateTime.UtcNow.Year,
+                    totalRevenue = 0m,
+                    unpaidInvoices = 0,
+                    unpaidAmount = 0m,
+                    partiallyPaidCount = 0,
+                    partiallyPaidAmount = 0m,
+                    pendingPaymentsCount = 0,
+                    pendingPaymentsAmount = 0m,
+                    duePaymentsCount = 0,
+                    duePaymentsAmount = 0m,
+                    revenueChart = Enumerable.Range(1, 12).Select(m => new { month = m, amount = 0m, count = 0 }),
+                    expenseChart = Enumerable.Range(1, 12).Select(m => new { month = m, amount = 0m, supplierCount = 0 }),
+                    totalExpenses = 0m,
+                    thisMonthRevenue = 0m,
+                    lastMonthRevenue = 0m,
+                    activeClients = 0,
+                    totalSuppliers = 0,
+                    supplierInvoices = 0,
+                    statusBreakdown = Array.Empty<object>(),
+                    topClients = Array.Empty<object>(),
+                    totalInvoiceCount = 0,
+                    paidInvoiceCount = 0,
+                    mostBoughtProducts = Array.Empty<object>()
+                });
+            }
         }
 
         // GET: api/dashboard/revenue-summary
@@ -492,11 +533,12 @@ namespace ResourceManager.Controllers
 
             var invoices = await _context.Invoices
                 .AsNoTracking()
+                .Include(i => i.Devis)
                 .Where(i => !string.Equals(i.Status, "Draft"))
                 .Select(i => new
                 {
                     Year = i.Date.Year,
-                    Currency = i.Currency,
+                    Currency = i.Devis != null ? i.Devis.Currency : null,
                     Amount = i.TotalAmount ?? 0
                 })
                 .ToListAsync();
@@ -575,6 +617,7 @@ namespace ResourceManager.Controllers
                 var invoices = await _context.Invoices.IgnoreQueryFilters()
                     .AsNoTracking()
                     .Include(i => i.Payments)
+                    .Include(i => i.Devis)
                     .Where(i => i.CompanyId == company.Id && !i.IsDeleted)
                     .ToListAsync();
 
@@ -590,7 +633,7 @@ namespace ResourceManager.Controllers
                     .ToListAsync();
 
                 // Group by currency
-                var currencies = invoices.Select(i => i.Currency ?? defaultCurrency)
+                var currencies = invoices.Select(i => i.Devis?.Currency ?? defaultCurrency)
                     .Union(supplierInvoices.Select(si => si.Currency ?? defaultCurrency))
                     .Union(otherExpenses.Select(e => e.Currency ?? defaultCurrency))
                     .Union(new[] { defaultCurrency })
@@ -599,7 +642,7 @@ namespace ResourceManager.Controllers
 
                 var currencyBuckets = currencies.Select(cur =>
                 {
-                    var curInvoices = invoices.Where(i => (i.Currency ?? defaultCurrency) == cur).ToList();
+                    var curInvoices = invoices.Where(i => (i.Devis?.Currency ?? defaultCurrency) == cur).ToList();
                     var curSupplier = supplierInvoices.Where(si => (si.Currency ?? defaultCurrency) == cur).ToList();
                     var curExpenses = otherExpenses.Where(e => (e.Currency ?? defaultCurrency) == cur).ToList();
 

@@ -68,6 +68,15 @@
     "viewOnly": "Lecture seule",
     "year": "Année"
   },
+  "pagination": {
+    "previous": "Précédent",
+    "next": "Suivant",
+    "showing": "Affichage",
+    "to": "à",
+    "of": "sur",
+    "results": "résultats",
+    "page": "page"
+  },
   "auth": {
     "login": "Connexion",
     "logout": "Déconnexion",
@@ -158,6 +167,7 @@
     "deleteInvoice": "Supprimer la facture",
     "sendByEmail": "Envoyer par email",
     "downloadPdf": "Télécharger PDF",
+    "remainingPaymentPdf": "Avis de reste à payer",
     "viewPdf": "Voir le PDF",
     "markAsPaid": "Marquer comme payée",
     "addPayment": "Ajouter un paiement",
@@ -418,6 +428,7 @@
     "currency": "Devise",
     "currencySymbol": "Symbole de devise",
     "pdf": "Paramètres PDF",
+    "pdfLogo": "Logo PDF",
     "pdfFooter": "Pied de page PDF",
     "pdfPaymentTerms": "Conditions de paiement",
     "pdfBankDetails": "Coordonnées bancaires",

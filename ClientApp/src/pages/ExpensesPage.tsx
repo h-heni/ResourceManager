@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../hooks/useSettings';
 import { formatCurrency } from '../lib/formatNumber';
 import { CURRENCY_OPTIONS, DEFAULT_CURRENCY } from '../lib/currencyUtils';
+import Pagination from '../components/Pagination';
 
 interface Expense {
     id: number;
@@ -68,6 +69,10 @@ export default function ExpensesPage() {
     const [search, setSearch] = useState('');
     const [filterCategory, setFilterCategory] = useState<string>('all');
     const [summary, setSummary] = useState<ExpenseSummary | null>(null);
+    const [page, setPage] = useState(1);
+    const [size, setSize] = useState(20);
+    const [totalCount, setTotalCount] = useState(0);
+    const [totalPages, setTotalPages] = useState(0);
 
     // Custom categories
     const [customCategories, setCustomCategories] = useState<string[]>(getCustomCategories());
@@ -94,17 +99,20 @@ export default function ExpensesPage() {
         try {
             setLoading(true);
             const [expRes, sumRes] = await Promise.all([
-                api.get('/Expenses'),
+                api.get(`/Expenses?page=${page}&size=${size}`),
                 api.get('/Expenses/summary')
             ]);
-            setExpenses(expRes.data);
+            const data = expRes.data;
+            setExpenses(data.data || []);
+            setTotalCount(data.totalCount || 0);
+            setTotalPages(data.totalPages || 0);
             setSummary(sumRes.data);
         } catch (err) {
             console.error('Failed to fetch expenses:', err);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [page, size]);
 
     useEffect(() => { fetchExpenses(); }, [fetchExpenses]);
 
@@ -338,21 +346,21 @@ export default function ExpensesPage() {
                     <p className="text-gray-500">{t('expense.noExpenses')}</p>
                 </div>
             ) : (
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    <table className="w-full">
-                        <thead className="bg-gray-50 border-b border-gray-200">
+                <div className="rm-table-card">
+                    <table className="rm-table">
+                        <thead>
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('expense.description')}</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('expense.category')}</th>
-                                <th className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('expense.date')}</th>
-                                <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('expense.amount')}</th>
-                                <th className="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('common.actions')}</th>
+                                <th>{t('expense.description')}</th>
+                                <th>{t('expense.category')}</th>
+                                <th>{t('expense.date')}</th>
+                                <th className="rm-th-number">{t('expense.amount')}</th>
+                                <th className="rm-th-actions">{t('common.actions')}</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100">
+                        <tbody>
                             {filteredExpenses.map(expense => (
-                                <tr key={expense.id} className="hover:bg-gray-50 transition-colors">
-                                    <td className="px-6 py-4">
+                                <tr key={expense.id}>
+                                    <td className="rm-cell-text">
                                         <div className="flex items-center gap-2">
                                             <span className="text-sm font-medium text-gray-900">{expense.description}</span>
                                             {expense.isRecurring && (
@@ -365,18 +373,18 @@ export default function ExpensesPage() {
                                             <p className="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{expense.notes}</p>
                                         )}
                                     </td>
-                                    <td className="px-6 py-4">
+                                    <td className="rm-cell-text">
                                         <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getCategoryColor(expense.category)}`}>
                                             {t(`expense.categories.${expense.category}`, expense.category)}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4 text-sm text-gray-600">
+                                    <td className="rm-cell-text text-sm text-gray-600">
                                         {new Date(expense.date).toLocaleDateString()}
                                     </td>
-                                    <td className="px-6 py-4 text-right font-medium text-gray-900">
+                                    <td className="rm-cell-currency">
                                         {formatCurrency(expense.amount, expense.currencySymbol || currencySymbol)}
                                     </td>
-                                    <td className="px-6 py-4 text-right">
+                                    <td className="rm-cell-actions">
                                         <div className="flex justify-end gap-2">
                                             <button
                                                 onClick={() => openEditModal(expense)}
@@ -410,10 +418,10 @@ export default function ExpensesPage() {
                                 const entries = Object.values(byCur);
                                 return entries.map((entry, i) => (
                                     <tr key={i}>
-                                        <td colSpan={3} className="px-6 py-3 text-sm font-semibold text-gray-700 text-right">
+                                        <td colSpan={3} className="px-4 py-3 text-sm font-semibold text-gray-700 text-right whitespace-nowrap">
                                             {i === 0 ? t('common.total') : ''}
                                         </td>
-                                        <td className="px-6 py-3 text-right font-bold text-gray-900">
+                                        <td className="px-4 py-3 text-right font-bold text-gray-900 tabular-nums whitespace-nowrap">
                                             {formatCurrency(entry.total, entry.symbol)}
                                         </td>
                                         <td></td>
@@ -423,6 +431,18 @@ export default function ExpensesPage() {
                         </tfoot>
                     </table>
                 </div>
+            )}
+
+            {/* Pagination */}
+            {!search && filterCategory === 'all' && (
+                <Pagination
+                    page={page}
+                    totalPages={totalPages}
+                    totalCount={totalCount}
+                    size={size}
+                    onPageChange={setPage}
+                    onSizeChange={(s) => { setSize(s); setPage(1); }}
+                />
             )}
 
             {/* Create/Edit Modal */}

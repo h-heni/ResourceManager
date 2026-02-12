@@ -47,6 +47,8 @@ namespace ResourceManager.Controllers
             [FromQuery] DateTime? to,
             [FromQuery] string format = "csv")
         {
+            try
+            {
             var fromDate = from ?? DateTime.MinValue;
             var toDate = to ?? DateTime.MaxValue;
 
@@ -69,6 +71,7 @@ namespace ResourceManager.Controllers
             var invoicePayments = await _context.Invoices
                 .Include(i => i.Client)
                 .Include(i => i.Payments)
+                .Include(i => i.Devis)
                 .Where(i => i.Payments!.Any(p => p.Status == "Completed"))
                 .ToListAsync();
 
@@ -80,33 +83,40 @@ namespace ResourceManager.Controllers
                         Date = p.PaymentDate,
                         ClientName = i.Client?.Name ?? "Unknown",
                         AmountPaid = p.Amount,
-                        Currency = i.Currency ?? defaultCurrency,
+                        Currency = i.Devis?.Currency ?? defaultCurrency,
                         PaymentMethod = "Payment",
-                        Reference = i.Number
+                        InvoiceNumber = i.Number
                     }))
                 .OrderBy(r => r.Date)
                 .ToList();
 
             // Include historical revenues
             var historicalRevenues = await _context.HistoricalRevenues
+                .Include(h => h.Invoice)
                 .Where(h => h.Date >= fromDate && h.Date <= toDate)
                 .OrderBy(h => h.Date)
                 .ToListAsync();
 
             var allRows = paymentRows
-                .Select(r => new ExportRow(r.Date, r.ClientName, r.AmountPaid, r.Currency, r.PaymentMethod, r.Reference))
-                .Concat(historicalRevenues.Select(h => new ExportRow(h.Date, h.ClientName, h.AmountPaid, h.Currency ?? defaultCurrency, h.PaymentMethod ?? "", h.Reference ?? "")))
+                .Select(r => new ExportRow(r.Date, r.ClientName, r.AmountPaid, r.Currency, r.PaymentMethod, r.InvoiceNumber))
+                .Concat(historicalRevenues.Select(h => new ExportRow(
+                    h.Date,
+                    h.ClientName,
+                    h.AmountPaid,
+                    h.Currency ?? defaultCurrency,
+                    h.PaymentMethod ?? "",
+                    h.Invoice?.Number ?? h.InvoiceNumber ?? "")))
                 .OrderBy(r => r.Date)
                 .ToList();
 
-            var headers = new[] { "Date", "Client Name", "Amount Paid", "Currency", "Payment Method", "Reference" };
+            var headers = new[] { "Date", "Client Name", "Amount Paid", "Currency", "Payment Method", "Invoice Number" };
             var dataRows = allRows.Select(r => new object[] {
                 r.Date,
                 r.ClientName,
                 r.AmountPaid,
                 r.Currency,
                 r.PaymentMethod,
-                r.Reference
+                r.InvoiceNumber
             }).ToList();
 
             if (format?.Equals("xlsx", StringComparison.OrdinalIgnoreCase) == true)
@@ -124,6 +134,12 @@ namespace ResourceManager.Controllers
             return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray(),
                 "text/csv; charset=utf-8",
                 $"revenues_{DateTime.UtcNow:yyyyMMdd}.csv");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error exporting revenues");
+                return StatusCode(500, new { message = "Failed to export revenues" });
+            }
         }
 
         /// <summary>
@@ -135,6 +151,8 @@ namespace ResourceManager.Controllers
             [FromQuery] DateTime? to,
             [FromQuery] string format = "csv")
         {
+            try
+            {
             var fromDate = from ?? DateTime.MinValue;
             var toDate = to ?? DateTime.MaxValue;
 
@@ -221,6 +239,12 @@ namespace ResourceManager.Controllers
             return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray(),
                 "text/csv; charset=utf-8",
                 $"expenses_{DateTime.UtcNow:yyyyMMdd}.csv");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error exporting expenses");
+                return StatusCode(500, new { message = "Failed to export expenses" });
+            }
         }
 
         /// <summary>
@@ -229,6 +253,8 @@ namespace ResourceManager.Controllers
         [HttpGet("export/clients")]
         public async Task<IActionResult> ExportClients([FromQuery] string format = "csv")
         {
+            try
+            {
             var clients = await _context.Clients.OrderBy(c => c.Name).ToListAsync();
 
             var headers = new[] { "Name", "Matricule Fiscal", "Phone Number", "Address", "Email" };
@@ -247,6 +273,12 @@ namespace ResourceManager.Controllers
             return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray(),
                 "text/csv; charset=utf-8",
                 $"clients_{DateTime.UtcNow:yyyyMMdd}.csv");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error exporting clients");
+                return StatusCode(500, new { message = "Failed to export clients" });
+            }
         }
 
         /// <summary>
@@ -255,6 +287,8 @@ namespace ResourceManager.Controllers
         [HttpGet("export/products")]
         public async Task<IActionResult> ExportProducts([FromQuery] string format = "csv")
         {
+            try
+            {
             var userId = _userManager.GetUserId(User);
             string defaultCurrency = "TND";
             if (userId != null)
@@ -292,6 +326,12 @@ namespace ResourceManager.Controllers
             return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray(),
                 "text/csv; charset=utf-8",
                 $"products_{DateTime.UtcNow:yyyyMMdd}.csv");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error exporting products");
+                return StatusCode(500, new { message = "Failed to export products" });
+            }
         }
 
         // ═══════════════════════════════════════════════════════════
@@ -302,12 +342,20 @@ namespace ResourceManager.Controllers
         /// Validate imported Excel/CSV data WITHOUT saving. Returns preview + errors.
         /// </summary>
         [HttpPost("import/validate")]
-        public IActionResult ValidateImport([FromBody] ImportRequest request)
+        public async Task<IActionResult> ValidateImport([FromBody] ImportRequest request)
         {
             if (request == null || request.Rows == null || request.Rows.Count == 0)
                 return BadRequest(new { message = "No data provided" });
 
-            var result = ValidateRows(request.DataType, request.Rows);
+            var userId = _userManager.GetUserId(User);
+            if (string.IsNullOrWhiteSpace(userId))
+                return Unauthorized();
+
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
+                return Unauthorized();
+
+            var result = await ValidateRowsAsync(request.DataType, request.Rows, user.CompanyId);
             return Ok(result);
         }
 
@@ -322,16 +370,19 @@ namespace ResourceManager.Controllers
             if (request == null || request.Rows == null || request.Rows.Count == 0)
                 return BadRequest(new { message = "No data provided" });
 
-            var validation = ValidateRows(request.DataType, request.Rows);
-            if (validation.Errors.Count > 0)
-                return BadRequest(new { message = "Validation failed", errors = validation.Errors });
-
             var userId = _userManager.GetUserId(User);
+            if (string.IsNullOrWhiteSpace(userId))
+                return Unauthorized();
+
             var user = await _userManager.FindByIdAsync(userId);
             if (user == null)
                 return Unauthorized();
 
             var companyId = user.CompanyId;
+            var validation = await ValidateRowsAsync(request.DataType, request.Rows, companyId);
+            if (validation.Errors.Count > 0)
+                return BadRequest(new { message = "Validation failed", errors = validation.Errors });
+
             int imported = 0;
             int updated = 0;
             int skipped = 0;
@@ -354,25 +405,26 @@ namespace ResourceManager.Controllers
                             .GroupBy(c => c.Name.Trim(), StringComparer.OrdinalIgnoreCase)
                             .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
-                        // 2. Fetch existing HistoricalRevenues for Deduplication (Date + Client + Amount)
-                        // Optimization: Fetch only for the date range in the import
-                        var validDates = validation.ValidRows
-                            .Select(r => TryParseDate(SafeGet(r, "Date"), out var d) ? d : DateTime.MinValue)
-                            .Where(d => d != DateTime.MinValue)
+                        var invoiceNumbers = validation.ValidRows
+                            .Select(r => SafeGet(r, "InvoiceNumber"))
+                            .Where(n => !string.IsNullOrWhiteSpace(n))
+                            .Select(n => n.Trim())
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
                             .ToList();
 
-                        var minDate = validDates.Any() ? validDates.Min().AddDays(-1) : DateTime.MinValue;
-                        var maxDate = validDates.Any() ? validDates.Max().AddDays(1) : DateTime.MaxValue;
+                        var invoiceLookup = await _context.Invoices
+                            .Where(i => i.CompanyId == companyId && invoiceNumbers.Contains(i.Number))
+                            .Select(i => new { i.Id, i.Number })
+                            .ToDictionaryAsync(i => i.Number, StringComparer.OrdinalIgnoreCase);
 
-                        var existingRevenues = await _context.HistoricalRevenues
-                            .Where(r => r.CompanyId == companyId && r.Date >= minDate && r.Date <= maxDate)
-                            .ToListAsync();
+                        var invoiceIds = invoiceLookup.Values.Select(i => i.Id).ToList();
 
-                        // Lookup Key: Date(UTC) + ClientId + Amount
-                        // structured as a list to handle multiple identical payments on same day
-                        var revenueLookup = existingRevenues
-                            .GroupBy(r => new { Date = r.Date.Date, r.ClientId, r.AmountPaid })
-                            .ToDictionary(g => g.Key, g => g.ToList());
+                        var existingRevenueByInvoiceId = await _context.HistoricalRevenues
+                            .Where(r => r.CompanyId == companyId && r.InvoiceId.HasValue && invoiceIds.Contains(r.InvoiceId.Value))
+                            .GroupBy(r => r.InvoiceId!.Value)
+                            .ToDictionaryAsync(g => g.Key, g => g.OrderByDescending(x => x.UpdatedAt ?? x.CreatedAt).First());
+
+                        var pendingHistoricalByInvoiceId = new Dictionary<int, HistoricalRevenue>();
 
                         foreach (var row in validation.ValidRows)
                         {
@@ -390,7 +442,13 @@ namespace ResourceManager.Controllers
 
                             var currency = SafeGet(row, "Currency", "TND");
                             var paymentMethod = SafeGet(row, "Payment Method");
-                            var reference = SafeGet(row, "Reference");
+                            var invoiceNumber = SafeGet(row, "InvoiceNumber");
+
+                            if (!invoiceLookup.TryGetValue(invoiceNumber, out var invoice))
+                            {
+                                skipped++;
+                                continue;
+                            }
 
                             // Get-or-Create Client
                             if (!clientLookup.TryGetValue(clientName, out var client))
@@ -406,46 +464,57 @@ namespace ResourceManager.Controllers
                                     CreatedAt = DateTime.UtcNow
                                 };
                                 _context.Clients.Add(client);
-                                await _context.SaveChangesAsync();
                                 clientLookup[clientName] = client;
                             }
 
-                            // Deduplication / Upsert Check
-                            var lookupKey = new { Date = utcDate.Date, ClientId = (int?)client.Id, AmountPaid = parsedAmount };
-                            
-                            if (revenueLookup.TryGetValue(lookupKey, out var candidates) && candidates.Count > 0)
+                            if (existingRevenueByInvoiceId.TryGetValue(invoice.Id, out var existingByInvoice))
                             {
-                                // MATCH FOUND: Update existing
-                                var existing = candidates[0];
-                                candidates.RemoveAt(0); // Consume this match
+                                existingByInvoice.Date = utcDate;
+                                existingByInvoice.ClientName = clientName;
+                                existingByInvoice.ClientId = client.Id;
+                                existingByInvoice.AmountPaid = parsedAmount;
+                                existingByInvoice.Currency = currency;
+                                existingByInvoice.PaymentMethod = paymentMethod;
+                                existingByInvoice.InvoiceNumber = invoice.Number;
+                                existingByInvoice.InvoiceId = invoice.Id;
+                                existingByInvoice.UpdatedAt = DateTime.UtcNow;
 
-                                existing.ClientName = clientName; // Update name in case it changed case/typo but mapped to same ID? Or just keep consistent.
-                                existing.Currency = currency;
-                                existing.PaymentMethod = paymentMethod;
-                                existing.Reference = reference;
-                                existing.UpdatedAt = DateTime.UtcNow;
-                                // ClientId, Amount, Date, CompanyId are part of identity/key, so no change needed.
-                                
-                                _context.HistoricalRevenues.Update(existing);
+                                _context.HistoricalRevenues.Update(existingByInvoice);
+                                updated++;
+                            }
+                            else if (pendingHistoricalByInvoiceId.TryGetValue(invoice.Id, out var pendingExisting))
+                            {
+                                pendingExisting.Date = utcDate;
+                                pendingExisting.ClientName = clientName;
+                                pendingExisting.ClientId = client.Id;
+                                pendingExisting.AmountPaid = parsedAmount;
+                                pendingExisting.Currency = currency;
+                                pendingExisting.PaymentMethod = paymentMethod;
+                                pendingExisting.InvoiceNumber = invoice.Number;
+                                pendingExisting.InvoiceId = invoice.Id;
+                                pendingExisting.UpdatedAt = DateTime.UtcNow;
                                 updated++;
                             }
                             else
                             {
-                                // NO MATCH: Insert new
-                                _context.HistoricalRevenues.Add(new HistoricalRevenue
+                                var newRevenue = new HistoricalRevenue
                                 {
                                     Date = utcDate,
                                     ClientName = clientName,
-                                    ClientId = client.Id,
+                                    Client = client,
                                     AmountPaid = parsedAmount,
                                     Currency = currency,
                                     PaymentMethod = paymentMethod,
-                                    Reference = reference,
+                                    InvoiceNumber = invoice.Number,
+                                    InvoiceId = invoice.Id,
                                     IsHistorical = true,
                                     CompanyId = companyId,
                                     CreatedByUserId = userId,
                                     CreatedAt = DateTime.UtcNow
-                                });
+                                };
+
+                                _context.HistoricalRevenues.Add(newRevenue);
+                                pendingHistoricalByInvoiceId[invoice.Id] = newRevenue;
                                 imported++;
                             }
                         }
@@ -772,8 +841,8 @@ namespace ResourceManager.Controllers
             switch (type.ToLower())
             {
                 case "revenues":
-                    headers = "Date;Client Name;Amount Paid;Currency;Payment Method";
-                    exampleRow = "31/10/2024;Client Name;1500,50;TND;Bank Transfer";
+                    headers = "Date;Client Name;Amount Paid;Currency;Payment Method;InvoiceNumber";
+                    exampleRow = "31/10/2024;Client Name;1500,50;TND;Bank Transfer;FA26-001";
                     break;
                 case "expenses":
                     headers = "Date;Supplier;Amount Paid;Currency;Category";
@@ -819,7 +888,7 @@ namespace ResourceManager.Controllers
             return string.IsNullOrWhiteSpace(trimmed) ? fallback : trimmed;
         }
 
-        private ValidationResult ValidateRows(string dataType, List<Dictionary<string, string>> rows)
+        private async Task<ValidationResult> ValidateRowsAsync(string dataType, List<Dictionary<string, string>> rows, int companyId)
         {
             var errors = new List<ValidationError>();
             var validRows = new List<Dictionary<string, string>>();
@@ -828,7 +897,7 @@ namespace ResourceManager.Controllers
             switch (dataType.ToLower())
             {
                 case "revenues":
-                    requiredColumns = new[] { "Date", "Client Name", "Amount Paid", "Currency" };
+                    requiredColumns = new[] { "Date", "Client Name", "Amount Paid", "Currency", "InvoiceNumber" };
                     break;
                 case "expenses":
                     requiredColumns = new[] { "Date", "Supplier", "Amount Paid", "Currency" };
@@ -943,8 +1012,50 @@ namespace ResourceManager.Controllers
                 }
                 else
                 {
+                    row["__RowNumber"] = rowNum.ToString(CultureInfo.InvariantCulture);
                     validRows.Add(row);
                 }
+            }
+
+            if (dataType.ToLower() == "revenues" && validRows.Count > 0)
+            {
+                var invoiceNumbers = validRows
+                    .Select(r => SafeGet(r, "InvoiceNumber"))
+                    .Where(n => !string.IsNullOrWhiteSpace(n))
+                    .Select(n => n.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                var validInvoices = await _context.Invoices
+                    .Where(i => i.CompanyId == companyId && invoiceNumbers.Contains(i.Number))
+                    .Select(i => i.Number)
+                    .ToListAsync();
+
+                var invoiceSet = new HashSet<string>(validInvoices, StringComparer.OrdinalIgnoreCase);
+                var filteredValidRows = new List<Dictionary<string, string>>(validRows.Count);
+
+                foreach (var row in validRows)
+                {
+                    var invoiceNumber = SafeGet(row, "InvoiceNumber");
+                    if (!invoiceSet.Contains(invoiceNumber))
+                    {
+                        var sourceRow = int.TryParse(SafeGet(row, "__RowNumber"), out var parsedSourceRow)
+                            ? parsedSourceRow
+                            : 0;
+                        errors.Add(new ValidationError(sourceRow, $"Invoice number '{invoiceNumber}' was not found for your company."));
+                        continue;
+                    }
+
+                    row.Remove("__RowNumber");
+                    filteredValidRows.Add(row);
+                }
+
+                validRows = filteredValidRows;
+            }
+            else
+            {
+                foreach (var row in validRows)
+                    row.Remove("__RowNumber");
             }
 
             return new ValidationResult(errors, validRows);
@@ -967,8 +1078,11 @@ namespace ResourceManager.Controllers
             { "Montant Payé", "Amount Paid" },
             { "Amount", "Amount Paid" },
             { "Devise", "Currency" },
-            { "Ref", "Reference" },
-            { "Référence", "Reference" },
+            { "Invoice Number", "InvoiceNumber" },
+            { "InvoiceNumber", "InvoiceNumber" },
+            { "Invoice No", "InvoiceNumber" },
+            { "Ref", "InvoiceNumber" },
+            { "Référence", "InvoiceNumber" },
             // Expense aliases
             { "Fournisseur", "Supplier" },
             { "Supplier Name", "Supplier" },
@@ -1333,7 +1447,7 @@ namespace ResourceManager.Controllers
         /// Uses MiniExcel index-based parsing. Atomic: if ANY cell fails, the
         /// entire file is rejected with a precise error location.
         ///
-        /// Column layout: [0] Date, [1] Client Name, [2] Amount Paid, [3] Currency, [4] Payment Method
+        /// Column layout: [0] Date, [1] Client Name, [2] Amount Paid, [3] Currency, [4] Payment Method, [5] InvoiceNumber (optional)
         /// </summary>
         [HttpPost("import/strict-upload")]
         public async Task<IActionResult> StrictPositionalUpload(IFormFile file)
@@ -1363,6 +1477,11 @@ namespace ResourceManager.Controllers
 
             // 2. Persist as HistoricalRevenue records with Client linkage
             var userId = _userManager.GetUserId(User);
+            var user = await _userManager.FindByIdAsync(userId ?? string.Empty);
+            if (user == null)
+                return Unauthorized();
+
+            var companyId = user.CompanyId;
             int imported = 0;
 
             using var transaction = await _context.Database.BeginTransactionAsync();
@@ -1370,7 +1489,9 @@ namespace ResourceManager.Controllers
             try
             {
                 // ── Performance: Pre-load all Clients into a case-insensitive dictionary ──
-                var existingClients = await _context.Clients.ToListAsync();
+                var existingClients = await _context.Clients
+                    .Where(c => c.CompanyId == companyId)
+                    .ToListAsync();
                 var clientLookup = existingClients
                     .GroupBy(c => c.Name.Trim(), StringComparer.OrdinalIgnoreCase)
                     .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
@@ -1391,21 +1512,48 @@ namespace ResourceManager.Controllers
                             Address = "",
                             MatriculeFiscal = "",
                             Phone = "",
+                            CompanyId = companyId,
+                            CreatedByUserId = userId,
                             CreatedAt = DateTime.UtcNow
                         };
                         _context.Clients.Add(client);
-                        await _context.SaveChangesAsync(); // flush to get Id
                         clientLookup[clientName] = client;
+                    }
+
+                    int? invoiceId = null;
+                    string? normalizedInvoiceNumber = null;
+                    if (!string.IsNullOrWhiteSpace(dto.InvoiceNumber))
+                    {
+                        normalizedInvoiceNumber = dto.InvoiceNumber.Trim();
+                        var invoice = await _context.Invoices
+                            .AsNoTracking()
+                            .FirstOrDefaultAsync(i => i.CompanyId == companyId && i.Number == normalizedInvoiceNumber);
+
+                        if (invoice == null)
+                        {
+                            await transaction.RollbackAsync();
+                            return BadRequest(new
+                            {
+                                message = $"Invoice number '{normalizedInvoiceNumber}' was not found for your company.",
+                                row = imported + 2,
+                                column = "InvoiceNumber"
+                            });
+                        }
+
+                        invoiceId = invoice.Id;
+                        normalizedInvoiceNumber = invoice.Number;
                     }
 
                     _context.HistoricalRevenues.Add(new HistoricalRevenue
                     {
                         Date = dto.Date.ToUniversalTime(),
                         ClientName = clientName,
-                        ClientId = client.Id,
+                        Client = client,
                         AmountPaid = dto.AmountPaid,
                         Currency = string.IsNullOrWhiteSpace(dto.Currency) ? "TND" : dto.Currency.Trim(),
                         PaymentMethod = dto.PaymentMethod?.Trim(),
+                        InvoiceId = invoiceId,
+                        InvoiceNumber = normalizedInvoiceNumber,
                         IsHistorical = true,
                         CreatedAt = DateTime.UtcNow
                     });
@@ -1479,6 +1627,6 @@ namespace ResourceManager.Controllers
             }
         }
 
-        private record ExportRow(DateTime Date, string ClientName, decimal AmountPaid, string Currency, string PaymentMethod, string Reference);
+        private record ExportRow(DateTime Date, string ClientName, decimal AmountPaid, string Currency, string PaymentMethod, string InvoiceNumber);
     }
 }

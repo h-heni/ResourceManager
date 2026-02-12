@@ -32,30 +32,38 @@ namespace ResourceManager.Controllers
         [HttpGet]
         public async Task<IActionResult> GetNotifications([FromQuery] bool includeRead = false)
         {
-            var userId = _userManager.GetUserId(User);
-            
-            var query = _context.PaymentNotifications
-                .Where(n => n.UserId == userId);
-
-            if (!includeRead)
+            try
             {
-                query = query.Where(n => !n.IsRead);
+                var userId = _userManager.GetUserId(User);
+                
+                var query = _context.PaymentNotifications
+                    .Where(n => n.UserId == userId);
+
+                if (!includeRead)
+                {
+                    query = query.Where(n => !n.IsRead);
+                }
+
+                var notifications = await query
+                    .OrderByDescending(n => n.CreatedAt)
+                    .Select(n => new {
+                        n.Id,
+                        n.PaymentId,
+                        n.InvoiceId,
+                        n.Message,
+                        n.CreatedAt,
+                        n.IsRead,
+                        n.ReadAt
+                    })
+                    .ToListAsync();
+
+                return Ok(notifications);
             }
-
-            var notifications = await query
-                .OrderByDescending(n => n.CreatedAt)
-                .Select(n => new {
-                    n.Id,
-                    n.PaymentId,
-                    n.InvoiceId,
-                    n.Message,
-                    n.CreatedAt,
-                    n.IsRead,
-                    n.ReadAt
-                })
-                .ToListAsync();
-
-            return Ok(notifications);
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching notifications");
+                return Ok(Array.Empty<object>());
+            }
         }
 
         // GET: api/notifications/count - Get unread notification count
@@ -249,41 +257,60 @@ namespace ResourceManager.Controllers
         [HttpPost("process-due")]
         public async Task<IActionResult> ProcessDuePayments()
         {
-            var userId = _userManager.GetUserId(User);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
+            try
+            {
+                var userId = _userManager.GetUserId(User);
+                if (string.IsNullOrEmpty(userId)) return Unauthorized();
 
-            var count = await _dueProcessor.ProcessDuePaymentsForUserAsync(userId);
-            return Ok(new { processed = count });
+                var count = await _dueProcessor.ProcessDuePaymentsForUserAsync(userId);
+                return Ok(new { processed = count });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing due payments");
+                return Ok(new { processed = 0 });
+            }
         }
 
         // GET: api/notifications/due-payments - Get payments that are due (for notification display)
         [HttpGet("due-payments")]
         public async Task<IActionResult> GetDuePayments()
         {
-            var userId = _userManager.GetUserId(User);
+            try
+            {
+                var userId = _userManager.GetUserId(User);
 
-            // CRITICAL: Process pending→due BEFORE querying, so the response is always fresh
-            await _dueProcessor.ProcessDuePaymentsForUserAsync(userId!);
-            
-            var duePayments = await _context.Payments
-                .Include(p => p.Invoice)
-                    .ThenInclude(i => i!.Client)
-                .Where(p => p.CreatedByUserId == userId && p.Status == "Due")
-                .Select(p => new
-                {
-                    p.Id,
-                    p.Amount,
-                    p.PaymentDate,
-                    p.InvoiceId,
-                    InvoiceNumber = p.Invoice!.Number,
-                    ClientName = p.Invoice.Client != null ? p.Invoice.Client.Name : "Unknown",
-                    InvoiceTotal = p.Invoice.TotalAmount,
-                    p.Notes,
-                    InvoiceCurrencySymbol = p.Invoice.CurrencySymbol
-                })
-                .ToListAsync();
+                // CRITICAL: Process pending→due BEFORE querying, so the response is always fresh
+                try { await _dueProcessor.ProcessDuePaymentsForUserAsync(userId!); }
+                catch (Exception ex) { _logger.LogWarning(ex, "Failed to process due payments, continuing with stale data"); }
+                
+                var duePayments = await _context.Payments
+                    .Include(p => p.Invoice)
+                        .ThenInclude(i => i!.Client)
+                    .Include(p => p.Invoice)
+                        .ThenInclude(i => i!.Devis)
+                    .Where(p => p.CreatedByUserId == userId && p.Status == "Due")
+                    .Select(p => new
+                    {
+                        p.Id,
+                        p.Amount,
+                        p.PaymentDate,
+                        p.InvoiceId,
+                        InvoiceNumber = p.Invoice!.Number,
+                        ClientName = p.Invoice != null && p.Invoice.Client != null ? p.Invoice.Client.Name : "Unknown",
+                        InvoiceTotal = p.Invoice != null ? p.Invoice.TotalAmount : 0m,
+                        p.Notes,
+                        InvoiceCurrencySymbol = p.Invoice != null && p.Invoice.Devis != null ? p.Invoice.Devis.CurrencySymbol : "TND"
+                    })
+                    .ToListAsync();
 
-            return Ok(duePayments);
+                return Ok(duePayments);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching due payments");
+                return Ok(Array.Empty<object>());
+            }
         }
 
         // POST: api/notifications/confirm-payment-by-id/{paymentId} - Confirm a due payment directly by payment ID
@@ -396,30 +423,39 @@ namespace ResourceManager.Controllers
         [HttpGet("due-supplier-payments")]
         public async Task<IActionResult> GetDueSupplierPayments()
         {
-            var userId = _userManager.GetUserId(User);
+            try
+            {
+                var userId = _userManager.GetUserId(User);
 
-            // CRITICAL: Process pending→due BEFORE querying
-            await _dueProcessor.ProcessDuePaymentsForUserAsync(userId!);
-            
-            var dueSupplierPayments = await _context.SupplierPayments
-                .Include(p => p.FournisseurInvoice)
-                    .ThenInclude(fi => fi!.Fournisseur)
-                .Where(p => p.CreatedByUserId == userId && p.Status == "Due")
-                .Select(p => new
-                {
-                    p.Id,
-                    p.Amount,
-                    p.PaymentDate,
-                    SupplierInvoiceId = p.FournisseurInvoiceId,
-                    InvoiceNumber = p.FournisseurInvoice!.InvoiceNumber ?? "Unknown",
-                    SupplierName = p.FournisseurInvoice.Fournisseur != null ? p.FournisseurInvoice.Fournisseur.Name : "Unknown",
-                    InvoiceTotal = p.FournisseurInvoice.TotalTTC,
-                    p.Notes,
-                    InvoiceCurrencySymbol = p.FournisseurInvoice.CurrencySymbol
-                })
-                .ToListAsync();
+                // CRITICAL: Process pending→due BEFORE querying
+                try { await _dueProcessor.ProcessDuePaymentsForUserAsync(userId!); }
+                catch (Exception ex) { _logger.LogWarning(ex, "Failed to process due supplier payments, continuing with stale data"); }
+                
+                var dueSupplierPayments = await _context.SupplierPayments
+                    .Include(p => p.FournisseurInvoice)
+                        .ThenInclude(fi => fi!.Fournisseur)
+                    .Where(p => p.CreatedByUserId == userId && p.Status == "Due")
+                    .Select(p => new
+                    {
+                        p.Id,
+                        p.Amount,
+                        p.PaymentDate,
+                        SupplierInvoiceId = p.FournisseurInvoiceId,
+                        InvoiceNumber = p.FournisseurInvoice != null ? (p.FournisseurInvoice.InvoiceNumber ?? "Unknown") : "Unknown",
+                        SupplierName = p.FournisseurInvoice != null && p.FournisseurInvoice.Fournisseur != null ? p.FournisseurInvoice.Fournisseur.Name : "Unknown",
+                        InvoiceTotal = p.FournisseurInvoice != null ? p.FournisseurInvoice.TotalTTC : 0m,
+                        p.Notes,
+                        InvoiceCurrencySymbol = p.FournisseurInvoice != null ? p.FournisseurInvoice.CurrencySymbol : "TND"
+                    })
+                    .ToListAsync();
 
-            return Ok(dueSupplierPayments);
+                return Ok(dueSupplierPayments);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching due supplier payments");
+                return Ok(Array.Empty<object>());
+            }
         }
 
         // POST: api/notifications/confirm-supplier-payment/{paymentId} - Confirm a due supplier payment

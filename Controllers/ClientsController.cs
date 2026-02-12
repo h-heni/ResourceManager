@@ -12,17 +12,40 @@ namespace ResourceManager.Controllers
     {
         private readonly AppDbContext _context;
         private readonly TimeProvider _time;
-        public ClientsController(AppDbContext context, TimeProvider time)
+        private readonly ILogger<ClientsController> _logger;
+        
+        public ClientsController(AppDbContext context, TimeProvider time, ILogger<ClientsController> logger)
         {
             _context = context;
             _time = time;
+            _logger = logger;
         }
 
         // GET: api/clients
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Client>>> GetClients()
+        public async Task<ActionResult> GetClients([FromQuery] int page = 1, [FromQuery] int size = 20)
         {
-            return await _context.Clients.AsNoTracking().OrderByDescending(c => c.CreatedAt).ToListAsync();
+            try
+            {
+                if (page < 1) page = 1;
+                if (size < 1) size = 20;
+
+                var query = _context.Clients.AsNoTracking().OrderByDescending(c => c.CreatedAt);
+                var totalCount = await query.CountAsync();
+                var totalPages = (int)Math.Ceiling(totalCount / (double)size);
+
+                var clients = await query
+                    .Skip((page - 1) * size)
+                    .Take(size)
+                    .ToListAsync();
+
+                return Ok(new { Data = clients, Page = page, Size = size, TotalCount = totalCount, TotalPages = totalPages });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching clients");
+                return Ok(new { Data = Array.Empty<Client>(), Page = page, Size = size, TotalCount = 0, TotalPages = 0 });
+            }
         }
 
     // GET: api/clients/5

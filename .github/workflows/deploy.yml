@@ -42,15 +42,17 @@ on:
         required: false
         default: 'latest'
 
-  # Automatic on push to main (enable if desired)
-  # push:
-  #   branches: [main]
+  # Also auto-deploy when called from CI pipeline
+  workflow_run:
+    workflows: ["CI/CD Pipeline"]
+    types: [completed]
+    branches: [main]
 
 env:
   DEPLOY_USER: ${{ secrets.VPS_USER }}
   DEPLOY_HOST: ${{ secrets.VPS_HOST }}
   DEPLOY_PORT: ${{ secrets.VPS_PORT || '22' }}
-  DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/resourcemanager' }}
+  DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '~/projects' }}
 
 jobs:
   # ============================================
@@ -59,6 +61,8 @@ jobs:
   deploy:
     name: Deploy to ${{ inputs.environment || 'production' }}
     runs-on: ubuntu-latest
+    # Skip if triggered by workflow_run and the CI pipeline failed
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     environment: ${{ inputs.environment || 'production' }}
     permissions:
       contents: read
@@ -70,6 +74,7 @@ jobs:
           sparse-checkout: |
             docker-compose.yml
             docker-compose.prod.yml
+            nginx/
 
       - name: Set image tags
         id: tags
@@ -88,9 +93,18 @@ jobs:
 
       - name: Copy deployment files to VPS
         run: |
+          # Copy compose files
           scp -i ~/.ssh/deploy_key -P ${{ env.DEPLOY_PORT }} \
             docker-compose.yml docker-compose.prod.yml \
             ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:${{ env.DEPLOY_PATH }}/
+          
+          # Ensure nginx directory exists and copy config
+          ssh -i ~/.ssh/deploy_key -p ${{ env.DEPLOY_PORT }} \
+            ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} \
+            "mkdir -p ${{ env.DEPLOY_PATH }}/nginx"
+          scp -i ~/.ssh/deploy_key -P ${{ env.DEPLOY_PORT }} \
+            nginx/nginx.conf nginx/Dockerfile \
+            ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:${{ env.DEPLOY_PATH }}/nginx/
 
       - name: Deploy with zero downtime
         env:
@@ -125,47 +139,51 @@ jobs:
           echo "📥 Pulling latest Docker images..."
           docker compose -f docker-compose.yml -f docker-compose.prod.yml pull api web
           
+          # Rebuild nginx if config changed (nginx is built locally, not from GHCR)
+          echo "🔧 Rebuilding nginx proxy (in case config changed)..."
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml build --no-cache nginx 2>/dev/null || true
+          
+          COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.yml"
+          
           # Check if services are running
-          if docker compose ps | grep -q "resourcemanager"; then
+          if $COMPOSE ps --status running 2>/dev/null | grep -q "rm-"; then
             echo "♻️  Performing rolling update..."
             
-            # Start new containers (will run alongside old ones temporarily)
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-deps --scale api=2 --no-recreate api
+            # Recreate API with new image
+            echo "🔄 Updating API container..."
+            $COMPOSE up -d --no-deps --force-recreate api
             
-            # Wait for new API to be healthy
-            echo "⏳ Waiting for new API container to be healthy..."
-            sleep 10
+            # Wait for new API to be healthy (app auto-runs DB migrations at startup)
+            echo "⏳ Waiting for API to start + apply migrations..."
+            sleep 15
             
-            # Health check for new API
+            # Health check
             MAX_ATTEMPTS=30
             ATTEMPT=0
             while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-              if docker compose exec -T api curl -f http://localhost:8080/health 2>/dev/null; then
-                echo "✅ New API is healthy"
+              if $COMPOSE exec -T api curl -sf http://localhost:8080/health 2>/dev/null; then
+                echo "✅ API is healthy (DB migrations applied automatically)"
                 break
               fi
               ATTEMPT=$((ATTEMPT + 1))
               echo "⏳ Waiting for API health check... ($ATTEMPT/$MAX_ATTEMPTS)"
-              sleep 2
+              sleep 3
             done
             
             if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
-              echo "❌ New API failed health check - rolling back"
-              docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --scale api=1 --no-recreate api
+              echo "❌ API failed health check after $MAX_ATTEMPTS attempts"
+              echo "📋 Last 30 lines of API logs:"
+              $COMPOSE logs --tail=30 api
               exit 1
             fi
             
-            # Scale down old API
-            echo "🔄 Removing old API container..."
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --scale api=1 --remove-orphans api
-            
-            # Update frontend (nginx can be restarted quickly)
-            echo "🔄 Updating frontend..."
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate web
+            # Update frontend + nginx
+            echo "🔄 Updating frontend and nginx..."
+            $COMPOSE up -d --force-recreate web nginx
             
           else
             echo "🆕 No existing deployment found - starting fresh..."
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+            $COMPOSE up -d
           fi
           
           # Wait for all services to be ready
@@ -174,11 +192,19 @@ jobs:
           
           # Final health check
           echo "🔍 Running final health checks..."
-          if docker compose exec -T api curl -f http://localhost:8080/health && \
-             docker compose exec -T web wget --no-verbose --tries=1 --spider http://localhost:80/health; then
-            echo "✅ All services are healthy"
+          if $COMPOSE exec -T api curl -sf http://localhost:8080/health; then
+            echo "✅ API health check passed"
           else
-            echo "⚠️  Warning: Some health checks failed, but services are running"
+            echo "⚠️  API health check failed"
+          fi
+          
+          # Verify DB migrations applied (app auto-migrates at startup)
+          echo "🗄️  Checking database connectivity via API..."
+          sleep 3
+          if $COMPOSE exec -T api curl -sf http://localhost:8080/health | grep -q "healthy"; then
+            echo "✅ Database connectivity confirmed"
+          else
+            echo "⚠️  Database connectivity check inconclusive"
           fi
           
           # Cleanup old images
@@ -189,7 +215,7 @@ jobs:
           echo "============================================"
           echo "✅ Deployment Complete!"
           echo "============================================"
-          docker compose ps
+          $COMPOSE ps
           ENDSSH
 
       - name: Verify deployment

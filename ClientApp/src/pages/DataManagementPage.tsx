@@ -35,9 +35,9 @@ const DATA_TYPE_CONFIG: Record<DataType, {
     revenues: {
         label: 'Revenue',
         icon: DollarSign,
-        requiredColumns: ['Date', 'Client Name', 'Amount Paid', 'Currency'],
-        optionalColumns: ['Payment Method', 'Reference'],
-        exampleRow: { Date: '2023-05-10', 'Client Name': 'Client A', 'Amount Paid': '1200', Currency: 'EUR', 'Payment Method': 'Bank Transfer', Reference: 'INV-001' },
+        requiredColumns: ['Date', 'Client Name', 'Amount Paid', 'Currency', 'InvoiceNumber'],
+        optionalColumns: ['Payment Method'],
+        exampleRow: { Date: '2023-05-10', 'Client Name': 'Client A', 'Amount Paid': '1200', Currency: 'EUR', 'Payment Method': 'Bank Transfer', InvoiceNumber: 'FA26-001' },
     },
     expenses: {
         label: 'Expense',

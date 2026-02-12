@@ -461,10 +461,6 @@ volumes:
   # PostgreSQL data - CRITICAL - Do not delete or data will be lost
   postgres_data:
     driver: local
-    driver_opts:
-      type: none
-      o: bind
-      # device: /opt/resourcemanager/data/postgres  # Optional: specify host path
   
   # API logs - Can be safely deleted if disk space is needed
   api-logs:

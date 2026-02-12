@@ -21,27 +21,45 @@ namespace ResourceManager.Controllers
 
         // GET: api/expenses
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<object>>> GetExpenses()
+        public async Task<ActionResult> GetExpenses([FromQuery] int page = 1, [FromQuery] int size = 20)
         {
-            var expenses = await _context.OtherExpenses
-                .AsNoTracking()
-                .OrderByDescending(e => e.Date)
-                .Select(e => new
-                {
-                    e.Id,
-                    e.Description,
-                    e.Amount,
-                    e.Date,
-                    e.Category,
-                    e.Notes,
-                    e.IsRecurring,
-                    e.Currency,
-                    e.CurrencySymbol,
-                    e.CreatedAt
-                })
-                .ToListAsync();
+            try
+            {
+                if (page < 1) page = 1;
+                if (size < 1) size = 20;
 
-            return Ok(expenses);
+                var query = _context.OtherExpenses
+                    .AsNoTracking()
+                    .OrderByDescending(e => e.Date);
+
+                var totalCount = await query.CountAsync();
+                var totalPages = (int)Math.Ceiling(totalCount / (double)size);
+
+                var expenses = await query
+                    .Skip((page - 1) * size)
+                    .Take(size)
+                    .Select(e => new
+                    {
+                        e.Id,
+                        e.Description,
+                        e.Amount,
+                        e.Date,
+                        e.Category,
+                        e.Notes,
+                        e.IsRecurring,
+                        e.Currency,
+                        e.CurrencySymbol,
+                        e.CreatedAt
+                    })
+                    .ToListAsync();
+
+                return Ok(new { Data = expenses, Page = page, Size = size, TotalCount = totalCount, TotalPages = totalPages });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching expenses");
+                return Ok(new { Data = Array.Empty<object>(), Page = page, Size = size, TotalCount = 0, TotalPages = 0 });
+            }
         }
 
         // GET: api/expenses/5

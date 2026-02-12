@@ -175,26 +175,25 @@ export default function DeliveryNotesPage() {
             {loading ? (
                 <div className="text-center py-20 text-gray-500">{t('common.loading')}</div>
             ) : (
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
+                <div className="rm-table-card">
+                        <table className="rm-table">
                             <thead>
-                                <tr className="bg-gray-50 border-b border-gray-100">
-                                    <th className="p-4 font-semibold text-gray-600">{t('deliveryNote.noteNumber')}</th>
-                                    <th className="p-4 font-semibold text-gray-600">{t('client.title')}</th>
-                                    <th className="p-4 font-semibold text-gray-600">{t('invoice.date')}</th>
-                                    <th className="p-4 font-semibold text-gray-600">{t('deliveryNote.items')}</th>
-                                    <th className="p-4 font-semibold text-gray-600">{t('deliveryNote.linkedDoc')}</th>
-                                    <th className="p-4 font-semibold text-gray-600 text-right">{t('common.actions')}</th>
+                                <tr>
+                                    <th>{t('deliveryNote.noteNumber')}</th>
+                                    <th>{t('client.title')}</th>
+                                    <th>{t('invoice.date')}</th>
+                                    <th>{t('deliveryNote.items')}</th>
+                                    <th>{t('deliveryNote.linkedDoc')}</th>
+                                    <th className="rm-th-actions">{t('common.actions')}</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-100">
+                            <tbody>
                                 {filteredNotes.map((note) => (
-                                    <tr key={note.id} className="hover:bg-gray-50 transition-colors group">
-                                        <td className="p-4">
+                                    <tr key={note.id} className="group">
+                                        <td className="rm-cell-text">
                                             <span className="font-bold text-[#065F46]">📄 {note.number}</span>
                                         </td>
-                                        <td className="p-4">
+                                        <td className="rm-cell-text">
                                             <div className="flex items-center gap-2">
                                                 <div className="w-8 h-8 bg-[#065F46]/10 rounded-full flex items-center justify-center text-[#065F46] font-bold text-sm">
                                                     {(note.clientName || 'U')[0].toUpperCase()}
@@ -202,13 +201,13 @@ export default function DeliveryNotesPage() {
                                                 <span className="text-gray-900">{note.clientName || t('common.unknown')}</span>
                                             </div>
                                         </td>
-                                        <td className="p-4">
+                                        <td className="rm-cell-text">
                                             <div className="flex items-center gap-2 text-gray-500">
                                                 <Calendar size={14} />
                                                 {note.date ? new Date(note.date).toLocaleDateString() : 'N/A'}
                                             </div>
                                         </td>
-                                        <td className="p-4">
+                                        <td className="rm-cell-text">
                                             <div className="flex items-center gap-2">
                                                 <Package size={14} className="text-gray-400" />
                                                 <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs font-semibold rounded-full">
@@ -216,7 +215,7 @@ export default function DeliveryNotesPage() {
                                                 </span>
                                             </div>
                                         </td>
-                                        <td className="p-4">
+                                        <td className="rm-cell-text">
                                             {note.invoiceId ? (
                                                 <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#065F46]/10 text-[#065F46] text-xs font-semibold rounded-full">
                                                     <FileText size={12} />
@@ -231,7 +230,7 @@ export default function DeliveryNotesPage() {
                                                 <span className="text-gray-400 text-sm">—</span>
                                             )}
                                         </td>
-                                        <td className="p-4 text-right">
+                                        <td className="rm-cell-actions">
                                             <div className="flex items-center justify-end space-x-1">
                                                 {/* View PDF */}
                                                 <button
@@ -265,14 +264,13 @@ export default function DeliveryNotesPage() {
                                 ))}
                                 {filteredNotes.length === 0 && (
                                     <tr>
-                                        <td colSpan={6} className="p-12 text-center text-gray-500">
+                                        <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
                                             📭 {t('deliveryNote.noData')}
                                         </td>
                                     </tr>
                                 )}
                             </tbody>
                         </table>
-                    </div>
                 </div>
             )}
         </div>

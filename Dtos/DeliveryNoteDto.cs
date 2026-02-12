@@ -14,11 +14,6 @@ namespace ResourceManager.DTOs // Namespace consistency
         public int? DevisId { get; set; } // Link to Quote
         public int? InvoiceId { get; set; } // For linking
         
-        // Per-document currency & language (overrides company defaults)
-        public string? Currency { get; set; }
-        public string? CurrencySymbol { get; set; }
-        public string? PdfLanguage { get; set; }
-        
         public List<DeliveryNoteItemDto> DeliveryNoteItems { get; set; } = new List<DeliveryNoteItemDto>();
     }
 

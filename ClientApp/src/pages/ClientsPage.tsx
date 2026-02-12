@@ -3,6 +3,7 @@ import { Plus, Search, Edit2, Trash2, Phone, MapPin } from 'lucide-react';
 import api from '../services/api';
 import { getErrorMessage } from '../utils/errorUtils';
 import Modal from '../components/Modal';
+import Pagination from '../components/Pagination';
 import { useTranslation } from 'react-i18next';
 
 interface Client {
@@ -20,6 +21,10 @@ export default function ClientsPage() {
     const [search, setSearch] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingClient, setEditingClient] = useState<Client | null>(null);
+    const [page, setPage] = useState(1);
+    const [size, setSize] = useState(20);
+    const [totalCount, setTotalCount] = useState(0);
+    const [totalPages, setTotalPages] = useState(0);
 
     // Form State
     const [formData, setFormData] = useState({
@@ -31,12 +36,16 @@ export default function ClientsPage() {
 
     useEffect(() => {
         fetchClients();
-    }, []);
+    }, [page, size]);
 
     const fetchClients = async () => {
         try {
-            const res = await api.get('/Clients');
-            setClients(res.data);
+            setLoading(true);
+            const res = await api.get(`/Clients?page=${page}&size=${size}`);
+            const data = res.data;
+            setClients(data.data || []);
+            setTotalCount(data.totalCount || 0);
+            setTotalPages(data.totalPages || 0);
         } catch (error) {
             console.error("Error fetching clients", error);
         } finally {
@@ -124,7 +133,8 @@ export default function ClientsPage() {
             {loading ? (
                 <div className="text-center py-20 text-gray-500">{t('client.messages.loading')}</div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filteredClients.map((client) => (
                         <div key={client.id} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow group">
                             <div className="flex justify-between items-start mb-4">
@@ -163,6 +173,19 @@ export default function ClientsPage() {
                         </div>
                     )}
                 </div>
+
+                {/* Pagination */}
+                    {!search && (
+                        <Pagination
+                            page={page}
+                            totalPages={totalPages}
+                            totalCount={totalCount}
+                            size={size}
+                            onPageChange={setPage}
+                            onSizeChange={(s) => { setSize(s); setPage(1); }}
+                        />
+                    )}
+                </>
             )}
 
             {/* Create/Edit Modal */}

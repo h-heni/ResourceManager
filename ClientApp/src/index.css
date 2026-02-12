@@ -168,3 +168,53 @@ body > .container {
   width: 100%;
   height: 100%;
 }
+
+@layer components {
+  .rm-table-card {
+    @apply bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden;
+  }
+
+  .rm-table {
+    @apply w-full table-fixed border-separate border-spacing-0;
+  }
+
+  .rm-table thead th {
+    @apply px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 bg-gray-50 border-b border-gray-200 whitespace-nowrap text-left overflow-hidden text-ellipsis;
+  }
+
+  .rm-table tbody td {
+    @apply px-4 py-3 text-sm text-gray-700 align-middle border-b border-gray-100 whitespace-nowrap overflow-hidden text-ellipsis;
+  }
+
+  .rm-table tbody tr {
+    @apply transition-colors hover:bg-gray-50;
+  }
+
+  .rm-table tfoot td {
+    @apply px-4 py-3 text-sm whitespace-nowrap overflow-hidden text-ellipsis;
+  }
+
+  .rm-cell-text {
+    @apply text-left overflow-hidden text-ellipsis;
+  }
+
+  .rm-cell-number {
+    @apply text-right tabular-nums whitespace-nowrap font-medium text-gray-900 overflow-hidden text-ellipsis;
+  }
+
+  .rm-cell-currency {
+    @apply text-right tabular-nums whitespace-nowrap font-semibold text-gray-900 overflow-hidden text-ellipsis;
+  }
+
+  .rm-cell-actions {
+    @apply text-right whitespace-nowrap overflow-visible;
+  }
+
+  .rm-th-number {
+    @apply text-right;
+  }
+
+  .rm-th-actions {
+    @apply text-right;
+  }
+}

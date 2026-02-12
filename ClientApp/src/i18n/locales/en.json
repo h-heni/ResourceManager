@@ -1,4 +1,4 @@
-{
+﻿{
   "common": {
     "loading": "Loading...",
     "save": "Save",
@@ -67,6 +67,15 @@
     "imported": "Imported",
     "viewOnly": "View Only",
     "year": "Year"
+  },
+  "pagination": {
+    "previous": "Previous",
+    "next": "Next",
+    "showing": "Showing",
+    "to": "to",
+    "of": "of",
+    "results": "results",
+    "page": "page"
   },
   "auth": {
     "login": "Login",
@@ -159,6 +168,7 @@
     "deleteInvoice": "Delete Invoice",
     "sendByEmail": "Send by Email",
     "downloadPdf": "Download PDF",
+    "remainingPaymentPdf": "Remaining Payment Notice",
     "viewPdf": "View PDF",
     "markAsPaid": "Mark as Paid",
     "addPayment": "Add Payment",
@@ -418,6 +428,7 @@
     "currency": "Currency",
     "currencySymbol": "Currency Symbol",
     "pdf": "PDF Settings",
+    "pdfLogo": "PDF Logo",
     "pdfFooter": "PDF Footer Text",
     "pdfPaymentTerms": "Payment Terms",
     "pdfBankDetails": "Bank Information",
@@ -558,6 +569,7 @@
     "unpaidInvoices": "Unpaid Invoices",
     "users": "Users",
     "allTime": "All Time",
+    "lastYear": "Last Year",
     "revenueByYear": "Revenue by Year"
   },
   "notifications": {

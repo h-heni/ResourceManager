@@ -34,6 +34,8 @@ interface Devis {
     currencySymbol?: string;
 }
 
+const getQuoteNumber = (quote: Devis & { Number?: string }) => quote.number || quote.Number || '';
+
 export default function QuotesPage() {
     const { t } = useTranslation();
     const [quotes, setQuotes] = useState<Devis[]>([]);
@@ -123,7 +125,7 @@ export default function QuotesPage() {
     };
 
     const filteredQuotes = (quotes || []).filter(q => {
-        const numMatch = q.number?.toString().includes(search) ?? false;
+        const numMatch = getQuoteNumber(q)?.toString().includes(search) ?? false;
         const clientMatch = q.clientName?.toLowerCase().includes(search.toLowerCase()) ?? false;
         const searchMatch = numMatch || clientMatch;
         const isArchived = q.treated === true;
@@ -198,13 +200,13 @@ export default function QuotesPage() {
                                         <FileText size={24} />
                                     </div>
                                     <div>
-                                        <h3 className="text-lg font-bold text-gray-900">{t('quote.quoteNumberLabel', { number: quote.number })}</h3>
+                                        <h3 className="text-lg font-bold text-gray-900">{t('quote.quoteNumberLabel')}: {getQuoteNumber(quote)}</h3>
                                         <p className="text-sm text-gray-500">{quote.clientName || t('common.unknown')}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center space-x-2">
                                     <button
-                                        onClick={() => handleDownloadPdf(quote.id, quote.number)}
+                                        onClick={() => handleDownloadPdf(quote.id, getQuoteNumber(quote))}
                                         className="p-2 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
                                         title={t('quote.downloadPdf')}
                                     >

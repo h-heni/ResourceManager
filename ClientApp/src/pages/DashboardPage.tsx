@@ -97,10 +97,12 @@ export default function DashboardPage() {
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [expenseSummary, setExpenseSummary] = useState<ExpenseSummary | null>(null);
     const [revenueSummary, setRevenueSummary] = useState<RevenueSummary | null>(null);
+    const [archivedInvoiceCount, setArchivedInvoiceCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [activeCurrency, setActiveCurrency] = useState<string | null>(null);
     const [recoveryStatus, setRecoveryStatus] = useState<{ type: 'running' | 'success' | 'warning' | 'error'; message: string } | null>(null);
     const recoveryRunRef = useRef(false);
+    const initialFetchDoneRef = useRef(false);
 
     /* ─── Mixed-currency mode state ─── */
     const [dashboardMode, setDashboardMode] = useState<'single' | 'mixed'>('single');
@@ -125,11 +127,14 @@ export default function DashboardPage() {
             } else {
                 queryParam = `?year=${yearParam}`;
             }
-            const [dashRes, expensesRes, revenueRes] = await Promise.allSettled([
+            const [dashRes, expensesRes, revenueRes, archivedRes] = await Promise.allSettled([
                 api.get(`/Dashboard/stats${queryParam}`),
                 api.get(`/Expenses/summary?year=${yearParam}`),
-                api.get(`/Dashboard/revenue-summary${queryParam}`)
+                api.get(`/Dashboard/revenue-summary${queryParam}`),
+                api.get(`/Invoices/archived/count?year=${yearParam}`)
             ]);
+
+            let archivedCountFallback: number | null = null;
 
             if (dashRes.status === 'fulfilled') {
                 const d = dashRes.value.data;
@@ -163,6 +168,7 @@ export default function DashboardPage() {
                     currencyBreakdownRevenue: d.currencyBreakdownRevenue ?? undefined,
                     currencyBreakdownExpense: d.currencyBreakdownExpense ?? undefined,
                 });
+                archivedCountFallback = d.paidInvoiceCount ?? 0;
                 if (!activeCurrency) setActiveCurrency(d.selectedCurrency || d.defaultCurrency || DEFAULT_CURRENCY);
             }
 
@@ -185,6 +191,13 @@ export default function DashboardPage() {
                     revenueByYear: rd.revenueByYear || [],
                 });
             }
+
+            if (archivedRes.status === 'fulfilled') {
+                const payload = archivedRes.value.data;
+                setArchivedInvoiceCount(payload?.count ?? 0);
+            } else if (archivedCountFallback !== null) {
+                setArchivedInvoiceCount(archivedCountFallback);
+            }
         } catch (error) {
             console.error('Failed to fetch dashboard stats', error);
         } finally {
@@ -193,7 +206,11 @@ export default function DashboardPage() {
     };
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => { if (!isSuperAdmin) fetchStats(); }, [isSuperAdmin]);
+    useEffect(() => {
+        if (isSuperAdmin || initialFetchDoneRef.current) return;
+        initialFetchDoneRef.current = true;
+        fetchStats();
+    }, [isSuperAdmin]);
 
     /* Re-fetch when year changes */
     const handleYearChange = (yr: number) => {
@@ -295,7 +312,7 @@ export default function DashboardPage() {
                         if (!entity) { failed++; continue; }
                         try {
                             await api.delete(`/pdf-storage/files/${missing.id}`).catch(() => { });
-                            await api.get(config.pdfEndpoint(entity.id || entity.Id), { responseType: 'blob' });
+                            await api.get(config.pdfEndpoint((entity.id || entity.Id) as number), { responseType: 'blob' });
                             regenerated++;
                         } catch { failed++; }
                     }
@@ -660,7 +677,7 @@ export default function DashboardPage() {
                         </div>
                     </div>
                     <div className="mt-3 flex justify-between text-xs text-gray-400 border-t border-gray-50 pt-2">
-                        <span>{t('dashboard.paidLabel', 'Paid')}: {stats?.paidInvoiceCount ?? 0}/{stats?.totalInvoiceCount ?? 0}</span>
+                        <span>{t('quote.archived', 'Archived')}: {archivedInvoiceCount}/{stats?.totalInvoiceCount ?? 0}</span>
                         <span>{t('dashboard.thisMonthLabel', 'This month')}: {fmt(stats?.thisMonthRevenue ?? 0)}</span>
                     </div>
                     {revenueSummary?.revenueByYear?.length ? (

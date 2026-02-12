@@ -66,7 +66,8 @@ export default function UsersPage() {
         setError(null);
         try {
             const res = await api.get('/Users');
-            setUsers(Array.isArray(res.data) ? res.data : []);
+            const data = res.data;
+            setUsers(Array.isArray(data) ? data : (data.data || []));
         } catch (err: unknown) {
             console.error("Failed to fetch users", err);
             const status = getErrorStatus(err);
@@ -270,24 +271,23 @@ export default function UsersPage() {
                 </div>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px]">
-                    <thead className="bg-gray-50 border-b border-gray-100">
+            <div className="rm-table-card">
+                <table className="rm-table">
+                    <thead>
                         <tr>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('users.table.user')}</th>
+                            <th>{t('users.table.user')}</th>
                             {isSuperAdmin && (
-                                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('users.table.company')}</th>
+                                <th>{t('users.table.company')}</th>
                             )}
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('users.table.role')}</th>
-                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('users.table.status')}</th>
-                            <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('common.actions')}</th>
+                            <th>{t('users.table.role')}</th>
+                            <th>{t('users.table.status')}</th>
+                            <th className="rm-th-actions">{t('common.actions')}</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody>
                         {users.map((u) => (
-                            <tr key={u.id} className="hover:bg-gray-50 transition-colors">
-                                <td className="px-6 py-4">
+                            <tr key={u.id}>
+                                <td className="rm-cell-text">
                                     <div className="flex items-center">
                                         <div className="h-10 w-10 rounded-full bg-[#065F46]/10 flex items-center justify-center text-[#065F46] font-bold">
                                             {u.firstName?.[0] || u.email[0].toUpperCase()}
@@ -299,11 +299,11 @@ export default function UsersPage() {
                                     </div>
                                 </td>
                                 {isSuperAdmin && (
-                                    <td className="px-6 py-4">
+                                    <td className="rm-cell-text">
                                         <span className="text-sm text-gray-700">{u.company || t('users.table.notAvailable')}</span>
                                     </td>
                                 )}
-                                <td className="px-6 py-4">
+                                <td className="rm-cell-text">
                                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                                         u.role === 'SuperAdmin' ? 'bg-red-50 text-red-600' :
                                         u.role === 'Manager' || u.role === 'FreeUser' ? 'bg-[#065F46]/5 text-[#065F46]' :
@@ -312,12 +312,12 @@ export default function UsersPage() {
                                         {u.role || t('users.roles.Employee')}
                                     </span>
                                 </td>
-                                <td className="px-6 py-4">
+                                <td className="rm-cell-text">
                                     <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-50 text-green-600">
                                         {t('users.status.active')}
                                     </span>
                                 </td>
-                                <td className="px-6 py-4 text-right">
+                                <td className="rm-cell-actions">
                                     <div className="flex items-center justify-end space-x-2">
                                         {canResetPassword(u) && (
                                             <button
@@ -354,14 +354,13 @@ export default function UsersPage() {
                         ))}
                         {users.length === 0 && (
                             <tr>
-                                <td colSpan={isSuperAdmin ? 5 : 4} className="px-6 py-10 text-center text-gray-500">
+                                <td colSpan={isSuperAdmin ? 5 : 4} className="px-4 py-10 text-center text-gray-500">
                                     {t('users.messages.empty')}
                                 </td>
                             </tr>
                         )}
                     </tbody>
                 </table>
-                </div>
             </div>
 
             {/* Add Employee Modal */}

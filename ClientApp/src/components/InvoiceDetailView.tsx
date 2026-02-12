@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import {
     X, FileText, User, DollarSign, CreditCard, Package,
     ClipboardList, Truck, CheckCircle, AlertCircle, Clock, Edit2,
-    Download, Mail, History, Receipt, Lock
+    Download, Mail, History, Receipt, Lock, FileWarning
 } from 'lucide-react';
 import api from '../services/api';
 import { formatCurrency as fmtCurrency } from '../lib/formatNumber';
@@ -29,7 +29,7 @@ interface InvoiceItem {
 
 interface RelatedDevis {
     id: number;
-    number: number;
+    number: string;
     date: string;
     totalAmount: number;
     status: string;
@@ -37,14 +37,16 @@ interface RelatedDevis {
 
 interface RelatedDeliveryNote {
     id: number;
-    number: number;
+    number: string;
     date: string;
     status: string;
 }
 
 interface InvoiceDetails {
     id: number;
-    number: number;
+    number?: string;
+    Number?: string;
+    invoiceNumber?: string;
     date: string;
     dueDate?: string;
     totalAmount: number;
@@ -78,7 +80,7 @@ interface Props {
     invoiceId: number;
     onClose: () => void;
     onEdit?: (id: number) => void;
-    onDownloadPdf?: (id: number, number: number) => void;
+    onDownloadPdf?: (id: number, number: string) => void;
     onSendEmail?: (invoice: InvoiceDetails) => void;
     isManager?: boolean;
 }
@@ -94,6 +96,7 @@ export default function InvoiceDetailView({
     const { t } = useTranslation();
     const [invoice, setInvoice] = useState<InvoiceDetails | null>(null);
     const [loading, setLoading] = useState(true);
+    const [downloadingRemainingPdf, setDownloadingRemainingPdf] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'details' | 'items' | 'payments' | 'related'>('details');
 
@@ -149,6 +152,11 @@ export default function InvoiceDetailView({
 
     const formatCurrency = (amount: number) => {
         return fmtCurrency(amount, getCurrencySymbol());
+    };
+
+    const resolveInvoiceNumber = (inv: InvoiceDetails | null) => {
+        if (!inv) return '';
+        return inv.number || inv.Number || inv.invoiceNumber || String(inv.id);
     };
 
     // Edit lock: cannot edit once ANY payment has been registered  
@@ -209,7 +217,7 @@ export default function InvoiceDetailView({
                         </div>
                         <div>
                             <h2 className="text-xl font-bold text-white">
-                                {t('invoice.title')} #{invoice.number}
+                                {t('invoice.title')} #{resolveInvoiceNumber(invoice)}
                             </h2>
                             <p className="text-white/70 text-sm">
                                 {invoice.clientName} • {formatDate(invoice.date)}
@@ -244,7 +252,7 @@ export default function InvoiceDetailView({
                         </div>
                     ) : null}
                     <button
-                        onClick={() => onDownloadPdf?.(invoice.id, invoice.number)}
+                        onClick={() => onDownloadPdf?.(invoice.id, resolveInvoiceNumber(invoice))}
                         className="flex items-center px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
                     >
                         <Download size={16} className="mr-2" />
@@ -257,6 +265,36 @@ export default function InvoiceDetailView({
                         <Mail size={16} className="mr-2" />
                         {t('email.send')}
                     </button>
+                    {/* Remaining Payment PDF - only for partially paid / unpaid with balance */}
+                    {(invoice.status === 'PartiallyPaid' || (invoice.status === 'Unpaid' && invoice.remainingAmount > 0)) && (
+                        <button
+                            onClick={async () => {
+                                if (downloadingRemainingPdf) return;
+                                setDownloadingRemainingPdf(true);
+                                try {
+                                    const res = await api.get(`/Invoices/${invoice.id}/remaining-payment-pdf`, { responseType: 'blob' });
+                                    const url = window.URL.createObjectURL(new Blob([res.data]));
+                                    const link = document.createElement('a');
+                                    link.href = url;
+                                    link.setAttribute('download', `Reste_a_payer_${resolveInvoiceNumber(invoice) ?? invoice.id}.pdf`);
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    link.remove();
+                                    window.URL.revokeObjectURL(url);
+                                } catch (err) {
+                                    console.error('Error downloading remaining payment PDF', err);
+                                } finally {
+                                    setDownloadingRemainingPdf(false);
+                                }
+                            }}
+                            disabled={downloadingRemainingPdf}
+                            className="flex items-center px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                            title={t('invoice.remainingPaymentPdf', 'Remaining Payment Notice')}
+                        >
+                            <FileWarning size={16} className="mr-2" />
+                            {t('invoice.remainingPaymentPdf', 'Remaining Payment Notice')}
+                        </button>
+                    )}
                 </div>
 
                 {/* Tabs */}
@@ -291,7 +329,7 @@ export default function InvoiceDetailView({
                                 <div className="space-y-3">
                                     <div className="flex justify-between">
                                         <span className="text-gray-600">{t('invoice.number')}:</span>
-                                        <span className="font-medium">#{invoice.number}</span>
+                                        <span className="font-medium">#{resolveInvoiceNumber(invoice)}</span>
                                     </div>
                                     <div className="flex justify-between">
                                         <span className="text-gray-600">{t('invoice.date')}:</span>
