@@ -1,0 +1,232 @@
+# ============================================
+# ResourceManager - Blue-Green Deployment Configuration
+# ============================================
+# This configuration supports zero-downtime deployments by running
+# two identical environments (Blue and Green) that can be switched
+# instantly via Nginx upstream routing.
+#
+# Architecture:
+#   - Nginx (Port 80) - Routes to active environment
+#   - Blue Environment (Ports: 7175 API, 8080 Web)
+#   - Green Environment (Ports: 7176 API, 8081 Web)
+#   - PostgreSQL (Shared) - Single database for both environments
+#
+# Usage:
+#   # Start initial Blue environment
+#   docker-compose -f docker-compose.blue-green.yml up -d postgres_db blue-api blue-web nginx
+#
+#   # Deploy to Green (while Blue serves traffic)
+#   docker-compose -f docker-compose.blue-green.yml up -d green-api green-web
+#
+#   # Switch traffic to Green (edit ACTIVE_ENV=green in .env, then reload nginx)
+#   docker exec nginx nginx -s reload
+#
+#   # Or use the deployment script
+#   ./scripts/deploy-blue-green.sh
+#
+# IMPORTANT: Create a .env file from .env.example before running!
+# ============================================
+
+services:
+  # ============================================
+  # PostgreSQL Database (Shared by both environments)
+  # ============================================
+  postgres_db:
+    image: postgres:16-alpine
+    container_name: postgres_db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-resourcemanager}
+      POSTGRES_USER: ${POSTGRES_USER:-rmuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - rm-internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rmuser} -d ${POSTGRES_DB:-resourcemanager}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ============================================
+  # BLUE ENVIRONMENT
+  # ============================================
+  
+  # Blue API (.NET 8)
+  blue-api:
+    image: ${API_IMAGE:-resourcemanager-api:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: blue-api
+    ports:
+      - "7175:8080"  # Expose on host for direct health checks
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - CONNECTION_STRING=Host=postgres_db;Port=5432;Database=${POSTGRES_DB:-resourcemanager};Username=${POSTGRES_USER:-rmuser};Password=${POSTGRES_PASSWORD:?err};SSL Mode=Prefer
+      - ConnectionStrings__DefaultConnection=Host=postgres_db;Port=5432;Database=${POSTGRES_DB:-resourcemanager};Username=${POSTGRES_USER:-rmuser};Password=${POSTGRES_PASSWORD:?err};SSL Mode=Prefer
+      - Jwt__Key=${JWT_KEY:?Set JWT_KEY in .env}
+      - Jwt__Issuer=${JWT_ISSUER:-ResourceManager}
+      - Jwt__Audience=${JWT_AUDIENCE:-ResourceManager-Users}
+      - Jwt__TokenExpirationInMinutes=${JWT_EXPIRATION:-100}
+      - GoogleOptions__ClientId=${GOOGLE_CLIENT_ID:-}
+      - GoogleOptions__ClientSecret=${GOOGLE_CLIENT_SECRET:-}
+      - GoogleOptions__RefreshToken=${GOOGLE_REFRESH_TOKEN:-}
+      - DEPLOYMENT_ENV=blue
+    volumes:
+      - blue-api-logs:/app/Logs
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+    networks:
+      - rm-internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # Blue Web (React + Nginx)
+  blue-web:
+    image: ${WEB_IMAGE:-resourcemanager-web:latest}
+    build:
+      context: ./ClientApp
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=
+    container_name: blue-web
+    ports:
+      - "8080:80"  # Expose on host for direct health checks
+    environment:
+      - BACKEND_API_HOST=blue-api
+      - BACKEND_API_PORT=8080
+      - DEPLOYMENT_ENV=blue
+    depends_on:
+      blue-api:
+        condition: service_healthy
+    networks:
+      - rm-internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================
+  # GREEN ENVIRONMENT
+  # ============================================
+  
+  # Green API (.NET 8)
+  green-api:
+    image: ${API_IMAGE:-resourcemanager-api:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: green-api
+    ports:
+      - "7176:8080"  # Different port from Blue
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - CONNECTION_STRING=Host=postgres_db;Port=5432;Database=${POSTGRES_DB:-resourcemanager};Username=${POSTGRES_USER:-rmuser};Password=${POSTGRES_PASSWORD:?err};SSL Mode=Prefer
+      - ConnectionStrings__DefaultConnection=Host=postgres_db;Port=5432;Database=${POSTGRES_DB:-resourcemanager};Username=${POSTGRES_USER:-rmuser};Password=${POSTGRES_PASSWORD:?err};SSL Mode=Prefer
+      - Jwt__Key=${JWT_KEY:?Set JWT_KEY in .env}
+      - Jwt__Issuer=${JWT_ISSUER:-ResourceManager}
+      - Jwt__Audience=${JWT_AUDIENCE:-ResourceManager-Users}
+      - Jwt__TokenExpirationInMinutes=${JWT_EXPIRATION:-100}
+      - GoogleOptions__ClientId=${GOOGLE_CLIENT_ID:-}
+      - GoogleOptions__ClientSecret=${GOOGLE_CLIENT_SECRET:-}
+      - GoogleOptions__RefreshToken=${GOOGLE_REFRESH_TOKEN:-}
+      - DEPLOYMENT_ENV=green
+    volumes:
+      - green-api-logs:/app/Logs
+    depends_on:
+      postgres_db:
+        condition: service_healthy
+    networks:
+      - rm-internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # Green Web (React + Nginx)
+  green-web:
+    image: ${WEB_IMAGE:-resourcemanager-web:latest}
+    build:
+      context: ./ClientApp
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=
+    container_name: green-web
+    ports:
+      - "8081:80"  # Different port from Blue
+    environment:
+      - BACKEND_API_HOST=green-api
+      - BACKEND_API_PORT=8080
+      - DEPLOYMENT_ENV=green
+    depends_on:
+      green-api:
+        condition: service_healthy
+    networks:
+      - rm-internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================
+  # Nginx Reverse Proxy with Dynamic Upstream
+  # ============================================
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/blue-green.conf:/etc/nginx/templates/default.conf.template:ro
+    environment:
+      - ACTIVE_ENV=${ACTIVE_ENV:-blue}
+      - BLUE_API_HOST=blue-api
+      - BLUE_API_PORT=8080
+      - BLUE_WEB_HOST=blue-web
+      - BLUE_WEB_PORT=80
+      - GREEN_API_HOST=green-api
+      - GREEN_API_PORT=8080
+      - GREEN_WEB_HOST=green-web
+      - GREEN_WEB_PORT=80
+    depends_on:
+      - blue-api
+      - blue-web
+    networks:
+      - rm-internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    command: /bin/sh -c "envsubst '$$ACTIVE_ENV $$BLUE_API_HOST $$BLUE_API_PORT $$BLUE_WEB_HOST $$BLUE_WEB_PORT $$GREEN_API_HOST $$GREEN_API_PORT $$GREEN_WEB_HOST $$GREEN_WEB_PORT' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
+
+volumes:
+  pgdata:
+    driver: local
+  blue-api-logs:
+    driver: local
+  green-api-logs:
+    driver: local
+
+networks:
+  rm-internal:
+    driver: bridge
