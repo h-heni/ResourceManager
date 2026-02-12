@@ -145,6 +145,11 @@ public class RedisCacheService : ICacheService
         }
     }
 
+    /// <summary>
+    /// Removes all cache entries matching a pattern.
+    /// Note: This implementation uses KEYS command which works on standalone Redis instances.
+    /// For Redis Sentinel or Cluster configurations, consider using SCAN or a different approach.
+    /// </summary>
     public async Task RemoveByPatternAsync(string pattern, CancellationToken cancellationToken = default)
     {
         try
@@ -156,6 +161,8 @@ public class RedisCacheService : ICacheService
             }
 
             var fullPattern = GetFullKey(pattern);
+            // Note: GetServers().FirstOrDefault() works for standalone Redis.
+            // For Redis Cluster/Sentinel, you would need to iterate all servers.
             var server = _redis.GetServers().FirstOrDefault();
             if (server is null)
             {

@@ -16,6 +16,8 @@
 services:
   # ============================================
   # Redis Cache (Dev)
+  # NOTE: Development Redis has no password for convenience.
+  # This is intentional - production Redis requires REDIS_PASSWORD.
   # ============================================
   redis_dev:
     image: redis:7-alpine

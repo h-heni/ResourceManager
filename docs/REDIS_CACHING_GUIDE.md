@@ -114,6 +114,13 @@ REDIS_MAXMEMORY=256mb
 Redis__ConnectionString=redis:6379,password=your_password,abortConnect=false
 ```
 
+> **Security Note**: In production, never store passwords in plain text environment files.
+> Consider using secure secret management solutions:
+> - Docker Secrets for Docker Swarm
+> - Azure Key Vault for Azure deployments
+> - AWS Secrets Manager for AWS deployments
+> - HashiCorp Vault for multi-cloud environments
+
 ### Service Registration (Program.cs)
 
 ```csharp
