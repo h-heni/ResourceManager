@@ -284,7 +284,7 @@ fi
 # ============================================
 
 log_info "Cleaning up old Docker images..."
-docker image prune -f > /dev/null 2>&1 || true
+docker image prune -f --filter "until=24h" > /dev/null 2>&1 || true
 
 # ============================================
 # Summary
