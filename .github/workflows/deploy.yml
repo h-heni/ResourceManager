@@ -60,6 +60,8 @@ jobs:
     name: Deploy to ${{ inputs.environment || 'production' }}
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment || 'production' }}
+    permissions:
+      contents: read
     
     steps:
       - name: Checkout repository
