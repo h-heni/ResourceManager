@@ -696,12 +696,45 @@ openssl rand -base64 48
 
 ### Backing Up the Database
 
+**🚀 NEW: Automated Backup Solution**
+
+We now have a complete automated backup solution with compression, rotation, and cron scheduling!
+
+**Quick Start:**
 ```bash
-# Dump the database (production)
+# 1. Make scripts executable
+chmod +x scripts/*.sh
+
+# 2. Setup daily automated backups (2 AM)
+sudo scripts/setup-backup-cron.sh
+
+# 3. Test manual backup
+scripts/pg-backup.sh
+```
+
+**Features:**
+- ✅ Daily automated backups via cron
+- ✅ Compressed backups (gzip)
+- ✅ Automatic rotation (keeps last 7 backups)
+- ✅ Optional external storage support
+- ✅ Easy restore with safety backup
+- ✅ Integrity verification
+
+**See [BACKUP_GUIDE.md](BACKUP_GUIDE.md)** for complete documentation or **[BACKUP_QUICKREF.md](BACKUP_QUICKREF.md)** for quick reference.
+
+**Manual backup/restore:**
+```bash
+# Backup (old method, still works)
 docker compose exec postgres_db pg_dump -U rmuser resourcemanager > backup_$(date +%Y%m%d).sql
 
-# Restore from backup
+# Restore (old method)
 docker compose exec -T postgres_db psql -U rmuser -d resourcemanager < backup_20260210.sql
+
+# Backup (new automated script - recommended)
+scripts/pg-backup.sh
+
+# Restore (new script with safety features)
+scripts/pg-restore.sh backups/backup_resourcemanager_20260212_120000.sql.gz
 ```
 
 ### Resetting Development Data
