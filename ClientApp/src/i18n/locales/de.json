@@ -41,7 +41,6 @@
     "date": "Datum",
     "price": "Preis",
     "saving": "Speichern...",
-<<<<<<< HEAD
     "deleting": "Deleting...",
     "loadingData": "Loading data...",
     "noResults": "No results found",
@@ -49,7 +48,6 @@
     "deleteFailed": "Failed to delete item",
     "createdBy": "Created by ",
     "createdAt": "Created at ",
-=======
     "deleting": "Löschen...",
     "loadingData": "Daten werden geladen...",
     "noResults": "Keine Ergebnisse gefunden",
@@ -74,7 +72,6 @@
     "to": "An",
     "viewDetails": "Details anzeigen"
   },
->>>>>>> copilot-worktree-2026-02-11T21-10-21
     "updatedBy": "Updated by ",
     "updatedAt": "Updated at ",
     "address": "Address",

@@ -834,8 +834,6 @@
     "tooLarge": "Too Large",
     "uploading": "Uploading"
   },
-<<<<<<< HEAD
-=======
   "companySetup": {
     "title": "Complete Your Profile",
     "subtitle": "Tell us about your company to get started",
@@ -899,7 +897,6 @@
       "submitFailed": "Failed to save company settings"
     }
   },
->>>>>>> copilot-worktree-2026-02-11T21-10-21
   "users": {
     "actions": {
       "addEmployee": "Add Employee",
