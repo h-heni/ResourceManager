@@ -399,3 +399,14 @@ nul
 
 # COPILOT rules (IDE-specific)
 COPILOT_RULES.md
+
+# ============================================
+# Blue-Green Deployment Artifacts
+# ============================================
+# Backup files created by deployment scripts
+.env.bak
+*.env.bak
+
+# Deployment logs
+deployment-*.log
+rollback-*.log
