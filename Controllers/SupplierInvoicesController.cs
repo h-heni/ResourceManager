@@ -158,6 +158,38 @@ namespace ResourceManager.Controllers
         // ═══════════════════════════════════════════════════════════════
         // GET: api/SupplierInvoices/{id}/file — serve the invoice file
         // ═══════════════════════════════════════════════════════════════
+        [HttpGet("temp-file")]
+        public async Task<IActionResult> GetTempFile([FromQuery] string tempFilePath)
+        {
+            if (string.IsNullOrWhiteSpace(tempFilePath))
+                return BadRequest(new { message = "tempFilePath is required" });
+
+            if (!tempFilePath.StartsWith("/uploads/supplier-invoices/", StringComparison.OrdinalIgnoreCase)
+                || tempFilePath.Contains("..", StringComparison.Ordinal))
+            {
+                return BadRequest(new { message = "Invalid temp file path" });
+            }
+
+            var fullPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", tempFilePath.TrimStart('/'));
+
+            if (!System.IO.File.Exists(fullPath))
+                return NotFound(new { message = "Temporary preview file not found" });
+
+            var ext = Path.GetExtension(fullPath).ToLowerInvariant();
+            var contentType = ext switch
+            {
+                ".png" => "image/png",
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".bmp" => "image/bmp",
+                ".tif" or ".tiff" => "image/tiff",
+                ".webp" => "image/webp",
+                _ => "application/pdf"
+            };
+
+            var bytes = await System.IO.File.ReadAllBytesAsync(fullPath);
+            return File(bytes, contentType, Path.GetFileName(fullPath));
+        }
+
         [HttpGet("{id}/file")]
         public async Task<IActionResult> GetFile(int id)
         {

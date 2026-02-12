@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Search, Download, Trash2, Eye, DollarSign, X, Mail, Send, Calendar, Clock, Edit2, Archive, Filter, CheckCircle, FileWarning } from 'lucide-react';
+import { Plus, Search, Download, Eye, DollarSign, X, Mail, Send, Calendar, Clock, Edit2, Archive, Filter, CheckCircle, FileWarning } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { getErrorMessage } from '../utils/errorUtils';
@@ -647,16 +647,7 @@ export default function InvoicesPage() {
                                                                 <FileWarning size={18} />
                                                             </button>
                                                         )}
-                                                        {/* Delete button - Manager only, not locked, not paid */}
-                                                        {isManager && !invoice.isLocked && invoice.status !== 'Paid' && (
-                                                            <button
-                                                                onClick={() => handleDelete(invoice.id)}
-                                                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                                title={t('common.delete')}
-                                                            >
-                                                                <Trash2 size={18} />
-                                                            </button>
-                                                        )}
+                                                        {/* Delete button removed from table - only available in detail view */}
                                                     </>
                                                 )}
                                                 {/* For historical items, show a view-only indicator */}
@@ -943,6 +934,11 @@ export default function InvoicesPage() {
                     onSendEmail={(invoice) => {
                         setShowDetailView(false);
                         openEmailModal(invoice);
+                    }}
+                    onDelete={async (id) => {
+                        setShowDetailView(false);
+                        setDetailInvoiceId(null);
+                        await handleDelete(id);
                     }}
                     isManager={isManager}
                 />

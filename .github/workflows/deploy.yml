@@ -35,7 +35,6 @@ on:
         type: choice
         options:
           - production
-          - staging
         default: 'production'
       tag:
         description: 'Docker image tag to deploy'
@@ -52,7 +51,7 @@ env:
   DEPLOY_USER: ${{ secrets.VPS_USER }}
   DEPLOY_HOST: ${{ secrets.VPS_HOST }}
   DEPLOY_PORT: ${{ secrets.VPS_PORT || '22' }}
-  DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '~/projects' }}
+  DEPLOY_PATH: /opt/resourcemanager
 
 jobs:
   # ============================================

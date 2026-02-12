@@ -115,6 +115,7 @@ export default function SupplierInvoicesPage() {
     // Review/Edit state
     const [currentInvoiceId, setCurrentInvoiceId] = useState<number | null>(null);
     const [tempFilePath, setTempFilePath] = useState<string | null>(null);
+    const [previewFileUrl, setPreviewFileUrl] = useState<string | null>(null);
     const [tempFileName, setTempFileName] = useState<string | null>(null);
     const [tempFileType, setTempFileType] = useState<string | null>(null);
     const [tempRawText, setTempRawText] = useState<string | null>(null);
@@ -184,6 +185,15 @@ export default function SupplierInvoicesPage() {
     // List view tab (active vs paid)
     const [activeTab, setActiveTab] = useState<'active' | 'paid'>('active');
 
+    const replacePreviewFileUrl = useCallback((nextUrl: string | null) => {
+        setPreviewFileUrl(prev => {
+            if (prev?.startsWith('blob:')) {
+                URL.revokeObjectURL(prev);
+            }
+            return nextUrl;
+        });
+    }, []);
+
     // ═══════════════════════════════════════════════════════════════
     // FETCH DATA
     // ═══════════════════════════════════════════════════════════════
@@ -225,6 +235,14 @@ export default function SupplierInvoicesPage() {
         window.addEventListener('payment-status-changed', handler);
         return () => window.removeEventListener('payment-status-changed', handler);
     }, []);
+
+    useEffect(() => {
+        return () => {
+            if (previewFileUrl?.startsWith('blob:')) {
+                URL.revokeObjectURL(previewFileUrl);
+            }
+        };
+    }, [previewFileUrl]);
 
     const fetchInvoices = async () => {
         try {
@@ -303,6 +321,7 @@ export default function SupplierInvoicesPage() {
         setStatus(null);
 
         try {
+            replacePreviewFileUrl(null);
             const formData = new FormData();
             formData.append('file', file);
 
@@ -318,6 +337,20 @@ export default function SupplierInvoicesPage() {
             setTempFileName(data.fileName);
             setTempFileType(data.fileType);
             setTempRawText(data.rawExtractedText || null);
+
+            if (data.tempFilePath) {
+                try {
+                    const previewRes = await api.get('/SupplierInvoices/temp-file', {
+                        params: { tempFilePath: data.tempFilePath },
+                        responseType: 'blob',
+                    });
+                    const blobUrl = URL.createObjectURL(new Blob([previewRes.data], { type: data.fileType || 'application/pdf' }));
+                    replacePreviewFileUrl(blobUrl);
+                } catch {
+                    replacePreviewFileUrl(null);
+                }
+            }
+
             setCurrentInvoiceId(null); // Not persisted yet
             setExtractedData(data.extractedData);
             setWarnings(data.warnings || []);
@@ -521,6 +554,7 @@ export default function SupplierInvoicesPage() {
     const resetReviewState = () => {
         setCurrentInvoiceId(null);
         setTempFilePath(null);
+        replacePreviewFileUrl(null);
         setTempFileName(null);
         setTempFileType(null);
         setTempRawText(null);
@@ -688,16 +722,17 @@ export default function SupplierInvoicesPage() {
             setSelectedSupplierId(data.fournisseurId);
             setConfidenceScore(data.confidenceScore || 0);
             // Fetch the file via authenticated API and create blob URL for iframe preview
+            replacePreviewFileUrl(null);
             if (data.filePath || data.fileName) {
                 try {
                     const fileRes = await api.get(`/SupplierInvoices/${data.id}/file`, { responseType: 'blob' });
                     const blobUrl = URL.createObjectURL(new Blob([fileRes.data], { type: data.fileType || 'application/pdf' }));
-                    setTempFilePath(blobUrl);
+                    replacePreviewFileUrl(blobUrl);
                     setTempFileName(data.fileName || 'invoice');
                     setTempFileType(data.fileType || 'application/pdf');
                 } catch {
                     // File may not exist on disk — skip preview
-                    setTempFilePath(null);
+                    replacePreviewFileUrl(null);
                 }
             }
             setView('review');
@@ -1580,9 +1615,9 @@ export default function SupplierInvoicesPage() {
             </div>
 
             {/* Split layout: Document Preview + Form */}
-            <div className={`flex gap-6 ${tempFilePath ? 'flex-col lg:flex-row' : ''}`}>
+            <div className={`flex gap-6 ${previewFileUrl ? 'flex-col lg:flex-row' : ''}`}>
                 {/* Document Preview Panel */}
-                {tempFilePath && (
+                {previewFileUrl && (
                     <div className={`${showDocPreview ? 'lg:w-1/2' : 'lg:w-auto'} flex-shrink-0`}>
                         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden sticky top-4">
                             <div className="flex items-center justify-between p-3 bg-gray-50 border-b border-gray-100">
@@ -1601,13 +1636,13 @@ export default function SupplierInvoicesPage() {
                                 <div className="p-2">
                                     {tempFileType?.startsWith('image/') ? (
                                         <img
-                                            src={tempFilePath || ''}
+                                            src={previewFileUrl || ''}
                                             alt={tempFileName || 'Uploaded document'}
                                             className="w-full rounded-lg object-contain max-h-[70vh]"
                                         />
                                     ) : (
                                         <iframe
-                                            src={tempFilePath || ''}
+                                            src={previewFileUrl || ''}
                                             className="w-full rounded-lg border-0"
                                             style={{ height: '70vh' }}
                                             title={tempFileName || 'PDF Preview'}

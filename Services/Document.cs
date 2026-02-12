@@ -742,12 +742,12 @@ namespace ResourceManager.Services
 
             container.Column(sigCol =>
             {
-                sigCol.Item().Width(220).AlignRight().LineHorizontal(2).LineColor("#E2E8F0");
-
                 sigCol.Item().PaddingTop(8).AlignRight().Column(innerCol =>
                 {
                     if (!string.IsNullOrWhiteSpace(Settings.PdfSignatureText))
                         innerCol.Item().AlignCenter().Text(Settings.PdfSignatureText).FontSize(16).Italic().Bold().FontColor("#1A202C");
+
+                    innerCol.Item().PaddingTop(4).AlignCenter().Width(220).LineHorizontal(2).LineColor("#E2E8F0");
 
                     if (!string.IsNullOrWhiteSpace(Settings.PdfSignerPosition))
                         innerCol.Item().PaddingTop(4).AlignCenter().Text(Settings.PdfSignerPosition).FontSize(10).FontColor(Colors.Grey.Medium);
@@ -1190,14 +1190,14 @@ namespace ResourceManager.Services
 
             container.Column(sigCol =>
             {
-                sigCol.Item().Width(220).AlignRight().LineHorizontal(2).LineColor("#E2E8F0");
-
                 sigCol.Item().PaddingTop(8).AlignRight().Column(innerCol =>
                 {
                     if (!string.IsNullOrWhiteSpace(Settings.PdfSignatureText))
                     {
                         innerCol.Item().AlignCenter().Text(Settings.PdfSignatureText).FontSize(16).Italic().Bold().FontColor("#1A202C");
                     }
+
+                    innerCol.Item().PaddingTop(4).AlignCenter().Width(220).LineHorizontal(2).LineColor("#E2E8F0");
 
                     if (!string.IsNullOrWhiteSpace(Settings.PdfSignerPosition))
                     {

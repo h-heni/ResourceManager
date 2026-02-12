@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import {
     X, FileText, User, DollarSign, CreditCard, Package,
     ClipboardList, Truck, CheckCircle, AlertCircle, Clock, Edit2,
-    Download, Mail, History, Receipt, Lock, FileWarning
+    Download, Mail, History, Receipt, Lock, FileWarning, Trash2
 } from 'lucide-react';
 import api from '../services/api';
 import { formatCurrency as fmtCurrency } from '../lib/formatNumber';
@@ -82,6 +82,7 @@ interface Props {
     onEdit?: (id: number) => void;
     onDownloadPdf?: (id: number, number: string) => void;
     onSendEmail?: (invoice: InvoiceDetails) => void;
+    onDelete?: (id: number) => void;
     isManager?: boolean;
 }
 
@@ -91,6 +92,7 @@ export default function InvoiceDetailView({
     onEdit,
     onDownloadPdf,
     onSendEmail,
+    onDelete,
     isManager = false
 }: Props) {
     const { t } = useTranslation();
@@ -293,6 +295,21 @@ export default function InvoiceDetailView({
                         >
                             <FileWarning size={16} className="mr-2" />
                             {t('invoice.remainingPaymentPdf', 'Remaining Payment Notice')}
+                        </button>
+                    )}
+                    {/* Delete button - Manager only, not locked, not paid */}
+                    {isManager && !invoice.isLocked && invoice.status !== 'Paid' && onDelete && (
+                        <button
+                            onClick={() => {
+                                if (confirm(t('invoice.messages.confirmDelete'))) {
+                                    onDelete(invoice.id);
+                                }
+                            }}
+                            className="flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                            title={t('common.delete')}
+                        >
+                            <Trash2 size={16} className="mr-2" />
+                            {t('common.delete')}
                         </button>
                     )}
                 </div>

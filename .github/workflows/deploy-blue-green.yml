@@ -25,6 +25,7 @@ env:
   REGISTRY: ghcr.io
   API_IMAGE: ghcr.io/${{ github.repository_owner }}/resourcemanager-api
   WEB_IMAGE: ghcr.io/${{ github.repository_owner }}/resourcemanager-web
+  DEPLOY_PATH: /opt/resourcemanager
 
 jobs:
   # ============================================
@@ -94,15 +95,42 @@ jobs:
       - name: Checkout code (for deployment files)
         uses: actions/checkout@v4
 
+      - name: Resolve SSH connection settings
+        id: ssh
+        shell: bash
+        run: |
+          RAW_HOST='${{ secrets.VPS_HOST }}'
+          RAW_PORT='${{ secrets.VPS_PORT }}'
+
+          HOST="${RAW_HOST#tcp://}"
+          HOST="${HOST#http://}"
+          HOST="${HOST#https://}"
+          HOST="${HOST#ssh://}"
+          HOST="${HOST%%/*}"
+          HOST="${HOST%%:*}"
+
+          PORT="$(echo "${RAW_PORT}" | tr -cd '0-9')"
+          if [ -z "$PORT" ]; then
+            PORT="22"
+          fi
+
+          if [ -z "$HOST" ]; then
+            echo "VPS_HOST is empty or invalid after normalization"
+            exit 1
+          fi
+
+          echo "host=$HOST" >> "$GITHUB_OUTPUT"
+          echo "port=$PORT" >> "$GITHUB_OUTPUT"
+
       - name: Copy deployment files to VPS
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.VPS_HOST }}
+          host: ${{ steps.ssh.outputs.host }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.VPS_PORT || 22 }}
+          port: ${{ steps.ssh.outputs.port }}
           source: "docker-compose.blue-green.yml,nginx/blue-green.conf,scripts/deploy-blue-green.sh,scripts/rollback-blue-green.sh"
-          target: ${{ vars.DEPLOY_PATH || '/opt/resourcemanager' }}
+          target: ${{ env.DEPLOY_PATH }}
 
       - name: SSH into VPS and run Blue-Green deployment
         uses: appleboy/ssh-action@v1.0.3
@@ -111,14 +139,14 @@ jobs:
           WEB_IMAGE: ${{ env.WEB_IMAGE }}:latest
           REGISTRY: ${{ env.REGISTRY }}
         with:
-          host: ${{ secrets.VPS_HOST }}
+          host: ${{ steps.ssh.outputs.host }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.VPS_PORT || 22 }}
+          port: ${{ steps.ssh.outputs.port }}
           envs: API_IMAGE,WEB_IMAGE,REGISTRY
           script: |
             set -e
-            DEPLOY_DIR="${{ vars.DEPLOY_PATH || '/opt/resourcemanager' }}"
+            DEPLOY_DIR="${{ env.DEPLOY_PATH }}"
             cd "$DEPLOY_DIR"
 
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -150,10 +178,10 @@ jobs:
       - name: Verify Deployment
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.VPS_HOST }}
+          host: ${{ steps.ssh.outputs.host }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.VPS_PORT || 22 }}
+          port: ${{ steps.ssh.outputs.port }}
           script: |
             echo "--- Verifying deployment ---"
             curl -f http://localhost/health || exit 1
@@ -172,15 +200,43 @@ jobs:
     permissions: {}
 
     steps:
+      - name: Resolve SSH connection settings
+        id: ssh
+        shell: bash
+        run: |
+          RAW_HOST='${{ secrets.VPS_HOST }}'
+          RAW_PORT='${{ secrets.VPS_PORT }}'
+
+          HOST="${RAW_HOST#tcp://}"
+          HOST="${HOST#http://}"
+          HOST="${HOST#https://}"
+          HOST="${HOST#ssh://}"
+          HOST="${HOST%%/*}"
+          HOST="${HOST%%:*}"
+
+          PORT="$(echo "${RAW_PORT}" | tr -cd '0-9')"
+          if [ -z "$PORT" ]; then
+            PORT="22"
+          fi
+
+          if [ -z "$HOST" ]; then
+            echo "VPS_HOST is empty or invalid after normalization"
+            exit 1
+          fi
+
+          echo "host=$HOST" >> "$GITHUB_OUTPUT"
+          echo "port=$PORT" >> "$GITHUB_OUTPUT"
+
       - name: SSH into VPS and rollback
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.VPS_HOST }}
+          host: ${{ steps.ssh.outputs.host }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ steps.ssh.outputs.port }}
           script: |
             set -e
-            DEPLOY_DIR="${{ vars.DEPLOY_PATH || '/opt/resourcemanager' }}"
+            DEPLOY_DIR="${{ env.DEPLOY_PATH }}"
             cd "$DEPLOY_DIR"
 
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
