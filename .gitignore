@@ -401,6 +401,19 @@ nul
 COPILOT_RULES.md
 
 # ============================================
+# SSL Certificates & Certbot (Production)
+# ============================================
+certbot/
+letsencrypt/
+ssl-certs/
+
+# ============================================
+# Blue-Green Deployment State
+# ============================================
+.active-env
+blue-green-state/
+
+# ============================================
 # Backup files (PostgreSQL backups)
 # ============================================
 backups/

@@ -8,7 +8,9 @@
 # MEMORY ALLOCATION (Total: ~2048MB available, ~1536MB allocated to containers):
 #   - PostgreSQL:  512MB (max 768MB burst)
 #   - Backend API: 768MB (max 1024MB burst)
-#   - Frontend:    256MB (max 384MB burst)
+#   - Redis:       128MB (max 192MB burst)
+#   - Nginx Proxy: 64MB (max 128MB burst)
+#   - Frontend:    64MB (max 128MB burst)
 #   - System:      ~464MB remaining for OS/kernel/cache
 #
 # Usage:
@@ -160,10 +162,9 @@ services:
           cpus: '0.5'              # Guaranteed CPU
           memory: 512M             # Guaranteed memory
     
-    # PORTS - Expose API to host for reverse proxy
-    # Format: HOST:CONTAINER
-    ports:
-      - "${API_PORT:-5000}:8080"  # Map host port 5000 to container port 8080
+    # No external port exposure — accessed via nginx reverse proxy
+    expose:
+      - "8080"
     
     # ENVIRONMENT VARIABLES - Application configuration
     environment:
@@ -173,7 +174,7 @@ services:
       
       # Database connection
       # Uses service name 'postgres_db' as hostname (Docker DNS resolution)
-      - ConnectionStrings__DefaultConnection=Host=postgres_db;Port=5432;Database=${POSTGRES_DB:-resourcemanager};Username=${POSTGRES_USER:-rmuser};Password=${POSTGRES_PASSWORD:?ERROR};SSL Mode=Prefer
+      - ConnectionStrings__DefaultConnection=Host=postgres_db;Port=5432;Database=${POSTGRES_DB:-resourcemanager};Username=${POSTGRES_USER:-rmuser};Password=${POSTGRES_PASSWORD:?ERROR};SSL Mode=Prefer;Maximum Pool Size=20;Minimum Pool Size=2;Connection Idle Lifetime=60
       
       # JWT Authentication
       - Jwt__Key=${JWT_KEY:?ERROR - JWT_KEY must be set in .env file}
@@ -190,15 +191,19 @@ services:
       - Supabase__Url=${SUPABASE_URL:-}
       - Supabase__Key=${SUPABASE_KEY:-}
       
+      # Redis Configuration
+      - Redis__ConnectionString=redis:6379,password=${REDIS_PASSWORD:?ERROR},abortConnect=false
+      - Redis__InstanceName=ResourceManager_
+      
       # CORS configuration
       - Cors__AllowedOrigins__0=${CORS_ORIGIN_1:-http://localhost}
       - Cors__AllowedOrigins__1=${CORS_ORIGIN_2:-http://localhost:80}
       
       # Performance tuning for low memory
-      - DOTNET_GCHeapCount=2                    # Limit GC heaps
+      - DOTNET_GCHeapCount=2
       - DOTNET_ThreadPool_UnfairSemaphoreSpinLimit=6
-      - DOTNET_gcServer=0                       # Use workstation GC (lower memory)
-      - DOTNET_GCConserveMemory=9               # Max memory conservation (1-9)
+      - DOTNET_gcServer=0
+      - DOTNET_GCConserveMemory=9
       
       # Logging
       - Logging__LogLevel__Default=Warning
@@ -211,9 +216,11 @@ services:
       # Optional: Configuration overrides
       # - ./appsettings.Production.json:/app/appsettings.Production.json:ro
     
-    # DEPENDENCIES - Wait for database to be healthy before starting
+    # DEPENDENCIES - Wait for database and Redis to be healthy before starting
     depends_on:
       postgres_db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     
     # NETWORKING
@@ -249,11 +256,11 @@ services:
       - NET_BIND_SERVICE  # Required to bind to port 8080
 
   # ============================================
-  # FRONTEND (React + Nginx)
+  # FRONTEND (React + Nginx for static files)
   # ============================================
-  # Serves static React build and acts as reverse proxy for API.
-  # Memory: 256MB soft limit, 384MB hard limit (Nginx is very lightweight)
-  # Network: Frontend network only, isolated from database
+  # Serves static React build files.
+  # Memory: 64MB soft limit, 128MB hard limit (Nginx is very lightweight)
+  # Network: Internal only - accessed via nginx reverse proxy
   web:
     image: ${WEB_IMAGE:-resourcemanager-web:latest}
     container_name: rm-web
@@ -264,33 +271,24 @@ services:
       dockerfile: Dockerfile
       args:
         - VITE_API_URL=                # Empty - nginx proxies /api to backend
-      # cache_from:
-      #   - ${WEB_IMAGE:-resourcemanager-web:latest}
     
     # RESOURCE LIMITS - Nginx is extremely lightweight
     deploy:
       resources:
         limits:
-          cpus: '0.5'              # Max 0.5 CPU core
-          memory: 384M             # Hard limit
+          cpus: '0.5'
+          memory: 128M
         reservations:
-          cpus: '0.1'              # Minimal CPU needed
-          memory: 128M             # Minimal memory for nginx + static files
+          cpus: '0.1'
+          memory: 64M
     
-    # PORTS - Main entry point for users
-    ports:
-      - "${WEB_PORT:-80}:80"       # HTTP traffic
-      # - "${WEB_PORT_SSL:-443}:443"  # HTTPS (requires SSL certificates)
+    # No external port exposure — accessed via nginx reverse proxy
+    expose:
+      - "80"
     
     # ENVIRONMENT (if needed for nginx templating)
     environment:
       - NGINX_ENTRYPOINT_QUIET_LOGS=1
-    
-    # VOLUMES (optional - for custom nginx config or SSL certs)
-    # volumes:
-    #   - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    #   - ./ssl:/etc/nginx/ssl:ro
-    #   - nginx-cache:/var/cache/nginx
     
     # DEPENDENCIES - Wait for API to be healthy
     depends_on:
@@ -317,9 +315,131 @@ services:
       driver: "json-file"
       options:
         max-size: "10m"
-        max-file: "3"        # 30MB total for nginx logs
+        max-file: "3"
     
     # SECURITY OPTIONS
+    security_opt:
+      - no-new-privileges:true
+    
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - CHOWN
+      - SETUID
+      - SETGID
+
+  # ============================================
+  # REDIS CACHE
+  # ============================================
+  # In-memory cache for improved API performance.
+  # Memory: 128MB limit with LRU eviction
+  redis:
+    image: redis:7-alpine
+    container_name: rm-redis
+    
+    command: >
+      redis-server
+      --maxmemory 96mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD:?ERROR - REDIS_PASSWORD must be set in .env file}
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 192M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    
+    volumes:
+      - redis_data:/data
+    
+    networks:
+      - backend-network
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
+    
+    security_opt:
+      - no-new-privileges:true
+
+  # ============================================
+  # NGINX REVERSE PROXY (Production Entry Point)
+  # ============================================
+  # Main entry point for all traffic. Routes:
+  #   / → React frontend (web container)
+  #   /api → .NET backend (api container)
+  # Memory: 64MB limit (Nginx is extremely lightweight)
+  nginx:
+    image: ${NGINX_IMAGE:-resourcemanager-nginx:latest}
+    container_name: rm-nginx
+    
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    
+    # Main entry point — only nginx is exposed to the host
+    ports:
+      - "${WEB_PORT:-80}:80"
+      # For HTTPS (after SSL setup):
+      # - "${WEB_PORT_SSL:-443}:443"
+    
+    volumes:
+      # For Let's Encrypt certificates (uncomment after SSL setup):
+      # - ./certbot/conf:/etc/letsencrypt
+      # - ./certbot/www:/var/www/certbot
+      - nginx-logs:/var/log/nginx
+    
+    depends_on:
+      web:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    
+    # Nginx needs access to both frontend and backend networks
+    networks:
+      - frontend-network
+      - backend-network
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
     security_opt:
       - no-new-privileges:true
     
@@ -345,19 +465,18 @@ volumes:
       type: none
       o: bind
       # device: /opt/resourcemanager/data/postgres  # Optional: specify host path
-    # labels:
-    #   com.resourcemanager.description: "PostgreSQL database storage"
-    #   com.resourcemanager.backup: "daily"
   
   # API logs - Can be safely deleted if disk space is needed
   api-logs:
     driver: local
-    # labels:
-    #   com.resourcemanager.description: "Application logs"
   
-  # Optional: Nginx cache for improved performance
-  # nginx-cache:
-  #   driver: local
+  # Redis persistent data
+  redis_data:
+    driver: local
+  
+  # Nginx access and error logs
+  nginx-logs:
+    driver: local
 
 # ============================================
 # NETWORKS
