@@ -1,5 +1,19 @@
 name: CI/CD Pipeline
 
+# ============================================
+# CI/CD Pipeline for ResourceManager
+# ============================================
+# This workflow handles:
+# 1. Build & test (runs on all branches/PRs)
+# 2. Docker image build & push (only on push to main/staging)
+# 3. Automatic deployment trigger via workflow_run (see deploy.yml)
+#
+# Job execution logic:
+# - backend & frontend: Always run
+# - docker: Only on push to main/staging (not PRs)
+# - deploy: Triggered automatically in deploy.yml via workflow_run
+# ============================================
+
 on:
   push:
     branches: [dev, staging, main]
