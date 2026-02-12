@@ -399,3 +399,10 @@ nul
 
 # COPILOT rules (IDE-specific)
 COPILOT_RULES.md
+
+# ============================================
+# SSL Certificates & Certbot (Production)
+# ============================================
+certbot/
+letsencrypt/
+ssl-certs/
