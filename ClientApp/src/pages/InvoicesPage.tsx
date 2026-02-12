@@ -518,29 +518,6 @@ export default function InvoicesPage() {
                                                 )}
                                             </div>
                                         </td>
-                                                >
-                                                    <Eye size={18} />
-                                                </button>
-                                                {/* Download PDF */}
-                                                <button
-                                                    onClick={() => handleDownloadPdf(invoice.id, invoice.number)}
-                                                    className="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
-                                                    title={t('common.download')}
-                                                >
-                                                    <Download size={18} />
-                                                </button>
-                                                {/* Delete - Manager only */}
-                                                {isManager && invoice.status !== 'Paid' && (
-                                                    <button
-                                                        onClick={() => handleDelete(invoice.id)}
-                                                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                        title={t('common.delete')}
-                                                    >
-                                                        <Trash2 size={18} />
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </td>
                                     </tr>
                                 ))}
                                 {filteredInvoices.length === 0 && (

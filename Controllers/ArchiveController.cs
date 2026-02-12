@@ -104,89 +104,78 @@ namespace ResourceManager.Controllers
                     .Include(i => i.Client)
                     .Include(i => i.Payments)
                     .Where(i => i.Status == "Paid" && i.Date.Year == filterYear)
-                    .Select(i => new
+                    .ToListAsync();
+
+                var regularInvoiceData = regularInvoices.Select(i => {
+                    var payments = i.Payments?.Where(p => p != null).Select(p => new
+                    {
+                        p.Id,
+                        p.Amount,
+                        PaymentDate = p.PaymentDate.ToString("yyyy-MM-dd"),
+                        Notes = p.Notes ?? "",
+                        Status = p.Status ?? "Completed",
+                        p.IsScheduled
+                    }).ToList();
+                    
+                    return new
                     {
                         i.Id,
-                        i.Number,
+                        Number = i.Number.ToString(),
                         Date = i.Date,
-                        i.TotalAmount,
+                        TotalAmount = i.TotalAmount,
                         ClientName = i.Client != null ? i.Client.Name : "Unknown",
-                        i.ClientId,
-                        i.Currency,
-                        i.CurrencySymbol,
-                        AmountPaid = i.Payments != null ? i.Payments.Where(p => p.Status == "Completed").Sum(p => p.Amount) : 0,
-                        RemainingAmount = i.TotalAmount - (i.Payments != null ? i.Payments.Where(p => p.Status == "Completed").Sum(p => p.Amount) : 0),
-                        i.Status,
+                        ClientId = i.ClientId,
+                        Currency = i.Currency ?? "",
+                        CurrencySymbol = i.CurrencySymbol ?? "",
+                        AmountPaid = i.Payments != null ? i.Payments.Where(p => p.Status == "Completed").Sum(p => p.Amount) : 0m,
+                        RemainingAmount = i.TotalAmount - (i.Payments != null ? i.Payments.Where(p => p.Status == "Completed").Sum(p => p.Amount) : 0m),
+                        Status = i.Status ?? "Paid",
                         Reference = i.Number.ToString(),
                         PaymentMethod = "Invoice",
                         Source = "invoice",
                         Year = i.Date.Year,
-                        Payments = i.Payments != null ? i.Payments.Select(p => new
-                        {
-                            p.Id,
-                            p.Amount,
-                            p.PaymentDate,
-                            p.Notes,
-                            p.Status,
-                            p.IsScheduled
-                        }).ToList() : new List<object>()
-                    })
-                    .ToListAsync();
+                        Payments = payments
+                    };
+                }).ToList();
 
                 // Get historical revenues
                 var historicalRevenues = await _context.HistoricalRevenues
                     .Include(h => h.Client)
                     .Where(h => h.Date.Year == filterYear)
-                    .Select(h => new
-                    {
-                        h.Id,
-                        Number = 0, // Historical data doesn't have invoice numbers
-                        Date = h.Date,
-                        TotalAmount = h.AmountPaid,
-                        ClientName = h.ClientName,
-                        h.ClientId,
-                        h.Currency,
-                        CurrencySymbol = h.Currency, // Use currency as symbol for historical
-                        AmountPaid = h.AmountPaid,
-                        RemainingAmount = (decimal)0,
-                        Status = "Paid",
-                        h.Reference,
-                        h.PaymentMethod,
-                        Source = "historical",
-                        Year = h.Date.Year,
-                        Payments = new List<object>() // Historical data doesn't have payment records
-                    })
                     .ToListAsync();
 
-                // Combine both lists
-                var combinedData = regularInvoices
-                    .Concat(historicalRevenues.Select(h => new
-                    {
-                        h.Id,
-                        h.Number,
-                        h.Date,
-                        h.TotalAmount,
-                        h.ClientName,
-                        h.ClientId,
-                        h.Currency,
-                        h.CurrencySymbol,
-                        h.AmountPaid,
-                        h.RemainingAmount,
-                        h.Status,
-                        h.Reference,
-                        h.PaymentMethod,
-                        h.Source,
-                        h.Year,
-                        h.Payments
-                    }))
-                    .OrderByDescending(x => x.Date)
-                    .ToList();
+                var historicalRevenueData = historicalRevenues.Select(h => new
+                {
+                    h.Id,
+                    Number = "H" + h.Id.ToString(), // Historical data doesn't have invoice numbers, use H + ID
+                    Date = h.Date,
+                    TotalAmount = h.AmountPaid,
+                    ClientName = h.ClientName,
+                    ClientId = h.ClientId,
+                    Currency = h.Currency ?? "",
+                    CurrencySymbol = h.Currency ?? "",
+                    AmountPaid = h.AmountPaid,
+                    RemainingAmount = 0m,
+                    Status = "Paid",
+                    Reference = h.Reference ?? "",
+                    PaymentMethod = h.PaymentMethod ?? "Cash",
+                    Source = "historical",
+                    Year = h.Date.Year,
+                    Payments = (List<object>?)null // Historical data doesn't have payment records
+                }).ToList();
+
+                // Combine both lists by creating a unified response
+                var combinedList = new List<object>();
+                combinedList.AddRange(regularInvoiceData);
+                combinedList.AddRange(historicalRevenueData);
+                
+                var sorted = combinedList.OrderByDescending(x => ((dynamic)x).Date).ToList();
 
                 return Ok(new
                 {
                     year = filterYear,
-                    count = combinedData.Count,
-                    data = combinedData
+                    count = sorted.Count,
+                    data = sorted
                 });
             }
             catch (Exception ex)
@@ -216,11 +205,11 @@ namespace ResourceManager.Controllers
                     {
                         e.Id,
                         Date = e.Date,
-                        SupplierName = e.Description,
+                        SupplierName = e.Description ?? "",
                         Amount = e.Amount,
-                        e.Currency,
-                        e.CurrencySymbol,
-                        e.Category,
+                        Currency = e.Currency ?? "",
+                        CurrencySymbol = e.CurrencySymbol ?? "",
+                        Category = e.Category ?? "",
                         Reference = e.Notes ?? "",
                         Source = "expense",
                         Year = e.Date.Year
@@ -239,10 +228,10 @@ namespace ResourceManager.Controllers
                         Date = si.InvoiceDate!.Value,
                         SupplierName = si.Fournisseur != null ? si.Fournisseur.Name : "Unknown",
                         Amount = si.Payments!.Where(p => p.Status == "Completed").Sum(p => p.Amount),
-                        si.Currency,
-                        si.CurrencySymbol,
+                        Currency = si.Currency ?? "",
+                        CurrencySymbol = si.CurrencySymbol ?? "",
                         Category = "Supplier Invoice",
-                        Reference = si.InvoiceNumber,
+                        Reference = si.InvoiceNumber ?? "",
                         Source = "supplier_invoice",
                         Year = si.InvoiceDate!.Value.Year
                     })
@@ -256,12 +245,12 @@ namespace ResourceManager.Controllers
                     {
                         h.Id,
                         Date = h.Date,
-                        SupplierName = h.SupplierName,
+                        SupplierName = h.SupplierName ?? "",
                         Amount = h.AmountPaid,
-                        h.Currency,
-                        CurrencySymbol = h.Currency,
-                        h.Category,
-                        h.Reference,
+                        Currency = h.Currency ?? "",
+                        CurrencySymbol = h.Currency ?? "",
+                        Category = h.Category ?? "",
+                        Reference = h.Reference ?? "",
                         Source = "historical",
                         Year = h.Date.Year
                     })

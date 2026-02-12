@@ -35,11 +35,7 @@ export default function CompanySetupPage() {
             navigate('/dashboard');
         } catch (err: unknown) {
             console.error(err);
-<<<<<<< HEAD
-            const msg = getErrorMessage(err, 'Failed to create company');
-=======
             const msg = getErrorMessage(err, t('companySetup.setupFailed'));
->>>>>>> copilot-worktree-2026-02-11T21-10-21
             setError(msg);
         } finally {
             setLoading(false);
