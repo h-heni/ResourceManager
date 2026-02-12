@@ -124,6 +124,9 @@ builder.Services.AddHttpContextAccessor(); // Critical for Multi-tenancy
 // Clean Architecture - Infrastructure layer services
 builder.Services.AddInfrastructure<AppDbContext>();
 
+// Distributed Cache (Redis with in-memory fallback)
+builder.Services.AddRedisCache(builder.Configuration);
+
 // Health Checks
 builder.Services.AddHealthChecks();
 
