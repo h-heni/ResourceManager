@@ -192,7 +192,7 @@ namespace ResourceManager.Controllers
                 {
                     var siCurrency = si.Currency ?? defaultCurrency;
                     var paidAmount = (si.Payments ?? new List<SupplierPayment>())
-                        .Where(p => p.Status == "Completed" && p.PaymentDate.Year == selectedYear)
+                        .Where(p => p.Status == "Completed" && p.PaymentDate >= startOfYear && p.PaymentDate < endOfYear)
                         .Sum(p => p.Amount);
                     totalExpenses += ConvertAmount(paidAmount, siCurrency);
                     if (!currencyBreakdownExpense.ContainsKey(siCurrency))
@@ -227,7 +227,7 @@ namespace ResourceManager.Controllers
 
                 var supplierPaidAmount = filteredSupplierInvoices
                     .SelectMany(si => si.Payments ?? new List<SupplierPayment>())
-                    .Where(p => p.Status == "Completed" && p.PaymentDate.Year == selectedYear)
+                    .Where(p => p.Status == "Completed" && p.PaymentDate >= startOfYear && p.PaymentDate < endOfYear)
                     .Sum(p => p.Amount);
 
                 totalExpenses = filteredOtherExpenses.Sum(e => e.Amount)
@@ -251,7 +251,7 @@ namespace ResourceManager.Controllers
             // Pending Payments (Scheduled future payments)
             var pendingPayments = filteredInvoices
                 .SelectMany(i => i.Payments ?? new List<Payment>())
-                .Where(p => p.Status == "Pending" && p.PaymentDate.Year == selectedYear)
+                .Where(p => p.Status == "Pending" && p.PaymentDate >= startOfYear && p.PaymentDate < endOfYear)
                 .ToList();
             var pendingPaymentsCount = pendingPayments.Count;
             var pendingPaymentsAmount = pendingPayments.Sum(p => p.Amount);
@@ -259,7 +259,7 @@ namespace ResourceManager.Controllers
             // Due Payments (waiting for confirmation)
             var duePayments = filteredInvoices
                 .SelectMany(i => i.Payments ?? new List<Payment>())
-                .Where(p => p.Status == "Due" && p.PaymentDate.Year == selectedYear)
+                .Where(p => p.Status == "Due" && p.PaymentDate >= startOfYear && p.PaymentDate < endOfYear)
                 .ToList();
             var duePaymentsCount = duePayments.Count;
             var duePaymentsAmount = duePayments.Sum(p => p.Amount);
@@ -312,7 +312,7 @@ namespace ResourceManager.Controllers
             // Supplier expenses by payment date (payment-based)
             var supplierCompletedPayments = filteredSupplierInvoices
                 .SelectMany(si => (si.Payments ?? new List<SupplierPayment>())
-                    .Where(p => p.Status == "Completed" && p.PaymentDate.Year == selectedYear)
+                    .Where(p => p.Status == "Completed" && p.PaymentDate >= startOfYear && p.PaymentDate < endOfYear)
                     .Select(p => new { Payment = p, Currency = si.Currency ?? defaultCurrency }))
                 .ToList();
 
