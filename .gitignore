@@ -399,3 +399,14 @@ nul
 
 # COPILOT rules (IDE-specific)
 COPILOT_RULES.md
+
+# ============================================
+# Backup files (PostgreSQL backups)
+# ============================================
+backups/
+!backups/.gitkeep
+*.sql
+*.sql.gz
+backup_*.sql
+backup_*.sql.gz
+pre-restore_*.sql.gz
