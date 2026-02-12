@@ -1,6 +1,6 @@
 # 🚀 CI/CD Pipeline Overview
 
-Complete CI/CD pipeline for ResourceManager using GitHub Actions, Docker Hub, and automated VPS deployment.
+Complete CI/CD pipeline for ResourceManager using GitHub Actions, GitHub Container Registry (GHCR), and automated VPS deployment.
 
 ---
 
@@ -35,9 +35,9 @@ Complete CI/CD pipeline for ResourceManager using GitHub Actions, Docker Hub, an
                 └───────────┬──────────┘
                             │
                 ┌───────────▼──────────┐
-                │  Push to Registries  │
-                │  - Docker Hub        │
-                │  - GitHub Registry   │
+                │  Push to GHCR        │
+                │  (GitHub Container   │
+                │   Registry)          │
                 └───────────┬──────────┘
                             │
                 ┌───────────▼──────────┐
@@ -78,11 +78,10 @@ Complete CI/CD pipeline for ResourceManager using GitHub Actions, Docker Hub, an
 - Upload build artifacts
 
 #### c) Docker Build & Push (main/staging only)
-- Login to Docker Hub and GHCR
+- Login to GitHub Container Registry
 - Build multi-stage Docker images (backend + frontend)
 - Tag with `latest` and commit SHA
-- Push to Docker Hub
-- Push to GitHub Container Registry (backup)
+- Push to GHCR
 - Run Trivy security scans
 - Upload security results
 
@@ -106,9 +105,9 @@ Complete CI/CD pipeline for ResourceManager using GitHub Actions, Docker Hub, an
 - ✅ Version control (deploy specific tags)
 
 **Process:**
-1. Pull pre-built images from Docker Hub
+1. Pull pre-built images from GHCR
 2. Copy docker-compose files to VPS
-3. Login to Docker Hub on VPS
+3. Login to GHCR on VPS
 4. Update image tags in `.env`
 5. Pull latest images
 6. Scale up API (2 instances temporarily)
@@ -135,7 +134,7 @@ Complete CI/CD pipeline for ResourceManager using GitHub Actions, Docker Hub, an
 ### Backend Image
 - **Base**: `mcr.microsoft.com/dotnet/aspnet:8.0-alpine`
 - **Size**: ~110MB (Alpine-based)
-- **Registry**: Docker Hub + GHCR
+- **Registry**: GitHub Container Registry (GHCR)
 - **Tags**: 
   - `latest` (production)
   - `staging` (staging)
@@ -144,7 +143,7 @@ Complete CI/CD pipeline for ResourceManager using GitHub Actions, Docker Hub, an
 ### Frontend Image
 - **Base**: `nginx:alpine`
 - **Size**: ~25MB
-- **Registry**: Docker Hub + GHCR
+- **Registry**: GitHub Container Registry (GHCR)
 - **Tags**: Same as backend
 
 ---
@@ -386,10 +385,10 @@ npm install
 - Check firewall allows SSH port
 - Verify deploy user exists on VPS
 
-**Docker Hub authentication:**
-- Verify DOCKERHUB_USERNAME and DOCKERHUB_TOKEN
-- Test login: `echo $TOKEN | docker login -u $USER --password-stdin`
-- Check token has Read & Write permissions
+**GHCR authentication:**
+- Verify GHCR_TOKEN has `read:packages` scope
+- Test login: `echo $TOKEN | docker login ghcr.io -u h-heni --password-stdin`
+- Check token was created at https://github.com/settings/tokens
 
 ---
 

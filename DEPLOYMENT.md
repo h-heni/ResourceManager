@@ -28,7 +28,6 @@ Complete guide for deploying ResourceManager to a production VPS using Docker an
 - **Network**: Public IP address
 
 ### Local Requirements
-- Docker Hub account
 - GitHub account with repository access
 - SSH client
 
@@ -164,8 +163,8 @@ JWT_AUDIENCE=ResourceManager-Users
 JWT_EXPIRATION=15
 
 # ── Docker Images (will be updated by CI/CD) ──
-API_IMAGE=your-dockerhub-username/resourcemanager-api:latest
-WEB_IMAGE=your-dockerhub-username/resourcemanager-web:latest
+API_IMAGE=ghcr.io/h-heni/resourcemanager-api:latest
+WEB_IMAGE=ghcr.io/h-heni/resourcemanager-web:latest
 
 # ── Frontend ──
 WEB_PORT=80
@@ -190,14 +189,23 @@ openssl rand -base64 32
 
 ## GitHub Secrets Configuration
 
-### 1. Docker Hub Setup
+### 1. GitHub Container Registry Setup
 
-1. Go to [Docker Hub](https://hub.docker.com/)
-2. Login and go to **Account Settings** → **Security** → **Access Tokens**
-3. Click **New Access Token**
-   - Description: "GitHub Actions ResourceManager"
-   - Permissions: Read & Write
-4. Copy the token (you can't see it again!)
+**Why GHCR?** GitHub Container Registry (GHCR) is integrated with GitHub, so:
+- CI/CD uses `GITHUB_TOKEN` automatically (no extra secret needed for push)
+- Private images are tied to your repository
+- Free for public repositories, included with private repos
+- Better integration with GitHub Actions
+
+**For VPS to pull images**, create a Personal Access Token:
+
+1. Go to GitHub → **Settings** → **Developer settings** → **Personal access tokens** → **Tokens (classic)**
+2. Click **Generate new token** → **Generate new token (classic)**
+3. Configure token:
+   - **Note**: `ResourceManager VPS GHCR Access`
+   - **Expiration**: 90 days (or your preference)
+   - **Scopes**: Select `read:packages` only
+4. Click **Generate token** and copy it (starts with `ghp_`)
 
 ### 2. Add Secrets to GitHub
 
@@ -207,12 +215,13 @@ Click **New repository secret** and add each of the following:
 
 | Secret Name | Value | Description |
 |------------|-------|-------------|
-| `DOCKERHUB_USERNAME` | `your-dockerhub-username` | Your Docker Hub username |
-| `DOCKERHUB_TOKEN` | `dckr_pat_xxxxx` | Docker Hub access token from step 1 |
 | `VPS_HOST` | `123.456.789.0` | Your VPS IP address or domain |
 | `VPS_USER` | `deploy` | SSH username (created earlier) |
 | `VPS_SSH_KEY` | `-----BEGIN OPENSSH PRIVATE KEY-----...` | Private SSH key content |
 | `VPS_PORT` | `22` | SSH port (optional, defaults to 22) |
+| `GHCR_TOKEN` | `ghp_xxxxxxxxxxxxx` | GitHub Personal Access Token from step 1 |
+
+**Note**: `GITHUB_TOKEN` is automatically available in GitHub Actions for pushing to GHCR.
 
 ### 3. Add Variables (Optional)
 
@@ -246,8 +255,10 @@ cd /opt/resourcemanager
 # Create docker-compose.yml and docker-compose.prod.yml
 # (Copy from repository or download via curl)
 
-# Pull images manually
-docker login docker.io -u your-dockerhub-username
+# Pull images manually from GHCR
+echo "$GHCR_TOKEN" | docker login ghcr.io -u h-heni --password-stdin
+docker pull ghcr.io/h-heni/resourcemanager-api:latest
+docker pull ghcr.io/h-heni/resourcemanager-web:latest
 docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
 
 # Start services
@@ -290,7 +301,7 @@ docker compose logs -f api
                    │
          ┌─────────▼──────────┐
          │  Build Docker      │
-         │  - Push to Hub     │
+         │  - Push to GHCR    │
          │  - Security Scan   │
          └─────────┬──────────┘
                    │
@@ -304,7 +315,7 @@ docker compose logs -f api
 
 ### Automatic Triggers
 
-- **Push to `main`**: Builds images, pushes to Docker Hub
+- **Push to `main`**: Builds images, pushes to GHCR
 - **Push to `staging`**: Builds staging images
 - **Pull requests**: Runs tests and builds (no deployment)
 
@@ -325,7 +336,7 @@ For production deployments, use manual workflow dispatch:
 
 ### How It Works
 
-1. **Pull new images** - Downloads latest from Docker Hub
+1. **Pull new images** - Downloads latest from GHCR
 2. **Scale up** - Starts new API container alongside old one
 3. **Health check** - Waits for new API to be healthy (30 attempts × 2s)
 4. **Scale down** - Removes old API container
@@ -392,8 +403,8 @@ docker images | grep resourcemanager
 # Edit .env to use previous image
 nano .env
 # Change:
-# API_IMAGE=your-username/resourcemanager-api:abc1234  # Previous version
-# WEB_IMAGE=your-username/resourcemanager-web:abc1234
+# API_IMAGE=ghcr.io/h-heni/resourcemanager-api:abc1234  # Previous version
+# WEB_IMAGE=ghcr.io/h-heni/resourcemanager-web:abc1234
 
 # Restart services
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate
@@ -654,22 +665,22 @@ swapon /swapfile
 # Make permanent: echo '/swapfile none swap sw 0 0' >> /etc/fstab
 ```
 
-### Issue: Images Not Pulling from Docker Hub
+### Issue: Images Not Pulling from GHCR
 
 **Symptoms**: "unauthorized: authentication required"
 
 **Solutions**:
 ```bash
-# Login to Docker Hub manually
-docker login docker.io -u your-username
+# Login to GHCR manually
+echo "$GHCR_TOKEN" | docker login ghcr.io -u h-heni --password-stdin
 
 # Check .env has correct image names
 cat .env | grep IMAGE
 
 # Try pulling manually
-docker pull your-username/resourcemanager-api:latest
+docker pull ghcr.io/h-heni/resourcemanager-api:latest
 
-# Check Docker Hub repository is public or credentials are correct
+# Verify GHCR token has read:packages scope
 ```
 
 ### Issue: Port Already in Use

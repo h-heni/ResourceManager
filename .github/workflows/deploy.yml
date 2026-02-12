@@ -1,24 +1,23 @@
 # ============================================
-# ResourceManager - Deploy to VPS via Docker Hub
+# ResourceManager - Deploy to VPS via GitHub Container Registry
 # ============================================
 # Triggers:
 #   - Manual workflow dispatch (recommended)
 #   - Automatic on push to main (optional)
 #
 # This workflow:
-#   1. Uses pre-built images from Docker Hub (built by ci.yml)
+#   1. Uses pre-built images from GHCR (built by ci.yml)
 #   2. SSHs into VPS
 #   3. Pulls latest images
 #   4. Performs zero-downtime deployment with health checks
 #   5. Rolls back on failure
 #
 # Required GitHub Secrets:
-#   DOCKERHUB_USERNAME    - Docker Hub username
-#   DOCKERHUB_TOKEN       - Docker Hub access token
 #   VPS_HOST              - Server IP or hostname
 #   VPS_USER              - SSH username (e.g. deploy)
 #   VPS_SSH_KEY           - Private SSH key for authentication
 #   VPS_PORT              - SSH port (default: 22)
+#   GHCR_TOKEN            - GitHub Personal Access Token with read:packages scope (for VPS)
 #
 # Required GitHub Variables (optional):
 #   DEPLOY_PATH           - Path on VPS (default: /opt/resourcemanager)
@@ -48,7 +47,6 @@ on:
   #   branches: [main]
 
 env:
-  DOCKER_REGISTRY: docker.io
   DEPLOY_USER: ${{ secrets.VPS_USER }}
   DEPLOY_HOST: ${{ secrets.VPS_HOST }}
   DEPLOY_PORT: ${{ secrets.VPS_PORT || '22' }}
@@ -76,8 +74,8 @@ jobs:
         run: |
           TAG="${{ inputs.tag || 'latest' }}"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "api_image=${{ secrets.DOCKERHUB_USERNAME }}/resourcemanager-api:$TAG" >> $GITHUB_OUTPUT
-          echo "web_image=${{ secrets.DOCKERHUB_USERNAME }}/resourcemanager-web:$TAG" >> $GITHUB_OUTPUT
+          echo "api_image=ghcr.io/${{ github.repository_owner }}/resourcemanager-api:$TAG" >> $GITHUB_OUTPUT
+          echo "web_image=ghcr.io/${{ github.repository_owner }}/resourcemanager-web:$TAG" >> $GITHUB_OUTPUT
 
       - name: Setup SSH
         run: |
@@ -107,9 +105,9 @@ jobs:
           echo "🚀 Starting Zero-Downtime Deployment"
           echo "============================================"
           
-          # Login to Docker Hub
-          echo "📦 Logging in to Docker Hub..."
-          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login docker.io -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
+          # Login to GitHub Container Registry
+          echo "📦 Logging in to GitHub Container Registry..."
+          echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
           
           # Update image references in .env
           echo "🔧 Updating image tags in .env..."
