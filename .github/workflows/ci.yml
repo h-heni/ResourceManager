@@ -196,52 +196,6 @@ jobs:
         continue-on-error: true
 
   # ============================================
-  # Deploy to Staging (automatic on staging branch)
+  # Deployment is automatically triggered via workflow_run
+  # in deploy.yml when CI completes successfully on main/staging
   # ============================================
-  deploy-staging:
-    name: Deploy to Staging
-    runs-on: ubuntu-latest
-    needs: [docker]
-    if: github.ref == 'refs/heads/staging'
-    environment: staging
-    
-    steps:
-      - name: Trigger staging deployment
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'deploy.yml',
-              ref: 'staging',
-              inputs: {
-                environment: 'staging',
-                tag: context.sha.substring(0, 7)
-              }
-            });
-            console.log('Triggered deploy.yml for staging');
-
-  deploy-production:
-    name: Deploy to Production
-    runs-on: ubuntu-latest
-    needs: [docker]
-    if: github.ref == 'refs/heads/main'
-    environment: production
-    
-    steps:
-      - name: Trigger production deployment
-        uses: actions/github-script@v7
-        with:
-          script: |
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'deploy.yml',
-              ref: 'main',
-              inputs: {
-                environment: 'production',
-                tag: context.sha.substring(0, 7)
-              }
-            });
-            console.log('Triggered deploy.yml for production');

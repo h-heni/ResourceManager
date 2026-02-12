@@ -46,7 +46,7 @@ on:
   workflow_run:
     workflows: ["CI/CD Pipeline"]
     types: [completed]
-    branches: [main]
+    branches: [main, staging]
 
 env:
   DEPLOY_USER: ${{ secrets.VPS_USER }}
@@ -59,11 +59,11 @@ jobs:
   # Deploy to VPS with Zero Downtime
   # ============================================
   deploy:
-    name: Deploy to ${{ inputs.environment || 'production' }}
+    name: Deploy to ${{ inputs.environment || (github.event.workflow_run.head_branch == 'staging' && 'staging') || 'production' }}
     runs-on: ubuntu-latest
     # Skip if triggered by workflow_run and the CI pipeline failed
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
-    environment: ${{ inputs.environment || 'production' }}
+    environment: ${{ inputs.environment || (github.event.workflow_run.head_branch == 'staging' && 'staging') || 'production' }}
     permissions:
       contents: read
     
@@ -71,18 +71,39 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
           sparse-checkout: |
             docker-compose.yml
             docker-compose.prod.yml
             nginx/
 
-      - name: Set image tags
+      - name: Determine environment and set image tags
         id: tags
         run: |
-          TAG="${{ inputs.tag || 'latest' }}"
+          # Determine environment from inputs or branch
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            ENV="${{ inputs.environment || 'production' }}"
+            TAG="${{ inputs.tag || 'latest' }}"
+          elif [ "${{ github.event_name }}" == "workflow_run" ]; then
+            BRANCH="${{ github.event.workflow_run.head_branch }}"
+            if [ "$BRANCH" == "staging" ]; then
+              ENV="staging"
+              TAG="staging"
+            else
+              ENV="production"
+              TAG="latest"
+            fi
+          else
+            ENV="production"
+            TAG="latest"
+          fi
+          
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "api_image=ghcr.io/${{ github.repository_owner }}/resourcemanager-api:$TAG" >> $GITHUB_OUTPUT
           echo "web_image=ghcr.io/${{ github.repository_owner }}/resourcemanager-web:$TAG" >> $GITHUB_OUTPUT
+          
+          echo "🚀 Deploying to $ENV with tag $TAG"
 
       - name: Setup SSH
         run: |
@@ -222,7 +243,7 @@ jobs:
         run: |
           echo "🔍 Verifying deployment..."
           # You can add additional verification here (e.g., curl health endpoints)
-          echo "Deployment to ${{ inputs.environment || 'production' }} completed successfully!"
+          echo "Deployment to ${{ steps.tags.outputs.environment }} completed successfully!"
 
       - name: Cleanup SSH keys
         if: always()
