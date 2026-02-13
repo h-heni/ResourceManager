@@ -259,6 +259,7 @@ namespace ResourceManager.Controllers
             }
             catch (Exception ex)
             {
+                await transaction.RollbackAsync();
                 _logger.LogError(ex, "Failed to complete invitation for {Email}", invitation.Email);
                 return StatusCode(500, new { error = "An error occurred during account setup." });
             }
