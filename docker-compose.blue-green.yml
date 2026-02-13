@@ -1,43 +1,60 @@
 # ============================================
-# ResourceManager - Blue-Green Deployment Configuration
+# ResourceManager - Blue-Green Deployment (2GB VPS)
 # ============================================
-# This configuration supports zero-downtime deployments by running
-# two identical environments (Blue and Green) that can be switched
-# instantly via Nginx upstream routing.
+# Sequential swap strategy: only ONE environment runs at a time.
+# During deployment: stop old → start new (~10-15s downtime).
 #
-# Architecture:
-#   - Nginx (Port 80) - Routes to active environment
-#   - Blue Environment (Ports: 7175 API, 8080 Web)
-#   - Green Environment (Ports: 7176 API, 8081 Web)
-#   - PostgreSQL (Shared) - Single database for both environments
+# Memory budget (2GB total):
+#   PostgreSQL:     ~384MB  (limit 512MB)
+#   Redis:          ~96MB   (limit 128MB)
+#   API:            ~384MB  (limit 512MB)
+#   Web (Nginx):    ~32MB   (limit 64MB)
+#   Nginx proxy:    ~32MB   (limit 64MB)
+#   System/OS:      ~500MB
+#   Total:          ~1.4GB used, ~600MB headroom
 #
 # Usage:
-#   # Start initial Blue environment
-#   docker-compose -f docker-compose.blue-green.yml up -d postgres_db blue-api blue-web nginx
+#   # Initial deploy (Blue)
+#   docker compose -f docker-compose.blue-green.yml up -d postgres_db redis blue-api blue-web nginx
 #
-#   # Deploy to Green (while Blue serves traffic)
-#   docker-compose -f docker-compose.blue-green.yml up -d green-api green-web
-#
-#   # Switch traffic to Green (edit ACTIVE_ENV=green in .env, then reload nginx)
-#   docker exec nginx nginx -s reload
-#
-#   # Or use the deployment script
+#   # Subsequent deploys (automated via scripts/deploy-blue-green.sh)
 #   ./scripts/deploy-blue-green.sh
 #
-# IMPORTANT: Create a .env file from .env.example before running!
+# IMPORTANT: Create .env file from .env.example first!
 # ============================================
 
 services:
   # ============================================
-  # PostgreSQL Database (Shared by both environments)
+  # PostgreSQL Database (Shared — always running)
   # ============================================
   postgres_db:
     image: postgres:16-alpine
     container_name: postgres_db
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-resourcemanager}
       POSTGRES_USER: ${POSTGRES_USER:-rmuser}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+    command: >
+      postgres
+      -c shared_buffers=128MB
+      -c effective_cache_size=256MB
+      -c work_mem=4MB
+      -c maintenance_work_mem=64MB
+      -c max_connections=40
+      -c wal_buffers=4MB
+      -c checkpoint_completion_target=0.9
+      -c random_page_cost=1.1
+      -c max_wal_size=256MB
+      -c min_wal_size=64MB
     volumes:
       - pgdata:/var/lib/postgresql/data
     networks:
@@ -49,37 +66,95 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+
+  # ============================================
+  # Redis Cache (Shared — always running)
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: rm-redis
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    command: >
+      redis-server
+      --maxmemory 96mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+    volumes:
+      - redis_data:/data
+    networks:
+      - rm-internal
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
 
   # ============================================
   # BLUE ENVIRONMENT
   # ============================================
-  
-  # Blue API (.NET 8)
+
   blue-api:
     image: ${API_IMAGE:-resourcemanager-api:latest}
-    build:
-      context: .
-      dockerfile: Dockerfile
     container_name: blue-api
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
     ports:
-      - "7175:8080"  # Expose on host for direct health checks
+      - "7175:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
-      - CONNECTION_STRING=Host=postgres_db;Port=5432;Database=${POSTGRES_DB:-resourcemanager};Username=${POSTGRES_USER:-rmuser};Password=${POSTGRES_PASSWORD:?err};SSL Mode=Prefer
-      - ConnectionStrings__DefaultConnection=Host=postgres_db;Port=5432;Database=${POSTGRES_DB:-resourcemanager};Username=${POSTGRES_USER:-rmuser};Password=${POSTGRES_PASSWORD:?err};SSL Mode=Prefer
+      - ConnectionStrings__DefaultConnection=Host=postgres_db;Port=5432;Database=${POSTGRES_DB:-resourcemanager};Username=${POSTGRES_USER:-rmuser};Password=${POSTGRES_PASSWORD:?err};SSL Mode=Prefer;Maximum Pool Size=20;Minimum Pool Size=2;Connection Idle Lifetime=60
       - Jwt__Key=${JWT_KEY:?Set JWT_KEY in .env}
       - Jwt__Issuer=${JWT_ISSUER:-ResourceManager}
       - Jwt__Audience=${JWT_AUDIENCE:-ResourceManager-Users}
-      - Jwt__TokenExpirationInMinutes=${JWT_EXPIRATION:-100}
+      - Jwt__TokenExpirationInMinutes=${JWT_EXPIRATION:-60}
       - GoogleOptions__ClientId=${GOOGLE_CLIENT_ID:-}
       - GoogleOptions__ClientSecret=${GOOGLE_CLIENT_SECRET:-}
       - GoogleOptions__RefreshToken=${GOOGLE_REFRESH_TOKEN:-}
+      - Redis__ConnectionString=redis:6379,password=${REDIS_PASSWORD:?err},abortConnect=false
+      - Redis__InstanceName=ResourceManager_
+      - Cors__AllowedOrigins__0=${CORS_ORIGIN_1:-http://localhost}
+      - Cors__AllowedOrigins__1=${CORS_ORIGIN_2:-http://localhost:80}
+      - DOTNET_gcServer=0
+      - DOTNET_GCConserveMemory=9
+      - DOTNET_GCHeapCount=2
+      - Logging__LogLevel__Default=Warning
+      - Logging__LogLevel__Microsoft=Warning
       - DEPLOYMENT_ENV=blue
     volumes:
       - blue-api-logs:/app/Logs
     depends_on:
       postgres_db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - rm-internal
@@ -89,19 +164,28 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "15m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
 
-  # Blue Web (React + Nginx)
   blue-web:
     image: ${WEB_IMAGE:-resourcemanager-web:latest}
-    build:
-      context: ./ClientApp
-      dockerfile: Dockerfile
-      args:
-        - VITE_API_URL=
     container_name: blue-web
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 64M
+        reservations:
+          cpus: '0.1'
+          memory: 32M
     ports:
-      - "8080:80"  # Expose on host for direct health checks
+      - "8080:80"
     environment:
       - BACKEND_API_HOST=blue-api
       - BACKEND_API_PORT=8080
@@ -117,37 +201,56 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
 
   # ============================================
   # GREEN ENVIRONMENT
   # ============================================
-  
-  # Green API (.NET 8)
+
   green-api:
     image: ${API_IMAGE:-resourcemanager-api:latest}
-    build:
-      context: .
-      dockerfile: Dockerfile
     container_name: green-api
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
     ports:
-      - "7176:8080"  # Different port from Blue
+      - "7176:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
-      - CONNECTION_STRING=Host=postgres_db;Port=5432;Database=${POSTGRES_DB:-resourcemanager};Username=${POSTGRES_USER:-rmuser};Password=${POSTGRES_PASSWORD:?err};SSL Mode=Prefer
-      - ConnectionStrings__DefaultConnection=Host=postgres_db;Port=5432;Database=${POSTGRES_DB:-resourcemanager};Username=${POSTGRES_USER:-rmuser};Password=${POSTGRES_PASSWORD:?err};SSL Mode=Prefer
+      - ConnectionStrings__DefaultConnection=Host=postgres_db;Port=5432;Database=${POSTGRES_DB:-resourcemanager};Username=${POSTGRES_USER:-rmuser};Password=${POSTGRES_PASSWORD:?err};SSL Mode=Prefer;Maximum Pool Size=20;Minimum Pool Size=2;Connection Idle Lifetime=60
       - Jwt__Key=${JWT_KEY:?Set JWT_KEY in .env}
       - Jwt__Issuer=${JWT_ISSUER:-ResourceManager}
       - Jwt__Audience=${JWT_AUDIENCE:-ResourceManager-Users}
-      - Jwt__TokenExpirationInMinutes=${JWT_EXPIRATION:-100}
+      - Jwt__TokenExpirationInMinutes=${JWT_EXPIRATION:-60}
       - GoogleOptions__ClientId=${GOOGLE_CLIENT_ID:-}
       - GoogleOptions__ClientSecret=${GOOGLE_CLIENT_SECRET:-}
       - GoogleOptions__RefreshToken=${GOOGLE_REFRESH_TOKEN:-}
+      - Redis__ConnectionString=redis:6379,password=${REDIS_PASSWORD:?err},abortConnect=false
+      - Redis__InstanceName=ResourceManager_
+      - Cors__AllowedOrigins__0=${CORS_ORIGIN_1:-http://localhost}
+      - Cors__AllowedOrigins__1=${CORS_ORIGIN_2:-http://localhost:80}
+      - DOTNET_gcServer=0
+      - DOTNET_GCConserveMemory=9
+      - DOTNET_GCHeapCount=2
+      - Logging__LogLevel__Default=Warning
+      - Logging__LogLevel__Microsoft=Warning
       - DEPLOYMENT_ENV=green
     volumes:
       - green-api-logs:/app/Logs
     depends_on:
       postgres_db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - rm-internal
@@ -157,19 +260,28 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "15m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
 
-  # Green Web (React + Nginx)
   green-web:
     image: ${WEB_IMAGE:-resourcemanager-web:latest}
-    build:
-      context: ./ClientApp
-      dockerfile: Dockerfile
-      args:
-        - VITE_API_URL=
     container_name: green-web
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 64M
+        reservations:
+          cpus: '0.1'
+          memory: 32M
     ports:
-      - "8081:80"  # Different port from Blue
+      - "8081:80"
     environment:
       - BACKEND_API_HOST=green-api
       - BACKEND_API_PORT=8080
@@ -185,15 +297,28 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "3"
 
   # ============================================
-  # Nginx Reverse Proxy with Dynamic Upstream
+  # Nginx Reverse Proxy (always running)
   # ============================================
   nginx:
     image: nginx:alpine
     container_name: nginx
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 64M
+        reservations:
+          cpus: '0.1'
+          memory: 32M
     ports:
-      - "80:80"
+      - "${WEB_PORT:-80}:80"
     volumes:
       - ./nginx/blue-green.conf:/etc/nginx/templates/default.conf.template:ro
     environment:
@@ -206,9 +331,6 @@ services:
       - GREEN_API_PORT=8080
       - GREEN_WEB_HOST=green-web
       - GREEN_WEB_PORT=80
-    depends_on:
-      - blue-api
-      - blue-web
     networks:
       - rm-internal
     restart: unless-stopped
@@ -217,10 +339,17 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     command: /bin/sh -c "envsubst '$$ACTIVE_ENV $$BLUE_API_HOST $$BLUE_API_PORT $$BLUE_WEB_HOST $$BLUE_WEB_PORT $$GREEN_API_HOST $$GREEN_API_PORT $$GREEN_WEB_HOST $$GREEN_WEB_PORT' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
 
 volumes:
   pgdata:
+    driver: local
+  redis_data:
     driver: local
   blue-api-logs:
     driver: local

@@ -1,3 +1,43 @@
+# ============================================
+# ResourceManager - CI/CD Pipeline
+# ============================================
+# Single unified pipeline:
+#   push to main → build & test → Docker build → deploy to VPS
+#
+# On 'dev' branch or PRs: build & test only (no deploy).
+# On 'main' branch push : build → test → Docker → auto-deploy.
+#
+# ┌────────────────────────────────────────────────────────┐
+# │  push main ──► backend tests ──► frontend build        │
+# │                      │                  │              │
+# │                      └──────┬───────────┘              │
+# │                             ▼                          │
+# │                    Docker build & push (GHCR)          │
+# │                             │                          │
+# │                             ▼                          │
+# │              SSH to VPS → deploy-blue-green.sh         │
+# │              (sequential swap, ~10-15s downtime)       │
+# │              (DB migrations auto-applied at startup)   │
+# │                             │                          │
+# │                             ▼                          │
+# │                    Health check verification           │
+# │                             │                          │
+# │                        ┌────┴────┐                     │
+# │                        │ Fail?   │                     │
+# │                        └────┬────┘                     │
+# │                             ▼                          │
+# │                    Auto rollback on failure             │
+# └────────────────────────────────────────────────────────┘
+#
+# Required GitHub Secrets:
+#   VPS_HOST        - VPS IP address or hostname
+#   VPS_USER        - SSH username (e.g. deploy or root)
+#   SSH_PRIVATE_KEY - Private key for SSH authentication
+#
+# Optional GitHub Variables (Settings > Variables > Actions):
+#   DEPLOY_PATH     - Deployment directory (default: /opt/resourcemanager)
+# ============================================
+
 name: CI/CD Pipeline
 
 on:
@@ -5,20 +45,23 @@ on:
     branches: [dev, main]
   pull_request:
     branches: [dev, main]
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch:
 
 env:
   DOTNET_VERSION: '8.0.x'
   NODE_VERSION: '20.x'
+  REGISTRY: ghcr.io
+  API_IMAGE: ghcr.io/${{ github.repository_owner }}/resourcemanager-api
+  WEB_IMAGE: ghcr.io/${{ github.repository_owner }}/resourcemanager-web
 
 jobs:
   # ============================================
-  # Backend Build & Test
+  # 1. Backend Build & Test
   # ============================================
   backend:
     name: Backend (.NET)
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -36,7 +79,7 @@ jobs:
           dotnet restore ResourceManager.Infrastructure/ResourceManager.Infrastructure.csproj
           dotnet restore ResourceManager.Tests/ResourceManager.Tests.csproj
 
-      - name: Build projects (excluding Mobile)
+      - name: Build projects
         run: |
           dotnet build ResourceManager.Domain/ResourceManager.Domain.csproj --configuration Release --no-restore
           dotnet build ResourceManager.Application/ResourceManager.Application.csproj --configuration Release --no-restore
@@ -46,7 +89,6 @@ jobs:
 
       - name: Run tests
         run: dotnet test ResourceManager.Tests/ResourceManager.Tests.csproj --configuration Release --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx"
-        continue-on-error: false
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
@@ -57,12 +99,11 @@ jobs:
           if-no-files-found: ignore
 
   # ============================================
-  # Frontend Build & Lint
+  # 2. Frontend Build & Lint
   # ============================================
   frontend:
     name: Frontend (React + Vite)
     runs-on: ubuntu-latest
-    
     defaults:
       run:
         working-directory: ClientApp
@@ -83,7 +124,6 @@ jobs:
 
       - name: Run ESLint
         run: npm run lint
-        continue-on-error: false
 
       - name: Type check
         run: npx tsc --noEmit
@@ -91,7 +131,7 @@ jobs:
       - name: Build production
         run: npm run build
         env:
-          VITE_API_URL: https://localhost:7175
+          VITE_API_URL: ''
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -100,7 +140,7 @@ jobs:
           path: ClientApp/dist
 
   # ============================================
-  # Docker Build & Push (main only)
+  # 3. Docker Build & Push (main branch only)
   # ============================================
   docker:
     name: Docker Build & Push
@@ -110,7 +150,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -118,98 +158,145 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Determine environment and tags
-        id: meta
-        run: |
-          echo "environment=production" >> $GITHUB_OUTPUT
-          echo "tag=latest" >> $GITHUB_OUTPUT
-          # Generate version tag from commit SHA (short)
-          echo "version=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
-
-      # Login to GitHub Container Registry
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Build and push Backend image
-      - name: Build & Push Backend Docker image
+      - name: Set image tags
+        id: meta
+        run: |
+          echo "version=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
+      - name: Build & Push Backend image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/resourcemanager-api:${{ steps.meta.outputs.tag }}
-            ghcr.io/${{ github.repository_owner }}/resourcemanager-api:${{ steps.meta.outputs.version }}
-          build-args: |
-            ENVIRONMENT=${{ steps.meta.outputs.environment }}
+            ${{ env.API_IMAGE }}:latest
+            ${{ env.API_IMAGE }}:${{ steps.meta.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
 
-      # Build and push Frontend image
-      - name: Build & Push Frontend Docker image
+      - name: Build & Push Frontend image
         uses: docker/build-push-action@v5
         with:
           context: ./ClientApp
           file: ./ClientApp/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/resourcemanager-web:${{ steps.meta.outputs.tag }}
-            ghcr.io/${{ github.repository_owner }}/resourcemanager-web:${{ steps.meta.outputs.version }}
+            ${{ env.WEB_IMAGE }}:latest
+            ${{ env.WEB_IMAGE }}:${{ steps.meta.outputs.version }}
           build-args: |
             VITE_API_URL=
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
 
-      # Security scanning
-      - name: Run Trivy vulnerability scanner on Backend
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ghcr.io/${{ github.repository_owner }}/resourcemanager-api:${{ steps.meta.outputs.tag }}
-          format: 'sarif'
-          output: 'trivy-backend-results.sarif'
-        continue-on-error: true
-
-      - name: Run Trivy vulnerability scanner on Frontend
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ghcr.io/${{ github.repository_owner }}/resourcemanager-web:${{ steps.meta.outputs.tag }}
-          format: 'sarif'
-          output: 'trivy-frontend-results.sarif'
-        continue-on-error: true
-
-      - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
-        with:
-          sarif_file: '.'
-        continue-on-error: true
-
-  deploy-production:
+  # ============================================
+  # 4. Deploy to VPS (auto on main push)
+  # ============================================
+  deploy:
     name: Deploy to Production
     runs-on: ubuntu-latest
     needs: [docker]
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment: production
-    
+    permissions:
+      contents: read
+
     steps:
-      - name: Trigger production deployment
-        uses: actions/github-script@v7
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
+          sparse-checkout: |
+            docker-compose.blue-green.yml
+            nginx/blue-green.conf
+            scripts/deploy-blue-green.sh
+            scripts/rollback-blue-green.sh
+
+      - name: Copy deployment files to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "docker-compose.blue-green.yml,nginx/blue-green.conf,scripts/deploy-blue-green.sh,scripts/rollback-blue-green.sh"
+          target: ${{ vars.DEPLOY_PATH || '/opt/resourcemanager' }}
+
+      - name: Deploy via SSH (blue-green sequential swap)
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          API_IMG: ${{ env.API_IMAGE }}:latest
+          WEB_IMG: ${{ env.WEB_IMAGE }}:latest
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: API_IMG,WEB_IMG
           script: |
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'deploy.yml',
-              ref: 'main',
-              inputs: {
-                environment: 'production',
-                tag: context.sha.substring(0, 7)
-              }
-            });
-            console.log('Triggered deploy.yml for production');
+            set -e
+            DEPLOY_DIR="${{ vars.DEPLOY_PATH || '/opt/resourcemanager' }}"
+            cd "$DEPLOY_DIR"
+
+            echo "━━━ Deployment starting ━━━"
+
+            # Login to GHCR
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Update image names in .env
+            grep -q "^API_IMAGE=" .env 2>/dev/null && sed -i "s|^API_IMAGE=.*|API_IMAGE=${API_IMG}|" .env || echo "API_IMAGE=${API_IMG}" >> .env
+            grep -q "^WEB_IMAGE=" .env 2>/dev/null && sed -i "s|^WEB_IMAGE=.*|WEB_IMAGE=${WEB_IMG}|" .env || echo "WEB_IMAGE=${WEB_IMG}" >> .env
+
+            # Make scripts executable
+            chmod +x scripts/deploy-blue-green.sh
+            chmod +x scripts/rollback-blue-green.sh 2>/dev/null || true
+
+            # Run blue-green deployment (handles migration, health checks, rollback)
+            ./scripts/deploy-blue-green.sh
+
+            echo "━━━ Deployment complete ━━━"
+
+      - name: Verify deployment
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "Verifying..."
+            curl -f http://localhost/health || exit 1
+            curl -f http://localhost/api/health || exit 1
+            echo "Deployment verified OK"
+
+  # ============================================
+  # 5. Auto-Rollback on Failure
+  # ============================================
+  rollback:
+    name: Rollback on Failure
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: failure()
+    environment: production
+
+    steps:
+      - name: Rollback via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            cd "${{ vars.DEPLOY_PATH || '/opt/resourcemanager' }}"
+            echo "Deployment failed — rolling back..."
+            if [ -f scripts/rollback-blue-green.sh ]; then
+              chmod +x scripts/rollback-blue-green.sh
+              yes | ./scripts/rollback-blue-green.sh || true
+            fi
+            echo "Rollback complete"

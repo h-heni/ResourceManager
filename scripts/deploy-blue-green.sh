@@ -1,38 +1,33 @@
 #!/bin/bash
 # ============================================
-# Blue-Green Deployment Script
+# Blue-Green Deployment Script (2GB VPS)
 # ============================================
-# This script performs zero-downtime deployment by:
-# 1. Detecting the current active environment (Blue or Green)
-# 2. Deploying to the inactive environment
-# 3. Running health checks
-# 4. Switching Nginx traffic to the new environment
-# 5. Stopping the old environment after verification
+# Optimized for 2GB RAM — uses SEQUENTIAL SWAP strategy:
+#   stop old → start new → health check → switch nginx
+#   (~10-15s downtime during swap)
+#
+# Database migrations run automatically at API startup
+# (EF Core applies pending migrations on boot).
 #
 # Usage:
 #   ./scripts/deploy-blue-green.sh
 #
-# Environment Variables (from .env):
-#   ACTIVE_ENV - Current active environment (blue or green)
-#   API_IMAGE - Docker image for API
-#   WEB_IMAGE - Docker image for Web
-#
 # Exit Codes:
 #   0 - Success
-#   1 - Health check failed
+#   1 - Health check failed (rollback initiated)
 #   2 - Docker operation failed
 #   3 - Configuration error
 # ============================================
 
-set -e  # Exit on any error
-set -u  # Exit on undefined variable
+set -e
+set -u
 
-# Colors for output
+# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -40,274 +35,150 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 COMPOSE_FILE="$PROJECT_DIR/docker-compose.blue-green.yml"
 ENV_FILE="$PROJECT_DIR/.env"
 
-# Health check configuration
-HEALTH_CHECK_RETRIES=10
+HEALTH_CHECK_RETRIES=20
 HEALTH_CHECK_INTERVAL=5
-MONITORING_DURATION=300  # 5 minutes
 
-# ============================================
-# Utility Functions
-# ============================================
+# ── Utility ──
 
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
+log_info()    { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[OK]${NC}   $1"; }
+log_warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error()   { echo -e "${RED}[ERR]${NC}  $1"; }
 
-log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
+# ── Pre-flight ──
 
-log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  Blue-Green Deploy (2GB VPS — sequential swap)"
+echo "  $(date '+%Y-%m-%d %H:%M:%S')"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
 
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
+[ ! -f "$COMPOSE_FILE" ] && { log_error "docker-compose.blue-green.yml not found"; exit 3; }
+[ ! -f "$ENV_FILE" ]     && { log_error ".env file not found"; exit 3; }
+command -v docker &>/dev/null || { log_error "Docker not installed"; exit 3; }
 
-# ============================================
-# Pre-flight Checks
-# ============================================
-
-log_info "Starting Blue-Green deployment..."
-
-# Check if running in project directory
-if [ ! -f "$COMPOSE_FILE" ]; then
-    log_error "docker-compose.blue-green.yml not found!"
-    log_error "Please run this script from the project root or set PROJECT_DIR."
-    exit 3
-fi
-
-if [ ! -f "$ENV_FILE" ]; then
-    log_error ".env file not found!"
-    log_error "Please create .env from .env.example"
-    exit 3
-fi
-
-# Check Docker
-if ! command -v docker &> /dev/null; then
-    log_error "Docker is not installed!"
-    exit 3
-fi
-
-if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
-    log_error "Docker Compose is not installed!"
-    exit 3
-fi
-
-# Use docker compose or docker-compose
-DOCKER_COMPOSE="docker compose"
-if ! docker compose version &> /dev/null; then
-    DOCKER_COMPOSE="docker-compose"
-fi
-
-# ============================================
-# Detect Current Active Environment
-# ============================================
+DC="docker compose"
+docker compose version &>/dev/null 2>&1 || DC="docker-compose"
 
 cd "$PROJECT_DIR"
 
-# Read ACTIVE_ENV from .env
+# ── Detect active environment ──
+
 if grep -q "^ACTIVE_ENV=" "$ENV_FILE"; then
     ACTIVE_ENV=$(grep "^ACTIVE_ENV=" "$ENV_FILE" | cut -d'=' -f2 | tr -d '"' | tr -d "'")
 else
-    log_warn "ACTIVE_ENV not found in .env, defaulting to 'blue'"
     ACTIVE_ENV="blue"
 fi
 
-log_info "Current active environment: $ACTIVE_ENV"
-
-# Determine target environment
 if [ "$ACTIVE_ENV" = "blue" ]; then
-    TARGET_ENV="green"
-    TARGET_API_PORT=7176
-    TARGET_WEB_PORT=8081
+    TARGET_ENV="green"; TARGET_API_PORT=7176; TARGET_WEB_PORT=8081
 else
-    TARGET_ENV="blue"
-    TARGET_API_PORT=7175
-    TARGET_WEB_PORT=8080
+    TARGET_ENV="blue";  TARGET_API_PORT=7175; TARGET_WEB_PORT=8080
 fi
 
-log_info "Target deployment environment: $TARGET_ENV"
+log_info "Active: $ACTIVE_ENV → Deploying to: $TARGET_ENV"
 
-# ============================================
-# Pull Latest Images
-# ============================================
+# ── Pull images (while old env still serves traffic) ──
 
-log_info "Pulling latest Docker images..."
+log_info "Pulling latest images..."
+$DC -f "$COMPOSE_FILE" pull ${TARGET_ENV}-api ${TARGET_ENV}-web 2>/dev/null || { log_error "Pull failed"; exit 2; }
+log_success "Images pulled"
 
-if ! $DOCKER_COMPOSE -f "$COMPOSE_FILE" pull ${TARGET_ENV}-api ${TARGET_ENV}-web; then
-    log_error "Failed to pull Docker images"
+# ── Ensure PostgreSQL is running ──
+
+log_info "Checking PostgreSQL..."
+if ! $DC -f "$COMPOSE_FILE" ps postgres_db 2>/dev/null | grep -qE "Up|running"; then
+    $DC -f "$COMPOSE_FILE" up -d postgres_db
+    sleep 10
+fi
+
+for i in $(seq 1 15); do
+    $DC -f "$COMPOSE_FILE" exec -T postgres_db pg_isready -U "${POSTGRES_USER:-rmuser}" -d "${POSTGRES_DB:-resourcemanager}" &>/dev/null && break
+    [ "$i" -eq 15 ] && { log_error "PostgreSQL not ready"; exit 2; }
+    sleep 2
+done
+log_success "PostgreSQL ready"
+
+# ── SEQUENTIAL SWAP: stop old → start new ──
+
+log_warn "2GB mode: stopping $ACTIVE_ENV before starting $TARGET_ENV (~10-15s downtime)"
+$DC -f "$COMPOSE_FILE" stop ${ACTIVE_ENV}-api ${ACTIVE_ENV}-web 2>/dev/null || true
+sleep 3
+
+log_info "Starting $TARGET_ENV (DB migrations apply at API startup)..."
+if ! $DC -f "$COMPOSE_FILE" up -d ${TARGET_ENV}-api ${TARGET_ENV}-web; then
+    log_error "Start failed! Rolling back to $ACTIVE_ENV..."
+    $DC -f "$COMPOSE_FILE" up -d ${ACTIVE_ENV}-api ${ACTIVE_ENV}-web
     exit 2
 fi
 
-log_success "Images pulled successfully"
+# ── Health checks ──
 
-# ============================================
-# Deploy to Target Environment
-# ============================================
-
-log_info "Starting $TARGET_ENV environment..."
-
-if ! $DOCKER_COMPOSE -f "$COMPOSE_FILE" up -d ${TARGET_ENV}-api ${TARGET_ENV}-web; then
-    log_error "Failed to start $TARGET_ENV environment"
-    exit 2
-fi
-
-log_success "$TARGET_ENV environment started"
-
-# ============================================
-# Health Checks
-# ============================================
-
-log_info "Running health checks on $TARGET_ENV environment..."
-
-# Function to check health endpoint
 check_health() {
-    local url=$1
-    local name=$2
-    
-    log_info "Checking $name health..."
-    
+    local url=$1 name=$2
     for i in $(seq 1 $HEALTH_CHECK_RETRIES); do
-        if curl -f -s -o /dev/null -w "%{http_code}" "$url" | grep -q "200"; then
-            log_success "$name is healthy"
-            return 0
-        fi
-        
-        log_warn "Health check attempt $i/$HEALTH_CHECK_RETRIES failed, retrying in ${HEALTH_CHECK_INTERVAL}s..."
+        CODE=$(curl -f -s -o /dev/null -w "%{http_code}" "$url" 2>/dev/null || echo "000")
+        [ "$CODE" = "200" ] && { log_success "$name healthy"; return 0; }
+        log_info "  $name attempt $i/$HEALTH_CHECK_RETRIES (HTTP $CODE)..."
         sleep $HEALTH_CHECK_INTERVAL
     done
-    
-    log_error "$name health check failed after $HEALTH_CHECK_RETRIES attempts"
+    log_error "$name health check failed"
     return 1
 }
 
-# Check API health
 if ! check_health "http://localhost:$TARGET_API_PORT/health" "$TARGET_ENV API"; then
-    log_error "API health check failed. Rolling back..."
-    $DOCKER_COMPOSE -f "$COMPOSE_FILE" stop ${TARGET_ENV}-api ${TARGET_ENV}-web
+    log_error "Rollback: restarting $ACTIVE_ENV..."
+    $DC -f "$COMPOSE_FILE" stop ${TARGET_ENV}-api ${TARGET_ENV}-web 2>/dev/null || true
+    $DC -f "$COMPOSE_FILE" up -d ${ACTIVE_ENV}-api ${ACTIVE_ENV}-web
     exit 1
 fi
 
-# Check Web health
 if ! check_health "http://localhost:$TARGET_WEB_PORT/health" "$TARGET_ENV Web"; then
-    log_error "Web health check failed. Rolling back..."
-    $DOCKER_COMPOSE -f "$COMPOSE_FILE" stop ${TARGET_ENV}-api ${TARGET_ENV}-web
+    log_error "Rollback: restarting $ACTIVE_ENV..."
+    $DC -f "$COMPOSE_FILE" stop ${TARGET_ENV}-api ${TARGET_ENV}-web 2>/dev/null || true
+    $DC -f "$COMPOSE_FILE" up -d ${ACTIVE_ENV}-api ${ACTIVE_ENV}-web
     exit 1
 fi
 
-log_success "All health checks passed!"
+log_success "All checks passed — migrations applied"
 
-# ============================================
-# Additional Verification
-# ============================================
+# ── Switch Nginx ──
 
-log_info "Running additional verification..."
+log_info "Switching Nginx → $TARGET_ENV..."
+grep -q "^ACTIVE_ENV=" "$ENV_FILE" \
+    && sed -i.bak "s/^ACTIVE_ENV=.*/ACTIVE_ENV=$TARGET_ENV/" "$ENV_FILE" \
+    || echo "ACTIVE_ENV=$TARGET_ENV" >> "$ENV_FILE"
 
-# Check container status
-if ! $DOCKER_COMPOSE -f "$COMPOSE_FILE" ps | grep -q "${TARGET_ENV}-api.*Up"; then
-    log_error "$TARGET_ENV API container is not running"
-    exit 2
-fi
+$DC -f "$COMPOSE_FILE" up -d nginx 2>/dev/null || true
+sleep 2
+docker exec nginx nginx -s reload 2>/dev/null || $DC -f "$COMPOSE_FILE" restart nginx
 
-if ! $DOCKER_COMPOSE -f "$COMPOSE_FILE" ps | grep -q "${TARGET_ENV}-web.*Up"; then
-    log_error "$TARGET_ENV Web container is not running"
-    exit 2
-fi
+# ── Verify via proxy ──
 
-log_success "Container verification passed"
+sleep 3
+curl -f -s -o /dev/null "http://localhost/health"     && log_success "Nginx proxy OK" || log_warn "Nginx proxy check failed"
+curl -f -s -o /dev/null "http://localhost/api/health"  && log_success "API via Nginx OK" || log_warn "API via Nginx check failed"
 
-# ============================================
-# Switch Nginx Traffic
-# ============================================
+# ── Cleanup ──
 
-log_info "Switching Nginx traffic to $TARGET_ENV..."
+$DC -f "$COMPOSE_FILE" rm -f ${ACTIVE_ENV}-api ${ACTIVE_ENV}-web 2>/dev/null || true
+docker image prune -f --filter "until=48h" >/dev/null 2>&1 || true
 
-# Update ACTIVE_ENV in .env
-if grep -q "^ACTIVE_ENV=" "$ENV_FILE"; then
-    sed -i.bak "s/^ACTIVE_ENV=.*/ACTIVE_ENV=$TARGET_ENV/" "$ENV_FILE"
-else
-    echo "ACTIVE_ENV=$TARGET_ENV" >> "$ENV_FILE"
-fi
-
-# Reload Nginx configuration
-if ! docker exec nginx nginx -s reload; then
-    log_error "Failed to reload Nginx configuration"
-    log_error "Manual intervention required!"
-    exit 2
-fi
-
-log_success "Traffic switched to $TARGET_ENV environment!"
-log_info "Nginx is now routing traffic to $TARGET_ENV"
-
-# ============================================
-# Monitoring Period
-# ============================================
-
-log_info "Monitoring $TARGET_ENV environment for $MONITORING_DURATION seconds..."
-log_info "Press Ctrl+C to cancel and keep both environments running"
-
-# Monitor for specified duration
-for i in $(seq 1 $((MONITORING_DURATION / 10))); do
-    sleep 10
-    
-    # Check if new environment is still healthy
-    if ! curl -f -s -o /dev/null "http://localhost:$TARGET_API_PORT/health"; then
-        log_error "$TARGET_ENV environment became unhealthy!"
-        log_error "Please investigate and run rollback script if needed"
-        exit 1
-    fi
-    
-    if [ $((i % 6)) -eq 0 ]; then
-        log_info "Monitoring... $((i * 10))s elapsed (${TARGET_ENV} is healthy)"
-    fi
-done
-
-log_success "Monitoring complete. $TARGET_ENV is stable."
-
-# ============================================
-# Stop Old Environment
-# ============================================
-
-log_info "Stopping old $ACTIVE_ENV environment..."
-
-if ! $DOCKER_COMPOSE -f "$COMPOSE_FILE" stop ${ACTIVE_ENV}-api ${ACTIVE_ENV}-web; then
-    log_warn "Failed to stop $ACTIVE_ENV environment, but deployment was successful"
-    log_warn "You may need to stop it manually"
-else
-    log_success "$ACTIVE_ENV environment stopped"
-fi
-
-# ============================================
-# Cleanup
-# ============================================
-
-log_info "Cleaning up old Docker images..."
-docker image prune -f --filter "until=24h" > /dev/null 2>&1 || true
-
-# ============================================
-# Summary
-# ============================================
+# ── Summary ──
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-log_success "Deployment completed successfully!"
+log_success "Deployment complete!"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  Previous : $ACTIVE_ENV (stopped)"
+echo "  Current  : $TARGET_ENV (active)"
+echo "  Mode     : 2GB RAM sequential swap"
+echo "  URL      : http://localhost"
+echo "  API      : http://localhost/api/health"
+echo "  Migrations: auto-applied at startup"
 echo ""
-echo "  Previous environment: $ACTIVE_ENV (stopped)"
-echo "  Current environment:  $TARGET_ENV (active)"
-echo ""
-echo "  Application URL: http://localhost"
-echo "  API Health:      http://localhost/api/health"
-echo "  Swagger:         http://localhost/swagger"
-echo ""
-echo "  Direct access:"
-echo "    API:  http://localhost:$TARGET_API_PORT"
-echo "    Web:  http://localhost:$TARGET_WEB_PORT"
-echo ""
-log_info "To rollback: ./scripts/rollback-blue-green.sh"
+echo "  Rollback : ./scripts/rollback-blue-green.sh"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo ""
 
 exit 0
