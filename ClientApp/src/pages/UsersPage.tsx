@@ -154,7 +154,10 @@ export default function UsersPage() {
             alert(t('users.messages.tenantCreated'));
         } catch (err: unknown) {
             console.error("Failed to create tenant", err);
-            const errorMsg = getErrorMessage(err, t('users.messages.tenantCreateFailed'));
+            const responseData = getAxiosResponseData(err);
+            const errorMsg = responseData?.errors
+                ? Object.values(responseData.errors as Record<string, string[]>).flat().join(', ')
+                : getErrorMessage(err, t('users.messages.tenantCreateFailed'));
             alert(errorMsg);
         } finally {
             setActionLoading(false);
