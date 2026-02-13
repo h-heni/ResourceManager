@@ -58,6 +58,7 @@ namespace ResourceManager.Controllers
                 return BadRequest(new { message = "Supplier name is required." });
 
             var userId = _userManager.GetUserId(User);
+            if (string.IsNullOrEmpty(userId)) return Unauthorized();
             var user = await _userManager.FindByIdAsync(userId);
             if (user == null) return Unauthorized();
 
@@ -201,6 +202,7 @@ namespace ResourceManager.Controllers
         public async Task<IActionResult> SyncToLocal()
         {
             var userId = _userManager.GetUserId(User);
+            if (string.IsNullOrEmpty(userId)) return Unauthorized();
             var user = await _userManager.FindByIdAsync(userId);
             if (user == null) return Unauthorized();
 

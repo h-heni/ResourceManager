@@ -112,9 +112,9 @@ $DC -f "$COMPOSE_FILE" stop nginx 2>/dev/null || true
 sleep 3
 
 log_info "Starting $TARGET_ENV (DB migrations apply at API startup)..."
-if ! $DC -f "$COMPOSE_FILE" up -d ${TARGET_ENV}-api ${TARGET_ENV}-web; then
+if ! $DC -f "$COMPOSE_FILE" up -d --force-recreate --pull never ${TARGET_ENV}-api ${TARGET_ENV}-web; then
     log_error "Start failed! Rolling back to $ACTIVE_ENV..."
-    $DC -f "$COMPOSE_FILE" up -d ${ACTIVE_ENV}-api ${ACTIVE_ENV}-web
+    $DC -f "$COMPOSE_FILE" up -d --force-recreate ${ACTIVE_ENV}-api ${ACTIVE_ENV}-web
     exit 2
 fi
 
