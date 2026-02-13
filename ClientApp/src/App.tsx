@@ -26,6 +26,7 @@ const ExpensesPage = lazy(() => import('./pages/ExpensesPage'));
 const ProductServicesPage = lazy(() => import('./pages/ProductServicesPage'));
 const DataManagementPage = lazy(() => import('./pages/DataManagementPage'));
 const SupplierInvoiceUploadPage = lazy(() => import('./pages/SupplierInvoiceUploadPage'));
+const SetupAccountPage = lazy(() => import('./pages/SetupAccountPage'));
 
 // Loading fallback for lazy-loaded pages
 const PageLoader = () => (
@@ -41,6 +42,7 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<Suspense fallback={<PageLoader />}><SignUpPage /></Suspense>} />
         <Route path="/company-setup" element={<Suspense fallback={<PageLoader />}><CompanySetupPage /></Suspense>} />
+        <Route path="/setup-account" element={<Suspense fallback={<PageLoader />}><SetupAccountPage /></Suspense>} />
 
         {/* Protected Routes */}
         <Route element={<ProtectedRoute />}>

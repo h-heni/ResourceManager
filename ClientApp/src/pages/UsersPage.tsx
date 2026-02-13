@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import api from '../services/api';
 import { getErrorMessage, getErrorStatus, getAxiosResponseData } from '../utils/errorUtils';
 import { useAuth } from '../context/AuthContext';
-import { Plus, Users, AlertCircle, Trash2, KeyRound, X, Building2, Settings } from 'lucide-react';
-import { CURRENCY_OPTIONS, DEFAULT_CURRENCY } from '../lib/currencyUtils';
+import { Plus, Users, AlertCircle, Trash2, KeyRound, X, Building2, Settings, Mail, CheckCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 interface UserDto {
@@ -41,19 +40,9 @@ export default function UsersPage() {
     });
 
     const [newTenant, setNewTenant] = useState({
-        companyName: '',
-        address: '',
-        matriculeFiscal: '',
-        phone: '',
-        email: '',
-        userEmail: '',
-        userPassword: '',
-        userFirstName: '',
-        userLastName: '',
-        defaultCurrency: DEFAULT_CURRENCY,
-        defaultLanguage: 'fr',
-        employeeLimit: 0
+        email: ''
     });
+    const [invitationSent, setInvitationSent] = useState(false);
 
     const [newPassword, setNewPassword] = useState('');
 
@@ -109,18 +98,12 @@ export default function UsersPage() {
     const handleCreateTenant = async (e: React.FormEvent) => {
         e.preventDefault();
         setActionLoading(true);
+        setInvitationSent(false);
         try {
-            await api.post('/Auth/create-tenant', newTenant);
-            setShowTenantModal(false);
-            setNewTenant({
-                companyName: '', address: '', matriculeFiscal: '', phone: '', email: '',
-                userEmail: '', userPassword: '', userFirstName: '', userLastName: '',
-                defaultCurrency: DEFAULT_CURRENCY, defaultLanguage: 'fr', employeeLimit: 0
-            });
-            fetchUsers();
-            alert(t('users.messages.tenantCreated'));
+            await api.post('/superadmin/invite-manager', { email: newTenant.email });
+            setInvitationSent(true);
         } catch (err: unknown) {
-            console.error("Failed to create tenant", err);
+            console.error("Failed to send invitation", err);
             const errorMsg = getErrorMessage(err, t('users.messages.tenantCreateFailed'));
             alert(errorMsg);
         } finally {
@@ -444,179 +427,69 @@ export default function UsersPage() {
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6 animate-scale-up max-h-[90vh] overflow-y-auto">
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-xl font-bold flex items-center gap-2">
-                                <Building2 className="text-emerald-600" size={24} />
+                                <Mail className="text-emerald-600" size={24} />
                                 {t('users.actions.addTenant')}
                             </h2>
-                            <button onClick={() => setShowTenantModal(false)} className="p-2 hover:bg-gray-100 rounded-full">
+                            <button onClick={() => { setShowTenantModal(false); setInvitationSent(false); setNewTenant({ email: '' }); }} className="p-2 hover:bg-gray-100 rounded-full">
                                 <X size={20} />
                             </button>
                         </div>
-                        <p className="text-sm text-gray-500 mb-6">
-                            Create a new company with a manager account. This will set up a complete tenant.
-                        </p>
-                        <form onSubmit={handleCreateTenant} className="space-y-6">
-                            {/* Company Section */}
-                            <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200">
-                                <h3 className="font-semibold text-emerald-800 mb-4">{t('users.sections.companyInfo')}</h3>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="col-span-2">
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.companyNameRequired')}</label>
-                                        <input
-                                            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
-                                            value={newTenant.companyName}
-                                            onChange={e => setNewTenant({ ...newTenant, companyName: e.target.value })}
-                                            required
-                                        />
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.addressRequired')}</label>
-                                        <input
-                                            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
-                                            value={newTenant.address}
-                                            onChange={e => setNewTenant({ ...newTenant, address: e.target.value })}
-                                            required
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.fiscalIdRequired')}</label>
-                                        <input
-                                            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
-                                            value={newTenant.matriculeFiscal}
-                                            onChange={e => setNewTenant({ ...newTenant, matriculeFiscal: e.target.value })}
-                                            required
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('common.phone')}</label>
-                                        <input
-                                            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
-                                            value={newTenant.phone}
-                                            onChange={e => setNewTenant({ ...newTenant, phone: e.target.value })}
-                                        />
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.companyEmail')}</label>
+
+                        {invitationSent ? (
+                            <div className="text-center py-8">
+                                <div className="size-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
+                                    <CheckCircle className="text-emerald-600" size={32} />
+                                </div>
+                                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                                    {t('users.messages.invitationSent', 'Invitation sent successfully!')}
+                                </h3>
+                                <p className="text-sm text-gray-500 mb-6">
+                                    {t('users.messages.invitationSentDesc', 'An invitation email has been sent to the manager. They will be able to set up their account and company details.')}
+                                </p>
+                                <button
+                                    onClick={() => { setShowTenantModal(false); setInvitationSent(false); setNewTenant({ email: '' }); }}
+                                    className="px-6 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow-md"
+                                >
+                                    {t('common.close', 'Close')}
+                                </button>
+                            </div>
+                        ) : (
+                            <>
+                                <p className="text-sm text-gray-500 mb-6">
+                                    {t('users.messages.inviteDesc', 'Enter the manager\'s email address to send them an invitation. They will set up their own account and company details.')}
+                                </p>
+                                <form onSubmit={handleCreateTenant} className="space-y-6">
+                                    <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200">
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">{t('users.fields.emailRequired')}</label>
                                         <input
                                             type="email"
                                             className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
                                             value={newTenant.email}
                                             onChange={e => setNewTenant({ ...newTenant, email: e.target.value })}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Manager Section */}
-                            <div className="p-4 bg-[#065F46]/5 rounded-xl border border-[#065F46]/20">
-                                <h3 className="font-semibold text-[#065F46] mb-4">{t('users.sections.managerAccount')}</h3>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.firstNameRequired')}</label>
-                                        <input
-                                            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
-                                            value={newTenant.userFirstName}
-                                            onChange={e => setNewTenant({ ...newTenant, userFirstName: e.target.value })}
+                                            placeholder={t('users.fields.emailPlaceholder', 'manager@company.com')}
                                             required
                                         />
                                     </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.lastNameRequired')}</label>
-                                        <input
-                                            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
-                                            value={newTenant.userLastName}
-                                            onChange={e => setNewTenant({ ...newTenant, userLastName: e.target.value })}
-                                            required
-                                        />
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.emailRequired')}</label>
-                                        <input
-                                            type="email"
-                                            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
-                                            value={newTenant.userEmail}
-                                            onChange={e => setNewTenant({ ...newTenant, userEmail: e.target.value })}
-                                            required
-                                        />
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.passwordRequired')}</label>
-                                        <input
-                                            type="password"
-                                            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
-                                            value={newTenant.userPassword}
-                                            onChange={e => setNewTenant({ ...newTenant, userPassword: e.target.value })}
-                                            required
-                                            minLength={6}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Defaults Section */}
-                            <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
-                                <h3 className="font-semibold text-amber-800 mb-4">{t('users.sections.companyDefaults')}</h3>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.defaultCurrency')}</label>
-                                        <select
-                                            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none bg-white"
-                                            value={newTenant.defaultCurrency}
-                                            onChange={e => setNewTenant({ ...newTenant, defaultCurrency: e.target.value })}
+                                    <div className="flex justify-end space-x-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => { setShowTenantModal(false); setNewTenant({ email: '' }); }}
+                                            className="px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-100"
                                         >
-                                            {CURRENCY_OPTIONS.map(opt => (
-                                                <option key={opt.code} value={opt.code}>
-                                                    {opt.symbol} — {opt.code}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.defaultLanguage')}</label>
-                                        <select
-                                            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none bg-white"
-                                            value={newTenant.defaultLanguage}
-                                            onChange={e => setNewTenant({ ...newTenant, defaultLanguage: e.target.value })}
+                                            {t('common.cancel')}
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            disabled={actionLoading}
+                                            className="px-6 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow-md disabled:opacity-50 flex items-center gap-2"
                                         >
-                                            <option value="fr">{t('language.fr')}</option>
-                                            <option value="en">{t('language.en')}</option>
-                                            <option value="de">{t('language.de')}</option>
-                                            <option value="ar">{t('language.ar')}</option>
-                                        </select>
+                                            <Mail size={16} />
+                                            {actionLoading ? t('users.actions.sending', 'Sending...') : t('users.actions.sendInvitation', 'Send Invitation')}
+                                        </button>
                                     </div>
-                                    <div className="col-span-2">
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            {t('users.fields.employeeLimit')}
-                                            <span className="text-gray-400 font-normal ml-1">{t('users.fields.employeeLimitHint')}</span>
-                                        </label>
-                                        <input
-                                            type="number"
-                                            min={0}
-                                            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none bg-white"
-                                            value={newTenant.employeeLimit}
-                                            onChange={e => setNewTenant({ ...newTenant, employeeLimit: parseInt(e.target.value) || 0 })}
-                                            placeholder={t('users.fields.employeeLimitPlaceholder')}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="flex justify-end space-x-3">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowTenantModal(false)}
-                                    className="px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-100"
-                                >
-                                    {t('common.cancel')}
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={actionLoading}
-                                    className="px-6 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow-md disabled:opacity-50"
-                                >
-                                    {actionLoading ? t('users.actions.creating') : t('users.actions.createTenant')}
-                                </button>
-                            </div>
-                        </form>
+                                </form>
+                            </>
+                        )}
                     </div>
                 </div>
             )}
