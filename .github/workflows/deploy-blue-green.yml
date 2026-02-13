@@ -51,7 +51,16 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
+      - name: Test SSH Connection
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ steps.ssh.outputs.host }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ steps.ssh.outputs.port }}
+          script: |
+            echo "SSH connection successful!"
+            whoami
       # --- Backend Image ---
       - name: Build & push Backend image
         uses: docker/build-push-action@v5
@@ -93,7 +102,7 @@ jobs:
 
     steps:
       - name: Checkout code (for deployment files)
-        uses: actions/checkout@v4
+        uses: appleboy/scp-action@v0.1.7
 
       - name: Resolve SSH connection settings
         id: ssh
