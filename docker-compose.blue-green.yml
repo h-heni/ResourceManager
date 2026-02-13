@@ -197,10 +197,11 @@ services:
       - rm-internal
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
     logging:
       driver: "json-file"
       options:
@@ -293,10 +294,11 @@ services:
       - rm-internal
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
     logging:
       driver: "json-file"
       options:
@@ -323,28 +325,21 @@ services:
       - ./nginx/blue-green.conf:/etc/nginx/templates/default.conf.template:ro
     environment:
       - ACTIVE_ENV=${ACTIVE_ENV:-blue}
-      - BLUE_API_HOST=blue-api
-      - BLUE_API_PORT=8080
-      - BLUE_WEB_HOST=blue-web
-      - BLUE_WEB_PORT=80
-      - GREEN_API_HOST=green-api
-      - GREEN_API_PORT=8080
-      - GREEN_WEB_HOST=green-web
-      - GREEN_WEB_PORT=80
     networks:
       - rm-internal
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
+      start_period: 5s
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
-    command: /bin/sh -c "envsubst '$$ACTIVE_ENV $$BLUE_API_HOST $$BLUE_API_PORT $$BLUE_WEB_HOST $$BLUE_WEB_PORT $$GREEN_API_HOST $$GREEN_API_PORT $$GREEN_WEB_HOST $$GREEN_WEB_PORT' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
+    command: /bin/sh -c "envsubst '$$ACTIVE_ENV' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
 
 volumes:
   pgdata:
