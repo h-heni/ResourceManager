@@ -20,5 +20,11 @@ namespace ResourceManager.Dtos
         [Required(ErrorMessage = "Last name is required.")]
         [StringLength(100)]
         public string LastName { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Optional: SuperAdmin must specify which company the employee belongs to.
+        /// Managers/FreeUsers leave this null — the employee joins their own company.
+        /// </summary>
+        public int? CompanyId { get; set; }
     }
 }

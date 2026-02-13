@@ -16,6 +16,11 @@ interface UserDto {
     companyId?: number;
 }
 
+interface CompanyOption {
+    id: number;
+    name: string;
+}
+
 export default function UsersPage() {
     const { t } = useTranslation();
     const { user } = useAuth();
@@ -37,8 +42,11 @@ export default function UsersPage() {
         email: '',
         password: '',
         firstName: '',
-        lastName: ''
+        lastName: '',
+        companyId: null as number | null
     });
+
+    const [companies, setCompanies] = useState<CompanyOption[]>([]);
 
     const [newTenant, setNewTenant] = useState({
         companyName: '',
@@ -70,6 +78,18 @@ export default function UsersPage() {
             const res = await api.get('/Users');
             const data = res.data;
             setUsers(Array.isArray(data) ? data : (data.data || []));
+
+            // SuperAdmin: extract unique companies from user list for the employee dropdown
+            if (isSuperAdmin) {
+                const rawUsers: UserDto[] = Array.isArray(data) ? data : (data.data || []);
+                const companyMap = new Map<number, string>();
+                rawUsers.forEach(u => {
+                    if (u.companyId && u.companyId > 0 && u.company && u.company !== 'N/A') {
+                        companyMap.set(u.companyId, u.company);
+                    }
+                });
+                setCompanies(Array.from(companyMap, ([id, name]) => ({ id, name })));
+            }
         } catch (err: unknown) {
             console.error("Failed to fetch users", err);
             const status = getErrorStatus(err);
@@ -87,11 +107,24 @@ export default function UsersPage() {
 
     const handleCreateEmployee = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (isSuperAdmin && !newEmployee.companyId) {
+            alert('Please select a company for this employee.');
+            return;
+        }
         setActionLoading(true);
         try {
-            await api.post('/Auth/register-manual', newEmployee);
+            const payload: Record<string, unknown> = {
+                email: newEmployee.email,
+                password: newEmployee.password,
+                firstName: newEmployee.firstName,
+                lastName: newEmployee.lastName
+            };
+            if (isSuperAdmin && newEmployee.companyId) {
+                payload.companyId = newEmployee.companyId;
+            }
+            await api.post('/Auth/register-manual', payload);
             setShowEmployeeModal(false);
-            setNewEmployee({ email: '', password: '', firstName: '', lastName: '' });
+            setNewEmployee({ email: '', password: '', firstName: '', lastName: '', companyId: null });
             fetchUsers();
             alert(t('users.messages.employeeCreated'));
         } catch (err: unknown) {
@@ -376,6 +409,22 @@ export default function UsersPage() {
                             </button>
                         </div>
                         <form onSubmit={handleCreateEmployee} className="space-y-4">
+                            {isSuperAdmin && (
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.company', 'Company')}</label>
+                                    <select
+                                        className="fancy-input w-full"
+                                        value={newEmployee.companyId ?? ''}
+                                        onChange={e => setNewEmployee({ ...newEmployee, companyId: e.target.value ? parseInt(e.target.value) : null })}
+                                        required
+                                    >
+                                        <option value="">{t('users.fields.selectCompany', 'Select a company...')}</option>
+                                        {companies.map(c => (
+                                            <option key={c.id} value={c.id}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.firstName')}</label>

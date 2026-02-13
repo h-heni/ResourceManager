@@ -293,7 +293,7 @@ namespace ResourceManager.Controllers
         // 3. MANUAL REGISTER (Admin/Manager/FreeUser Only)
         // ==========================================
         [HttpPost("register-manual")]
-        [Authorize(Roles = "Manager,FreeUser")] // <--- Managers and FreeUsers can add employees to their company
+        [Authorize(Roles = "SuperAdmin,Manager,FreeUser")]
         [EnableRateLimiting("AuthStrict")]
         public async Task<IActionResult> RegisterManual([FromBody] CreateEmployeeDto employee)
         {
@@ -307,7 +307,27 @@ namespace ResourceManager.Controllers
                 if (currentUser == null)
                     return Unauthorized(new { error = "User not found." });
 
-                var companyId = currentUser.CompanyId;
+                var currentRoles = await _userManager.GetRolesAsync(currentUser);
+                var isSuperAdmin = currentRoles.Contains("SuperAdmin");
+
+                // SuperAdmin must specify the target company; managers use their own
+                int companyId;
+                if (isSuperAdmin)
+                {
+                    if (employee.CompanyId == null || employee.CompanyId <= 0)
+                        return BadRequest(new { error = "SuperAdmin must specify a valid companyId." });
+
+                    var targetCompany = await _context.Companies.IgnoreQueryFilters()
+                        .FirstOrDefaultAsync(c => c.Id == employee.CompanyId.Value && !c.IsDeleted);
+                    if (targetCompany == null)
+                        return NotFound(new { error = $"Company with ID {employee.CompanyId} not found." });
+
+                    companyId = targetCompany.Id;
+                }
+                else
+                {
+                    companyId = currentUser.CompanyId;
+                }
 
                 // ═══ Employee limit enforcement ═══
                 var company = await _context.Companies.FindAsync(companyId);
