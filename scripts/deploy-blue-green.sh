@@ -169,7 +169,7 @@ sleep 3
 # ── Verify via proxy ──
 
 curl -f -s -o /dev/null "http://localhost/health"     && log_success "Nginx proxy OK" || log_warn "Nginx proxy check failed (may need a few seconds)"
-curl -f -s -o /dev/null "http://localhost/api/health"  && log_success "API via Nginx OK" || log_warn "API via Nginx check failed"
+curl -f -s -o /dev/null "http://localhost/api/health"  && log_success "API health via Nginx OK" || log_warn "API health via Nginx check failed"
 
 # ── Cleanup ──
 
