@@ -62,6 +62,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<ProductService> ProductServices { get; set; }
     public DbSet<RefreshToken> RefreshTokens { get; set; }
     public DbSet<UserLoginRecord> UserLoginRecords { get; set; }
+    public DbSet<ManagerInvitation> ManagerInvitations { get; set; }
     public DbSet<HistoricalRevenue> HistoricalRevenues { get; set; }
     public DbSet<HistoricalExpense> HistoricalExpenses { get; set; }
     public DbSet<PendingInvoice> PendingInvoices { get; set; }
@@ -119,6 +120,10 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         // UserLoginRecord indexes
         builder.Entity<UserLoginRecord>().HasIndex(e => e.UserId);
         builder.Entity<UserLoginRecord>().HasIndex(e => e.IpAddress);
+
+        // ManagerInvitation indexes
+        builder.Entity<ManagerInvitation>().HasIndex(e => e.Token).IsUnique();
+        builder.Entity<ManagerInvitation>().HasIndex(e => e.Email);
 
         // Business document number uniqueness per company
         builder.Entity<Invoice>()

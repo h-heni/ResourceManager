@@ -423,3 +423,5 @@ backups/
 backup_*.sql
 backup_*.sql.gz
 pre-restore_*.sql.gz
+# Frontend build output
+ClientApp/dist/

@@ -67,7 +67,7 @@ api.interceptors.request.use(
 // If login returns 401, we want the error to reach the login form,
 // NOT get swallowed by a refresh attempt that then redirects.
 // ═══════════════════════════════════════════════════════════════
-const AUTH_ENDPOINTS = ['/auth/login', '/auth/signup', '/auth/refresh', '/auth/logout'];
+const AUTH_ENDPOINTS = ['/auth/login', '/auth/signup', '/auth/refresh', '/auth/logout', '/invitations/validate', '/invitations/complete'];
 
 function isAuthEndpoint(url: string | undefined): boolean {
     if (!url) return false;
