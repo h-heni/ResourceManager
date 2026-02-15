@@ -63,6 +63,9 @@ namespace ResourceManager.Models
         public ICollection<Client> Clients { get; set; } = new List<Client>();
         public ICollection<Fournisseur> Fournisseurs { get; set; } = new List<Fournisseur>();
 
+        [NotMapped]
+        public List<string> PaymentMethods { get; set; } = new();
+
     }
 
 }

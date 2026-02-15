@@ -180,6 +180,85 @@ namespace ResourceManager.Controllers
             return CreatedAtAction(nameof(GetDeliveryNote), new { id = note.Id }, note);
         }
 
+        // PUT: api/deliverynotes/{id}
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdateDeliveryNote(int id, [FromBody] DeliveryNoteDto dto)
+        {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            var note = await _context.DeliveryNotes
+                .Include(dn => dn.DeliveryNoteItems)
+                .FirstOrDefaultAsync(dn => dn.Id == id);
+
+            if (note == null) return NotFound();
+
+            // Block update if already linked to a paid invoice
+            if (note.InvoiceId.HasValue)
+            {
+                var linkedInvoice = await _context.Invoices
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(i => i.Id == note.InvoiceId.Value);
+                if (linkedInvoice?.Status == "Paid")
+                {
+                    return BadRequest(new { message = "Cannot modify a delivery note linked to a paid invoice." });
+                }
+            }
+
+            note.Number = dto.Number ?? note.Number;
+            note.Date = dto.Date.ToUniversalTime();
+            note.ClientId = dto.ClientId ?? note.ClientId;
+            note.UpdatedAt = DateTime.UtcNow;
+
+            // Replace items
+            _context.DeliveryNoteItems.RemoveRange(note.DeliveryNoteItems);
+            if (dto.DeliveryNoteItems != null)
+            {
+                foreach (var item in dto.DeliveryNoteItems)
+                {
+                    note.DeliveryNoteItems.Add(new DeliveryNoteItem
+                    {
+                        Description = item.Description,
+                        Quantity = item.Quantity,
+                        TotalEstimated = item.Quantity * 0
+                    });
+                }
+            }
+
+            await _context.SaveChangesAsync();
+            _logger.LogInformation("Updated delivery note {Id}: {Number}", note.Id, note.Number);
+
+            return NoContent();
+        }
+
+        // DELETE: api/deliverynotes/{id}
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteDeliveryNote(int id)
+        {
+            var note = await _context.DeliveryNotes.FindAsync(id);
+            if (note == null) return NotFound();
+
+            // Block deletion if linked to a paid invoice
+            if (note.InvoiceId.HasValue)
+            {
+                var linkedInvoice = await _context.Invoices
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(i => i.Id == note.InvoiceId.Value);
+                if (linkedInvoice?.Status == "Paid")
+                {
+                    return BadRequest(new { message = "Cannot delete a delivery note linked to a paid invoice." });
+                }
+            }
+
+            // Soft delete
+            note.IsDeleted = true;
+            note.DeletedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Soft-deleted delivery note {Id}", id);
+
+            return NoContent();
+        }
+
         // GET: api/deliverynotes/{id}/pdf
         [HttpGet("{id}/pdf")]
         public async Task<IActionResult> GetPdf(int id)

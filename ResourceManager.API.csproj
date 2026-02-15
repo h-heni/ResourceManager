@@ -50,6 +50,7 @@
 		<!-- Add runtime/provider and design packages (8.x) -->
 		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.*" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.*" />
+		<PackageReference Include="Polly" Version="8.6.5" />
 		<PackageReference Include="QRCoder" Version="1.7.0" />
 		<PackageReference Include="QuestPDF" Version="2025.12.3" />
 		<PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />

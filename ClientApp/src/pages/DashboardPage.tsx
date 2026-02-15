@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { DollarSign, FileText, Users, TrendingUp, AlertTriangle, ArrowRight, CheckCircle, RefreshCw, X, Globe } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { DollarSign, FileText, Users, TrendingUp, AlertTriangle, CheckCircle, RefreshCw, X, Globe } from 'lucide-react';
 import {
     BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid,
     Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -48,14 +47,12 @@ interface DashboardStats {
     selectedYear: number;
 
     totalRevenue: number;
-    unpaidInvoices: number;
-    unpaidAmount: number;
+    pendingInvoicesCount: number;
+    pendingInvoicesAmount: number;
     partiallyPaidCount: number;
     partiallyPaidAmount: number;
     pendingPaymentsCount: number;
     pendingPaymentsAmount: number;
-    duePaymentsCount: number;
-    duePaymentsAmount: number;
     thisMonthRevenue: number;
     lastMonthRevenue: number;
     totalInvoiceCount: number;
@@ -91,7 +88,6 @@ interface RevenueSummary {
 
 export default function DashboardPage() {
     const { t } = useTranslation();
-    const navigate = useNavigate();
     const { isManager, isSuperAdmin } = useAuth();
 
     const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -133,6 +129,7 @@ export default function DashboardPage() {
                 api.get(`/Dashboard/revenue-summary${queryParam}`),
                 api.get(`/Invoices/archived/count?year=${yearParam}`)
             ]);
+            console.log('fetchStats', { queryParam, dashRes, expensesRes, revenueRes, archivedRes });
 
             let archivedCountFallback: number | null = null;
 
@@ -144,14 +141,12 @@ export default function DashboardPage() {
                     defaultCurrency: d.defaultCurrency || DEFAULT_CURRENCY,
                     selectedYear: d.selectedYear || currentYear,
                     totalRevenue: d.totalRevenue || 0,
-                    unpaidInvoices: d.unpaidInvoices || 0,
-                    unpaidAmount: d.unpaidAmount || 0,
+                    pendingInvoicesCount: d.pendingInvoicesCount || 0,
+                    pendingInvoicesAmount: d.pendingInvoicesAmount || 0,
                     partiallyPaidCount: d.partiallyPaidCount || 0,
                     partiallyPaidAmount: d.partiallyPaidAmount || 0,
                     pendingPaymentsCount: d.pendingPaymentsCount || 0,
                     pendingPaymentsAmount: d.pendingPaymentsAmount || 0,
-                    duePaymentsCount: d.duePaymentsCount || 0,
-                    duePaymentsAmount: d.duePaymentsAmount || 0,
                     thisMonthRevenue: d.thisMonthRevenue || 0,
                     lastMonthRevenue: d.lastMonthRevenue || 0,
                     totalInvoiceCount: d.totalInvoiceCount || 0,
@@ -404,8 +399,8 @@ export default function DashboardPage() {
         },
         {
             title: t('dashboard.pendingInvoices'),
-            value: stats ? `${stats.unpaidInvoices}` : '-',
-            subtitle: stats?.unpaidAmount ? fmt(stats.unpaidAmount) : undefined,
+            value: stats ? `${stats.pendingInvoicesCount}` : '-',
+            subtitle: stats?.pendingInvoicesAmount ? fmt(stats.pendingInvoicesAmount) : undefined,
             icon: FileText,
             iconColor: CHART_COLORS.unpaid,
         },
@@ -446,9 +441,9 @@ export default function DashboardPage() {
     /* Status bar colors — using CHART_COLORS tokens */
     const statusBarColor: Record<string, string> = {
         'Paid': CHART_COLORS.paid,
-        'Unpaid': CHART_COLORS.unpaid,
+        'Pending': CHART_COLORS.unpaid,
         'PartiallyPaid': CHART_COLORS.partial,
-        'Draft': CHART_COLORS.draft,
+        'Archived': CHART_COLORS.draft,
     };
 
     /* Custom tooltip for Recharts */
@@ -613,28 +608,8 @@ export default function DashboardPage() {
                         <span>{recoveryStatus.message}</span>
                     </div>
                     {recoveryStatus.type !== 'running' && (
-                        <button onClick={() => setRecoveryStatus(null)} className="ml-2 p-1 rounded hover:bg-black/5"><X size={14} /></button>
+                        <button onClick={() => setRecoveryStatus(null)} className="ms-2 p-1 rounded hover:bg-black/5"><X size={14} /></button>
                     )}
-                </div>
-            )}
-
-            {/* Overdue Alert Banner */}
-            {stats && stats.unpaidInvoices > 0 && stats.duePaymentsCount > 0 && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <AlertTriangle className="text-red-500 flex-shrink-0" size={20} />
-                        <div>
-                            <p className="font-semibold text-red-800 text-sm">
-                                {stats.duePaymentsCount} {t('invoice.overdueInvoices', 'overdue invoice(s)')} — {fmt(stats.duePaymentsAmount)}
-                            </p>
-                        </div>
-                    </div>
-                    <button
-                        onClick={() => navigate('/invoices')}
-                        className="px-3 py-1.5 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors flex items-center gap-1.5"
-                    >
-                        {t('common.view')} <ArrowRight size={14} />
-                    </button>
                 </div>
             )}
 
@@ -669,7 +644,7 @@ export default function DashboardPage() {
                             <p className="text-xs text-gray-500 mt-0.5">{cur} {t('dashboard.totalRevenueLabel', 'Revenue')}</p>
                         </div>
                         <div className="text-center">
-                            <p className="text-lg font-bold text-gray-900">{stats?.totalInvoiceCount ?? 0}</p>
+                            <p className="text-lg font-bold text-gray-900">{(stats?.totalInvoiceCount ?? 0) - archivedInvoiceCount}</p>
                             <p className="text-xs text-gray-500 mt-0.5">{t('dashboard.invoicesLabel', 'Invoices')}</p>
                         </div>
                         <div className="text-center">
@@ -678,19 +653,29 @@ export default function DashboardPage() {
                         </div>
                     </div>
                     <div className="mt-3 flex justify-between text-xs text-gray-400 border-t border-gray-50 pt-2">
-                        <span>{t('quote.archived', 'Archived')}: {archivedInvoiceCount}/{stats?.totalInvoiceCount ?? 0}</span>
+                        <span>{t('quote.archived', 'Archived')}: {archivedInvoiceCount}</span>
                         <span>{t('dashboard.thisMonthLabel', 'This month')}: {fmt(stats?.thisMonthRevenue ?? 0)}</span>
                     </div>
                     {revenueSummary?.revenueByYear?.length ? (
                         <div className="mt-3 border-t border-gray-50 pt-2">
                             <p className="text-[11px] text-gray-400 mb-2">{t('dashboard.revenueByYear', 'Revenue by year')}</p>
-                            <div className="flex flex-wrap gap-2">
-                                {revenueSummary.revenueByYear.map((entry) => (
-                                    <div key={entry.year} className="flex items-center gap-2 px-2 py-1 rounded-md bg-gray-50 border border-gray-100 text-[11px] text-gray-600">
-                                        <span className="font-medium text-gray-700">{entry.year}</span>
-                                        <span>{fmt(entry.total)}</span>
-                                    </div>
-                                ))}
+                            <div className="rm-table-card border-gray-100 shadow-none">
+                                <table className="rm-table">
+                                    <thead>
+                                        <tr>
+                                            <th className="rm-th-id">{t('common.year', 'Year')}</th>
+                                            <th className="rm-th-number">{t('dashboard.totalRevenueLabel', 'Revenue')}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {revenueSummary.revenueByYear.map((entry) => (
+                                            <tr key={entry.year}>
+                                                <td className="rm-cell-text whitespace-nowrap font-medium text-gray-700">{entry.year}</td>
+                                                <td className="rm-cell-currency">{fmt(entry.total)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     ) : null}
@@ -715,7 +700,7 @@ export default function DashboardPage() {
                     </div>
                     {stats && (
                         <div className={`mt-3 p-2.5 rounded-lg border text-center ${netResult >= 0 ? 'bg-emerald-50/50 border-emerald-100' : 'bg-red-50/50 border-red-100'}`}>
-                            <span className="text-xs text-gray-500 mr-2">{t('dashboard.netResult', 'Net Result')}</span>
+                            <span className="text-xs text-gray-500 me-2">{t('dashboard.netResult', 'Net Result')}</span>
                             <span className={`text-sm font-bold ${netResult >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
                                 {netResult >= 0 ? '+' : ''}{fmt(netResult)}
                             </span>
@@ -795,7 +780,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Bottom Row: Status Breakdown + Top Clients */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
                 {/* Invoice Status Breakdown */}
                 <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
                     <h3 className="text-sm font-semibold text-gray-900 mb-4">
@@ -803,8 +788,10 @@ export default function DashboardPage() {
                     </h3>
                     {stats?.statusBreakdown && stats.statusBreakdown.length > 0 ? (
                         <div className="space-y-3">
-                            {stats.statusBreakdown.map((item) => {
-                                const totalCount = stats.totalInvoiceCount || 1;
+                            {stats.statusBreakdown
+                                .filter(item => item.status !== 'Archived') // Filter out Archived
+                                .map((item) => {
+                                const totalCount = (stats.totalInvoiceCount || 0) - archivedInvoiceCount || 1; // Use active total for %
                                 const pct = Math.round((item.count / totalCount) * 100);
                                 const barColor = statusBarColor[item.status] || CHART_COLORS.draft;
                                 return (
@@ -834,37 +821,33 @@ export default function DashboardPage() {
                         {t('dashboard.topClients', 'Top Clients by Revenue')}
                     </h3>
                     {stats?.topClients && stats.topClients.length > 0 ? (
-                        <div className="space-y-3">
-                            {stats.topClients.map((client, idx) => {
-                                const totalRevenueForYear = selectedYearRevenue || 1;
-                                const pct = Math.round((client.totalAmount / totalRevenueForYear) * 100);
-                                return (
-                                    <div key={client.clientId}>
-                                        <div className="flex items-center justify-between text-sm mb-1">
-                                            <div className="flex items-center gap-2">
-                                                <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold bg-gray-100 text-gray-600">
-                                                    {idx + 1}
-                                                </span>
-                                                <span className="font-medium text-gray-900">{client.clientName}</span>
-                                            </div>
-                                            <span className="text-gray-500 text-xs">{fmt(client.totalAmount)}</span>
-                                        </div>
-                                        <div className="ml-7 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                            <div
-                                                className="h-full rounded-full transition-all"
-                                                style={{
-                                                    width: `${pct}%`,
-                                                    backgroundColor: CHART_COLORS.revenue,
-                                                }}
-                                            />
-                                        </div>
-                                        <div className="ml-7 flex justify-between text-[11px] text-gray-400 mt-0.5">
-                                            <span>{client.totalInvoices} {t('dashboard.invoicesLabel', 'invoices')}</span>
-                                            <span>{fmt(client.totalAmount)} {t('dashboard.revenueLabel', 'revenue')}</span>
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                        <div className="rm-table-card border-gray-100 shadow-none">
+                            <table className="rm-table">
+                                <thead>
+                                    <tr>
+                                        <th className="rm-th-id">#</th>
+                                        <th>{t('invoice.client', 'Client')}</th>
+                                        <th className="rm-th-number">{t('dashboard.invoicesLabel', 'Invoices')}</th>
+                                        <th className="rm-th-number">{t('dashboard.revenueLabel', 'Revenue')}</th>
+                                        <th className="rm-th-number">{t('dashboard.share', 'Share')}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {stats.topClients.map((client, idx) => {
+                                        const totalRevenueForYear = selectedYearRevenue || 1;
+                                        const pct = Math.round((client.totalAmount / totalRevenueForYear) * 100);
+                                        return (
+                                            <tr key={client.clientId}>
+                                                <td className="rm-cell-text whitespace-nowrap font-semibold text-gray-500">{idx + 1}</td>
+                                                <td className="rm-cell-text font-medium text-gray-900">{client.clientName}</td>
+                                                <td className="rm-cell-number">{client.totalInvoices}</td>
+                                                <td className="rm-cell-currency">{fmt(client.totalAmount)}</td>
+                                                <td className="rm-cell-number">{pct}%</td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
                         </div>
                     ) : (
                         <p className="text-gray-400 text-sm">{t('common.noData')}</p>

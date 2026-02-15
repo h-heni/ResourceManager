@@ -147,11 +147,11 @@ namespace ResourceManager.Controllers
                 foreach (var invoice in revenueInvoices)
                 {
                     var invCurrency = invoice.Devis?.Currency ?? defaultCurrency;
-                    var invoiceTotal = invoice.TotalAmount ?? 0;
-                    totalRevenue += ConvertAmount(invoiceTotal, invCurrency);
+                    var confirmedPaid = invoice.AmountPaid; // Only confirmed payments count as revenue
+                    totalRevenue += ConvertAmount(confirmedPaid, invCurrency);
                     if (!currencyBreakdownRevenue.ContainsKey(invCurrency))
                         currencyBreakdownRevenue[invCurrency] = 0;
-                    currencyBreakdownRevenue[invCurrency] += invoiceTotal;
+                    currencyBreakdownRevenue[invCurrency] += confirmedPaid;
                 }
 
                 foreach (var h in yearHistoricalRevenues)
@@ -173,11 +173,16 @@ namespace ResourceManager.Controllers
                     .Where(i => !string.Equals(i.Status, "Draft", StringComparison.OrdinalIgnoreCase))
                     .ToList();
 
-                totalRevenue = revenueInvoices.Sum(i => i.TotalAmount ?? 0);
+                totalRevenue = revenueInvoices.Sum(i => i.AmountPaid); // Only confirmed payments count as revenue
                 totalRevenue += yearHistoricalRevenues
                     .Where(h => (h.Currency ?? defaultCurrency) == selectedCurrency)
                     .Sum(h => h.AmountPaid);
             }
+
+            var filteredHistoricalRevenues = isMixedMode
+                ? yearHistoricalRevenues
+                : yearHistoricalRevenues.Where(h => (h.Currency ?? defaultCurrency) == selectedCurrency).ToList();
+            var importedSalesCount = filteredHistoricalRevenues.Count;
 
             // ═══ Filter expenses ═══
             List<FournisseurInvoice> filteredSupplierInvoices;
@@ -240,10 +245,10 @@ namespace ResourceManager.Controllers
                     .Sum(h => h.AmountPaid);
             }
 
-            // Unpaid Invoices Count and Amount
-            var unpaidInvoicesList = filteredInvoices.Where(i => (i.Status == "Unpaid" || i.Status == "Draft") && !i.Treated).ToList();
-            var unpaidInvoices = unpaidInvoicesList.Count;
-            var unpaidAmount = unpaidInvoicesList.Sum(i => i.TotalAmount ?? 0);
+            // Pending Invoices Count and Amount
+            var pendingInvoicesList = filteredInvoices.Where(i => i.Status == "Pending" && !i.Treated).ToList();
+            var pendingInvoicesCount = pendingInvoicesList.Count;
+            var pendingInvoicesAmount = pendingInvoicesList.Sum(i => i.TotalAmount ?? 0);
 
             // Partially Paid
             var partiallyPaidList = filteredInvoices.Where(i => i.Status == "PartiallyPaid").ToList();
@@ -258,18 +263,11 @@ namespace ResourceManager.Controllers
             var pendingPaymentsCount = pendingPayments.Count;
             var pendingPaymentsAmount = pendingPayments.Sum(p => p.Amount);
 
-            // Due Payments (waiting for confirmation)
-            var duePayments = filteredInvoices
-                .SelectMany(i => i.Payments ?? new List<Payment>())
-                .Where(p => p.Status == "Due" && p.PaymentDate >= startOfYear && p.PaymentDate < endOfYear)
-                .ToList();
-            var duePaymentsCount = duePayments.Count;
-            var duePaymentsAmount = duePayments.Sum(p => p.Amount);
-
             // ═══ Revenue Chart (by invoice date, per selected year) ═══
-            var historicalRevenueForChart = isMixedMode
-                ? yearHistoricalRevenues.ToList()
-                : yearHistoricalRevenues.Where(h => (h.Currency ?? defaultCurrency) == selectedCurrency).ToList();
+            var historicalRevenueForChart = filteredHistoricalRevenues;
+            var historicalCountByMonth = historicalRevenueForChart
+                .GroupBy(h => h.Date.Month)
+                .ToDictionary(g => g.Key, g => g.Count());
 
             var revenueByMonth = revenueInvoices
                 .GroupBy(i => i.Date.Month)
@@ -286,6 +284,7 @@ namespace ResourceManager.Controllers
                     month,
                     amount = invoiceAmount + histAmount,
                     count = revenueInvoices.Count(i => i.Date.Month == month)
+                        + historicalCountByMonth.GetValueOrDefault(month, 0)
                 };
             }).ToList();
 
@@ -381,7 +380,8 @@ namespace ResourceManager.Controllers
                 .Where(h => h.ClientId.HasValue)
                 .GroupBy(h => h.ClientId!.Value)
                 .ToDictionary(g => g.Key, g => new {
-                    paidAmount = g.Sum(h => NormalizeAmount(h.AmountPaid, h.Currency ?? defaultCurrency)),
+                    totalInvoices = g.Count(),
+                    totalAmount = g.Sum(h => NormalizeAmount(h.AmountPaid, h.Currency ?? defaultCurrency)),
                     clientName = g.First().Client?.Name ?? g.First().ClientName ?? "Unknown"
                 });
 
@@ -393,9 +393,9 @@ namespace ResourceManager.Controllers
                     return new {
                         clientId = (int?)id,
                         clientName = inv?.clientName ?? hist?.clientName ?? "Unknown",
-                        totalInvoices = inv?.totalInvoices ?? 0,
-                        totalAmount = (inv?.totalAmount ?? 0m) + (hist?.paidAmount ?? 0m),
-                        paidAmount = (inv?.paidAmount ?? 0m) + (hist?.paidAmount ?? 0m)
+                        totalInvoices = (inv?.totalInvoices ?? 0) + (hist?.totalInvoices ?? 0),
+                        totalAmount = (inv?.totalAmount ?? 0m) + (hist?.totalAmount ?? 0m),
+                        paidAmount = (inv?.paidAmount ?? 0m) + (hist?.totalAmount ?? 0m)
                     };
                 })
                 .Where(c => c.paidAmount > 0)
@@ -417,7 +417,15 @@ namespace ResourceManager.Controllers
                 .Take(10)
                 .ToList();
 
-            var paidInvoiceCount = filteredInvoices.Count(i => i.Status == "Paid" || i.Treated);
+            // Use IgnoreQueryFilters for accurate archived count
+            var companyIdClaim = User.FindFirst("CompanyId")?.Value;
+            var currentCompanyId = companyIdClaim != null ? int.Parse(companyIdClaim) : 0;
+            var paidInvoiceCount = await _context.Invoices
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(i => i.Treated == true && i.CompanyId == currentCompanyId)
+                .Where(i => i.Date >= startOfYear && i.Date < endOfYear)
+                .CountAsync();
 
             return Ok(new {
                 // Multi-currency metadata
@@ -433,14 +441,12 @@ namespace ResourceManager.Controllers
                 selectedYear,
 
                 totalRevenue,
-                unpaidInvoices,
-                unpaidAmount,
+                pendingInvoicesCount,
+                pendingInvoicesAmount,
                 partiallyPaidCount,
                 partiallyPaidAmount,
                 pendingPaymentsCount,
                 pendingPaymentsAmount,
-                duePaymentsCount,
-                duePaymentsAmount,
                 revenueChart = chart,
                 expenseChart,
                 totalExpenses,
@@ -451,7 +457,7 @@ namespace ResourceManager.Controllers
                 supplierInvoices = supplierInvoicesCount,
                 statusBreakdown,
                 topClients,
-                totalInvoiceCount = filteredInvoices.Count,
+                totalInvoiceCount = filteredInvoices.Count + importedSalesCount,
                 paidInvoiceCount,
                 mostBoughtProducts = allSupplierItems
             });
@@ -470,14 +476,12 @@ namespace ResourceManager.Controllers
                     currencyBreakdownExpense = (object?)null,
                     selectedYear = year ?? DateTime.UtcNow.Year,
                     totalRevenue = 0m,
-                    unpaidInvoices = 0,
-                    unpaidAmount = 0m,
+                    pendingInvoicesCount = 0,
+                    pendingInvoicesAmount = 0m,
                     partiallyPaidCount = 0,
                     partiallyPaidAmount = 0m,
                     pendingPaymentsCount = 0,
                     pendingPaymentsAmount = 0m,
-                    duePaymentsCount = 0,
-                    duePaymentsAmount = 0m,
                     revenueChart = Enumerable.Range(1, 12).Select(m => new { month = m, amount = 0m, count = 0 }),
                     expenseChart = Enumerable.Range(1, 12).Select(m => new { month = m, amount = 0m, supplierCount = 0 }),
                     totalExpenses = 0m,
@@ -534,12 +538,15 @@ namespace ResourceManager.Controllers
             var invoices = await _context.Invoices
                 .AsNoTracking()
                 .Include(i => i.Devis)
+                .Include(i => i.Payments)
                 .Where(i => !string.Equals(i.Status, "Draft"))
                 .Select(i => new
                 {
                     Year = i.Date.Year,
                     Currency = i.Devis != null ? i.Devis.Currency : null,
-                    Amount = i.TotalAmount ?? 0
+                    Amount = i.Payments
+                        .Where(p => p.Status == "Completed")
+                        .Sum(p => (decimal?)p.Amount) ?? 0
                 })
                 .ToListAsync();
             var historicalRevenues = await _context.HistoricalRevenues
@@ -660,8 +667,8 @@ namespace ResourceManager.Controllers
                         Expenses = expenses,
                         Net = revenue - expenses,
                         InvoiceCount = curInvoices.Count,
-                        UnpaidCount = curInvoices.Count(i => i.Status == "Unpaid" || i.Status == "Draft"),
-                        UnpaidAmount = curInvoices.Where(i => i.Status == "Unpaid" || i.Status == "Draft").Sum(i => i.TotalAmount ?? 0)
+                        UnpaidCount = curInvoices.Count(i => i.Status == "Pending"),
+                        UnpaidAmount = curInvoices.Where(i => i.Status == "Pending").Sum(i => i.TotalAmount ?? 0)
                     };
                 }).ToList();
 

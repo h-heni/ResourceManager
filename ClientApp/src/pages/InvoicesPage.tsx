@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Search, Download, Eye, DollarSign, X, Mail, Send, Calendar, Clock, Edit2, Archive, Filter, CheckCircle, FileWarning } from 'lucide-react';
+import { Plus, Search, Download, Eye, DollarSign, X, Mail, Send, Calendar, Clock, Edit2, Archive, Filter, CheckCircle, FileWarning, AlertCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { getErrorMessage } from '../utils/errorUtils';
@@ -37,7 +37,9 @@ interface Invoice {
     treated?: boolean;
     devisId?: number;
     amountPaid: number;
+    pendingAmount: number;
     remainingAmount: number;
+    progress?: number;
     payments?: Payment[];
     currency?: string;
     currencySymbol?: string;
@@ -54,6 +56,7 @@ export default function InvoicesPage() {
     const [paymentNotes, setPaymentNotes] = useState('');
     const [isScheduledPayment, setIsScheduledPayment] = useState(false);
     const [scheduledDate, setScheduledDate] = useState('');
+    const [submittingPayment, setSubmittingPayment] = useState(false);
     
     // Email modal state
     const [showEmailModal, setShowEmailModal] = useState(false);
@@ -107,7 +110,7 @@ export default function InvoicesPage() {
 
     // Fetch archived invoices when year changes or switching to archived view
     useEffect(() => {
-        if (viewMode === 'archived' && selectedYear) {
+        if (selectedYear) {
             fetchArchivedInvoices(selectedYear, archivedPage, pageSize);
         }
     }, [viewMode, selectedYear, archivedPage, pageSize]);
@@ -353,7 +356,7 @@ export default function InvoicesPage() {
     };
 
     const handleAddPayment = async () => {
-        if (!selectedInvoice || !paymentAmount) return;
+        if (!selectedInvoice || !paymentAmount || submittingPayment) return;
         
         const amount = parseFloat(paymentAmount);
         if (isNaN(amount) || amount <= 0) {
@@ -367,6 +370,7 @@ export default function InvoicesPage() {
             return;
         }
 
+        setSubmittingPayment(true);
         try {
             const paymentDate = isScheduledPayment 
                 ? new Date(scheduledDate).toISOString() 
@@ -377,7 +381,7 @@ export default function InvoicesPage() {
                 paymentDate,
                 notes: paymentNotes || null,
                 isScheduled: isScheduledPayment,
-                status: isScheduledPayment ? 'Pending' : 'Completed'
+                status: 'Pending'
             });
             setShowPaymentModal(false);
             fetchInvoices(activePage, pageSize);
@@ -388,6 +392,8 @@ export default function InvoicesPage() {
         } catch (error) {
             console.error("Error adding payment", error);
             alert(t('supplierInvoice.paymentFailed'));
+        } finally {
+            setSubmittingPayment(false);
         }
     };
 
@@ -433,19 +439,19 @@ export default function InvoicesPage() {
                     onClick={() => navigate('/invoices/create')}
                     className="flex items-center px-4 py-2 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all transform hover:scale-105"
                 >
-                    <Plus size={20} className="mr-2" />
+                    <Plus size={20} className="me-2" />
                     {t('invoice.create')}
                 </button>
             </div>
 
             <div className="relative">
-                <Search className="absolute left-4 top-3.5 h-5 w-5 text-gray-400" />
+                <Search className="absolute start-4 top-3.5 h-5 w-5 text-gray-400" />
                 <input
                     type="text"
                     placeholder={t('invoice.searchPlaceholder')}
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent outline-none transition-all"
+                    className="w-full ps-12 pe-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent outline-none transition-all"
                 />
             </div>
 
@@ -510,84 +516,81 @@ export default function InvoicesPage() {
             {(loading || (viewMode === 'archived' && loadingArchive)) ? (
                 <div className="text-center py-20 text-gray-500">{t('common.loadingData')}</div>
             ) : (
-                <div className="rm-table-card overflow-x-auto">
+                <div className="rm-table-card">
                         <table className="rm-table">
-                            <colgroup>
-                                <col style={{ width: '15%' }} />
-                                <col style={{ width: '16%' }} />
-                                <col style={{ width: '10%' }} />
-                                <col style={{ width: '14%' }} />
-                                <col style={{ width: '12%' }} />
-                                <col style={{ width: '10%' }} />
-                                <col style={{ width: '10%' }} />
-                                <col style={{ width: '13%' }} />
-                            </colgroup>
                             <thead>
                                 <tr>
                                     <th
-                                        className="cursor-pointer select-none"
+                                        className="cursor-pointer select-none text-start px-4 py-3 font-semibold text-gray-600"
                                         onClick={() => setInvoiceNumberSort(prev => prev === 'asc' ? 'desc' : 'asc')}
                                     >
                                         {t('invoice.invoiceNumber', 'Invoice #')} {invoiceNumberSort === 'asc' ? '↑' : '↓'}
                                     </th>
-                                    <th>{t('invoice.client')}</th>
-                                    <th>{t('invoice.date')}</th>
-                                    <th className="rm-th-number">{t('invoice.total')}</th>
-                                    <th className="rm-th-number">{t('invoice.amountPaid')}</th>
-                                    <th className="rm-th-number">{t('invoice.remaining')}</th>
-                                    <th>{t('common.status')}</th>
-                                    <th className="rm-th-actions">{t('common.actions')}</th>
+                                    <th className="text-start px-4 py-3 font-semibold text-gray-600">{t('invoice.client')}</th>
+                                    <th className="text-start px-4 py-3 font-semibold text-gray-600">{t('invoice.date')}</th>
+                                    <th className="text-end px-4 py-3 font-semibold text-gray-600">{t('invoice.total')}</th>
+                                    <th className="text-end px-4 py-3 font-semibold text-gray-600">{t('invoice.amountPaid')}</th>
+                                    <th className="text-end px-4 py-3 font-semibold text-gray-600">{t('invoice.remaining')}</th>
+                                    <th className="text-center px-4 py-3 font-semibold text-gray-600">{t('common.status')}</th>
+                                    <th className="text-end px-4 py-3 font-semibold text-gray-600">{t('common.actions')}</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {sortedInvoices.map((invoice) => (
-                                    <tr key={invoice.id} className="group">
-                                        <td className="rm-cell-text font-semibold text-[#065F46]">
+                                    <tr key={invoice.id} className="group hover:bg-gray-50 border-b border-gray-100 transition-colors">
+                                        <td className="text-start px-4 py-3 whitespace-nowrap font-semibold text-[#065F46]">
                                             {invoice.source === 'historical' && invoice.invoiceId ? (
                                                 <button
                                                     type="button"
-                                                    className="hover:underline truncate block"
+                                                    className="hover:underline inline-block"
                                                     onClick={() => handleViewDetails(invoice.invoiceId!)}
                                                     title={resolveLinkedInvoiceNumber(invoice) || undefined}
                                                 >
                                                     #{resolveLinkedInvoiceNumber(invoice) || invoice.id}
                                                 </button>
                                             ) : (
-                                                <span className="truncate block" title={resolveInvoiceNumber(invoice) || String(invoice.id)}>
+                                                <span className="inline-block" title={resolveInvoiceNumber(invoice) || String(invoice.id)}>
                                                     #{resolveInvoiceNumber(invoice) || invoice.id}
                                                 </span>
                                             )}
                                         </td>
-                                        <td className="rm-cell-text text-gray-900">
-                                            <span className="truncate block" title={invoice.clientName || undefined}>
+                                        <td className="text-start px-4 py-3 text-gray-900">
+                                            <span title={invoice.clientName || undefined}>
                                                 {invoice.clientName || t('common.unknown')}
                                             </span>
                                         </td>
-                                        <td className="rm-cell-text text-gray-500">{invoice.date ? new Date(invoice.date).toLocaleDateString() : t('users.table.notAvailable')}</td>
-                                        <td className="rm-cell-currency">{formatCurrency(invoice.totalAmount, invoice.currencySymbol || DEFAULT_CURRENCY)}</td>
-                                        <td className="rm-cell-currency text-emerald-600">
-                                            {formatCurrency(invoice.amountPaid, invoice.currencySymbol || DEFAULT_CURRENCY)}
-                                            {invoice.payments?.some(p => p.status === 'Pending') && (
-                                                <div className="text-xs text-orange-500 font-normal mt-0.5">
-                                                    +{formatCurrency(invoice.payments.filter(p => p.status === 'Pending').reduce((sum, p) => sum + p.amount, 0), invoice.currencySymbol || DEFAULT_CURRENCY)} {t('payment.pending')}
-                                                </div>
-                                            )}
+                                        <td className="text-start px-4 py-3 text-gray-600">{invoice.date ? new Date(invoice.date).toLocaleDateString() : t('users.table.notAvailable')}</td>
+                                        <td className="text-end px-4 py-3 font-medium text-gray-900">
+                                            {formatCurrency(invoice.totalAmount, invoice.currencySymbol || DEFAULT_CURRENCY)}
                                         </td>
-                                        <td className="rm-cell-currency text-amber-600">
+                                        <td className="text-end px-4 py-3">
+                                            <div className="flex flex-col items-end">
+                                                <span className="text-emerald-600 font-medium">
+                                                    {formatCurrency(invoice.amountPaid, invoice.currencySymbol || DEFAULT_CURRENCY)}
+                                                </span>
+                                                {(invoice.pendingAmount || 0) > 0 && (
+                                                    <span className="text-xs text-orange-500 flex items-center gap-1 mt-0.5" title={t('invoice.pending')}>
+                                                        <Clock size={12} />
+                                                        +{formatCurrency(invoice.pendingAmount, invoice.currencySymbol || DEFAULT_CURRENCY)}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </td>
+                                        <td className="text-end px-4 py-3 text-amber-600 font-medium">
                                             {invoice.remainingAmount > 0 ? formatCurrency(invoice.remainingAmount, invoice.currencySymbol || DEFAULT_CURRENCY) : '—'}
                                         </td>
-                                        <td className="rm-cell-text">
+                                        <td className="text-center px-4 py-3">
                                             <span className={`px-3 py-1 text-xs font-semibold rounded-full inline-block ${getInvoiceStatusColor(invoice.status)}`}>
-                                                {invoice.status}
+                                                {t(`invoice.status.${invoice.status}`, invoice.status)}
                                             </span>
                                             {viewMode === 'archived' && invoice.source === 'historical' && (
-                                                <span className="ml-1 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full inline-block">
+                                                <span className="ms-1 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full inline-block">
                                                     {t('common.imported', 'Imported')}
                                                 </span>
                                             )}
                                         </td>
-                                        <td className="rm-cell-actions">
-                                            <div className="flex items-center justify-end space-x-1">
+                                        <td className="text-end px-4 py-3">
+                                            <div className="flex items-center justify-end gap-0.5">
                                                 {/* Don't show action buttons for historical archived items */}
                                                 {!(viewMode === 'archived' && invoice.source === 'historical') && (
                                                     <>
@@ -595,56 +598,56 @@ export default function InvoicesPage() {
                                                         {invoice.status !== 'Paid' && (
                                                             <button
                                                                 onClick={() => openPaymentModal(invoice)}
-                                                                className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                                                className="p-1 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                                                                 title={t('invoice.addPayment')}
                                                             >
-                                                                <DollarSign size={18} />
+                                                                <DollarSign size={15} />
                                                             </button>
                                                         )}
                                                         {/* Edit Invoice - Only if not locked/paid/partially paid (payments registered) */}
                                                         {isManager && !invoice.isLocked && invoice.status !== 'Paid' && invoice.status !== 'PartiallyPaid' && (
                                                             <button
                                                                 onClick={() => navigate(`/invoices/edit/${invoice.id}`)}
-                                                                className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                                                                className="p-1 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
                                                                 title={t('common.edit')}
                                                             >
-                                                                <Edit2 size={18} />
+                                                                <Edit2 size={15} />
                                                             </button>
                                                         )}
                                                         {/* Send Email */}
                                                         <button
                                                             onClick={() => openEmailModal(invoice)}
-                                                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                            className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                                                             title={t('email.sendInvoice')}
                                                         >
-                                                            <Mail size={18} />
+                                                            <Mail size={15} />
                                                         </button>
                                                         {/* View Details (Eye icon now shows detail view, not PDF) */}
                                                         <button
                                                             onClick={() => handleViewDetails(invoice.id)}
-                                                            className="p-2 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
+                                                            className="p-1 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
                                                             title={t('invoice.viewDetails')}
                                                         >
-                                                            <Eye size={18} />
+                                                            <Eye size={15} />
                                                         </button>
                                                         {/* Download PDF */}
                                                         <button
                                                             onClick={() => handleDownloadPdf(invoice.id, invoice)}
                                                             disabled={loading || (viewMode === 'archived' && loadingArchive) || downloadingInvoiceId === invoice.id}
-                                                            className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                                            className="p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                                                             title={t('invoice.downloadPdf')}
                                                         >
-                                                            <Download size={18} />
+                                                            <Download size={15} />
                                                         </button>
-                                                        {/* Remaining Payment PDF - only for partially paid / unpaid */}
-                                                        {(invoice.status === 'PartiallyPaid' || (invoice.status === 'Unpaid' && invoice.remainingAmount > 0)) && (
+                                                        {/* Remaining Payment PDF - only for partially paid / pending */}
+                                                        {(invoice.status === 'PartiallyPaid' || (invoice.status === 'Pending' && invoice.remainingAmount > 0)) && (
                                                             <button
                                                                 onClick={() => handleDownloadRemainingPdf(invoice.id, invoice)}
                                                                 disabled={downloadingInvoiceId === invoice.id}
-                                                                className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                                                                className="p-1 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
                                                                 title={t('invoice.remainingPaymentPdf', 'Remaining Payment Notice')}
                                                             >
-                                                                <FileWarning size={18} />
+                                                                <FileWarning size={15} />
                                                             </button>
                                                         )}
                                                         {/* Delete button removed from table - only available in detail view */}
@@ -652,7 +655,7 @@ export default function InvoicesPage() {
                                                 )}
                                                 {/* For historical items, show a view-only indicator */}
                                                 {viewMode === 'archived' && invoice.source === 'historical' && (
-                                                    <span className="text-xs text-gray-400 italic">
+                                                    <span className="text-xs text-gray-400 italic whitespace-nowrap">
                                                         {t('common.viewOnly', 'View only')}
                                                     </span>
                                                 )}
@@ -707,6 +710,9 @@ export default function InvoicesPage() {
                             <p className="text-sm text-gray-600">{t('invoice.title')}: <span className="font-bold">#{selectedInvoice.number}</span></p>
                             <p className="text-sm text-gray-600">{t('invoice.total')}: <span className="font-bold">{formatCurrency(selectedInvoice.totalAmount, selectedInvoice.currencySymbol || DEFAULT_CURRENCY)}</span></p>
                             <p className="text-sm text-gray-600">{t('invoice.alreadyPaid')}: <span className="font-bold text-emerald-600">{formatCurrency(selectedInvoice.amountPaid, selectedInvoice.currencySymbol || DEFAULT_CURRENCY)}</span></p>
+                            {(selectedInvoice.pendingAmount || 0) > 0 && (
+                                <p className="text-sm text-gray-600">{t('invoice.pending', 'Pending')}: <span className="font-bold text-orange-500">{formatCurrency(selectedInvoice.pendingAmount, selectedInvoice.currencySymbol || DEFAULT_CURRENCY)}</span></p>
+                            )}
                             <p className="text-sm text-gray-600">{t('invoice.remaining')}: <span className="font-bold text-amber-600">{formatCurrency(selectedInvoice.remainingAmount, selectedInvoice.currencySymbol || DEFAULT_CURRENCY)}</span></p>
                         </div>
 
@@ -793,7 +799,8 @@ export default function InvoicesPage() {
                             </button>
                             <button
                                 onClick={handleAddPayment}
-                                className={`px-6 py-2 text-white rounded-xl transition-colors flex items-center gap-2 ${
+                                disabled={submittingPayment}
+                                className={`px-6 py-2 text-white rounded-xl transition-colors flex items-center gap-2 disabled:opacity-50 ${
                                     isScheduledPayment 
                                         ? 'bg-amber-600 hover:bg-amber-700' 
                                         : 'bg-emerald-600 hover:bg-emerald-700'

@@ -58,14 +58,11 @@ namespace ResourceManager.Controllers
             {
                 var user = await _userManager.FindByEmailAsync(loginDto.Email);
 
-                var ip = HttpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0]?.Trim()
-                      ?? HttpContext.Request.Headers["X-Real-IP"].FirstOrDefault()
-                      ?? HttpContext.Connection.RemoteIpAddress?.ToString()
-                      ?? "unknown";
+                var ip = GetClientIp();
 
                 if (user == null)
                 {
-                    _logger.LogWarning("Login failed: user not found for {Email}", loginDto.Email);
+                    _logger.LogWarning("Login failed: user not found. Email={Email}, IP={IpAddress}", loginDto.Email, ip);
                     _securityAlerts.RecordFailedLogin(ip, loginDto.Email);
                     return Unauthorized(new { error = "Invalid credentials." });
                 }
@@ -80,7 +77,7 @@ namespace ResourceManager.Controllers
                         : 30;
                     if (remainingSeconds < 1) remainingSeconds = 1;
 
-                    _logger.LogWarning("Account locked out for {Email}, {Seconds}s remaining", loginDto.Email, remainingSeconds);
+                    _logger.LogWarning("Account locked. Email={Email}, IP={IpAddress}, RemainingSeconds={RemainingSeconds}", loginDto.Email, ip, remainingSeconds);
                     _securityAlerts.RecordFailedLogin(ip, loginDto.Email);
 
                     // Return 429 so the frontend shows the countdown timer
@@ -90,7 +87,7 @@ namespace ResourceManager.Controllers
 
                 if (!result.Succeeded)
                 {
-                    _logger.LogWarning("Login failed: wrong password for {Email}", loginDto.Email);
+                    _logger.LogWarning("Login failed: invalid password. Email={Email}, IP={IpAddress}", loginDto.Email, ip);
                     _securityAlerts.RecordFailedLogin(ip, loginDto.Email);
                     return Unauthorized(new { error = "Invalid credentials." });
                 }
@@ -106,9 +103,9 @@ namespace ResourceManager.Controllers
                 var refreshToken = await CreateRefreshTokenAsync(user.Id);
                 SetRefreshTokenCookie(refreshToken.Token);
 
-                _logger.LogInformation("User {Email} logged in successfully", loginDto.Email);
+                _logger.LogInformation("User logged in. UserId={UserId}, Email={Email}, IP={IpAddress}", user.Id, loginDto.Email, ip);
 
-                // Record login for country tracking
+                // Record login for country tracking (fire-and-forget, non-blocking)
                 await RecordUserLoginAsync(user.Id, ip);
 
                 // Fetch company settings BYPASSING tenant filter (user not yet authenticated in this request)
@@ -135,7 +132,7 @@ namespace ResourceManager.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Login error for {Email}", loginDto.Email);
+                _logger.LogError(ex, "Login error. Email={Email}", loginDto.Email);
                 return StatusCode(500, new { error = "An error occurred during login." });
             }
         }
@@ -145,219 +142,216 @@ namespace ResourceManager.Controllers
         [EnableRateLimiting("AuthStrict")]
         public async Task<IActionResult> SignUp([FromBody] CreateManagerDto createManagerDto)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync();
-            try
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
             {
-
-                // 1. Create the User Object
-                // 1. Create the Company FIRST
-                var company = new Company
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
                 {
-                    Name = createManagerDto.CompanyName,
-                    Address = createManagerDto.Address,
-                    MatriculeFiscal = createManagerDto.MatriculeFiscal,
-                    Phone = createManagerDto.Phone,
-                    CreatedAt = DateTime.UtcNow // Or _timeProvider.GetUtcNow().DateTime
-                };
-
-                _context.Companies.Add(company);
-                await _context.SaveChangesAsync(); // Save to generate company.Id
-
-                // 2. Create the Manager User linked to that Company
-                var newUser = new ApplicationUser
-                {
-                    UserName = createManagerDto.UserEmail,
-                    Email = createManagerDto.UserEmail,
-                    CompanyId = company.Id, // LINK HERE
-                    Profile = new UserProfile
+                    // 1. Create the Company FIRST
+                    var company = new Company
                     {
-                        FirstName = createManagerDto.UserFirstName,
-                        LastName = createManagerDto.UserLastName
+                        Name = createManagerDto.CompanyName,
+                        Address = createManagerDto.Address,
+                        MatriculeFiscal = createManagerDto.MatriculeFiscal,
+                        Phone = createManagerDto.Phone,
+                        CreatedAt = DateTime.UtcNow
+                    };
+
+                    _context.Companies.Add(company);
+                    await _context.SaveChangesAsync();
+
+                    // 2. Create the Manager User linked to that Company
+                    var newUser = new ApplicationUser
+                    {
+                        UserName = createManagerDto.UserEmail,
+                        Email = createManagerDto.UserEmail,
+                        CompanyId = company.Id,
+                        Profile = new UserProfile
+                        {
+                            FirstName = createManagerDto.UserFirstName,
+                            LastName = createManagerDto.UserLastName
+                        }
+                    };
+
+                    var result = await _userManager.CreateAsync(newUser, createManagerDto.UserPassword);
+
+                    if (!result.Succeeded)
+                    {
+                        await transaction.RollbackAsync();
+                        _logger.LogWarning("Signup failed validation. Email={Email}, Errors={@Errors}", createManagerDto.UserEmail, result.Errors.Select(e => e.Description));
+                        return BadRequest(new { error = "Signup failed.", errors = result.Errors });
                     }
-                };
 
-                // 2. Use UserManager to Create (This hashes password & saves to DB)
-                // ❌ REMOVED: _supabase.Auth.SignUp
-                // ❌ REMOVED: _context.Users.Add
-                var result = await _userManager.CreateAsync(newUser, createManagerDto.UserPassword);
+                    await _userManager.AddToRoleAsync(newUser, "FreeUser");
+                    await transaction.CommitAsync();
 
-                if (!result.Succeeded)
-                {
-                    await transaction.RollbackAsync(); // Cancel company creation
-                    return BadRequest(result.Errors);
+                    _logger.LogInformation("User signed up. UserId={UserId}, Email={Email}, CompanyId={CompanyId}", newUser.Id, newUser.Email, company.Id);
+
+                    return Ok(new
+                    {
+                        Message = "User created successfully. You can now log in.",
+                        UserId = newUser.Id
+                    });
                 }
-
-                // 3. Assign Role securely
-                // Public users should NOT choose their own role via DTO (Security Risk!)
-                // We force them to be "FreeUser" or "Client".
-                await _userManager.AddToRoleAsync(newUser, "FreeUser");
-
-                // 4. Commit the transaction
-                await transaction.CommitAsync();
-
-                return Ok(new
-                {
-                    Message = "User created successfully. You can now log in.",
-                    UserId = newUser.Id
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Signup failed");
-                return StatusCode(500, new { error = "An error occurred during signup." });
-            }
-        }
-        [HttpPost("create-tenant")]
-        [Authorize(Roles = "SuperAdmin")] // Only you can run this
-        public async Task<IActionResult> CreateTenant([FromBody] CreateManagerDto createManagerDto)
-        {
-            // Use a Transaction to keep Data clean (if one fails, both fail)
-            using var transaction = await _context.Database.BeginTransactionAsync();
-
-            try
-            {
-                // 1. Create the User AND the Company in one object tree
-                // 1. Create Company
-                var company = new Company
-                {
-                    Name = createManagerDto.CompanyName,
-                    Address = createManagerDto.Address,
-                    MatriculeFiscal = createManagerDto.MatriculeFiscal,
-                    Phone = createManagerDto.Phone,
-                    Email = createManagerDto.Email,
-                    EmployeeLimit = createManagerDto.EmployeeLimit
-
-                    // Context.SaveChangesAsync will handle CreatedAt & CreatedByUserId automatically
-                };
-
-                _context.Companies.Add(company);
-                await _context.SaveChangesAsync(); // Auto-stamps SuperAdmin ID here
-
-                // 2. Create User
-                var newUser = new ApplicationUser
-                {
-                    UserName = createManagerDto.UserEmail,
-                    Email = createManagerDto.UserEmail,
-                    CompanyId = company.Id,
-
-                    Profile = new UserProfile
-                    {
-                        
-                        FirstName = createManagerDto.UserFirstName,
-                        LastName = createManagerDto.UserLastName,
-                    }
-                };
-
-                // 3. Save User
-                // This internally calls your AppDbContext.SaveChangesAsync
-                var result = await _userManager.CreateAsync(newUser, createManagerDto.UserPassword);
-
-                if (!result.Succeeded)
+                catch (Exception ex)
                 {
                     await transaction.RollbackAsync();
-                    return BadRequest(result.Errors);
+                    _logger.LogError(ex, "Signup failed. Email={Email}", createManagerDto.UserEmail);
+                    return StatusCode(500, new { error = "An error occurred during signup." });
                 }
-
-                await _userManager.AddToRoleAsync(newUser, "Manager");
-
-                // 4. Create CompanySettings with default currency & language
-                var currencySymbol = createManagerDto.DefaultCurrency switch
-                {
-                    "USD" => "$",
-                    "EUR" => "€",
-                    "GBP" => "£",
-                    _ => createManagerDto.DefaultCurrency
-                };
-                var companySettings = new CompanySettings
-                {
-                    CompanyId = company.Id,
-                    Currency = createManagerDto.DefaultCurrency,
-                    CurrencySymbol = currencySymbol,
-                    InvoiceLanguage = createManagerDto.DefaultLanguage
-                };
-                _context.CompanySettings.Add(companySettings);
-                await _context.SaveChangesAsync();
-
-                await transaction.CommitAsync();
-
-
-                return Ok(new { Message = "New paying client created." });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Tenant creation failed");
-                return StatusCode(500, new { error = "An error occurred during tenant creation." });
-            }
+            });
         }
-        // ==========================================
-        // 3. MANUAL REGISTER (Admin/Manager/FreeUser Only)
-        // ==========================================
+        [HttpPost("create-tenant")]
+        [Authorize(Roles = "SuperAdmin")]
+        public async Task<IActionResult> CreateTenant([FromBody] CreateManagerDto createManagerDto)
+        {
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
+            {
+                using var transaction = await _context.Database.BeginTransactionAsync();
+
+                try
+                {
+                    var company = new Company
+                    {
+                        Name = createManagerDto.CompanyName,
+                        Address = createManagerDto.Address,
+                        MatriculeFiscal = createManagerDto.MatriculeFiscal,
+                        Phone = createManagerDto.Phone,
+                        Email = createManagerDto.Email,
+                        EmployeeLimit = createManagerDto.EmployeeLimit
+                    };
+
+                    _context.Companies.Add(company);
+                    await _context.SaveChangesAsync();
+
+                    var newUser = new ApplicationUser
+                    {
+                        UserName = createManagerDto.UserEmail,
+                        Email = createManagerDto.UserEmail,
+                        CompanyId = company.Id,
+                        Profile = new UserProfile
+                        {
+                            FirstName = createManagerDto.UserFirstName,
+                            LastName = createManagerDto.UserLastName,
+                        }
+                    };
+
+                    var result = await _userManager.CreateAsync(newUser, createManagerDto.UserPassword);
+
+                    if (!result.Succeeded)
+                    {
+                        await transaction.RollbackAsync();
+                        _logger.LogWarning("Tenant creation failed validation. Email={Email}, Errors={@Errors}", createManagerDto.UserEmail, result.Errors.Select(e => e.Description));
+                        return BadRequest(new { error = "Tenant creation failed.", errors = result.Errors });
+                    }
+
+                    await _userManager.AddToRoleAsync(newUser, "Manager");
+
+                    var currencySymbol = createManagerDto.DefaultCurrency switch
+                    {
+                        "USD" => "$",
+                        "EUR" => "€",
+                        "GBP" => "£",
+                        _ => createManagerDto.DefaultCurrency
+                    };
+                    var companySettings = new CompanySettings
+                    {
+                        CompanyId = company.Id,
+                        Currency = createManagerDto.DefaultCurrency,
+                        CurrencySymbol = currencySymbol,
+                        InvoiceLanguage = createManagerDto.DefaultLanguage
+                    };
+                    _context.CompanySettings.Add(companySettings);
+                    await _context.SaveChangesAsync();
+
+                    await transaction.CommitAsync();
+
+                    _logger.LogInformation("Tenant created. CompanyId={CompanyId}, UserId={UserId}, Email={Email}", company.Id, newUser.Id, newUser.Email);
+
+                    return Ok(new { Message = "New paying client created." });
+                }
+                catch (Exception ex)
+                {
+                    await transaction.RollbackAsync();
+                    _logger.LogError(ex, "Tenant creation failed. Email={Email}", createManagerDto.UserEmail);
+                    return StatusCode(500, new { error = "An error occurred during tenant creation." });
+                }
+            });
+        }
         [HttpPost("register-manual")]
-        [Authorize(Roles = "Manager,FreeUser")] // <--- Managers and FreeUsers can add employees to their company
+        [Authorize(Roles = "Manager,FreeUser")]
         [EnableRateLimiting("AuthStrict")]
         public async Task<IActionResult> RegisterManual([FromBody] CreateEmployeeDto employee)
         {
-            using var transaction = await _context.Database.BeginTransactionAsync();
-            try
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
             {
-                var currentUser = await _context.Users
-                    .Where(u => u.Id == User.FindFirstValue(ClaimTypes.NameIdentifier))
-                    .FirstOrDefaultAsync();
-
-                if (currentUser == null)
-                    return Unauthorized(new { error = "User not found." });
-
-                var companyId = currentUser.CompanyId;
-
-                // ═══ Employee limit enforcement ═══
-                var company = await _context.Companies.FindAsync(companyId);
-                if (company != null && company.EmployeeLimit > 0)
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
                 {
-                    var currentEmployeeCount = await _context.Users
-                        .CountAsync(u => u.CompanyId == companyId);
-                    // Count includes the manager, so employees = total - 1
-                    if (currentEmployeeCount >= company.EmployeeLimit + 1) // +1 for manager
+                    var currentUser = await _context.Users
+                        .Where(u => u.Id == User.FindFirstValue(ClaimTypes.NameIdentifier))
+                        .FirstOrDefaultAsync();
+
+                    if (currentUser == null)
+                        return Unauthorized(new { error = "User not found." });
+
+                    var companyId = currentUser.CompanyId;
+
+                    // Employee limit enforcement
+                    var company = await _context.Companies.FindAsync(companyId);
+                    if (company != null && company.EmployeeLimit > 0)
                     {
-                        return BadRequest(new { error = $"Employee limit reached ({company.EmployeeLimit}). Contact your administrator to increase the limit." });
+                        var currentEmployeeCount = await _context.Users
+                            .CountAsync(u => u.CompanyId == companyId);
+                        if (currentEmployeeCount >= company.EmployeeLimit + 1)
+                        {
+                            _logger.LogWarning("Employee limit reached. CompanyId={CompanyId}, Limit={Limit}, Current={Current}",
+                                companyId, company.EmployeeLimit, currentEmployeeCount);
+                            return BadRequest(new { error = $"Employee limit reached ({company.EmployeeLimit}). Contact your administrator to increase the limit." });
+                        }
                     }
-                }
 
-                var newUser = new ApplicationUser
-                {
-                    UserName = employee.Email,
-                    Email = employee.Email,
-                    Profile= new UserProfile
+                    var newUser = new ApplicationUser
                     {
-                        FirstName = employee.FirstName,
-                        LastName = employee.LastName,
-                        CreatedAt= _time.GetUtcNow().DateTime
-                    },
-                    
-                    CompanyId = companyId
+                        UserName = employee.Email,
+                        Email = employee.Email,
+                        Profile = new UserProfile
+                        {
+                            FirstName = employee.FirstName,
+                            LastName = employee.LastName,
+                            CreatedAt = _time.GetUtcNow().DateTime
+                        },
+                        CompanyId = companyId
+                    };
 
-                };
-                // 3. Use UserManager to save User
-                var result = await _userManager.CreateAsync(newUser, employee.Password);
+                    var result = await _userManager.CreateAsync(newUser, employee.Password);
 
-                if (!result.Succeeded)
-                {
-                    await transaction.RollbackAsync(); // Cancel company creation
-                    return BadRequest(result.Errors);
+                    if (!result.Succeeded)
+                    {
+                        _logger.LogWarning("Employee creation failed. Email={Email}, Errors={@Errors}",
+                            employee.Email, result.Errors.Select(e => e.Description));
+                        await transaction.RollbackAsync();
+                        return BadRequest(new { error = "Employee creation failed.", errors = result.Errors });
+                    }
+
+                    await _userManager.AddToRoleAsync(newUser, "Employee");
+                    await transaction.CommitAsync();
+
+                    _logger.LogInformation("Employee created. UserId={UserId}, Email={Email}, CompanyId={CompanyId}",
+                        newUser.Id, employee.Email, companyId);
+
+                    return Ok(new { Message = $"User {employee.Email} created with role Employee" });
                 }
-
-                // 4. Assign "Manager" Role
-                await _userManager.AddToRoleAsync(newUser, "Employee");
-
-                // 5. Commit Transaction
-                await transaction.CommitAsync();
-                
-                return Ok(new { Message = $"User {employee.Email} created with role Employee" });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to register employee");
-                return BadRequest(new { error = "Failed to create employee account." });
-            }
+                catch (Exception ex)
+                {
+                    await transaction.RollbackAsync();
+                    _logger.LogError(ex, "Failed to register employee. Email={Email}", employee.Email);
+                    return StatusCode(500, new { error = "Failed to create employee account." });
+                }
+            });
         }
 
         // ==========================================
@@ -367,6 +361,7 @@ namespace ResourceManager.Controllers
         /// <summary>
         /// POST: api/auth/refresh — Exchange a valid refresh token for a new access + refresh token pair.
         /// The refresh token is read from the HttpOnly cookie.
+        /// Handles multi-tab race conditions gracefully.
         /// </summary>
         [HttpPost("refresh")]
         [AllowAnonymous]
@@ -381,14 +376,34 @@ namespace ResourceManager.Controllers
 
             if (oldToken == null)
             {
-                _logger.LogWarning("Refresh token not found (possible replay attack)");
-                return Unauthorized(new { error = "Invalid refresh token." });
+                _logger.LogWarning("Refresh token not found in database (cookie corruption or cleanup)");
+                ClearRefreshTokenCookie();
+                return Unauthorized(new { error = "Session expired. Please log in again." });
             }
 
-            // Replay attack detection: if token is already revoked, revoke the entire family
+            // ═══════════════════════════════════════════════════════════════
+            // RACE CONDITION HANDLING: If token was already rotated by another
+            // tab/request, try to find the new token and use that instead of
+            // triggering security lockout.
+            // ═══════════════════════════════════════════════════════════════
             if (oldToken.IsRevoked)
             {
-                _logger.LogWarning("Revoked refresh token reused for user {UserId} — revoking entire family {Family}",
+                // Check if this token was rotated (legitimately replaced)
+                if (!string.IsNullOrEmpty(oldToken.ReplacedByToken) && oldToken.RevokedReason == "Rotated")
+                {
+                    var replacementToken = await _context.RefreshTokens
+                        .FirstOrDefaultAsync(t => t.Token == oldToken.ReplacedByToken);
+
+                    // If replacement is still valid, use it (multi-tab race condition)
+                    if (replacementToken != null && replacementToken.IsActive)
+                    {
+                        _logger.LogInformation("Multi-tab race detected: reusing rotated token. UserId={UserId}", oldToken.UserId);
+                        return await BuildRefreshResponse(oldToken.UserId, replacementToken.Token);
+                    }
+                }
+
+                // True replay attack: token was revoked but not due to rotation, or replacement is also invalid
+                _logger.LogWarning("Revoked refresh token reused — revoking entire family. UserId={UserId}, Family={Family}",
                     oldToken.UserId, oldToken.Family);
                 _securityAlerts.RecordTokenMisuse(oldToken.UserId, $"Replay attack on family {oldToken.Family}");
                 await RevokeTokenFamilyAsync(oldToken.Family, "Replay attack detected");
@@ -398,63 +413,18 @@ namespace ResourceManager.Controllers
 
             if (oldToken.IsExpired)
             {
-                var refreshIp = HttpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0]?.Trim()
-                             ?? HttpContext.Request.Headers["X-Real-IP"].FirstOrDefault()
-                             ?? HttpContext.Connection.RemoteIpAddress?.ToString()
-                             ?? "unknown";
-                _logger.LogWarning("Expired refresh token used for user {UserId}", oldToken.UserId);
+                var refreshIp = GetClientIp();
+                _logger.LogWarning("Expired refresh token used. UserId={UserId}, IP={IpAddress}", oldToken.UserId, refreshIp);
                 _securityAlerts.RecordExpiredRefreshAttempt(oldToken.UserId, refreshIp);
                 ClearRefreshTokenCookie();
-                return Unauthorized(new { error = "Refresh token expired. Please log in again." });
+                return Unauthorized(new { error = "Session expired. Please log in again." });
             }
 
             // Rotate: revoke old token, issue new one in the same family
-            var user = await _userManager.FindByIdAsync(oldToken.UserId);
-            if (user == null)
-                return Unauthorized(new { error = "User not found." });
-
-            var roles = await _userManager.GetRolesAsync(user);
-            var role = roles.FirstOrDefault() ?? "FreeUser";
-
-            // Create new refresh token in the same family
             var newRefreshToken = await RotateRefreshTokenAsync(oldToken);
-            SetRefreshTokenCookie(newRefreshToken.Token);
-
-            // Issue new access token
-            var accessToken = GenerateAccessToken(user.Id.ToString(), user.Email!, role, user.CompanyId);
-
-            // Fetch company settings BYPASSING tenant filter (refresh requests are [AllowAnonymous])
-            var companySettings = await _context.CompanySettings
-                .IgnoreQueryFilters()
-                .Where(s => s.CompanyId == user.CompanyId)
-                .Select(s => new { s.IsProfileComplete, s.BaseStoragePath })
-                .FirstOrDefaultAsync();
-
-            return Ok(new
-            {
-                AccessToken = accessToken,
-                ExpiresInMinutes = AccessTokenMinutes,
-                User = new {
-                    user.Id,
-                    user.Email,
-                    Role = role,
-                    // We don't have profile handy here easily unless we fetch it, 
-                    // but for refresh we primarily need the new token. 
-                    // However, to keep AuthContext in sync if we reload page, we might need it.
-                    // But AuthContext.restoreSession calls /refresh then sets User from localStorage.
-                    // Actually AuthContext.restoreSession relies on localStorage for User details!
-                    // So RefreshToken result is ONLY used for the new token.
-                    // WAIT: If I update IsProfileComplete on the backend, the frontend won't know until re-login if I rely only on localStorage.
-                    // I should probably return the User object in RefreshToken too, or at least the flags.
-                    IsProfileComplete = companySettings?.IsProfileComplete ?? false,
-                    BaseStoragePath = companySettings?.BaseStoragePath
-                }
-            });
+            return await BuildRefreshResponse(oldToken.UserId, newRefreshToken.Token);
         }
 
-        /// <summary>
-        /// POST: api/auth/logout — Revoke the current refresh token and clear the cookie.
-        /// </summary>
         [HttpPost("logout")]
         [AllowAnonymous]
         public async Task<IActionResult> Logout()
@@ -468,6 +438,7 @@ namespace ResourceManager.Controllers
                     token.RevokedAt = DateTime.UtcNow;
                     token.RevokedReason = "Logout";
                     await _context.SaveChangesAsync();
+                    _logger.LogInformation("User logged out. UserId={UserId}", token.UserId);
                 }
             }
 
@@ -475,9 +446,6 @@ namespace ResourceManager.Controllers
             return Ok(new { message = "Logged out successfully." });
         }
 
-        /// <summary>
-        /// POST: api/auth/revoke-all — Revoke all refresh tokens for the current user (password change, security event).
-        /// </summary>
         [HttpPost("revoke-all")]
         public async Task<IActionResult> RevokeAllTokens()
         {
@@ -485,6 +453,70 @@ namespace ResourceManager.Controllers
             if (string.IsNullOrEmpty(userId))
                 return Unauthorized();
 
+            var count = await RevokeAllUserTokensAsync(userId, "User requested full revocation");
+            ClearRefreshTokenCookie();
+
+            _logger.LogInformation("All refresh tokens revoked. UserId={UserId}, Count={Count}", userId, count);
+            return Ok(new { message = "All sessions revoked.", count });
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // HELPERS (Private)
+        // ═══════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// Builds the standard refresh response with user profile, role, and company settings.
+        /// Shared by the normal refresh path and the multi-tab race condition path.
+        /// </summary>
+        private async Task<IActionResult> BuildRefreshResponse(string userId, string refreshTokenValue)
+        {
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
+                return Unauthorized(new { error = "User not found." });
+
+            var roles = await _userManager.GetRolesAsync(user);
+            var role = roles.FirstOrDefault() ?? "FreeUser";
+
+            var accessToken = GenerateAccessToken(user.Id.ToString(), user.Email!, role, user.CompanyId);
+            SetRefreshTokenCookie(refreshTokenValue);
+
+            // Fetch profile + company settings bypassing tenant filter (refresh is [AllowAnonymous])
+            var userProfile = await _context.UserProfiles
+                .IgnoreQueryFilters()
+                .Where(p => p.UserId == user.Id)
+                .Select(p => new { p.FirstName, p.LastName })
+                .FirstOrDefaultAsync();
+
+            var companySettings = await _context.CompanySettings
+                .IgnoreQueryFilters()
+                .Where(s => s.CompanyId == user.CompanyId)
+                .Select(s => new { s.IsProfileComplete, s.BaseStoragePath })
+                .FirstOrDefaultAsync();
+
+            _logger.LogInformation("Refresh token issued. UserId={UserId}", userId);
+
+            return Ok(new
+            {
+                AccessToken = accessToken,
+                ExpiresInMinutes = AccessTokenMinutes,
+                User = new
+                {
+                    user.Id,
+                    user.Email,
+                    Role = role,
+                    FirstName = userProfile?.FirstName ?? "",
+                    LastName = userProfile?.LastName ?? "",
+                    IsProfileComplete = companySettings?.IsProfileComplete ?? false,
+                    BaseStoragePath = companySettings?.BaseStoragePath
+                }
+            });
+        }
+
+        /// <summary>
+        /// Revoke all active refresh tokens for a user. Returns the count of revoked tokens.
+        /// </summary>
+        private async Task<int> RevokeAllUserTokensAsync(string userId, string reason)
+        {
             var activeTokens = await _context.RefreshTokens
                 .Where(t => t.UserId == userId && t.RevokedAt == null && t.ExpiresAt > DateTime.UtcNow)
                 .ToListAsync();
@@ -492,19 +524,23 @@ namespace ResourceManager.Controllers
             foreach (var token in activeTokens)
             {
                 token.RevokedAt = DateTime.UtcNow;
-                token.RevokedReason = "User requested full revocation";
+                token.RevokedReason = reason;
             }
-        
-            await _context.SaveChangesAsync();
-            ClearRefreshTokenCookie();
 
-            _logger.LogInformation("All refresh tokens revoked for user {UserId}", userId);
-            return Ok(new { message = "All sessions revoked.", count = activeTokens.Count });
+            await _context.SaveChangesAsync();
+            return activeTokens.Count;
         }
 
-        // ═══════════════════════════════════════════════════════════════
-        // TOKEN HELPERS (Private)
-        // ═══════════════════════════════════════════════════════════════
+        /// <summary>
+        /// Extract client IP from forwarded headers or connection info.
+        /// </summary>
+        private string GetClientIp()
+        {
+            return HttpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0]?.Trim()
+                ?? HttpContext.Request.Headers["X-Real-IP"].FirstOrDefault()
+                ?? HttpContext.Connection.RemoteIpAddress?.ToString()
+                ?? "unknown";
+        }
 
         private string GenerateAccessToken(string userId, string email, string role, int companyId)
         {
@@ -647,16 +683,24 @@ namespace ResourceManager.Controllers
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
             var user = await _userManager.FindByIdAsync(userId);
             if (user == null) return Unauthorized();
 
             var result = await _userManager.ChangePasswordAsync(user, model.CurrentPassword, model.NewPassword);
             if (!result.Succeeded)
             {
-                return BadRequest(result.Errors);
+                _logger.LogWarning("Password change failed. UserId={UserId}, Errors={@Errors}",
+                    userId, result.Errors.Select(e => e.Description));
+                return BadRequest(new { error = "Password change failed.", errors = result.Errors });
             }
 
-            return Ok(new { Message = "Password changed successfully" });
+            // Revoke all refresh tokens after password change (security best practice)
+            var revokedCount = await RevokeAllUserTokensAsync(userId, "Password changed");
+            ClearRefreshTokenCookie();
+
+            _logger.LogInformation("Password changed. UserId={UserId}, TokensRevoked={Count}", userId, revokedCount);
+            return Ok(new { Message = "Password changed successfully. Please log in again." });
         }
     }
 } 

@@ -179,8 +179,17 @@ Invoice (1) ──→ (N) InvoiceItem
 - Run migrations with `dotnet ef database update`
 - Test with account: `AHT@gmail.com` / `AHT@gmail.com`
 
+ 🛡️ Strict Development ProtocolsImmutable Pages: If a page is marked as "Complete ✅" in the status tables, DO NOT modify or refactor it unless I explicitly state: "I am overriding the status for [Page Name]".Search Before Code: Before proposing a new function, DTO, or React component, search the codebase. If a similar pattern exists (e.g., in useInvoices or BaseApiController), follow that pattern exactly.Clean Architecture Enforcement: All business logic must reside in the Application layer. Controllers should only handle routing and returning ActionResult.
+ 🌍 Localization & i18n RulesHardcoding Forbidden: Never add hardcoded strings (English, French, etc.) to the UI.Mandatory Updates: Every new label, button, or message must be added to the i18n JSON files for all supported languages (check ClientApp/src/locales/).Key Hierarchy: Use structured keys (e.g., invoice.status.partiallyPaid) rather than flat keys.
+ 🧪 Definition of "Done" (Verification Checklist)Before providing a final solution, you must verify:Multi-Tenancy: Does the backend logic automatically respect the CompanyId global filter?i18n: Are all new strings localized in the JSON files?State Management: If data is mutated, did you call queryClient.invalidateQueries for the relevant TanStack Query key?UI Testing: Does the frontend render correctly without breaking Tailwind layout?Status Logic: Does Invoice logic correctly compare TotalAmount vs AmountPaid? (Note: "Due" status is strictly forbidden).🛠️ Updated Phase TableComponentStatusAction Neededi18n MigrationIn Progress 🔄Move all hardcoded strings in src/pages to translation filesLogic VerificationMonitoring 🔄Every PR must verify TotalAmount vs AmountPaid logicTestingRequired 🔴You must ask to test the frontend functionality before saying "Done"
+ 
+ 🧪 Integration & Verification Protocol (The "Full-Stack" Check)
+Before marking any task as Done ✅, you must perform the following internal checks:
+ 1. Backend-to-Frontend SyncType Safety: Ensure the C# DTO matches the TypeScript Interface in ClientApp/src/types/.Global Filter Check: Verify the new logic does not bypass the CompanyId global query filter in AppDbContext.Naming Consistency: Use camelCase for JSON responses (C# JsonNamingPolicy.CamelCase) to match the React frontend expectations.
+ 2. Frontend "Live" CheckTanStack Query Keys: If you add or edit data, you must include the code to invalidate the specific cache key (e.g., queryClient.invalidateQueries(['invoices'])).Loading & Error States: Every new component must handle isLoading and isError states from the hooks.i18n Coverage: Verify that t('key') is used and the corresponding keys exist in both en.json and fr.json.
+ 3. Business Logic AccuracyInvoice Status: Verify that the UI reflects status based on TotalAmount vs AmountPaid.Dual Currency: If the page involves money, verify the "Mixed Mode" toggle logic works with the provided exchangeRate.🛠️ Updated Phase Table (Add this to your "Current State")Add these two lines to your status table to track the verification work:ComponentStatusAction NeededCross-Layer Sync🔄 MonitoringAI must verify DTOs match TS InterfacesEnd-to-End Test🔴 RequiredAI must provide a "Test Plan" (steps to verify) before finishing
 ### DO NOT
-- Add manual `CompanyId` filters (global filters handle it)
+- Add manual `CompanyId`, `UserId` filters (global filters handle it)
 - Duplicate existing React pages or components
 - Put business logic in controllers
 - Commit secrets to source control

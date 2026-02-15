@@ -179,9 +179,8 @@
     "overdueAmount": "Total Overdue Amount",
     "dueSoon": "Due Soon",
     "paid": "Paid",
-    "unpaid": "Unpaid",
+    "pending": "Pending",
     "partiallyPaid": "Partially Paid",
-    "draft": "Draft",
     "locked": "Locked",
     "daysOverdue": "{{days}} days overdue",
     "daysUntilDue": "{{days}} days until due",
@@ -191,8 +190,13 @@
     "enterAmount": "Enter amount...",
     "paymentNotesPlaceholder": "Payment reference, check number, etc.",
     "details": "Details",
-    "payments": "Payments",
+    "payments": {
+      "label": "Payments",
+      "lockedMessage": "Payments for this invoice are locked"
+    },
     "relatedDocs": "Related Documents",
+    "handledBy": "Handled By",
+    "pendingBalance": "Pending Balance",
     "info": "Invoice Information",
     "number": "Invoice Number",
     "financial": "Financial Summary",
@@ -206,7 +210,6 @@
     "linkedDelivery": "Linked Delivery Notes",
     "noPayments": "No payments recorded",
     "noLinkedDocs": "No linked documents found",
-    "lockedAfterPayment": "Locked â€” payments registered",
     "noRelatedQuote": "No related quote",
     "relatedDeliveryNotes": "Related Delivery Notes",
     "noRelatedDeliveryNotes": "No related delivery notes",
@@ -217,11 +220,11 @@
     "relatedQuote": "Related Quote",
     "status": {
       "Paid": "Paid",
-      "Unpaid": "Unpaid",
+      "Pending": "Pending",
       "PartiallyPaid": "Partially Paid",
-      "Draft": "Draft",
-      "Overdue": "Overdue",
-      "Locked": "Locked"
+      "Archived": "Archived",
+      "Locked": "Locked",
+      "Cancelled": "Cancelled"
     },
     "createPage": {
       "titleNew": "New Invoice",
@@ -352,7 +355,8 @@
         "address": "Address",
         "companyName": "Company Name",
         "fiscalId": "Fiscal Id",
-        "phone": "Phone"
+        "phone": "Phone",
+        "email": "name@company.com"
       },
       "saveChanges": "Save Changes",
       "saveFailed": "Save Failed",
@@ -401,10 +405,12 @@
     "payNow": "Pay Now",
     "scheduleLater": "Schedule for Later",
     "scheduledDate": "Scheduled Date",
-    "scheduledInfo": "The payment will be automatically processed on the selected date",
+    "scheduledInfo": "The payment will be scheduled and must be manually approved",
     "schedulePayment": "Schedule Payment",
     "scheduledSuccess": "Payment has been scheduled successfully",
-    "selectScheduledDate": "Please select a scheduled date"
+    "selectScheduledDate": "Please select a scheduled date",
+    "confirmDelete": "Are you sure you want to delete this payment?",
+    "deleteFailed": "Failed to delete payment"
   },
   "settings": {
     "title": "Settings",
@@ -565,8 +571,8 @@
     "totalInvoices": "Total Invoices",
     "totalRevenueLabel": "Total Revenue",
     "totalUsers": "Total Users",
-    "unpaid": "Unpaid",
-    "unpaidInvoices": "Unpaid Invoices",
+    "pending": "Pending",
+    "pendingInvoices": "Pending Invoices",
     "users": "Users",
     "allTime": "All Time",
     "lastYear": "Last Year",
@@ -707,7 +713,6 @@
     "paymentStatus": {
       "Paid": "Paid",
       "PartiallyPaid": "Partially Paid",
-      "Unpaid": "Unpaid",
       "Pending": "Pending"
     },
     "paid": "Paid",
@@ -842,17 +847,17 @@
     "loadFailed": "Load Failed",
     "noQuoteSelected": "No Quote Selected",
     "numberRequired": "Number Required",
-    "pdfLanguage": "Pdf Language",
-    "saveButton": "Save Button",
-    "saving": "Saving",
-    "selectClient": "Select Client",
-    "selectQuote": "Select Quote",
-    "subtitleEdit": "Subtitle Edit",
-    "subtitleNew": "Subtitle New",
+    "pdfLanguage": "PDF Language",
+    "saveButton": "Save Invoice",
+    "saving": "Saving...",
+    "selectClient": "Select a client",
+    "selectQuote": "Quote #{{number}} - {{amount}}",
+    "subtitleEdit": "Edit the invoice details below",
+    "subtitleNew": "Fill in the details to generate an invoice",
     "suggested": "Suggested",
-    "titleEdit": "Title Edit",
-    "titleNew": "Title New",
-    "updateButton": "Update Button"
+    "titleEdit": "Edit Invoice",
+    "titleNew": "Create New Invoice",
+    "updateButton": "Update Invoice"
   },
   "dataManagement": {
     "dropOrSelect": "Drop Or Select",
@@ -971,7 +976,10 @@
       "deleteUser": "Delete User",
       "resetPassword": "Reset Password",
       "resetSettings": "Reset Settings",
-      "resetting": "Resetting"
+      "resetting": "Resetting",
+      "sendInvitation": "Send Invitation",
+      "sending": "Sending...",
+      "createDirectly": "Create Directly"
     },
     "fields": {
       "addressRequired": "Address Required",
@@ -989,7 +997,9 @@
       "lastName": "Last Name",
       "lastNameRequired": "Last Name Required",
       "newPasswordPlaceholder": "New Password Placeholder",
-      "passwordRequired": "Password Required"
+      "passwordRequired": "Password Required",
+      "emailPlaceholder": "manager@company.com",
+      "phone": "Phone"
     },
     "messages": {
       "authRequired": "Auth Required",
@@ -1016,7 +1026,13 @@
       "resettingFor": "Resetting For",
       "retry": "Retry",
       "tenantCreateFailed": "Tenant Create Failed",
-      "tenantCreated": "Tenant Created"
+      "tenantCreated": "Tenant Created",
+      "invitationSent": "Invitation sent successfully!",
+      "invitationSentDesc": "An invitation email has been sent to the manager. They will be able to set up their account and company details.",
+      "inviteDesc": "Enter the manager's email address to send them an invitation. They will set up their own account and company details.",
+      "directTenantCreated": "Tenant created successfully!",
+      "directTenantCreatedDesc": "The manager account and company have been created. They can now log in with the credentials you provided.",
+      "directDesc": "Fill in all the details below to create the manager account and company directly."
     },
     "roles": {
       "Employee": "Employee"
@@ -1037,5 +1053,35 @@
       "user": "User"
     },
     "title": "Title"
+  },
+  "invitation": {
+    "invalidTitle": "Invalid Invitation",
+    "goToLogin": "Go to Login",
+    "successTitle": "Account Created Successfully!",
+    "successDesc": "Your account and company have been set up. You can now log in.",
+    "setupTitle": "Set Up Your Account",
+    "setupDesc": "Complete your profile and company details to get started.",
+    "profileSection": "Profile Information",
+    "firstName": "First Name",
+    "lastName": "Last Name",
+    "password": "Password",
+    "confirmPassword": "Confirm Password",
+    "companySection": "Company Information",
+    "companyName": "Company Name",
+    "companyAddress": "Address",
+    "city": "City",
+    "taxNumber": "Tax Number",
+    "creating": "Creating account...",
+    "createAccount": "Create Account & Company",
+    "validatingToken": "Validating your invitation...",
+    "tokenRequired": "No invitation token provided.",
+    "validationFailed": "Failed to validate invitation. Please try again.",
+    "invalidOrExpired": "This invitation is invalid or expired.",
+    "createFailed": "Failed to create account.",
+    "unexpectedError": "An unexpected error occurred. Please try again.",
+    "passwordMismatch": "Passwords do not match.",
+    "passwordMinLength": "Password must be at least 6 characters.",
+    "defaultCurrency": "Default Currency",
+    "defaultLanguage": "Default Language"
   }
 }

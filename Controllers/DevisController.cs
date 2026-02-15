@@ -351,6 +351,8 @@ namespace ResourceManager.Controllers
                 ClientId = devis.ClientId,
                 DevisId = devis.Id, // Link original Devis
                 SourceDevisNumber = devis.Number,
+                Tfiscal = devis.Tfiscal,
+                TfiscalName = devis.TfiscalName,
                 CreatedByUserId = userId,
                 CreatedAt = DateTime.UtcNow,
                 Status = "Unpaid"

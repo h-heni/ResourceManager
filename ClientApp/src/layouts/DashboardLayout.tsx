@@ -48,10 +48,11 @@ export default function DashboardLayout() {
     const { logout, canManageUsers, canManageSettings, displayName, isSuperAdmin, isManager } = useAuth();
     const { t } = useTranslation();
 
-    const [sidebarOpen, setSidebarOpen] = useState(true);
+    // Mobile detection: auto-collapse sidebar on small screens
+    const [sidebarOpen, setSidebarOpen] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 768);
+    const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
     const [companyName, setCompanyName] = useState<string>('');
     const [companyLogo, setCompanyLogo] = useState<string | null>(null);
-    const [archivedInvoiceCount, setArchivedInvoiceCount] = useState(0);
     const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
     const prevPathRef = useRef(location.pathname);
     const userName = displayName || '';
@@ -121,33 +122,18 @@ export default function DashboardLayout() {
         };
     }, []);
 
-    useEffect(() => {
-        if (isSuperAdmin) return;
-
-        let isMounted = true;
-        const year = new Date().getFullYear();
-
-        const fetchArchivedInvoiceCount = async () => {
-            try {
-                const response = await api.get(`/Invoices/archived/count?year=${year}`);
-                if (isMounted) {
-                    setArchivedInvoiceCount(response.data?.count ?? 0);
-                }
-            } catch {
-                if (isMounted) {
-                    setArchivedInvoiceCount(0);
-                }
-            }
-        };
-
-        fetchArchivedInvoiceCount();
-
-        return () => {
-            isMounted = false;
-        };
-    }, [isSuperAdmin]);
-
     // userName is derived directly from displayName (no sync effect needed)
+
+    // Handle window resize for responsive sidebar
+    useEffect(() => {
+        const handleResize = () => {
+            const mobile = window.innerWidth < 768;
+            setIsMobile(mobile);
+            if (mobile) setSidebarOpen(false);
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
 
     // Dynamic browser tab: title + favicon from company branding
     useEffect(() => {
@@ -196,7 +182,7 @@ export default function DashboardLayout() {
                 { icon: Users, label: t('nav.clients'), path: '/clients' },
                 { icon: CreditCard, label: t('nav.quotes'), path: '/quotes' },
                 { icon: Truck, label: t('nav.deliveryNotes'), path: '/delivery-notes' },
-                { icon: FileText, label: t('nav.invoices'), path: '/invoices', badge: archivedInvoiceCount },
+                { icon: FileText, label: t('nav.invoices'), path: '/invoices' },
                 { icon: Package, label: t('nav.products'), path: '/products' },
             ]
         },
@@ -311,13 +297,20 @@ export default function DashboardLayout() {
     // ════════════════════════════════════════════════════════
 
     return (
-        <div className="min-h-screen bg-[#F9FAFB] flex" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
+        <div className="min-h-screen bg-[#F9FAFB] flex" style={{ fontFamily: 'Inter, system-ui, sans-serif' }} dir="ltr">
+            {/* Mobile overlay backdrop */}
+            {isMobile && sidebarOpen && (
+                <div 
+                    className="fixed inset-0 bg-black/50 z-40 md:hidden"
+                    onClick={() => setSidebarOpen(false)}
+                />
+            )}
             {/* Sidebar — Professional Green: white bg, green active states */}
             <aside
                 className={cn(
-                    "fixed inset-y-0 left-0 z-50 transition-all duration-300 ease-in-out flex flex-col",
-                    "bg-white border-r border-slate-200",
-                    sidebarOpen ? "w-72" : "w-20"
+                    "fixed inset-y-0 start-0 z-50 transition-all duration-300 ease-in-out flex flex-col",
+                    "bg-white border-e border-slate-200",
+                    isMobile ? (sidebarOpen ? "w-72" : "w-0 -translate-x-full") : (sidebarOpen ? "w-72" : "w-20")
                 )}
             >
                 {/* Company Header */}
@@ -405,12 +398,22 @@ export default function DashboardLayout() {
 
             {/* Main Content */}
             <main className={cn(
-                "flex-1 transition-all duration-300 min-h-screen",
-                sidebarOpen ? "ml-72" : "ml-20"
+                "transition-all duration-300 min-h-screen min-w-0 w-full",
+                isMobile ? "ms-0" : (sidebarOpen ? "ms-72 w-[calc(100%-18rem)]" : "ms-20 w-[calc(100%-5rem)]")
             )}>
                 {/* Topbar */}
-                <div className="bg-white border-b border-slate-200 px-8 py-3 flex justify-between items-center">
+                <div className="bg-white border-b border-slate-200 px-4 md:px-8 py-3 flex justify-between items-center">
                     <div className="flex items-center gap-3">
+                        {/* Mobile hamburger menu */}
+                        {isMobile && (
+                            <button
+                                onClick={() => setSidebarOpen(true)}
+                                className="p-2 rounded-lg hover:bg-slate-100 text-slate-600 md:hidden"
+                                aria-label={t('nav.openMenu', 'Open menu')}
+                            >
+                                <Menu size={20} />
+                            </button>
+                        )}
                         {companyLogo && (
                             <img src={companyLogo} alt="" className="h-7 w-7 object-contain rounded" />
                         )}
@@ -432,7 +435,7 @@ export default function DashboardLayout() {
                 </div>
 
                 {/* Page Content */}
-                <div className="p-8 max-w-7xl mx-auto space-y-8 animate-fade-in">
+                <div className="rm-content-shell space-y-8 animate-fade-in">
                     <Outlet />
                 </div>
             </main>

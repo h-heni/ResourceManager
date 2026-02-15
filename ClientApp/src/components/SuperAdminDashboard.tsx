@@ -834,7 +834,7 @@ export default function SuperAdminDashboard() {
                                         </div>
                                         {data.unpaid > 0 && (
                                             <div className="flex justify-between text-amber-600">
-                                                <span>{t('dashboard.unpaid', 'Unpaid')}</span>
+                                                <span>{t('dashboard.pending', 'Pending')}</span>
                                                 <span className="font-medium">{formatAmount(data.unpaid, currency)}</span>
                                             </div>
                                         )}
@@ -912,7 +912,7 @@ export default function SuperAdminDashboard() {
                                                         <div className="flex items-center gap-2 text-amber-600 text-xs pt-1 border-t border-gray-100">
                                                             <AlertTriangle size={14} />
                                                             <span>
-                                                                {bucket.unpaidCount} {t('dashboard.unpaidInvoices', 'unpaid')} \u00B7 {formatAmount(bucket.unpaidAmount, bucket.currency)}
+                                                                {bucket.unpaidCount} {t('dashboard.pendingInvoices', 'pending')} \u00B7 {formatAmount(bucket.unpaidAmount, bucket.currency)}
                                                             </span>
                                                         </div>
                                                     )}

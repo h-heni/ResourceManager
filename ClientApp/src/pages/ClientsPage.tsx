@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Search, Edit2, Trash2, Phone, MapPin } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2 } from 'lucide-react';
 import api from '../services/api';
 import { getErrorMessage } from '../utils/errorUtils';
 import Modal from '../components/Modal';
@@ -12,6 +12,7 @@ interface Client {
     address: string;
     matriculeFiscal: string;
     phone: string;
+    email: string;
 }
 
 export default function ClientsPage() {
@@ -31,8 +32,10 @@ export default function ClientsPage() {
         name: '',
         address: '',
         matriculeFiscal: '',
-        phone: ''
+        phone: '',
+        email: ''
     });
+    const [saving, setSaving] = useState(false);
 
     /* eslint-disable react-hooks/exhaustive-deps */
     useEffect(() => {
@@ -62,17 +65,20 @@ export default function ClientsPage() {
                 name: client.name,
                 address: client.address,
                 matriculeFiscal: client.matriculeFiscal,
-                phone: client.phone
+                phone: client.phone,
+                email: client.email || ''
             });
         } else {
             setEditingClient(null);
-            setFormData({ name: '', address: '', matriculeFiscal: '', phone: '' });
+            setFormData({ name: '', address: '', matriculeFiscal: '', phone: '', email: '' });
         }
         setIsModalOpen(true);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (saving) return;
+        setSaving(true);
         try {
             if (editingClient) {
                 await api.put(`/Clients/${editingClient.id}`, { ...formData, companyName: formData.name, id: editingClient.id });
@@ -85,6 +91,8 @@ export default function ClientsPage() {
             console.error("Error saving client", error);
             const msg = getErrorMessage(error, t('client.messages.saveFailed'));
             alert(msg);
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -131,52 +139,57 @@ export default function ClientsPage() {
                 />
             </div>
 
-            {/* Clients Grid/Table */}
+            {/* Clients Table */}
             {loading ? (
                 <div className="text-center py-20 text-gray-500">{t('client.messages.loading')}</div>
             ) : (
                 <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {filteredClients.map((client) => (
-                        <div key={client.id} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow group">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="h-12 w-12 bg-[#065F46]/5 rounded-xl flex items-center justify-center text-[#065F46] font-bold text-lg">
-                                    {client.name.substring(0, 2).toUpperCase()}
-                                </div>
-                                <div className="flex space-x-2">
-                                    <button onClick={() => handleOpenModal(client)} className="p-2 text-gray-400 hover:text-[#065F46] hover:bg-gray-50 rounded-lg transition-colors">
-                                        <Edit2 size={18} />
-                                    </button>
-                                    <button onClick={() => handleDelete(client.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-gray-50 rounded-lg transition-colors">
-                                        <Trash2 size={18} />
-                                    </button>
-                                </div>
-                            </div>
+                    <div className="rm-table-card">
+                        <table className="rm-table">
+                            <thead>
+                                <tr>
+                                    <th>{t('client.companyName')}</th>
+                                    <th className="rm-th-id">{t('client.fiscalId')}</th>
+                                    <th className="rm-th-id">{t('client.phone')}</th>
+                                    <th className="rm-th-id">{t('client.email')}</th>
+                                    <th>{t('client.address')}</th>
+                                    <th className="rm-th-actions">{t('common.actions')}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredClients.map((client) => (
+                                    <tr key={client.id}>
+                                        <td className="rm-cell-text">
+                                            <span className="font-semibold text-gray-900">{client.name}</span>
+                                        </td>
+                                        <td className="rm-cell-text whitespace-nowrap text-gray-600">{client.matriculeFiscal || '-'}</td>
+                                        <td className="rm-cell-text whitespace-nowrap text-gray-600">{client.phone || '-'}</td>
+                                        <td className="rm-cell-text whitespace-nowrap text-gray-600">{client.email || '-'}</td>
+                                        <td className="rm-cell-text text-gray-600">{client.address || '-'}</td>
+                                        <td className="rm-cell-actions">
+                                            <div className="flex items-center justify-end gap-1">
+                                                <button onClick={() => handleOpenModal(client)} className="p-2 text-gray-400 hover:text-[#065F46] hover:bg-gray-50 rounded-lg transition-colors" title={t('common.edit')}>
+                                                    <Edit2 size={18} />
+                                                </button>
+                                                <button onClick={() => handleDelete(client.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-gray-50 rounded-lg transition-colors" title={t('common.delete')}>
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {filteredClients.length === 0 && (
+                                    <tr>
+                                        <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
+                                            {t('client.messages.emptySearch')}
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
 
-                            <h3 className="text-lg font-bold text-gray-900 mb-1">{client.name}</h3>
-                            <p className="text-sm text-gray-400 mb-4">{client.matriculeFiscal}</p>
-
-                            <div className="space-y-2">
-                                <div className="flex items-center text-sm text-gray-600">
-                                    <MapPin size={16} className="mr-2 text-gray-400" />
-                                    <span className="truncate">{client.address}</span>
-                                </div>
-                                <div className="flex items-center text-sm text-gray-600">
-                                    <Phone size={16} className="mr-2 text-gray-400" />
-                                    <span>{client.phone}</span>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-
-                    {filteredClients.length === 0 && (
-                        <div className="col-span-full text-center py-12 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
-                            <p className="text-gray-500">{t('client.messages.emptySearch')}</p>
-                        </div>
-                    )}
-                </div>
-
-                {/* Pagination */}
+                    {/* Pagination */}
                     {!search && (
                         <Pagination
                             page={page}
@@ -230,6 +243,16 @@ export default function ClientsPage() {
                         />
                     </div>
                     <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('client.email')}</label>
+                        <input
+                            type="email"
+                            value={formData.email}
+                            onChange={e => setFormData({ ...formData, email: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] outline-none"
+                            placeholder={t('client.messages.placeholders.email')}
+                        />
+                    </div>
+                    <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">{t('client.address')}</label>
                         <textarea
                             value={formData.address}
@@ -250,7 +273,8 @@ export default function ClientsPage() {
                         </button>
                         <button
                             type="submit"
-                            className="px-4 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#047857] transition-colors shadow-lg"
+                            disabled={saving}
+                            className="px-4 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#047857] transition-colors shadow-lg disabled:opacity-50"
                         >
                             {editingClient ? t('client.messages.saveChanges') : t('client.messages.create')}
                         </button>

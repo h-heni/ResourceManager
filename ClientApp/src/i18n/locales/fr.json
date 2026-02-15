@@ -178,9 +178,8 @@
     "overdueAmount": "Montant total en retard",
     "dueSoon": "Échéance proche",
     "paid": "Payée",
-    "unpaid": "Non payée",
+    "pending": "En attente",
     "partiallyPaid": "Partiellement payée",
-    "draft": "Brouillon",
     "locked": "Verrouillée",
     "daysOverdue": "{{days}} jours de retard",
     "daysUntilDue": "{{days}} jours avant l'échéance",
@@ -190,8 +189,13 @@
     "enterAmount": "Entrez le montant...",
     "paymentNotesPlaceholder": "Référence de paiement, numéro de chèque, etc.",
     "details": "Détails",
-    "payments": "Paiements",
+    "payments": {
+      "label": "Paiements",
+      "lockedMessage": "Les paiements pour cette facture sont verrouillés"
+    },
     "relatedDocs": "Documents liés",
+    "handledBy": "Traité par",
+    "pendingBalance": "Solde en attente",
     "info": "Informations de la facture",
     "number": "Numéro de facture",
     "financial": "Résumé financier",
@@ -205,7 +209,6 @@
     "linkedDelivery": "Bons de livraison liés",
     "noPayments": "Aucun paiement enregistré",
     "noLinkedDocs": "Aucun document lié trouvé",
-    "lockedAfterPayment": "Verrouillée — paiements enregistrés",
     "noRelatedQuote": "Aucun devis associé",
     "relatedDeliveryNotes": "Bons de livraison associés",
     "noRelatedDeliveryNotes": "Aucun bon de livraison associé",
@@ -217,11 +220,11 @@
     "relatedQuote": "Devis associé",
     "status": {
       "Paid": "Payée",
-      "Unpaid": "Non payée",
+      "Pending": "En attente",
       "PartiallyPaid": "Partiellement payée",
-      "Draft": "Brouillon",
-      "Overdue": "En retard",
-      "Locked": "Verrouillée"
+      "Archived": "Archivée",
+      "Locked": "Verrouillée",
+      "Cancelled": "Annulée"
     },
     "createPage": {
       "titleNew": "Nouvelle Facture",
@@ -352,7 +355,8 @@
         "address": "Adresse complète",
         "companyName": "Nom de l'entreprise",
         "fiscalId": "Matricule Fiscal",
-        "phone": "Téléphone"
+        "phone": "Téléphone",
+        "email": "nom@entreprise.com"
       },
       "saveChanges": "Enregistrer les modifications",
       "saveFailed": "Échec de l'enregistrement",
@@ -401,10 +405,12 @@
     "payNow": "Payer maintenant",
     "scheduleLater": "Programmer pour plus tard",
     "scheduledDate": "Date programmée",
-    "scheduledInfo": "Le paiement sera automatiquement traité à la date sélectionnée",
+    "scheduledInfo": "Le paiement sera programmé et devra être approuvé manuellement",
     "schedulePayment": "Programmer le paiement",
     "scheduledSuccess": "Le paiement a été programmé avec succès",
-    "selectScheduledDate": "Veuillez sélectionner une date programmée"
+    "selectScheduledDate": "Veuillez sélectionner une date programmée",
+    "confirmDelete": "Êtes-vous sûr de vouloir supprimer ce paiement ?",
+    "deleteFailed": "Échec de la suppression du paiement"
   },
   "settings": {
     "title": "Paramètres",
@@ -565,8 +571,8 @@
     "totalInvoices": "Total Factures",
     "totalRevenueLabel": "Total Revenus",
     "totalUsers": "Total Utilisateurs",
-    "unpaid": "Impayé",
-    "unpaidInvoices": "Factures impayées",
+    "pending": "En attente",
+    "pendingInvoices": "Factures en attente",
     "users": "Utilisateurs",
     "revenueByYear": "Chiffre d'affaires par année",
     "allTime": "Tous les temps",
@@ -707,7 +713,6 @@
     "paymentStatus": {
       "Paid": "Payé",
       "PartiallyPaid": "Partiellement payé",
-      "Unpaid": "Impayé",
       "Pending": "En attente"
     },
     "paid": "Payé",
@@ -843,16 +848,16 @@
     "noQuoteSelected": "Aucun devis sélectionné",
     "numberRequired": "Numéro requis",
     "pdfLanguage": "Langue du PDF",
-    "saveButton": "Enregistrer",
-    "saving": "Enregistrement...",
-    "selectClient": "Sélectionner un client",
-    "selectQuote": "Sélectionner un devis",
-    "subtitleEdit": "Modifier les détails",
-    "subtitleNew": "Entrez les détails",
+    "saveButton": "Enregistrer la facture",
+    "saving": "Enregistrement en cours...",
+    "selectClient": "Sélectionnez un client",
+    "selectQuote": "Devis #{{number}} - {{amount}}",
+    "subtitleEdit": "Modifiez les détails de la facture ci-dessous",
+    "subtitleNew": "Remplissez les détails pour générer une facture",
     "suggested": "Suggéré",
-    "titleEdit": "Modifier",
-    "titleNew": "Nouveau",
-    "updateButton": "Mettre à jour"
+    "titleEdit": "Modifier la Facture",
+    "titleNew": "Créer une Nouvelle Facture",
+    "updateButton": "Mettre à jour la facture"
   },
   "dataManagement": {
     "dropOrSelect": "Glissez ou sélectionnez",
@@ -971,7 +976,10 @@
       "deleteUser": "Supprimer utilisateur",
       "resetPassword": "Réinitialiser mot de passe",
       "resetSettings": "Réinitialiser les paramètres",
-      "resetting": "Réinitialisation..."
+      "resetting": "Réinitialisation...",
+      "sendInvitation": "Envoyer l'invitation",
+      "sending": "Envoi...",
+      "createDirectly": "Créer directement"
     },
     "fields": {
       "addressRequired": "Adresse requise",
@@ -989,7 +997,9 @@
       "lastName": "Nom",
       "lastNameRequired": "Nom requis",
       "newPasswordPlaceholder": "Entrez le nouveau mot de passe",
-      "passwordRequired": "Le mot de passe est requis"
+      "passwordRequired": "Le mot de passe est requis",
+      "emailPlaceholder": "manager@entreprise.com",
+      "phone": "Téléphone"
     },
     "messages": {
       "authRequired": "Authentification requise",
@@ -1016,7 +1026,13 @@
       "resettingFor": "Réinitialisation pour",
       "retry": "Réessayer",
       "tenantCreateFailed": "Échec de la création de l'entreprise",
-      "tenantCreated": "Entreprise créée avec succès"
+      "tenantCreated": "Entreprise créée avec succès",
+      "invitationSent": "Invitation envoyée avec succès !",
+      "invitationSentDesc": "Un email d'invitation a été envoyé au manager. Il pourra configurer son compte et les détails de son entreprise.",
+      "inviteDesc": "Entrez l'adresse email du manager pour lui envoyer une invitation. Il configurera lui-même son compte et les détails de son entreprise.",
+      "directTenantCreated": "Entreprise créée avec succès !",
+      "directTenantCreatedDesc": "Le compte manager et l'entreprise ont été créés. Le manager peut maintenant se connecter avec les identifiants fournis.",
+      "directDesc": "Remplissez tous les détails ci-dessous pour créer directement le compte manager et l'entreprise."
     },
     "roles": {
       "Employee": "Employé"
@@ -1037,5 +1053,35 @@
       "user": "Utilisateur"
     },
     "title": "Gestion des utilisateurs"
+  },
+  "invitation": {
+    "invalidTitle": "Invitation invalide",
+    "goToLogin": "Aller à la connexion",
+    "successTitle": "Compte créé avec succès !",
+    "successDesc": "Votre compte et votre entreprise ont été configurés. Vous pouvez maintenant vous connecter.",
+    "setupTitle": "Configurez votre compte",
+    "setupDesc": "Complétez votre profil et les détails de votre entreprise pour commencer.",
+    "profileSection": "Informations du profil",
+    "firstName": "Prénom",
+    "lastName": "Nom",
+    "password": "Mot de passe",
+    "confirmPassword": "Confirmer le mot de passe",
+    "companySection": "Informations de l'entreprise",
+    "companyName": "Nom de l'entreprise",
+    "companyAddress": "Adresse",
+    "city": "Ville",
+    "taxNumber": "Matricule fiscal",
+    "creating": "Création du compte...",
+    "createAccount": "Créer le compte et l'entreprise",
+    "validatingToken": "Validation de votre invitation...",
+    "tokenRequired": "Aucun jeton d'invitation fourni.",
+    "validationFailed": "Échec de la validation de l'invitation. Veuillez réessayer.",
+    "invalidOrExpired": "Cette invitation est invalide ou expirée.",
+    "createFailed": "Échec de la création du compte.",
+    "unexpectedError": "Une erreur inattendue s'est produite. Veuillez réessayer.",
+    "passwordMismatch": "Les mots de passe ne correspondent pas.",
+    "passwordMinLength": "Le mot de passe doit contenir au moins 6 caractères.",
+    "defaultCurrency": "Devise par défaut",
+    "defaultLanguage": "Langue par défaut"
   }
 }

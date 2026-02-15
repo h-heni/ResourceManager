@@ -119,8 +119,7 @@ namespace ResourceManager.Controllers
             return Ok(new
             {
                 message = "Invitation sent successfully.",
-                emailSent = emailResult.Success,
-                emailMode = emailResult.Mode.ToString()
+                emailSent = emailResult.Success
             });
         }
 
@@ -183,86 +182,135 @@ namespace ResourceManager.Controllers
             if (existingUser != null)
                 return Conflict(new { error = "A user with this email already exists." });
 
-            // Execute everything in a transaction
-            using var transaction = await _context.Database.BeginTransactionAsync();
-            try
+            // Execute with execution strategy for PostgreSQL retry compatibility
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
             {
-                // 1. Create Company
-                var company = new Company
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
                 {
-                    Name = dto.CompanyName,
-                    Address = dto.CompanyAddress,
-                    MatriculeFiscal = dto.TaxNumber,
-                    Phone = dto.Phone,
-                    Email = invitation.Email,
-                    CreatedAt = DateTime.UtcNow
-                };
+                    // 1. Create Company
+                    var fullAddress = string.IsNullOrWhiteSpace(dto.CompanyCity)
+                        ? dto.CompanyAddress
+                        : $"{dto.CompanyAddress}, {dto.CompanyCity}";
 
-                _context.Companies.Add(company);
-                await _context.SaveChangesAsync();
-
-                // 2. Create User
-                var newUser = new ApplicationUser
-                {
-                    UserName = invitation.Email,
-                    Email = invitation.Email,
-                    CompanyId = company.Id,
-                    Profile = new UserProfile
+                    var company = new Company
                     {
-                        FirstName = dto.FirstName,
-                        LastName = dto.LastName,
+                        Name = dto.CompanyName,
+                        Address = fullAddress,
+                        MatriculeFiscal = dto.TaxNumber ?? string.Empty,
+                        Phone = dto.Phone ?? string.Empty,
+                        Email = invitation.Email,
                         CreatedAt = DateTime.UtcNow
-                    }
-                };
+                    };
 
-                var result = await _userManager.CreateAsync(newUser, dto.Password);
-                if (!result.Succeeded)
+                    _context.Companies.Add(company);
+                    await _context.SaveChangesAsync();
+
+                    // 2. Create User linked to Company
+                    var newUser = new ApplicationUser
+                    {
+                        UserName = invitation.Email,
+                        Email = invitation.Email,
+                        CompanyId = company.Id,
+                        Profile = new UserProfile
+                        {
+                            FirstName = dto.FirstName,
+                            LastName = dto.LastName,
+                            CreatedAt = DateTime.UtcNow
+                        }
+                    };
+
+                    var result = await _userManager.CreateAsync(newUser, dto.Password);
+                    if (!result.Succeeded)
+                    {
+                        await transaction.RollbackAsync();
+                        var errors = result.Errors.Select(e => e.Description).ToList();
+                        _logger.LogWarning("User creation failed for {Email}: {Errors}", invitation.Email, string.Join(", ", errors));
+                        return BadRequest(new { error = "Failed to create account.", details = errors });
+                    }
+
+                    // 3. Assign Manager role
+                    var roleResult = await _userManager.AddToRoleAsync(newUser, "Manager");
+                    if (!roleResult.Succeeded)
+                    {
+                        await transaction.RollbackAsync();
+                        _logger.LogError("Role assignment failed for {Email}: {Errors}", invitation.Email, string.Join(", ", roleResult.Errors.Select(e => e.Description)));
+                        return StatusCode(500, new { error = "Failed to assign role." });
+                    }
+
+                    // 4. Create CompanySettings with defaults
+                    var currencySymbol = dto.DefaultCurrency switch
+                    {
+                        "USD" => "$",
+                        "EUR" => "€",
+                        "GBP" => "£",
+                        _ => dto.DefaultCurrency
+                    };
+
+                    var companySettings = new CompanySettings
+                    {
+                        CompanyId = company.Id,
+                        Currency = dto.DefaultCurrency,
+                        CurrencySymbol = currencySymbol,
+                        InvoiceLanguage = dto.DefaultLanguage
+                    };
+                    _context.CompanySettings.Add(companySettings);
+
+                    // 5. Mark invitation as used
+                    invitation.IsUsed = true;
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    _logger.LogInformation(
+                        "Manager account created — Email: {Email}, Company: {Company} (ID: {CompanyId}), User: {UserId}",
+                        invitation.Email, dto.CompanyName, company.Id, newUser.Id);
+
+                    // 6. Send welcome email (after commit — non-critical)
+                    try
+                    {
+                        var frontendUrl = _configuration["Cors:AllowedOrigins:0"] ?? "http://localhost:5173";
+                        var welcomeBody = $@"
+                            <html>
+                            <body style='font-family: Arial, sans-serif; color: #333;'>
+                                <div style='max-width: 600px; margin: 0 auto; padding: 20px;'>
+                                    <h2 style='color: #065F46;'>Welcome to Resource Manager!</h2>
+                                    <p>Hi {dto.FirstName},</p>
+                                    <p>Your account and company <strong>{dto.CompanyName}</strong> have been set up successfully.</p>
+                                    <p>You can now log in and start managing your invoices:</p>
+                                    <div style='text-align: center; margin: 30px 0;'>
+                                        <a href='{frontendUrl}/login' 
+                                           style='background-color: #065F46; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;'>
+                                            Log In Now
+                                        </a>
+                                    </div>
+                                    <hr style='border: none; border-top: 1px solid #eee; margin: 20px 0;'/>
+                                    <p style='color: #999; font-size: 12px;'>Resource Manager — Professional Invoice Management</p>
+                                </div>
+                            </body>
+                            </html>";
+
+                        await _emailService.SendEmailAsync(invitation.Email, "Welcome to Resource Manager", welcomeBody);
+                    }
+                    catch (Exception emailEx)
+                    {
+                        _logger.LogWarning(emailEx, "Welcome email failed for {Email} — account was created successfully", invitation.Email);
+                    }
+
+                    return Ok(new
+                    {
+                        message = "Account created successfully. You can now log in.",
+                        userId = newUser.Id
+                    });
+                }
+                catch (Exception ex)
                 {
                     await transaction.RollbackAsync();
-                    return BadRequest(new { error = "Failed to create account.", details = result.Errors });
+                    _logger.LogError(ex, "Failed to complete invitation for {Email}", invitation.Email);
+                    return StatusCode(500, new { error = "An error occurred during account setup." });
                 }
-
-                // 3. Assign Manager role
-                await _userManager.AddToRoleAsync(newUser, "Manager");
-
-                // 4. Create CompanySettings
-                var currencySymbol = dto.DefaultCurrency switch
-                {
-                    "USD" => "$",
-                    "EUR" => "€",
-                    "GBP" => "£",
-                    _ => dto.DefaultCurrency
-                };
-
-                var companySettings = new CompanySettings
-                {
-                    CompanyId = company.Id,
-                    Currency = dto.DefaultCurrency,
-                    CurrencySymbol = currencySymbol,
-                    InvoiceLanguage = dto.DefaultLanguage
-                };
-                _context.CompanySettings.Add(companySettings);
-
-                // 5. Mark invitation as used
-                invitation.IsUsed = true;
-
-                await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
-
-                _logger.LogInformation("Manager account created for {Email}, Company: {Company}", invitation.Email, dto.CompanyName);
-
-                return Ok(new
-                {
-                    message = "Account created successfully. You can now log in.",
-                    userId = newUser.Id
-                });
-            }
-            catch (Exception ex)
-            {
-                await transaction.RollbackAsync();
-                _logger.LogError(ex, "Failed to complete invitation for {Email}", invitation.Email);
-                return StatusCode(500, new { error = "An error occurred during account setup." });
-            }
+            });
         }
 
         /// <summary>

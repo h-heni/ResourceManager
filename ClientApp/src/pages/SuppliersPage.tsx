@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Search, Edit2, Trash2, Phone, MapPin, Truck, Upload } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Upload } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
@@ -29,6 +29,7 @@ export default function SuppliersPage() {
         matriculeFiscal: '',
         phone: ''
     });
+    const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         fetchSuppliers();
@@ -65,6 +66,8 @@ export default function SuppliersPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (saving) return;
+        setSaving(true);
         try {
             if (editingSupplier) {
                 await api.put(`/Fournisseurs/${editingSupplier.id}`, { ...formData, id: editingSupplier.id });
@@ -76,6 +79,8 @@ export default function SuppliersPage() {
         } catch (error) {
             console.error("Error saving supplier", error);
             alert(t('supplier.messages.saveFailed'));
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -124,69 +129,72 @@ export default function SuppliersPage() {
             {loading ? (
                 <div className="text-center py-20 text-gray-500">{t('supplier.messages.loading')}</div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {filteredSuppliers.map((supplier) => (
-                        <div key={supplier.id} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow group">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="h-12 w-12 bg-[#065F46]/5 rounded-xl flex items-center justify-center text-[#065F46] font-bold text-lg">
-                                    <Truck size={24} />
-                                </div>
-                                <div className="flex space-x-2">
-                                    <button onClick={() => {
-                                        const input = document.createElement('input');
-                                        input.type = 'file';
-                                        input.accept = 'application/pdf';
-                                        input.onchange = async (e) => {
-                                            const file = (e.target as HTMLInputElement).files?.[0];
-                                            if (!file) return;
-                                            const formData = new FormData();
-                                            formData.append('file', file);
-                                            try {
-                                                await api.post(`/Fournisseurs/${supplier.id}/upload-invoice`, formData, {
-                                                    headers: { 'Content-Type': 'multipart/form-data' }
-                                                });
-                                                alert(t('supplier.messages.uploadSuccess'));
-                                            } catch (error) {
-                                                console.error("Upload failed", error);
-                                                alert(t('supplier.messages.uploadFailed'));
-                                            }
-                                        };
-                                        input.click();
-                                    }} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-gray-50 rounded-lg transition-colors" title={t('supplier.messages.uploadInvoice')}>
-                                        <Upload size={18} />
-                                    </button>
-                                    <button onClick={() => handleOpenModal(supplier)} className="p-2 text-gray-400 hover:text-[#065F46] hover:bg-gray-50 rounded-lg transition-colors" title={t('common.edit')}>
-                                        <Edit2 size={18} />
-                                    </button>
-                                    {isManager && (
-                                        <button onClick={() => handleDelete(supplier.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-gray-50 rounded-lg transition-colors" title={t('common.delete')}>
-                                            <Trash2 size={18} />
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-
-                            <h3 className="text-lg font-bold text-gray-900 mb-1">{supplier.name}</h3>
-                            <p className="text-sm text-gray-400 mb-4">{supplier.matriculeFiscal}</p>
-
-                            <div className="space-y-2">
-                                <div className="flex items-center text-sm text-gray-600">
-                                    <MapPin size={16} className="mr-2 text-gray-400" />
-                                    <span className="truncate">{supplier.address}</span>
-                                </div>
-                                <div className="flex items-center text-sm text-gray-600">
-                                    <Phone size={16} className="mr-2 text-gray-400" />
-                                    <span>{supplier.phone}</span>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-
-                    {filteredSuppliers.length === 0 && (
-                        <div className="col-span-full text-center py-12 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
-                            <p className="text-gray-500">{t('supplier.messages.empty')}</p>
-                        </div>
-                    )}
+                <div className="rm-table-card">
+                    <table className="rm-table">
+                        <thead>
+                            <tr>
+                                <th>{t('supplier.messages.companyName')}</th>
+                                <th className="rm-th-id">{t('supplier.messages.fiscalId')}</th>
+                                <th className="rm-th-id">{t('supplier.messages.phone')}</th>
+                                <th>{t('supplier.messages.address')}</th>
+                                <th className="rm-th-actions">{t('common.actions')}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredSuppliers.map((supplier) => (
+                                <tr key={supplier.id}>
+                                    <td className="rm-cell-text">
+                                        <span className="font-semibold text-gray-900">{supplier.name}</span>
+                                    </td>
+                                    <td className="rm-cell-text whitespace-nowrap text-gray-600">{supplier.matriculeFiscal || '-'}</td>
+                                    <td className="rm-cell-text whitespace-nowrap text-gray-600">{supplier.phone || '-'}</td>
+                                    <td className="rm-cell-text text-gray-600">{supplier.address || '-'}</td>
+                                    <td className="rm-cell-actions">
+                                        <div className="flex items-center justify-end gap-1">
+                                            <button onClick={() => {
+                                                const input = document.createElement('input');
+                                                input.type = 'file';
+                                                input.accept = 'application/pdf';
+                                                input.onchange = async (e) => {
+                                                    const file = (e.target as HTMLInputElement).files?.[0];
+                                                    if (!file) return;
+                                                    const formData = new FormData();
+                                                    formData.append('file', file);
+                                                    try {
+                                                        await api.post(`/Fournisseurs/${supplier.id}/upload-invoice`, formData, {
+                                                            headers: { 'Content-Type': 'multipart/form-data' }
+                                                        });
+                                                        alert(t('supplier.messages.uploadSuccess'));
+                                                    } catch (error) {
+                                                        console.error("Upload failed", error);
+                                                        alert(t('supplier.messages.uploadFailed'));
+                                                    }
+                                                };
+                                                input.click();
+                                            }} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-gray-50 rounded-lg transition-colors" title={t('supplier.messages.uploadInvoice')}>
+                                                <Upload size={18} />
+                                            </button>
+                                            <button onClick={() => handleOpenModal(supplier)} className="p-2 text-gray-400 hover:text-[#065F46] hover:bg-gray-50 rounded-lg transition-colors" title={t('common.edit')}>
+                                                <Edit2 size={18} />
+                                            </button>
+                                            {isManager && (
+                                                <button onClick={() => handleDelete(supplier.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-gray-50 rounded-lg transition-colors" title={t('common.delete')}>
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                            {filteredSuppliers.length === 0 && (
+                                <tr>
+                                    <td colSpan={5} className="px-4 py-12 text-center text-gray-500">
+                                        {t('supplier.messages.empty')}
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
                 </div>
             )}
 
@@ -249,7 +257,8 @@ export default function SuppliersPage() {
                         </button>
                         <button
                             type="submit"
-                            className="px-4 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#047857] transition-colors shadow-lg"
+                            disabled={saving}
+                            className="px-4 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#047857] transition-colors shadow-lg disabled:opacity-50"
                         >
                             {editingSupplier ? t('supplier.messages.saveChanges') : t('supplier.messages.create')}
                         </button>

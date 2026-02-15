@@ -175,11 +175,11 @@ builder.Services.AddScoped<ResourceManager.Services.ILocalPdfStorageService, Res
 // Fournisseur PDF Scanner Service (Part 4: PDF Upload + Data Extraction)
 builder.Services.AddScoped<ResourceManager.Services.IFournisseurPdfScannerService, ResourceManager.Services.FournisseurPdfScannerService>();
 
-// Due Payment Processor (scoped service — called on-demand + by background worker)
-builder.Services.AddScoped<ResourceManager.Services.IDuePaymentProcessor, ResourceManager.Services.DuePaymentProcessorService>();
+// Due Payment Processor — DISABLED: payments stay Pending until manually approved
+// builder.Services.AddScoped<ResourceManager.Services.IDuePaymentProcessor, ResourceManager.Services.DuePaymentProcessorService>();
 
-// Background Service for Scheduled Payments (safety net — runs every 15 min)
-builder.Services.AddHostedService<ResourceManager.Services.ScheduledPaymentService>();
+// Background Service for Scheduled Payments — DISABLED: no auto-completion
+// builder.Services.AddHostedService<ResourceManager.Services.ScheduledPaymentService>();
 
 // This registers the system's real clock as the default
 builder.Services.AddSingleton(TimeProvider.System);

@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { setAccessToken, setLoggingOut } from '../services/api';
+import { setAccessToken, setLoggingOut, broadcastLogout } from '../services/api';
 import api from '../services/api';
 import { setAppLanguage } from '../i18n/index';
 
@@ -75,22 +75,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const { accessToken: newToken } = response.data;
                 setAccessToken(newToken);
 
+                // Prefer fresh server data from refresh response, fall back to localStorage
+                const serverUser = response.data.user;
                 const savedRoles = localStorage.getItem('user_roles');
-                const savedFirstName = localStorage.getItem('user_firstName');
-                const savedLastName = localStorage.getItem('user_lastName');
-                const savedIsProfileComplete = localStorage.getItem('user_isProfileComplete') === 'true';
-                const savedBaseStoragePath = localStorage.getItem('user_baseStoragePath');
 
-                // If refresh returned newer data, use it (flags)
-                const isProfileComplete = response.data.user?.isProfileComplete ?? savedIsProfileComplete;
-                const baseStoragePath = response.data.user?.baseStoragePath ?? savedBaseStoragePath;
+                const email = serverUser?.email ?? savedEmail;
+                const role = serverUser?.role;
+                const roles = role ? [role] : (savedRoles ? JSON.parse(savedRoles) : []);
+                const firstName = serverUser?.firstName ?? localStorage.getItem('user_firstName') ?? '';
+                const lastName = serverUser?.lastName ?? localStorage.getItem('user_lastName') ?? '';
+                const isProfileComplete = serverUser?.isProfileComplete ?? localStorage.getItem('user_isProfileComplete') === 'true';
+                const baseStoragePath = serverUser?.baseStoragePath ?? localStorage.getItem('user_baseStoragePath');
+
+                // Persist updated values so they survive the next restore
+                localStorage.setItem('user_email', email);
+                localStorage.setItem('user_roles', JSON.stringify(roles));
+                localStorage.setItem('user_firstName', firstName);
+                localStorage.setItem('user_lastName', lastName);
+                localStorage.setItem('user_isProfileComplete', String(!!isProfileComplete));
+                if (baseStoragePath) localStorage.setItem('user_baseStoragePath', baseStoragePath);
 
                 setUser({
-                    email: savedEmail,
-                    roles: savedRoles ? JSON.parse(savedRoles) : [],
-                    firstName: savedFirstName || '',
-                    lastName: savedLastName || '',
-                    isProfileComplete: isProfileComplete,
+                    email,
+                    roles,
+                    firstName,
+                    lastName,
+                    isProfileComplete: !!isProfileComplete,
                     baseStoragePath: baseStoragePath || undefined
                 });
 
@@ -183,6 +193,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.removeItem('user_isProfileComplete');
         localStorage.removeItem('user_baseStoragePath');
         setUser(null);
+
+        // Notify other tabs about logout
+        broadcastLogout();
 
         // Reset guard after cleanup
         setLoggingOut(false);

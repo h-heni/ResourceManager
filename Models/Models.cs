@@ -24,7 +24,12 @@ namespace ResourceManager.Models
         public  DateTime CreatedAt { get; set; }
         public  DateTime? UpdatedAt { get; set; }= default;
         public  DateTime? DeletedAt { get; set; }= default;
+        
+        // Archival/Treatment status
         public bool Treated { get; set; } = false;
+        public string? TreatedByUserId { get; set; }
+        public DateTime? TreatedAt { get; set; }
+        
         public bool IsDeleted { get; set; } = false;
 
 
@@ -92,13 +97,15 @@ namespace ResourceManager.Models
         public decimal AmountPaid => Payments?.Where(p => p.Status == "Completed").Sum(p => p.Amount) ?? 0;
         [NotMapped]
         public decimal PendingAmount => Payments?.Where(p => p.Status == "Pending").Sum(p => p.Amount) ?? 0;
+        /// <summary>
+        /// Remaining = TotalTTC - (Confirmed + Pending). Never negative.
+        /// </summary>
         [NotMapped]
-        public decimal RemainingAmount => (TotalTTC ?? 0) - AmountPaid;
+        public decimal RemainingAmount => Math.Max(0, (TotalTTC ?? 0) - (AmountPaid + PendingAmount));
         [NotMapped]
         public string PaymentStatus => AmountPaid >= (TotalTTC ?? 0) && (TotalTTC ?? 0) > 0 ? "Paid"
             : AmountPaid > 0 ? "PartiallyPaid"
-            : PendingAmount > 0 ? "Pending"
-            : "Unpaid";
+            : "Pending";
     }
     
     public class SupplierPayment
@@ -111,6 +118,10 @@ namespace ResourceManager.Models
         public FournisseurInvoice? FournisseurInvoice { get; set; }
         public string? CreatedByUserId { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        // Audit: Payment confirmation
+        public string? ConfirmedByUserId { get; set; }
+        public DateTime? ConfirmedAt { get; set; }
         public string Status { get; set; } = "Completed"; // Completed, Pending
         [NotMapped]
         public bool IsScheduled => Status == "Pending" && PaymentDate > DateTime.UtcNow;
@@ -188,13 +199,16 @@ namespace ResourceManager.Models
         public decimal? TaxAmount { get; private set; }
         public decimal? TotalAmount { get; private set; }
         
-        // Payment tracking - Only count completed payments for actual paid amount
+        // Payment tracking - Only count completed payments for actual paid amount (revenue)
         [NotMapped]
         public decimal AmountPaid => Payments?.Where(p => p.Status == "Completed").Sum(p => p.Amount) ?? 0;
         [NotMapped]
         public decimal PendingAmount => Payments?.Where(p => p.Status == "Pending").Sum(p => p.Amount) ?? 0;
+        /// <summary>
+        /// Remaining = TotalAmount - (Confirmed + Pending). Never negative, never exceeds TotalAmount.
+        /// </summary>
         [NotMapped]
-        public decimal RemainingAmount => (TotalAmount ?? 0) - AmountPaid;
+        public decimal RemainingAmount => Math.Max(0, (TotalAmount ?? 0) - (AmountPaid + PendingAmount));
         
         // Payment due tracking
         [NotMapped]
@@ -214,7 +228,7 @@ namespace ResourceManager.Models
             
         }
         public bool IsLocked { get; set; } = false;
-        public string Status { get; set; } = "Unpaid"; // 'Paid', 'Unpaid', 'PartiallyPaid', 'Draft'
+        public string Status { get; set; } = "Pending"; // 'Pending', 'PartiallyPaid', 'Paid'
         
         // Token-based verification signature (Pro Invoice feature)
         public string? VerificationToken { get; set; }
@@ -238,6 +252,10 @@ namespace ResourceManager.Models
         public Invoice? Invoice { get; set; }
         public string? CreatedByUserId { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        
+        // Audit: Payment confirmation
+        public string? ConfirmedByUserId { get; set; }
+        public DateTime? ConfirmedAt { get; set; }
         
         // Payment status: Completed, Pending (for future scheduled payments)
         public string Status { get; set; } = "Completed"; // Default is Completed, "Pending" for future scheduled

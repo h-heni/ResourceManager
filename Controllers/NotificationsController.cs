@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ResourceManager.Data;
 using ResourceManager.Models;
-using ResourceManager.Services;
 
 namespace ResourceManager.Controllers
 {
@@ -14,18 +13,15 @@ namespace ResourceManager.Controllers
         private readonly AppDbContext _context;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ILogger<NotificationsController> _logger;
-        private readonly IDuePaymentProcessor _dueProcessor;
 
         public NotificationsController(
             AppDbContext context,
             UserManager<ApplicationUser> userManager,
-            ILogger<NotificationsController> logger,
-            IDuePaymentProcessor dueProcessor)
+            ILogger<NotificationsController> logger)
         {
             _context = context;
             _userManager = userManager;
             _logger = logger;
-            _dueProcessor = dueProcessor;
         }
 
         // GET: api/notifications - Get all unread notifications for current user
@@ -166,6 +162,10 @@ namespace ResourceManager.Controllers
             // Mark payment as Completed
             payment.Status = "Completed";
             payment.PaymentDate = DateTime.UtcNow;
+            
+            // Audit: Who confirmed it?
+            payment.ConfirmedByUserId = userId;
+            payment.ConfirmedAt = DateTime.UtcNow;
 
             // Mark notification as read
             notification.IsRead = true;
@@ -252,24 +252,11 @@ namespace ResourceManager.Controllers
             });
         }
 
-        // POST: api/notifications/process-due - On-demand trigger to transition Pending → Due
-        // Called by the frontend on app load and periodically
+        // POST: api/notifications/process-due — DISABLED: auto-completion removed, payments stay Pending until manually approved
         [HttpPost("process-due")]
-        public async Task<IActionResult> ProcessDuePayments()
+        public IActionResult ProcessDuePayments()
         {
-            try
-            {
-                var userId = _userManager.GetUserId(User);
-                if (string.IsNullOrEmpty(userId)) return Unauthorized();
-
-                var count = await _dueProcessor.ProcessDuePaymentsForUserAsync(userId);
-                return Ok(new { processed = count });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error processing due payments");
-                return Ok(new { processed = 0 });
-            }
+            return Ok(new { processed = 0, message = "Auto-completion disabled. Payments must be manually approved." });
         }
 
         // GET: api/notifications/due-payments - Get payments that are due (for notification display)
@@ -280,16 +267,13 @@ namespace ResourceManager.Controllers
             {
                 var userId = _userManager.GetUserId(User);
 
-                // CRITICAL: Process pending→due BEFORE querying, so the response is always fresh
-                try { await _dueProcessor.ProcessDuePaymentsForUserAsync(userId!); }
-                catch (Exception ex) { _logger.LogWarning(ex, "Failed to process due payments, continuing with stale data"); }
-                
+                // List pending payments that need manual approval (Status == Pending AND due date <= today)
                 var duePayments = await _context.Payments
                     .Include(p => p.Invoice)
                         .ThenInclude(i => i!.Client)
                     .Include(p => p.Invoice)
                         .ThenInclude(i => i!.Devis)
-                    .Where(p => p.CreatedByUserId == userId && p.Status == "Due")
+                    .Where(p => p.CreatedByUserId == userId && p.Status == "Pending" && p.PaymentDate <= DateTime.UtcNow)
                     .Select(p => new
                     {
                         p.Id,
@@ -331,6 +315,10 @@ namespace ResourceManager.Controllers
             // Mark payment as Completed
             payment.Status = "Completed";
             payment.PaymentDate = DateTime.UtcNow;
+            
+            // Audit: Who confirmed it?
+            payment.ConfirmedByUserId = userId;
+            payment.ConfirmedAt = DateTime.UtcNow;
 
             // Mark any related notification as read
             var notification = await _context.PaymentNotifications
@@ -352,6 +340,9 @@ namespace ResourceManager.Controllers
                 if (totalPaid >= totalAmount)
                 {
                     payment.Invoice.Status = "Paid";
+                    payment.Invoice.Treated = true;
+                    payment.Invoice.TreatedByUserId = userId;
+                    payment.Invoice.TreatedAt = DateTime.UtcNow;
                     if (payment.Invoice.Devis != null)
                     {
                         payment.Invoice.Devis.Status = "Completed";
@@ -427,14 +418,11 @@ namespace ResourceManager.Controllers
             {
                 var userId = _userManager.GetUserId(User);
 
-                // CRITICAL: Process pending→due BEFORE querying
-                try { await _dueProcessor.ProcessDuePaymentsForUserAsync(userId!); }
-                catch (Exception ex) { _logger.LogWarning(ex, "Failed to process due supplier payments, continuing with stale data"); }
-                
+                // List pending supplier payments that need manual approval (Status == Pending AND due date <= today)
                 var dueSupplierPayments = await _context.SupplierPayments
                     .Include(p => p.FournisseurInvoice)
                         .ThenInclude(fi => fi!.Fournisseur)
-                    .Where(p => p.CreatedByUserId == userId && p.Status == "Due")
+                    .Where(p => p.CreatedByUserId == userId && p.Status == "Pending" && p.PaymentDate <= DateTime.UtcNow)
                     .Select(p => new
                     {
                         p.Id,

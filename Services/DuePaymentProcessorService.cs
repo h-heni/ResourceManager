@@ -6,7 +6,7 @@ namespace ResourceManager.Services
 {
     /// <summary>
     /// Scoped service that processes pending payments whose scheduled date has passed.
-    /// Transitions Pending → Due and creates notifications.
+    /// Transitions Pending → Completed and creates notifications.
     /// 
     /// Can be called from:
     /// 1. ScheduledPaymentService (background, periodic)
@@ -17,7 +17,7 @@ namespace ResourceManager.Services
     {
         /// <summary>
         /// Process all pending payments for all users whose PaymentDate has passed.
-        /// Returns the number of payments transitioned to Due.
+        /// Returns the number of payments transitioned to Completed.
         /// </summary>
         Task<int> ProcessAllDuePaymentsAsync(CancellationToken ct = default);
 
@@ -75,13 +75,15 @@ namespace ResourceManager.Services
                 userId != null ? $"user {userId}" : "all users");
 
             // ═══════════════════════════════════════════════════════
-            // CLIENT INVOICE PAYMENTS: Pending → Due
+            // CLIENT INVOICE PAYMENTS: Pending → Completed
             // ═══════════════════════════════════════════════════════
             var clientPaymentQuery = _context.Payments
                 .Include(p => p.Invoice)
                     .ThenInclude(i => i!.Client)
                 .Include(p => p.Invoice)
                     .ThenInclude(i => i!.Devis)
+                .Include(p => p.Invoice)
+                    .ThenInclude(i => i!.Payments)
                 .Where(p => p.Status == "Pending" && p.PaymentDate <= now);
 
             if (userId != null)
@@ -94,7 +96,7 @@ namespace ResourceManager.Services
                 _logger.LogWarning(
                     "DuePaymentProcessor: CLIENT payment ID={PaymentId} is PAST DUE. " +
                     "PaymentDate={PaymentDate} (UTC), Now={Now} (UTC), InvoiceId={InvoiceId}, " +
-                    "Invoice#={InvoiceNumber}, Amount={Amount}. Transitioning Pending → Due.",
+                    "Invoice#={InvoiceNumber}, Amount={Amount}. Transitioning Pending → Completed.",
                     payment.Id, 
                     payment.PaymentDate.ToString("yyyy-MM-dd HH:mm:ss"),
                     now.ToString("yyyy-MM-dd HH:mm:ss"),
@@ -103,7 +105,7 @@ namespace ResourceManager.Services
                     payment.Amount);
 
                 // Transition status
-                payment.Status = "Due";
+                payment.Status = "Completed";
                 totalTransitioned++;
 
                 // Create notification if one doesn't already exist (regardless of read status to avoid duplicates)
@@ -120,7 +122,7 @@ namespace ResourceManager.Services
                     {
                         PaymentId = payment.Id,
                         InvoiceId = payment.InvoiceId,
-                        Message = $"💰 Scheduled payment of {payment.Amount:N3} {currencySymbol} for Invoice #{invoiceNumber} ({clientName}) is now due. Is the money received in the bank?",
+                        Message = $"💰 Scheduled payment of {payment.Amount:N3} {currencySymbol} for Invoice #{invoiceNumber} ({clientName}) has been auto-completed.",
                         CreatedAt = DateTime.UtcNow,
                         IsRead = false,
                         UserId = payment.CreatedByUserId
@@ -132,10 +134,28 @@ namespace ResourceManager.Services
                         "Invoice #{InvoiceNumber}, Client={ClientName}",
                         payment.Id, invoiceNumber, clientName);
                 }
+
+                // Recalculate invoice status after payment completion
+                if (payment.Invoice != null)
+                {
+                    var inv = payment.Invoice;
+                    var totalPaidCompleted = inv.Payments?.Where(p => p.Status == "Completed").Sum(p => p.Amount) ?? 0;
+                    var totalAmount = inv.TotalAmount ?? 0;
+
+                    if (totalPaidCompleted >= totalAmount && totalAmount > 0)
+                    {
+                        inv.Status = "Paid";
+                        inv.IsLocked = true;
+                    }
+                    else if (totalPaidCompleted > 0)
+                    {
+                        inv.Status = "PartiallyPaid";
+                    }
+                }
             }
 
             // ═══════════════════════════════════════════════════════
-            // SUPPLIER INVOICE PAYMENTS: Pending → Due
+            // SUPPLIER INVOICE PAYMENTS: Pending → Completed
             // ═══════════════════════════════════════════════════════
             var supplierPaymentQuery = _context.SupplierPayments
                 .Include(p => p.FournisseurInvoice)
@@ -152,7 +172,7 @@ namespace ResourceManager.Services
                 _logger.LogWarning(
                     "DuePaymentProcessor: SUPPLIER payment ID={PaymentId} is PAST DUE. " +
                     "PaymentDate={PaymentDate} (UTC), Now={Now} (UTC), SupplierInvoiceId={InvoiceId}, " +
-                    "Invoice#={InvoiceNumber}, Supplier={SupplierName}, Amount={Amount}. Transitioning Pending → Due.",
+                    "Invoice#={InvoiceNumber}, Supplier={SupplierName}, Amount={Amount}. Transitioning Pending → Completed.",
                     payment.Id,
                     payment.PaymentDate.ToString("yyyy-MM-dd HH:mm:ss"),
                     now.ToString("yyyy-MM-dd HH:mm:ss"),
@@ -162,7 +182,7 @@ namespace ResourceManager.Services
                     payment.Amount);
 
                 // Transition status
-                payment.Status = "Due";
+                payment.Status = "Completed";
                 totalTransitioned++;
 
                 // Create notification if one doesn't already exist (regardless of read status to avoid duplicates)
@@ -181,7 +201,7 @@ namespace ResourceManager.Services
                         InvoiceId = 0,
                         SupplierPaymentId = payment.Id,
                         SupplierInvoiceId = payment.FournisseurInvoiceId,
-                        Message = $"📦 Scheduled supplier payment of {payment.Amount:N3} {currencySymbol} for Invoice #{invoiceNumber} ({supplierName}) is now due. Has the payment been sent?",
+                        Message = $"📦 Scheduled supplier payment of {payment.Amount:N3} {currencySymbol} for Invoice #{invoiceNumber} ({supplierName}) has been auto-completed.",
                         CreatedAt = DateTime.UtcNow,
                         IsRead = false,
                         UserId = payment.CreatedByUserId
@@ -200,7 +220,7 @@ namespace ResourceManager.Services
             {
                 await _context.SaveChangesAsync(ct);
                 _logger.LogWarning(
-                    "DuePaymentProcessor: COMPLETED — Transitioned {Count} payments from Pending → Due " +
+                    "DuePaymentProcessor: COMPLETED — Transitioned {Count} payments from Pending → Completed " +
                     "({ClientCount} client, {SupplierCount} supplier)",
                     totalTransitioned, pendingClientPayments.Count, pendingSupplierPayments.Count);
             }

@@ -26,6 +26,10 @@ namespace ResourceManager.DTOs
         public int Quantity { get; set; }
         public decimal Price { get; set; }
         public bool Tva { get; set; }
+        /// <summary>
+        /// VAT rate as percentage (e.g. 19, 7, 0). Converted to decimal on the backend.
+        /// </summary>
+        public decimal? VatRate { get; set; }
     }
 
     public class UpdateInvoiceDto

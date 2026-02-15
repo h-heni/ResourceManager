@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import api from '../services/api';
 import { getErrorMessage, getErrorStatus, getAxiosResponseData } from '../utils/errorUtils';
 import { useAuth } from '../context/AuthContext';
-import { Plus, Users, AlertCircle, Trash2, KeyRound, X, Building2, Settings, Mail, CheckCircle } from 'lucide-react';
+import { Plus, Users, AlertCircle, Trash2, KeyRound, X, Building2, Settings, Mail, CheckCircle, UserPlus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 interface UserDto {
@@ -43,6 +43,23 @@ export default function UsersPage() {
         email: ''
     });
     const [invitationSent, setInvitationSent] = useState(false);
+    const [tenantMode, setTenantMode] = useState<'invite' | 'direct'>('invite');
+
+    const [newDirectTenant, setNewDirectTenant] = useState({
+        companyName: '',
+        address: '',
+        matriculeFiscal: '',
+        phone: '',
+        email: '',
+        userEmail: '',
+        userPassword: '',
+        userFirstName: '',
+        userLastName: '',
+        defaultCurrency: 'TND',
+        defaultLanguage: 'fr',
+        employeeLimit: 0
+    });
+    const [directTenantCreated, setDirectTenantCreated] = useState(false);
 
     const [newPassword, setNewPassword] = useState('');
 
@@ -105,6 +122,26 @@ export default function UsersPage() {
         } catch (err: unknown) {
             console.error("Failed to send invitation", err);
             const errorMsg = getErrorMessage(err, t('users.messages.tenantCreateFailed'));
+            alert(errorMsg);
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    const handleCreateDirectTenant = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setActionLoading(true);
+        setDirectTenantCreated(false);
+        try {
+            await api.post('/Auth/create-tenant', newDirectTenant);
+            setDirectTenantCreated(true);
+            fetchUsers();
+        } catch (err: unknown) {
+            console.error("Failed to create tenant directly", err);
+            const responseData = getAxiosResponseData(err);
+            const errorMsg = responseData?.errors
+                ? Object.values(responseData.errors as Record<string, string[]>).flat().join(', ')
+                : getErrorMessage(err, t('users.messages.tenantCreateFailed'));
             alert(errorMsg);
         } finally {
             setActionLoading(false);
@@ -256,8 +293,8 @@ export default function UsersPage() {
                 </div>
             </div>
 
-            <div className="rm-table-card">
-                <table className="rm-table">
+            <div className="rm-table-card overflow-x-auto">
+                <table className="rm-table min-w-[700px]">
                     <thead>
                         <tr>
                             <th>{t('users.table.user')}</th>
@@ -277,7 +314,7 @@ export default function UsersPage() {
                                         <div className="h-10 w-10 rounded-full bg-[#065F46]/10 flex items-center justify-center text-[#065F46] font-bold">
                                             {u.firstName?.[0] || u.email[0].toUpperCase()}
                                         </div>
-                                        <div className="ml-4">
+                                        <div className="ms-4">
                                             <div className="text-sm font-medium text-gray-900">{u.firstName} {u.lastName}</div>
                                             <div className="text-sm text-gray-500">{u.email}</div>
                                         </div>
@@ -427,67 +464,292 @@ export default function UsersPage() {
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6 animate-scale-up max-h-[90vh] overflow-y-auto">
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-xl font-bold flex items-center gap-2">
-                                <Mail className="text-emerald-600" size={24} />
+                                {tenantMode === 'invite' ? <Mail className="text-emerald-600" size={24} /> : <UserPlus className="text-blue-600" size={24} />}
                                 {t('users.actions.addTenant')}
                             </h2>
-                            <button onClick={() => { setShowTenantModal(false); setInvitationSent(false); setNewTenant({ email: '' }); }} className="p-2 hover:bg-gray-100 rounded-full">
+                            <button onClick={() => { setShowTenantModal(false); setInvitationSent(false); setDirectTenantCreated(false); setNewTenant({ email: '' }); setTenantMode('invite'); setNewDirectTenant({ companyName: '', address: '', matriculeFiscal: '', phone: '', email: '', userEmail: '', userPassword: '', userFirstName: '', userLastName: '', defaultCurrency: 'TND', defaultLanguage: 'fr', employeeLimit: 0 }); }} className="p-2 hover:bg-gray-100 rounded-full">
                                 <X size={20} />
                             </button>
                         </div>
 
-                        {invitationSent ? (
-                            <div className="text-center py-8">
-                                <div className="size-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
-                                    <CheckCircle className="text-emerald-600" size={32} />
-                                </div>
-                                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                                    {t('users.messages.invitationSent', 'Invitation sent successfully!')}
-                                </h3>
-                                <p className="text-sm text-gray-500 mb-6">
-                                    {t('users.messages.invitationSentDesc', 'An invitation email has been sent to the manager. They will be able to set up their account and company details.')}
-                                </p>
+                        {/* Tab Toggle */}
+                        {!invitationSent && !directTenantCreated && (
+                            <div className="flex rounded-xl bg-gray-100 p-1 mb-6">
                                 <button
-                                    onClick={() => { setShowTenantModal(false); setInvitationSent(false); setNewTenant({ email: '' }); }}
-                                    className="px-6 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow-md"
+                                    type="button"
+                                    onClick={() => setTenantMode('invite')}
+                                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-all ${tenantMode === 'invite' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                                 >
-                                    {t('common.close', 'Close')}
+                                    <Mail size={16} />
+                                    {t('users.actions.sendInvitation')}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setTenantMode('direct')}
+                                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-all ${tenantMode === 'direct' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                                >
+                                    <UserPlus size={16} />
+                                    {t('users.actions.createDirectly')}
                                 </button>
                             </div>
-                        ) : (
+                        )}
+
+                        {/* ─── INVITE MODE ─── */}
+                        {tenantMode === 'invite' && (
                             <>
-                                <p className="text-sm text-gray-500 mb-6">
-                                    {t('users.messages.inviteDesc', 'Enter the manager\'s email address to send them an invitation. They will set up their own account and company details.')}
-                                </p>
-                                <form onSubmit={handleCreateTenant} className="space-y-6">
-                                    <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200">
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">{t('users.fields.emailRequired')}</label>
-                                        <input
-                                            type="email"
-                                            className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
-                                            value={newTenant.email}
-                                            onChange={e => setNewTenant({ ...newTenant, email: e.target.value })}
-                                            placeholder={t('users.fields.emailPlaceholder', 'manager@company.com')}
-                                            required
-                                        />
-                                    </div>
-                                    <div className="flex justify-end space-x-3">
+                                {invitationSent ? (
+                                    <div className="text-center py-8">
+                                        <div className="size-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
+                                            <CheckCircle className="text-emerald-600" size={32} />
+                                        </div>
+                                        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                                            {t('users.messages.invitationSent')}
+                                        </h3>
+                                        <p className="text-sm text-gray-500 mb-6">
+                                            {t('users.messages.invitationSentDesc')}
+                                        </p>
                                         <button
-                                            type="button"
-                                            onClick={() => { setShowTenantModal(false); setNewTenant({ email: '' }); }}
-                                            className="px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-100"
+                                            onClick={() => { setShowTenantModal(false); setInvitationSent(false); setNewTenant({ email: '' }); setTenantMode('invite'); }}
+                                            className="px-6 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow-md"
                                         >
-                                            {t('common.cancel')}
-                                        </button>
-                                        <button
-                                            type="submit"
-                                            disabled={actionLoading}
-                                            className="px-6 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow-md disabled:opacity-50 flex items-center gap-2"
-                                        >
-                                            <Mail size={16} />
-                                            {actionLoading ? t('users.actions.sending', 'Sending...') : t('users.actions.sendInvitation', 'Send Invitation')}
+                                            {t('common.close')}
                                         </button>
                                     </div>
-                                </form>
+                                ) : (
+                                    <>
+                                        <p className="text-sm text-gray-500 mb-6">
+                                            {t('users.messages.inviteDesc')}
+                                        </p>
+                                        <form onSubmit={handleCreateTenant} className="space-y-6">
+                                            <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200">
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">{t('users.fields.emailRequired')}</label>
+                                                <input
+                                                    type="email"
+                                                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                                                    value={newTenant.email}
+                                                    onChange={e => setNewTenant({ ...newTenant, email: e.target.value })}
+                                                    placeholder={t('users.fields.emailPlaceholder')}
+                                                    required
+                                                />
+                                            </div>
+                                            <div className="flex justify-end space-x-3">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setShowTenantModal(false); setNewTenant({ email: '' }); setTenantMode('invite'); }}
+                                                    className="px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-100"
+                                                >
+                                                    {t('common.cancel')}
+                                                </button>
+                                                <button
+                                                    type="submit"
+                                                    disabled={actionLoading}
+                                                    className="px-6 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow-md disabled:opacity-50 flex items-center gap-2"
+                                                >
+                                                    <Mail size={16} />
+                                                    {actionLoading ? t('users.actions.sending') : t('users.actions.sendInvitation')}
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </>
+                                )}
+                            </>
+                        )}
+
+                        {/* ─── DIRECT MODE ─── */}
+                        {tenantMode === 'direct' && (
+                            <>
+                                {directTenantCreated ? (
+                                    <div className="text-center py-8">
+                                        <div className="size-16 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
+                                            <CheckCircle className="text-blue-600" size={32} />
+                                        </div>
+                                        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                                            {t('users.messages.directTenantCreated')}
+                                        </h3>
+                                        <p className="text-sm text-gray-500 mb-6">
+                                            {t('users.messages.directTenantCreatedDesc')}
+                                        </p>
+                                        <button
+                                            onClick={() => { setShowTenantModal(false); setDirectTenantCreated(false); setTenantMode('invite'); setNewDirectTenant({ companyName: '', address: '', matriculeFiscal: '', phone: '', email: '', userEmail: '', userPassword: '', userFirstName: '', userLastName: '', defaultCurrency: 'TND', defaultLanguage: 'fr', employeeLimit: 0 }); }}
+                                            className="px-6 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow-md"
+                                        >
+                                            {t('common.close')}
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <p className="text-sm text-gray-500 mb-6">
+                                            {t('users.messages.directDesc')}
+                                        </p>
+                                        <form onSubmit={handleCreateDirectTenant} className="space-y-6">
+                                            {/* Manager Account Section */}
+                                            <div className="space-y-4">
+                                                <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">{t('users.sections.managerAccount')}</h3>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.firstNameRequired')}</label>
+                                                        <input
+                                                            className="fancy-input w-full"
+                                                            value={newDirectTenant.userFirstName}
+                                                            onChange={e => setNewDirectTenant({ ...newDirectTenant, userFirstName: e.target.value })}
+                                                            required
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.lastNameRequired')}</label>
+                                                        <input
+                                                            className="fancy-input w-full"
+                                                            value={newDirectTenant.userLastName}
+                                                            onChange={e => setNewDirectTenant({ ...newDirectTenant, userLastName: e.target.value })}
+                                                            required
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.emailRequired')}</label>
+                                                    <input
+                                                        type="email"
+                                                        className="fancy-input w-full"
+                                                        value={newDirectTenant.userEmail}
+                                                        onChange={e => setNewDirectTenant({ ...newDirectTenant, userEmail: e.target.value })}
+                                                        placeholder={t('users.fields.emailPlaceholder')}
+                                                        required
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.passwordRequired')}</label>
+                                                    <input
+                                                        type="password"
+                                                        className="fancy-input w-full"
+                                                        value={newDirectTenant.userPassword}
+                                                        onChange={e => setNewDirectTenant({ ...newDirectTenant, userPassword: e.target.value })}
+                                                        required
+                                                        minLength={6}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Company Info Section */}
+                                            <div className="space-y-4">
+                                                <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">{t('users.sections.companyInfo')}</h3>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.companyNameRequired')}</label>
+                                                    <input
+                                                        className="fancy-input w-full"
+                                                        value={newDirectTenant.companyName}
+                                                        onChange={e => setNewDirectTenant({ ...newDirectTenant, companyName: e.target.value })}
+                                                        required
+                                                    />
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.addressRequired')}</label>
+                                                        <input
+                                                            className="fancy-input w-full"
+                                                            value={newDirectTenant.address}
+                                                            onChange={e => setNewDirectTenant({ ...newDirectTenant, address: e.target.value })}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.fiscalIdRequired')}</label>
+                                                        <input
+                                                            className="fancy-input w-full"
+                                                            value={newDirectTenant.matriculeFiscal}
+                                                            onChange={e => setNewDirectTenant({ ...newDirectTenant, matriculeFiscal: e.target.value })}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.phone')}</label>
+                                                        <input
+                                                            type="tel"
+                                                            className="fancy-input w-full"
+                                                            value={newDirectTenant.phone}
+                                                            onChange={e => setNewDirectTenant({ ...newDirectTenant, phone: e.target.value })}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.companyEmail')}</label>
+                                                        <input
+                                                            type="email"
+                                                            className="fancy-input w-full"
+                                                            value={newDirectTenant.email}
+                                                            onChange={e => setNewDirectTenant({ ...newDirectTenant, email: e.target.value })}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Company Defaults Section */}
+                                            <div className="space-y-4">
+                                                <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">{t('users.sections.companyDefaults')}</h3>
+                                                <div className="grid grid-cols-3 gap-4">
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.defaultCurrency')}</label>
+                                                        <select
+                                                            className="fancy-input w-full"
+                                                            value={newDirectTenant.defaultCurrency}
+                                                            onChange={e => setNewDirectTenant({ ...newDirectTenant, defaultCurrency: e.target.value })}
+                                                        >
+                                                            <option value="TND">TND</option>
+                                                            <option value="EUR">EUR</option>
+                                                            <option value="USD">USD</option>
+                                                            <option value="GBP">GBP</option>
+                                                            <option value="MAD">MAD</option>
+                                                            <option value="DZD">DZD</option>
+                                                            <option value="SAR">SAR</option>
+                                                            <option value="AED">AED</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.defaultLanguage')}</label>
+                                                        <select
+                                                            className="fancy-input w-full"
+                                                            value={newDirectTenant.defaultLanguage}
+                                                            onChange={e => setNewDirectTenant({ ...newDirectTenant, defaultLanguage: e.target.value })}
+                                                        >
+                                                            <option value="fr">Français</option>
+                                                            <option value="en">English</option>
+                                                            <option value="ar">العربية</option>
+                                                            <option value="de">Deutsch</option>
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.employeeLimit')}</label>
+                                                        <input
+                                                            type="number"
+                                                            className="fancy-input w-full"
+                                                            value={newDirectTenant.employeeLimit}
+                                                            onChange={e => setNewDirectTenant({ ...newDirectTenant, employeeLimit: parseInt(e.target.value) || 0 })}
+                                                            min={0}
+                                                            placeholder={t('users.fields.employeeLimitPlaceholder')}
+                                                        />
+                                                        <p className="text-xs text-gray-400 mt-1">{t('users.fields.employeeLimitHint')}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex justify-end space-x-3 pt-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setShowTenantModal(false); setTenantMode('invite'); setNewDirectTenant({ companyName: '', address: '', matriculeFiscal: '', phone: '', email: '', userEmail: '', userPassword: '', userFirstName: '', userLastName: '', defaultCurrency: 'TND', defaultLanguage: 'fr', employeeLimit: 0 }); }}
+                                                    className="px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-100"
+                                                >
+                                                    {t('common.cancel')}
+                                                </button>
+                                                <button
+                                                    type="submit"
+                                                    disabled={actionLoading}
+                                                    className="px-6 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow-md disabled:opacity-50 flex items-center gap-2"
+                                                >
+                                                    <UserPlus size={16} />
+                                                    {actionLoading ? t('users.actions.creating') : t('users.actions.createTenant')}
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </>
+                                )}
                             </>
                         )}
                     </div>

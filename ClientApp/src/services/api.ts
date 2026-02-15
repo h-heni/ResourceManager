@@ -19,6 +19,39 @@ let failedQueue: Array<{
     reject: (error: unknown) => void;
 }> = [];
 
+// ═══════════════════════════════════════════════════════════════
+// CROSS-TAB SYNCHRONIZATION via BroadcastChannel
+// Prevents multiple tabs from trying to refresh simultaneously
+// ═══════════════════════════════════════════════════════════════
+let authChannel: BroadcastChannel | null = null;
+try {
+    authChannel = new BroadcastChannel('resource_manager_auth');
+    authChannel.onmessage = (event) => {
+        if (event.data.type === 'TOKEN_REFRESHED' && event.data.token) {
+            // Another tab successfully refreshed — use its token
+            accessToken = event.data.token;
+            processQueue(null, event.data.token);
+        } else if (event.data.type === 'SESSION_EXPIRED') {
+            // Another tab detected session expiry — clear our state too
+            accessToken = null;
+            localStorage.removeItem('user_email');
+            localStorage.removeItem('user_roles');
+            localStorage.removeItem('user_firstName');
+            localStorage.removeItem('user_lastName');
+            localStorage.removeItem('user_isProfileComplete');
+            localStorage.removeItem('user_baseStoragePath');
+            window.dispatchEvent(new Event('auth:session-expired'));
+        } else if (event.data.type === 'LOGOUT') {
+            // Another tab logged out — sync state
+            accessToken = null;
+            window.dispatchEvent(new Event('auth:logout'));
+        }
+    };
+} catch {
+    // BroadcastChannel not supported (older browsers, some mobile)
+    authChannel = null;
+}
+
 export function setAccessToken(token: string | null) {
     accessToken = token;
 }
@@ -30,6 +63,11 @@ export function getAccessToken(): string | null {
 /** Mark the app as logging out — interceptor will not redirect or refresh */
 export function setLoggingOut(value: boolean) {
     isLoggingOut = value;
+}
+
+/** Broadcast logout to other tabs */
+export function broadcastLogout() {
+    authChannel?.postMessage({ type: 'LOGOUT' });
 }
 
 function processQueue(error: unknown, token: string | null = null) {
@@ -127,6 +165,10 @@ api.interceptors.response.use(
                 const newToken = response.data.accessToken;
                 setAccessToken(newToken);
                 processQueue(null, newToken);
+                
+                // Notify other tabs about successful refresh
+                authChannel?.postMessage({ type: 'TOKEN_REFRESHED', token: newToken });
+                
                 originalRequest.headers.Authorization = `Bearer ${newToken}`;
                 return api(originalRequest);
             } catch (refreshError: unknown) {
@@ -145,6 +187,10 @@ api.interceptors.response.use(
                     localStorage.removeItem('user_lastName');
                     localStorage.removeItem('user_isProfileComplete');
                     localStorage.removeItem('user_baseStoragePath');
+                    
+                    // Notify other tabs about session expiry
+                    authChannel?.postMessage({ type: 'SESSION_EXPIRED' });
+                    
                     // Dispatch event so AuthContext can handle navigation via React Router
                     // instead of a hard page reload which causes blank-screen flashes
                     window.dispatchEvent(new Event('auth:session-expired'));

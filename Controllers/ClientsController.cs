@@ -84,7 +84,8 @@ namespace ResourceManager.Controllers
             Name = clientDto.CompanyName,
             MatriculeFiscal = clientDto.MatriculeFiscal,
             Address = clientDto.Address,
-            Phone = clientDto.Phone
+            Phone = clientDto.Phone,
+            Email = clientDto.Email
         };
         _context.Clients.Add(client);
         await _context.SaveChangesAsync();
@@ -105,6 +106,7 @@ namespace ResourceManager.Controllers
         clientDb.Address=client.Address;
         clientDb.MatriculeFiscal=client.MatriculeFiscal;
         clientDb.Phone=client.Phone;
+        clientDb.Email=client.Email;
 
         clientDb.UpdatedAt = _time.GetUtcNow().DateTime;
             

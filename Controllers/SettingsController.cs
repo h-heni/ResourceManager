@@ -560,45 +560,20 @@ namespace ResourceManager.Controllers
             return Ok(placeholders);
         }
 
-        // GET: api/settings/email-status - Get email configuration status and testing info
+        // GET: api/settings/email-status - Get email configuration status
         [HttpGet("email-status")]
         public IActionResult GetEmailStatus()
         {
-            var testInfo = _emailService.GetTestInfo();
+            var config = _emailService.GetConfiguration();
             return Ok(new
             {
-                testInfo.Mode,
-                testInfo.ModeDescription,
-                testInfo.SmtpHost,
-                testInfo.SmtpPort,
-                testInfo.CredentialsConfigured,
-                testInfo.PreviewDirectory,
-                testInfo.SpamPreventionChecklist,
-                testInfo.DnsRequirements,
-                localTestingOptions = new object[]
-                {
-                    new { 
-                        name = "Mailpit", 
-                        description = "Modern email testing tool with web UI", 
-                        configExample = "SmtpHost: localhost, SmtpPort: 1025",
-                        webUI = "http://localhost:8025",
-                        installCommand = "docker run -d -p 1025:1025 -p 8025:8025 axllent/mailpit"
-                    },
-                    new { 
-                        name = "Papercut SMTP", 
-                        description = "Lightweight Windows email testing tool", 
-                        configExample = "SmtpHost: localhost, SmtpPort: 25",
-                        webUI = "Desktop app",
-                        installCommand = "Download from https://github.com/ChangemakerStudios/Papercut-SMTP/releases"
-                    },
-                    new { 
-                        name = "Preview Mode (Current)", 
-                        description = "Emails saved to files - no SMTP needed", 
-                        configExample = "SmtpHost: smtp.gmail.com, SmtpPort: 587, SmtpUser: empty, SmtpPassword: empty",
-                        webUI = testInfo.PreviewDirectory,
-                        installCommand = "No installation needed - just leave SMTP credentials empty"
-                    }
-                },
+                config.SmtpHost,
+                config.SmtpPort,
+                config.EnableSsl,
+                config.FromEmail,
+                config.FromName,
+                config.IsConfigured,
+                config.ConfigurationError,
                 productionSetup = new
                 {
                     gmailInstructions = new[]
@@ -620,7 +595,17 @@ namespace ResourceManager.Controllers
     ""ReplyToEmail"": ""your-email@gmail.com"",
     ""EnableSsl"": true
   }
-}"
+}",
+                    environmentVariables = new[]
+                    {
+                        "EMAIL_SMTP_HOST",
+                        "EMAIL_SMTP_PORT",
+                        "EMAIL_SMTP_USER",
+                        "EMAIL_SMTP_PASSWORD",
+                        "EMAIL_FROM_ADDRESS",
+                        "EMAIL_FROM_NAME",
+                        "EMAIL_ENABLE_SSL"
+                    }
                 }
             });
         }
@@ -701,8 +686,7 @@ namespace ResourceManager.Controllers
                 {
                     success = true,
                     message = result.Message,
-                    mode = result.Mode.ToString(),
-                    previewPath = result.PreviewPath
+                    mode = "SMTP"
                 });
             }
             else
@@ -711,7 +695,7 @@ namespace ResourceManager.Controllers
                 {
                     success = false,
                     message = result.Message,
-                    mode = result.Mode.ToString(),
+                    mode = "SMTP",
                     errorDetails = result.ErrorDetails
                 });
             }

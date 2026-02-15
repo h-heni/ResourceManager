@@ -49,6 +49,9 @@ interface SupplierPayment {
     status: string;
     isScheduled: boolean;
     createdAt: string;
+    ConfirmedBy?: string;
+    ConfirmedAt?: string;
+    CreatedBy?: string;
 }
 
 interface SupplierInvoice {
@@ -613,7 +616,7 @@ export default function SupplierInvoicesPage() {
                 amount,
                 paymentDate,
                 notes: paymentNotes || undefined,
-                status: isScheduledPayment ? 'Pending' : 'Completed',
+                status: 'Pending',
             });
             setShowPaymentModal(false);
             setSelectedInvoice(null);
@@ -665,8 +668,7 @@ export default function SupplierInvoicesPage() {
         switch (status) {
             case 'Paid': return 'bg-emerald-100 text-emerald-700';
             case 'PartiallyPaid': return 'bg-blue-100 text-blue-700';
-            case 'Unpaid': return 'bg-amber-100 text-amber-700';
-            case 'Pending': return 'bg-orange-100 text-orange-700';
+            case 'Pending': return 'bg-amber-100 text-amber-700';
             default: return 'bg-gray-100 text-gray-600';
         }
     };
@@ -675,8 +677,7 @@ export default function SupplierInvoicesPage() {
         switch (status) {
             case 'Paid': return '✅';
             case 'PartiallyPaid': return '🔶';
-            case 'Unpaid': return '🔴';
-            case 'Pending': return '⏳';
+            case 'Pending': return '🔴';
             default: return '❔';
         }
     };
@@ -884,13 +885,13 @@ export default function SupplierInvoicesPage() {
                         <table className="rm-table">
                             <thead>
                                 <tr>
-                                    <th>{t('supplierInvoice.invoiceNumber', 'Invoice #')}</th>
+                                    <th className="rm-th-id">{t('supplierInvoice.invoiceNumber', 'Invoice #')}</th>
                                     <th>{t('supplierInvoice.supplier', 'Supplier')}</th>
-                                    <th>{t('common.date', 'Date')}</th>
+                                    <th className="rm-th-date">{t('common.date', 'Date')}</th>
                                     <th className="rm-th-number">{t('invoice.totalTTC', 'Total TTC')}</th>
                                     <th className="rm-th-number">{t('supplierInvoice.paid', 'Paid')}</th>
                                     <th className="rm-th-number">{t('supplierInvoice.remaining', 'Remaining')}</th>
-                                    <th className="text-center">{t('common.status', 'Status')}</th>
+                                    <th className="rm-th-status">{t('common.status', 'Status')}</th>
                                     <th className="rm-th-actions">{t('common.actions', 'Actions')}</th>
                                 </tr>
                             </thead>
@@ -898,11 +899,11 @@ export default function SupplierInvoicesPage() {
                                 {filteredInvoices.map(inv => (
                                     <tr key={inv.id}>
                                         <td className="rm-cell-text">
-                                            <div className="font-medium text-gray-900">{inv.invoiceNumber || '—'}</div>
-                                            <div className="text-xs text-gray-400">{inv.fileName}</div>
+                                            <div className="font-medium text-gray-900 whitespace-nowrap">{inv.invoiceNumber || '—'}</div>
+                                            <div className="text-xs text-gray-400 break-all">{inv.fileName}</div>
                                         </td>
                                         <td className="rm-cell-text text-sm text-gray-600">{inv.fournisseurName || '—'}</td>
-                                        <td className="rm-cell-text text-sm text-gray-600">
+                                        <td className="rm-cell-date">
                                             {inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString() : '—'}
                                         </td>
                                         <td className="rm-cell-currency">
@@ -929,7 +930,7 @@ export default function SupplierInvoicesPage() {
                                                 <span className="text-gray-400">—</span>
                                             )}
                                         </td>
-                                        <td className="px-4 py-3 text-center whitespace-nowrap">
+                                        <td className="rm-cell-status text-center">
                                             <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getPaymentStatusColor(inv.paymentStatus)}`}>
                                                 {getPaymentStatusEmoji(inv.paymentStatus)} {t(`supplierInvoice.paymentStatus.${inv.paymentStatus}`, inv.paymentStatus)}
                                             </span>
@@ -1011,16 +1012,16 @@ export default function SupplierInvoicesPage() {
                                     const currencies = Object.keys(byCurrency);
                                     return currencies.map(cur => (
                                         <tr key={cur}>
-                                            <td colSpan={3} className="px-4 py-3 text-sm font-semibold text-gray-700 text-right whitespace-nowrap">
+                                            <td colSpan={3} className="rm-cell-number font-semibold">
                                                 {currencies.length > 1 ? `${t('common.total', 'Total')} (${cur})` : t('common.total', 'Total')}
                                             </td>
-                                            <td className="px-4 py-3 text-right font-bold text-gray-900 tabular-nums whitespace-nowrap">
+                                            <td className="rm-cell-currency font-bold">
                                                 {formatCurrency(byCurrency[cur].totalTTC, cur)}
                                             </td>
-                                            <td className="px-4 py-3 text-right font-semibold text-emerald-600 tabular-nums whitespace-nowrap">
+                                            <td className="rm-cell-currency font-semibold text-emerald-600">
                                                 {formatCurrency(byCurrency[cur].paid, cur)}
                                             </td>
-                                            <td className="px-4 py-3 text-right font-semibold text-amber-600 tabular-nums whitespace-nowrap">
+                                            <td className="rm-cell-currency font-semibold text-amber-600">
                                                 {formatCurrency(byCurrency[cur].remaining, cur)}
                                             </td>
                                             <td className="px-4 py-3"></td>
@@ -1283,7 +1284,10 @@ export default function SupplierInvoicesPage() {
                                                 <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg text-sm">
                                                     <div className="flex items-center gap-2">
                                                         <span>{p.status === 'Pending' ? '⏰' : '💵'}</span>
-                                                        <span className="text-gray-600">{new Date(p.paymentDate).toLocaleDateString()}</span>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-gray-600">{new Date(p.paymentDate).toLocaleDateString()}</span>
+                                                            {p.ConfirmedBy && <span className="text-[10px] text-gray-500">{t('common.confirmedBy', 'Confirmed by')} {p.ConfirmedBy}</span>}
+                                                        </div>
                                                     </div>
                                                     <div className="flex items-center gap-2">
                                                         <span className={`px-2 py-0.5 rounded-full text-xs ${p.status === 'Completed' ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'}`}>
@@ -1326,6 +1330,7 @@ export default function SupplierInvoicesPage() {
                                                 <div className="text-xs text-gray-500">
                                                     {new Date(p.paymentDate).toLocaleDateString()} {p.notes && `— ${p.notes}`}
                                                 </div>
+                                                {p.ConfirmedBy && <div className="text-[10px] text-gray-500 mt-0.5">{t('common.confirmedBy', 'Confirmed by')} {p.ConfirmedBy}</div>}
                                             </div>
                                             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                                                 p.status === 'Pending' ? 'bg-amber-200 text-amber-800' : 'bg-emerald-200 text-emerald-800'

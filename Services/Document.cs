@@ -16,6 +16,7 @@ namespace ResourceManager.Services
         public string CurrencySymbol { get; set; } = string.Empty;
         public bool ShowLogo { get; set; } = true;
         public string? FooterText { get; set; }
+        public List<string> PaymentMethods { get; set; } = new();
         
         // Company info for the PDF
         public string CompanyName { get; set; }= string.Empty;
@@ -42,6 +43,8 @@ namespace ResourceManager.Services
         // Signature / Cachet image
         public byte[]? SignatureImageData { get; set; }
         public bool ShowSignatureOnPdf { get; set; } = false;
+        public bool ShowSignature { get; set; } = false;
+        public bool ShowStamp { get; set; } = false;
         
         // Bank information
         public string? BankName { get; set; }
@@ -82,6 +85,7 @@ namespace ResourceManager.Services
                 ShowLogo = settings?.ShowCompanyLogo ?? true,
                 LogoData = company?.LogoData,
                 FooterText = settings?.PdfFooterText,
+                PaymentMethods = company?.PaymentMethods ?? new List<string>(),
                 CompanyName = company?.Name ?? (previewDefaults ? "Your Company" : ""),
                 CompanyAddress = company?.Address ?? (previewDefaults ? "123 Business St" : ""),
                 CompanyTaxId = company?.MatriculeFiscal ?? (previewDefaults ? "000ABC000" : ""),
@@ -95,6 +99,8 @@ namespace ResourceManager.Services
                 InvoiceLanguage = languageOverride ?? settings?.InvoiceLanguage ?? "fr",
                 SignatureImageData = settings?.SignatureImageData,
                 ShowSignatureOnPdf = settings?.ShowSignatureOnPdf ?? false,
+                ShowSignature = settings?.ShowSignatureOnPdf ?? false,
+                ShowStamp = settings?.ShowSignatureOnPdf ?? false,
                 BankName = settings?.BankName,
                 BankBIC = settings?.BankBIC,
                 BankRIB = settings?.BankRIB,
@@ -430,6 +436,11 @@ namespace ResourceManager.Services
                 {
                     column.Item().PaddingTop(15).Element(compose => ComposeBankInfo(compose));
                 }
+
+                if (Settings.ShowSignature || Settings.ShowStamp)
+                {
+                    column.Item().PaddingTop(16).Element(ComposeSignature);
+                }
                 
                 column.Item().PaddingTop(30).Element(ComposeFooterSection);
             });
@@ -594,8 +605,11 @@ namespace ResourceManager.Services
             var lang = Settings.InvoiceLanguage?.ToLower() ?? "fr";
 
             var paymentMethodsLabel = lang switch { "fr" => "Modes de paiement", "de" => "Zahlungsmethoden", "ar" => "طرق الدفع", _ => "Payment Methods" };
-            var paymentMethodsLine1 = lang switch { "fr" => "Virement bancaire / Chèque /", "de" => "Überweisung / Scheck /", "ar" => "تحويل بنكي / شيك /", _ => "Bank Transfer / Check /" };
-            var paymentMethodsLine2 = lang switch { "fr" => "Traite / Espèces", "de" => "Wechsel / Bargeld", "ar" => "كمبيالة / نقد", _ => "Bank Draft / Cash" };
+            var paymentMethods = (Settings.PaymentMethods ?? new List<string>())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
             var subtotalLabel = lang switch { "fr" => "Total H TVA", "de" => "Zwischensumme", "ar" => "المجموع الفرعي", _ => "Subtotal" };
             var vatPrefix = lang switch { "fr" => "TVA", "de" => "MwSt", "ar" => "ضريبة", _ => "VAT" };
             var totalTtcLabel = lang switch { "fr" => "Total TTC", "de" => "Gesamtbetrag", "ar" => "المجموع الكلي", _ => "Total" };
@@ -608,9 +622,12 @@ namespace ResourceManager.Services
                     {
                         row.RelativeItem(2).Column(c =>
                         {
-                            c.Item().Text(paymentMethodsLabel).Bold().FontColor(BrandBlue);
-                            c.Item().Text(paymentMethodsLine1);
-                            c.Item().Text(paymentMethodsLine2);
+                            if (paymentMethods.Any())
+                            {
+                                c.Item().Text(paymentMethodsLabel).Bold().FontColor(BrandBlue);
+                                foreach (var method in paymentMethods)
+                                    c.Item().Text(method);
+                            }
                         });
                     }
 
@@ -688,24 +705,14 @@ namespace ResourceManager.Services
             };
         }
 
-        private string ResolveAuthorizedSignatureLabel(string lang)
-        {
-            return lang switch
-            {
-                "fr" => "Signature autorisée",
-                "de" => "Autorisierte Unterschrift",
-                "ar" => "التوقيع المعتمد",
-                _ => "Authorized Signature"
-            };
-        }
+        
 
         private void ComposeFooterSection(IContainer container)
         {
-            var lang = Settings.InvoiceLanguage?.ToLower() ?? "fr";
-            var authorizedSignatureLabel = ResolveAuthorizedSignatureLabel(lang);
-            var footerText = !string.IsNullOrWhiteSpace(Settings.FooterText)
-                ? Settings.FooterText
-                : ResolveDefaultFooterText(lang);
+            if (string.IsNullOrWhiteSpace(Settings.FooterText))
+                return;
+
+            var footerText = Settings.FooterText;
 
             var qrBytes = Model is Invoice ? GenerateQrCode() : Array.Empty<byte>();
 
@@ -721,8 +728,6 @@ namespace ResourceManager.Services
                             leftCol.Item().Width(96).Height(96).Image(qrBytes).FitArea();
                     });
 
-                    row.ConstantItem(20);
-                    row.RelativeItem().AlignRight().Element(sig => ComposeSignature(sig, authorizedSignatureLabel));
                 });
 
                 col.Item().Row(row =>
@@ -734,11 +739,17 @@ namespace ResourceManager.Services
             });
         }
 
-        void ComposeSignature(IContainer container, string authorizedSignatureLabel)
+        void ComposeSignature(IContainer container)
         {
+            if (!Settings.ShowSignature && !Settings.ShowStamp)
+                return;
+
             var hasSignatureContent = !string.IsNullOrWhiteSpace(Settings.PdfSignatureText)
                 || !string.IsNullOrWhiteSpace(Settings.PdfSignerPosition)
                 || (Settings.ShowSignatureOnPdf && Settings.SignatureImageData?.Length > 0);
+
+            if (!hasSignatureContent)
+                return;
 
             container.Column(sigCol =>
             {
@@ -755,14 +766,9 @@ namespace ResourceManager.Services
                     if (Settings.ShowSignatureOnPdf && Settings.SignatureImageData?.Length > 0)
                         innerCol.Item().PaddingTop(6).AlignCenter().Width(120).Height(50).Image(Settings.SignatureImageData).FitArea();
 
-                    if (hasSignatureContent)
-                    {
-                        innerCol.Item().PaddingTop(8).AlignCenter().Text(authorizedSignatureLabel).FontSize(8).FontColor("#A0AEC0").LetterSpacing(0.5f);
-                    }
                     else
                     {
                         innerCol.Item().PaddingTop(16).AlignCenter().Width(160).BorderBottom(1).BorderColor("#CBD5E0").PaddingBottom(20);
-                        innerCol.Item().PaddingTop(6).AlignCenter().Text(authorizedSignatureLabel).FontSize(8).FontColor("#A0AEC0").LetterSpacing(0.5f);
                     }
                 });
             });
@@ -960,6 +966,11 @@ namespace ResourceManager.Services
                     column.Item().PaddingTop(15).Element(ComposeBankInfo);
                 }
 
+                if (Settings.ShowSignature || Settings.ShowStamp)
+                {
+                    column.Item().PaddingTop(16).Element(ComposeSignature);
+                }
+
                 column.Item().PaddingTop(30).Element(ComposeFooterSection);
             });
         }
@@ -1092,17 +1103,6 @@ namespace ResourceManager.Services
             };
         }
 
-        private string ResolveAuthorizedSignatureLabel(string lang)
-        {
-            return lang switch
-            {
-                "fr" => "Signature autorisée",
-                "de" => "Autorisierte Unterschrift",
-                "ar" => "التوقيع المعتمد",
-                _ => "Authorized Signature"
-            };
-        }
-
         private byte[] GenerateQrCode()
         {
             try
@@ -1149,11 +1149,10 @@ namespace ResourceManager.Services
 
         private void ComposeFooterSection(IContainer container)
         {
-            var lang = Settings.InvoiceLanguage?.ToLower() ?? "fr";
-            var authorizedSignatureLabel = ResolveAuthorizedSignatureLabel(lang);
-            var footerText = !string.IsNullOrWhiteSpace(Settings.FooterText)
-                ? Settings.FooterText
-                : ResolveDefaultFooterText(lang);
+            if (string.IsNullOrWhiteSpace(Settings.FooterText))
+                return;
+
+            var footerText = Settings.FooterText;
 
             var qrBytes = GenerateQrCode();
 
@@ -1169,8 +1168,6 @@ namespace ResourceManager.Services
                             leftCol.Item().Width(96).Height(96).Image(qrBytes).FitArea();
                     });
 
-                    row.ConstantItem(20);
-                    row.RelativeItem().AlignRight().Element(sig => ComposeSignature(sig, authorizedSignatureLabel));
                 });
 
                 col.Item().Row(row =>
@@ -1182,11 +1179,17 @@ namespace ResourceManager.Services
             });
         }
 
-        private void ComposeSignature(IContainer container, string authorizedSignatureLabel)
+        private void ComposeSignature(IContainer container)
         {
+            if (!Settings.ShowSignature && !Settings.ShowStamp)
+                return;
+
             var hasSignatureContent = !string.IsNullOrWhiteSpace(Settings.PdfSignatureText)
                 || !string.IsNullOrWhiteSpace(Settings.PdfSignerPosition)
                 || (Settings.ShowSignatureOnPdf && Settings.SignatureImageData?.Length > 0);
+
+            if (!hasSignatureContent)
+                return;
 
             container.Column(sigCol =>
             {
@@ -1209,15 +1212,7 @@ namespace ResourceManager.Services
                         innerCol.Item().PaddingTop(6).AlignCenter().Width(120).Height(50).Image(Settings.SignatureImageData).FitArea();
                     }
 
-                    if (hasSignatureContent)
-                    {
-                        innerCol.Item().PaddingTop(8).AlignCenter().Text(authorizedSignatureLabel).FontSize(8).FontColor("#A0AEC0").LetterSpacing(0.5f);
-                    }
-                    else
-                    {
-                        innerCol.Item().PaddingTop(16).AlignCenter().Width(160).BorderBottom(1).BorderColor("#CBD5E0").PaddingBottom(20);
-                        innerCol.Item().PaddingTop(6).AlignCenter().Text(authorizedSignatureLabel).FontSize(8).FontColor("#A0AEC0").LetterSpacing(0.5f);
-                    }
+
                 });
             });
         }

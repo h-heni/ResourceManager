@@ -147,11 +147,11 @@
     "client": "العميل",
     "status": {
       "Paid": "مدفوعة",
-      "Unpaid": "غير مدفوعة",
+      "Pending": "معلّقة",
       "PartiallyPaid": "مدفوعة جزئياً",
-      "Draft": "مسودة",
-      "Overdue": "متأخرة",
-      "Locked": "مقفلة"
+      "Archived": "مؤرشفة",
+      "Locked": "مقفلة",
+      "Cancelled": "ملغاة"
     },
     "total": "المجموع",
     "amountPaid": "المبلغ المدفوع",
@@ -179,9 +179,8 @@
     "overdue": "متأخرة",
     "dueSoon": "قريبة الاستحقاق",
     "paid": "مدفوعة",
-    "unpaid": "غير مدفوعة",
+    "pending": "معلّقة",
     "partiallyPaid": "مدفوعة جزئياً",
-    "draft": "مسودة",
     "locked": "مقفلة",
     "daysOverdue": "متأخرة {{days}} يوم",
     "daysUntilDue": "{{days}} يوم حتى الاستحقاق",
@@ -191,8 +190,13 @@
     "enterAmount": "أدخل المبلغ...",
     "paymentNotesPlaceholder": "مرجع الدفع، رقم الشيك، إلخ.",
     "details": "التفاصيل",
-    "payments": "الدفعات",
+    "payments": {
+      "label": "الدفعات",
+      "lockedMessage": "المدفوعات لهذه الفاتورة مقفلة"
+    },
     "relatedDocs": "المستندات المرتبطة",
+    "handledBy": "تمت المعالجة بواسطة",
+    "pendingBalance": "الرصيد المعلّق",
     "info": "معلومات الفاتورة",
     "number": "رقم الفاتورة",
     "financial": "الملخص المالي",
@@ -206,7 +210,6 @@
     "linkedDelivery": "سندات التسليم المرتبطة",
     "noPayments": "لا توجد دفعات مسجلة",
     "noLinkedDocs": "لا توجد مستندات مرتبطة",
-    "lockedAfterPayment": "مقفلة — تم تسجيل مدفوعات",
     "noRelatedQuote": "لا يوجد عرض أسعار مرتبط",
     "relatedDeliveryNotes": "مذكرات التسليم المرتبطة",
     "noRelatedDeliveryNotes": "لا توجد مذكرات تسليم مرتبطة",
@@ -352,7 +355,8 @@
         "address": "العنوان",
         "companyName": "اسم الشركة",
         "fiscalId": "المعرف الجبائي",
-        "phone": "الهاتف"
+        "phone": "الهاتف",
+        "email": "name@company.com"
       },
       "saveChanges": "Save Changes",
       "saveFailed": "Save Failed",
@@ -401,10 +405,12 @@
     "payNow": "ادفع الآن",
     "scheduleLater": "جدولة لاحقًا",
     "scheduledDate": "التاريخ المجدول",
-    "scheduledInfo": "سيتم معالجة الدفعة تلقائيًا في التاريخ المحدد",
+    "scheduledInfo": "سيتم جدولة الدفعة ويجب الموافقة عليها يدوياً",
     "schedulePayment": "جدولة الدفعة",
     "scheduledSuccess": "تم جدولة الدفعة بنجاح",
-    "selectScheduledDate": "يرجى اختيار تاريخ مجدول"
+    "selectScheduledDate": "يرجى اختيار تاريخ مجدول",
+    "confirmDelete": "هل أنت متأكد من حذف هذه الدفعة؟",
+    "deleteFailed": "فشل حذف الدفعة"
   },
   "settings": {
     "title": "الإعدادات",
@@ -565,8 +571,8 @@
     "totalInvoices": "إجمالي الفواتير",
     "totalRevenueLabel": "تسمية إجمالي الإيرادات",
     "totalUsers": "إجمالي المستخدمين",
-    "unpaid": "غير مدفوعة",
-    "unpaidInvoices": "الفواتير غير المدفوعة",
+    "pending": "معلّقة",
+    "pendingInvoices": "الفواتير المعلّقة",
     "users": "المستخدمون",
     "revenueByYear": "الإيرادات السنوية",
     "allTime": "جميع الأوقات",
@@ -680,7 +686,6 @@
     "paymentStatus": {
       "Paid": "مدفوع",
       "PartiallyPaid": "مدفوع جزئياً",
-      "Unpaid": "غير مدفوع",
       "Pending": "معلق"
     },
     "paid": "مدفوع",
@@ -843,16 +848,16 @@
     "noQuoteSelected": "لم يتم اختيار اقتباس",
     "numberRequired": "الرقم مطلوب",
     "pdfLanguage": "لغة PDF",
-    "saveButton": "زر الحفظ",
-    "saving": "جارٍ الحفظ",
-    "selectClient": "اختر العميل",
-    "selectQuote": "اختر الاقتباس",
-    "subtitleEdit": "تعديل العنوان الفرعي",
-    "subtitleNew": "عنوان فرعي جديد",
+    "saveButton": "حفظ الفاتورة",
+    "saving": "جارٍ الحفظ...",
+    "selectClient": "اختر عميلاً",
+    "selectQuote": "عرض سعر #{{number}} - {{amount}}",
+    "subtitleEdit": "قم بتعديل تفاصيل الفاتورة أدناه",
+    "subtitleNew": "املأ التفاصيل لإنشاء فاتورة",
     "suggested": "مقترح",
-    "titleEdit": "تعديل العنوان",
-    "titleNew": "عنوان جديد",
-    "updateButton": "زر التحديث"
+    "titleEdit": "تعديل الفاتورة",
+    "titleNew": "إنشاء فاتورة جديدة",
+    "updateButton": "تحديث الفاتورة"
   },
   "dataManagement": {
     "dropOrSelect": "اسحب أو اختر",
@@ -908,7 +913,10 @@
       "deleteUser": "حذف المستخدم",
       "resetPassword": "إعادة تعيين كلمة المرور",
       "resetSettings": "إعادة تعيين الإعدادات",
-      "resetting": "جارٍ إعادة التعيين"
+      "resetting": "جارٍ إعادة التعيين",
+      "sendInvitation": "إرسال الدعوة",
+      "sending": "جارٍ الإرسال...",
+      "createDirectly": "إنشاء مباشر"
     },
     "fields": {
       "addressRequired": "العنوان مطلوب",
@@ -926,7 +934,9 @@
       "lastName": "اسم العائلة",
       "lastNameRequired": "اسم العائلة مطلوب",
       "newPasswordPlaceholder": "عنصر نائب كلمة المرور الجديدة",
-      "passwordRequired": "كلمة المرور مطلوبة"
+      "passwordRequired": "كلمة المرور مطلوبة",
+      "emailPlaceholder": "manager@company.com",
+      "phone": "الهاتف"
     },
     "messages": {
       "authRequired": "المصادقة مطلوبة",
@@ -953,7 +963,13 @@
       "resettingFor": "جارٍ إعادة التعيين لـ",
       "retry": "إعادة المحاولة",
       "tenantCreateFailed": "فشل إنشاء المستأجر",
-      "tenantCreated": "تم إنشاء المستأجر"
+      "tenantCreated": "تم إنشاء المستأجر",
+      "invitationSent": "تم إرسال الدعوة بنجاح!",
+      "invitationSentDesc": "تم إرسال بريد إلكتروني للدعوة إلى المدير. سيتمكن من إعداد حسابه وتفاصيل شركته.",
+      "inviteDesc": "أدخل عنوان البريد الإلكتروني للمدير لإرسال دعوة له. سيقوم بإعداد حسابه وتفاصيل شركته بنفسه.",
+      "directTenantCreated": "تم إنشاء المستأجر بنجاح!",
+      "directTenantCreatedDesc": "تم إنشاء حساب المدير والشركة. يمكنه الآن تسجيل الدخول باستخدام بيانات الاعتماد المقدمة.",
+      "directDesc": "أملأ جميع التفاصيل أدناه لإنشاء حساب المدير والشركة مباشرة."
     },
     "roles": {
       "Employee": "الموظف"
@@ -1037,5 +1053,35 @@
     "setupFailed": "فشل إنشاء الشركة",
     "subtitle": "أخبرنا عن شركتك للبدء",
     "title": "أكمل ملفك الشخصي"
+  },
+  "invitation": {
+    "invalidTitle": "دعوة غير صالحة",
+    "goToLogin": "الذهاب لتسجيل الدخول",
+    "successTitle": "تم إنشاء الحساب بنجاح!",
+    "successDesc": "تم إعداد حسابك وشركتك. يمكنك الآن تسجيل الدخول.",
+    "setupTitle": "إعداد حسابك",
+    "setupDesc": "أكمل ملفك الشخصي وتفاصيل شركتك للبدء.",
+    "profileSection": "معلومات الملف الشخصي",
+    "firstName": "الاسم الأول",
+    "lastName": "اسم العائلة",
+    "password": "كلمة المرور",
+    "confirmPassword": "تأكيد كلمة المرور",
+    "companySection": "معلومات الشركة",
+    "companyName": "اسم الشركة",
+    "companyAddress": "العنوان",
+    "city": "المدينة",
+    "taxNumber": "الرقم الضريبي",
+    "creating": "جار إنشاء الحساب...",
+    "createAccount": "إنشاء الحساب والشركة",
+    "validatingToken": "جار التحقق من دعوتك...",
+    "tokenRequired": "لم يتم تقديم رمز الدعوة.",
+    "validationFailed": "فشل التحقق من الدعوة. يرجى المحاولة مرة أخرى.",
+    "invalidOrExpired": "هذه الدعوة غير صالحة أو منتهية الصلاحية.",
+    "createFailed": "فشل إنشاء الحساب.",
+    "unexpectedError": "حدث خطأ غير متوقع. يرجى المحاولة مرة أخرى.",
+    "passwordMismatch": "كلمات المرور غير متطابقة.",
+    "passwordMinLength": "يجب أن تتكون كلمة المرور من 6 أحرف على الأقل.",
+    "defaultCurrency": "العملة الافتراضية",
+    "defaultLanguage": "اللغة الافتراضية"
   }
 }

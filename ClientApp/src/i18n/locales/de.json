@@ -147,11 +147,11 @@
     "client": "Kunde",
     "status": {
       "Paid": "Bezahlt",
-      "Unpaid": "Unbezahlt",
+      "Pending": "Ausstehend",
       "PartiallyPaid": "Teilweise bezahlt",
-      "Draft": "Entwurf",
-      "Overdue": "Überfällig",
-      "Locked": "Gesperrt"
+      "Archived": "Archiviert",
+      "Locked": "Gesperrt",
+      "Cancelled": "Storniert"
     },
     "total": "Gesamt",
     "amountPaid": "Bezahlter Betrag",
@@ -179,9 +179,8 @@
     "overdue": "Überfällig",
     "dueSoon": "Bald fällig",
     "paid": "Bezahlt",
-    "unpaid": "Unbezahlt",
+    "pending": "Ausstehend",
     "partiallyPaid": "Teilweise bezahlt",
-    "draft": "Entwurf",
     "locked": "Gesperrt",
     "daysOverdue": "{{days}} Tage überfällig",
     "daysUntilDue": "{{days}} Tage bis zur Fälligkeit",
@@ -191,8 +190,13 @@
     "enterAmount": "Betrag eingeben...",
     "paymentNotesPlaceholder": "Zahlungsreferenz, Schecknummer usw.",
     "details": "Details",
-    "payments": "Zahlungen",
+    "payments": {
+      "label": "Zahlungen",
+      "lockedMessage": "Die Zahlungen für diese Rechnung sind gesperrt"
+    },
     "relatedDocs": "Verknüpfte Dokumente",
+    "handledBy": "Bearbeitet von",
+    "pendingBalance": "Ausstehender Betrag",
     "info": "Rechnungsinformationen",
     "number": "Rechnungsnummer",
     "financial": "Finanzübersicht",
@@ -206,7 +210,7 @@
     "linkedDelivery": "Verknüpfte Lieferscheine",
     "noPayments": "Keine Zahlungen erfasst",
     "noLinkedDocs": "Keine verknüpften Dokumente gefunden",
-    "lockedAfterPayment": "Gesperrt — Zahlungen registriert",
+
     "noRelatedQuote": "Kein verknüpftes Angebot",
     "relatedDeliveryNotes": "Zugehörige Lieferscheine",
     "noRelatedDeliveryNotes": "Keine zugehörigen Lieferscheine",
@@ -352,7 +356,8 @@
         "address": "Adresse",
         "companyName": "Firmenname",
         "fiscalId": "Steuernummer",
-        "phone": "Telefon"
+        "phone": "Telefon",
+        "email": "name@firma.com"
       },
       "saveChanges": "Änderungen speichern",
       "saveFailed": "Speichern fehlgeschlagen",
@@ -401,10 +406,12 @@
     "payNow": "Jetzt bezahlen",
     "scheduleLater": "Für später planen",
     "scheduledDate": "Geplantes Datum",
-    "scheduledInfo": "Die Zahlung wird am ausgewählten Datum automatisch verarbeitet",
+    "scheduledInfo": "Die Zahlung wird geplant und muss manuell genehmigt werden",
     "schedulePayment": "Zahlung planen",
     "scheduledSuccess": "Zahlung wurde erfolgreich geplant",
-    "selectScheduledDate": "Bitte wählen Sie ein geplantes Datum aus"
+    "selectScheduledDate": "Bitte wählen Sie ein geplantes Datum aus",
+    "confirmDelete": "Möchten Sie diese Zahlung wirklich löschen?",
+    "deleteFailed": "Zahlung konnte nicht gelöscht werden"
   },
   "settings": {
     "title": "Einstellungen",
@@ -565,8 +572,8 @@
     "totalInvoices": "Anzahl Rechnungen",
     "totalRevenueLabel": "Gesamtumsatz",
     "totalUsers": "Anzahl Benutzer",
-    "unpaid": "Unbezahlt",
-    "unpaidInvoices": "Unbezahlte Rechnungen",
+    "pending": "Ausstehend",
+    "pendingInvoices": "Ausstehende Rechnungen",
     "users": "Benutzer",
     "allTime": "Alle Zeiten",
     "lastYear": "Letztes Jahr",
@@ -680,7 +687,6 @@
     "paymentStatus": {
       "Paid": "Bezahlt",
       "PartiallyPaid": "Teilweise bezahlt",
-      "Unpaid": "Unbezahlt",
       "Pending": "Ausstehend"
     },
     "paid": "Bezahlt",
@@ -843,16 +849,16 @@
     "noQuoteSelected": "Kein Angebot ausgewählt",
     "numberRequired": "Nummer erforderlich",
     "pdfLanguage": "PDF-Sprache",
-    "saveButton": "Speichern",
-    "saving": "Speichern...",
-    "selectClient": "Kunde auswählen",
-    "selectQuote": "Angebot auswählen",
-    "subtitleEdit": "Bearbeiten Sie die Details",
-    "subtitleNew": "Erstellen Sie ein neues Dokument",
+    "saveButton": "Rechnung speichern",
+    "saving": "Wird gespeichert...",
+    "selectClient": "Wählen Sie einen Kunden",
+    "selectQuote": "Angebot #{{number}} - {{amount}}",
+    "subtitleEdit": "Bearbeiten Sie die Rechnungsdetails unten",
+    "subtitleNew": "Füllen Sie die Details aus, um eine Rechnung zu erstellen",
     "suggested": "Vorgeschlagen",
-    "titleEdit": "Bearbeiten",
-    "titleNew": "Neu erstellen",
-    "updateButton": "Aktualisieren"
+    "titleEdit": "Rechnung bearbeiten",
+    "titleNew": "Neue Rechnung erstellen",
+    "updateButton": "Rechnung aktualisieren"
   },
   "dataManagement": {
     "dropOrSelect": "Datei ablegen oder auswählen",
@@ -908,7 +914,10 @@
       "deleteUser": "Benutzer löschen",
       "resetPassword": "Passwort zurücksetzen",
       "resetSettings": "Einstellungen zurücksetzen",
-      "resetting": "Zurücksetzen..."
+      "resetting": "Zurücksetzen...",
+      "sendInvitation": "Einladung senden",
+      "sending": "Wird gesendet...",
+      "createDirectly": "Direkt erstellen"
     },
     "fields": {
       "addressRequired": "Adresse erforderlich",
@@ -926,7 +935,9 @@
       "lastName": "Nachname",
       "lastNameRequired": "Nachname erforderlich",
       "newPasswordPlaceholder": "Neues Passwort eingeben",
-      "passwordRequired": "Passwort erforderlich"
+      "passwordRequired": "Passwort erforderlich",
+      "emailPlaceholder": "manager@firma.com",
+      "phone": "Telefon"
     },
     "messages": {
       "authRequired": "Authentifizierung erforderlich",
@@ -953,7 +964,13 @@
       "resettingFor": "Zurücksetzen für",
       "retry": "Erneut versuchen",
       "tenantCreateFailed": "Mandantenerstellung fehlgeschlagen",
-      "tenantCreated": "Mandant erstellt"
+      "tenantCreated": "Mandant erstellt",
+      "invitationSent": "Einladung erfolgreich gesendet!",
+      "invitationSentDesc": "Eine Einladungs-E-Mail wurde an den Manager gesendet. Er kann sein Konto und die Firmendetails selbst einrichten.",
+      "inviteDesc": "Geben Sie die E-Mail-Adresse des Managers ein, um ihm eine Einladung zu senden. Er richtet sein Konto und seine Firmendetails selbst ein.",
+      "directTenantCreated": "Mandant erfolgreich erstellt!",
+      "directTenantCreatedDesc": "Das Manager-Konto und die Firma wurden erstellt. Der Manager kann sich jetzt mit den angegebenen Zugangsdaten anmelden.",
+      "directDesc": "Füllen Sie alle Angaben unten aus, um das Manager-Konto und die Firma direkt zu erstellen."
     },
     "roles": {
       "Employee": "Mitarbeiter"
@@ -1037,5 +1054,35 @@
     "setupFailed": "Unternehmen konnte nicht erstellt werden",
     "subtitle": "Erzählen Sie uns von Ihrem Unternehmen, um zu starten",
     "title": "Vervollständigen Sie Ihr Profil"
+  },
+  "invitation": {
+    "invalidTitle": "Ungültige Einladung",
+    "goToLogin": "Zur Anmeldung",
+    "successTitle": "Konto erfolgreich erstellt!",
+    "successDesc": "Ihr Konto und Unternehmen wurden eingerichtet. Sie können sich jetzt anmelden.",
+    "setupTitle": "Konto einrichten",
+    "setupDesc": "Vervollständigen Sie Ihr Profil und Ihre Unternehmensdetails, um zu beginnen.",
+    "profileSection": "Profildaten",
+    "firstName": "Vorname",
+    "lastName": "Nachname",
+    "password": "Passwort",
+    "confirmPassword": "Passwort bestätigen",
+    "companySection": "Unternehmensinformationen",
+    "companyName": "Firmenname",
+    "companyAddress": "Adresse",
+    "city": "Stadt",
+    "taxNumber": "Steuernummer",
+    "creating": "Konto wird erstellt...",
+    "createAccount": "Konto & Unternehmen erstellen",
+    "validatingToken": "Einladung wird validiert...",
+    "tokenRequired": "Kein Einladungs-Token angegeben.",
+    "validationFailed": "Einladung konnte nicht validiert werden. Bitte versuchen Sie es erneut.",
+    "invalidOrExpired": "Diese Einladung ist ungültig oder abgelaufen.",
+    "createFailed": "Konto konnte nicht erstellt werden.",
+    "unexpectedError": "Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es erneut.",
+    "passwordMismatch": "Passwörter stimmen nicht überein.",
+    "passwordMinLength": "Passwort muss mindestens 6 Zeichen lang sein.",
+    "defaultCurrency": "Standardwährung",
+    "defaultLanguage": "Standardsprache"
   }
 }

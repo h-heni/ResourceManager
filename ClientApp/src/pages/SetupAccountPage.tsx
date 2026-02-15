@@ -16,8 +16,6 @@ interface FormData {
     companyAddress: string;
     companyCity: string;
     taxNumber: string;
-    vat: string;
-    bankInfo: string;
     defaultCurrency: string;
     defaultLanguage: string;
 }
@@ -46,8 +44,6 @@ export default function SetupAccountPage() {
         companyAddress: '',
         companyCity: '',
         taxNumber: '',
-        vat: '',
-        bankInfo: '',
         defaultCurrency: 'TND',
         defaultLanguage: 'fr',
     });
@@ -55,7 +51,7 @@ export default function SetupAccountPage() {
     // Validate token on page load
     useEffect(() => {
         if (!token) {
-            setTokenError('No invitation token provided.');
+            setTokenError(t('invitation.tokenRequired', 'No invitation token provided.'));
             setValidating(false);
             return;
         }
@@ -69,10 +65,10 @@ export default function SetupAccountPage() {
                     setTokenValid(true);
                     setInvitedEmail(res.data.email);
                 } else {
-                    setTokenError(res.data.error || 'This invitation is invalid or expired.');
+                    setTokenError(res.data.error || t('invitation.invalidOrExpired', 'This invitation is invalid or expired.'));
                 }
             } catch {
-                setTokenError('Failed to validate invitation. Please try again.');
+                setTokenError(t('invitation.validationFailed', 'Failed to validate invitation. Please try again.'));
             } finally {
                 setValidating(false);
             }
@@ -90,12 +86,12 @@ export default function SetupAccountPage() {
         setSubmitError('');
 
         if (form.password !== form.confirmPassword) {
-            setSubmitError('Passwords do not match.');
+            setSubmitError(t('invitation.passwordMismatch', 'Passwords do not match.'));
             return;
         }
 
         if (form.password.length < 6) {
-            setSubmitError('Password must be at least 6 characters.');
+            setSubmitError(t('invitation.passwordMinLength', 'Password must be at least 6 characters.'));
             return;
         }
 
@@ -111,8 +107,6 @@ export default function SetupAccountPage() {
                 companyAddress: form.companyAddress,
                 companyCity: form.companyCity,
                 taxNumber: form.taxNumber,
-                vat: form.vat,
-                bankInfo: form.bankInfo,
                 defaultCurrency: form.defaultCurrency,
                 defaultLanguage: form.defaultLanguage,
             });
@@ -120,9 +114,9 @@ export default function SetupAccountPage() {
         } catch (err: unknown) {
             if (axios.isAxiosError(err) && err.response?.data) {
                 const data = err.response.data;
-                setSubmitError(data.error || data.message || 'Failed to create account.');
+                setSubmitError(data.error || data.message || t('invitation.createFailed', 'Failed to create account.'));
             } else {
-                setSubmitError('An unexpected error occurred. Please try again.');
+                setSubmitError(t('invitation.unexpectedError', 'An unexpected error occurred. Please try again.'));
             }
         } finally {
             setSubmitting(false);
@@ -135,7 +129,7 @@ export default function SetupAccountPage() {
             <div className="min-h-screen bg-gradient-to-br from-emerald-50 to-white flex items-center justify-center">
                 <div className="text-center">
                     <Loader2 className="animate-spin h-10 w-10 text-emerald-600 mx-auto mb-4" />
-                    <p className="text-gray-600">Validating your invitation...</p>
+                    <p className="text-gray-600">{t('invitation.validatingToken', 'Validating your invitation...')}</p>
                 </div>
             </div>
         );
@@ -340,28 +334,6 @@ export default function SetupAccountPage() {
                                     className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
                                     value={form.taxNumber}
                                     onChange={handleChange('taxNumber')}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    {t('invitation.vat', 'VAT')}
-                                </label>
-                                <input
-                                    type="text"
-                                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
-                                    value={form.vat}
-                                    onChange={handleChange('vat')}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    {t('invitation.bankInfo', 'Bank Info')}
-                                </label>
-                                <input
-                                    type="text"
-                                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
-                                    value={form.bankInfo}
-                                    onChange={handleChange('bankInfo')}
                                 />
                             </div>
                         </div>

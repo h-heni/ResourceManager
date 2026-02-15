@@ -10,5 +10,6 @@ namespace ResourceManager.Dtos
         [Required(ErrorMessage = "Le numéro d'identification fiscale est obligatoire.")]
         public string MatriculeFiscal { get; set; } = string.Empty;
         public string Phone { get; set; } = string.Empty;
+        public string? Email { get; set; }
     }
 }

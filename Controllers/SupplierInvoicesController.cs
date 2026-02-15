@@ -119,6 +119,26 @@ namespace ResourceManager.Controllers
 
             if (invoice == null) return NotFound();
 
+            // Audit: Resolve User Names
+            var userIds = new HashSet<string>();
+            if (invoice.Payments != null)
+            {
+                foreach (var p in invoice.Payments)
+                {
+                    if (!string.IsNullOrEmpty(p.CreatedByUserId)) userIds.Add(p.CreatedByUserId);
+                    if (!string.IsNullOrEmpty(p.ConfirmedByUserId)) userIds.Add(p.ConfirmedByUserId);
+                }
+            }
+            var userMap = new Dictionary<string, string>();
+            if (userIds.Any())
+            {
+                var users = await _context.Users.AsNoTracking()
+                    .Where(u => userIds.Contains(u.Id))
+                    .Select(u => new { u.Id, Name = u.UserName ?? u.Email })
+                    .ToListAsync();
+                foreach (var u in users) userMap[u.Id] = u.Name ?? "Unknown";
+            }
+
             return Ok(new
             {
                 invoice.Id,
@@ -148,9 +168,12 @@ namespace ResourceManager.Controllers
                     i.Id, i.Description, i.Quantity, i.UnitPrice, i.TaxRate,
                     i.TotalHT, i.TaxAmount, i.TotalTTC
                 }),
-                Payments = invoice.Payments.OrderByDescending(p => p.PaymentDate).Select(p => new
+                Payments = (invoice.Payments ?? Enumerable.Empty<SupplierPayment>()).OrderByDescending(p => p.PaymentDate).Select(p => new
                 {
-                    p.Id, p.Amount, p.PaymentDate, p.Notes, p.Status, p.IsScheduled, p.CreatedAt
+                    p.Id, p.Amount, p.PaymentDate, p.Notes, p.Status, p.IsScheduled, p.CreatedAt,
+                    ConfirmedBy = (p.ConfirmedByUserId != null && userMap.ContainsKey(p.ConfirmedByUserId)) ? userMap[p.ConfirmedByUserId] : null,
+                    ConfirmedAt = p.ConfirmedAt,
+                    CreatedBy = (p.CreatedByUserId != null && userMap.ContainsKey(p.CreatedByUserId)) ? userMap[p.CreatedByUserId] : null
                 })
             });
         }
@@ -511,6 +534,18 @@ namespace ResourceManager.Controllers
             if (invoice == null) return NotFound();
             if (dto.Amount <= 0) return BadRequest(new { message = "Payment amount must be positive" });
 
+            // Over-allocation guard: confirmed + pending must not exceed totalAmount
+            var totalAmount = invoice.TotalTTC ?? 0;
+            var existingPaid = invoice.AmountPaid;
+            var existingPending = invoice.PendingAmount;
+            var newPending = (dto.Status ?? "Completed") == "Pending" ? dto.Amount : 0;
+            var newCompleted = (dto.Status ?? "Completed") == "Completed" ? dto.Amount : 0;
+            if (totalAmount > 0 && (existingPaid + newCompleted + existingPending + newPending) > totalAmount)
+            {
+                var maxAllowed = Math.Max(0, totalAmount - existingPaid - existingPending);
+                return BadRequest(new { message = $"Payment would exceed invoice total. Maximum allowed: {maxAllowed:N3}" });
+            }
+
             var payment = new SupplierPayment
             {
                 FournisseurInvoiceId = id,
@@ -519,7 +554,9 @@ namespace ResourceManager.Controllers
                 Notes = dto.Notes,
                 Status = dto.Status ?? "Completed",
                 CreatedByUserId = userId,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                ConfirmedByUserId = (dto.Status ?? "Completed") == "Completed" ? userId : null,
+                ConfirmedAt = (dto.Status ?? "Completed") == "Completed" ? DateTime.UtcNow : null
             };
             _context.SupplierPayments.Add(payment);
             await _context.SaveChangesAsync();
@@ -532,6 +569,7 @@ namespace ResourceManager.Controllers
                 paymentId = payment.Id,
                 paymentStatus = invoice.PaymentStatus,
                 amountPaid = invoice.AmountPaid,
+                pendingAmount = invoice.PendingAmount,
                 remainingAmount = invoice.RemainingAmount
             });
         }

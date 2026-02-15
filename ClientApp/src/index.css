@@ -41,6 +41,7 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow-x: hidden; /* Prevent horizontal scroll on mobile */
 }
 
 body > .container {
@@ -170,51 +171,113 @@ body > .container {
 }
 
 @layer components {
+  .rm-content-shell {
+    width: min(100%, max(90vw, 1600px));
+    margin-inline: auto;
+    padding: 1.5rem 0.875rem 2rem;
+  }
+
+  @media (min-width: 768px) {
+    .rm-content-shell {
+      padding-inline: 1rem;
+      padding-block: 1.75rem 2rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .rm-content-shell {
+      padding-inline: 0.75rem;
+      padding-block: 2rem 2.25rem;
+    }
+  }
+
+  @media (min-width: 1440px) {
+    .rm-content-shell {
+      padding-inline: 1rem;
+    }
+  }
+
   .rm-table-card {
-    @apply bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden;
+    @apply bg-white rounded-xl border border-gray-200 shadow-sm;
+    overflow-x: visible;
   }
 
   .rm-table {
-    @apply w-full table-fixed border-separate border-spacing-0;
+    @apply w-full table-auto border-separate border-spacing-0;
   }
 
   .rm-table thead th {
-    @apply px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 bg-gray-50 border-b border-gray-200 whitespace-nowrap text-left overflow-hidden text-ellipsis;
+    @apply px-2.5 lg:px-3 py-3.5 text-xs font-semibold uppercase tracking-[0.08em] text-slate-600 bg-slate-50 border-b border-slate-200 whitespace-nowrap text-left align-middle;
   }
 
   .rm-table tbody td {
-    @apply px-4 py-3 text-sm text-gray-700 align-middle border-b border-gray-100 whitespace-nowrap overflow-hidden text-ellipsis;
+    @apply px-2.5 lg:px-3 py-3.5 text-sm text-slate-700 align-middle border-b border-slate-100;
   }
 
   .rm-table tbody tr {
-    @apply transition-colors hover:bg-gray-50;
+    @apply transition-colors hover:bg-slate-50/80;
+  }
+
+  .rm-table tbody tr:last-child td {
+    @apply border-b-0;
   }
 
   .rm-table tfoot td {
-    @apply px-4 py-3 text-sm whitespace-nowrap overflow-hidden text-ellipsis;
+    @apply px-2.5 lg:px-3 py-3.5 text-sm text-slate-700 border-t border-slate-200 bg-slate-50/70;
   }
 
   .rm-cell-text {
-    @apply text-left overflow-hidden text-ellipsis;
+    @apply text-left text-slate-700;
+  }
+
+  .rm-cell-date {
+    @apply text-left text-slate-600 whitespace-nowrap;
+  }
+
+  .rm-cell-status {
+    @apply whitespace-nowrap align-middle;
+    width: 1%;
   }
 
   .rm-cell-number {
-    @apply text-right tabular-nums whitespace-nowrap font-medium text-gray-900 overflow-hidden text-ellipsis;
+    @apply text-right tabular-nums whitespace-nowrap font-medium text-slate-900;
   }
 
   .rm-cell-currency {
-    @apply text-right tabular-nums whitespace-nowrap font-semibold text-gray-900 overflow-hidden text-ellipsis;
+    @apply text-right tabular-nums whitespace-nowrap font-semibold text-slate-900;
   }
 
   .rm-cell-actions {
-    @apply text-right whitespace-nowrap overflow-visible;
+    @apply text-right whitespace-nowrap align-middle;
+    width: 1%;
+  }
+
+  .rm-th-id {
+    @apply whitespace-nowrap;
   }
 
   .rm-th-number {
-    @apply text-right;
+    @apply text-right whitespace-nowrap;
+  }
+
+  .rm-th-date {
+    @apply whitespace-nowrap;
+  }
+
+  .rm-th-status {
+    @apply whitespace-nowrap text-center;
+    width: 1%;
   }
 
   .rm-th-actions {
-    @apply text-right;
+    @apply text-right whitespace-nowrap;
+    width: 1%;
+  }
+
+  @media (max-width: 1023px) {
+    .rm-table-card {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
   }
 }

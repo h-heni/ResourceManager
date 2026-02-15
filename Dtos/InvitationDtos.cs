@@ -41,10 +41,6 @@ namespace ResourceManager.Dtos
 
         public string TaxNumber { get; set; } = string.Empty;
 
-        public string VAT { get; set; } = string.Empty;
-
-        public string BankInfo { get; set; } = string.Empty;
-
         // Defaults
         public string DefaultCurrency { get; set; } = "TND";
         public string DefaultLanguage { get; set; } = "fr";

@@ -351,8 +351,8 @@ export default function ExpensesPage() {
                         <thead>
                             <tr>
                                 <th>{t('expense.description')}</th>
-                                <th>{t('expense.category')}</th>
-                                <th>{t('expense.date')}</th>
+                                <th className="rm-th-status">{t('expense.category')}</th>
+                                <th className="rm-th-date">{t('expense.date')}</th>
                                 <th className="rm-th-number">{t('expense.amount')}</th>
                                 <th className="rm-th-actions">{t('common.actions')}</th>
                             </tr>
@@ -370,15 +370,15 @@ export default function ExpensesPage() {
                                             )}
                                         </div>
                                         {expense.notes && (
-                                            <p className="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{expense.notes}</p>
+                                            <p className="text-xs text-gray-400 mt-0.5">{expense.notes}</p>
                                         )}
                                     </td>
-                                    <td className="rm-cell-text">
+                                    <td className="rm-cell-status">
                                         <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getCategoryColor(expense.category)}`}>
                                             {t(`expense.categories.${expense.category}`, expense.category)}
                                         </span>
                                     </td>
-                                    <td className="rm-cell-text text-sm text-gray-600">
+                                    <td className="rm-cell-date">
                                         {new Date(expense.date).toLocaleDateString()}
                                     </td>
                                     <td className="rm-cell-currency">
@@ -418,10 +418,10 @@ export default function ExpensesPage() {
                                 const entries = Object.values(byCur);
                                 return entries.map((entry, i) => (
                                     <tr key={i}>
-                                        <td colSpan={3} className="px-4 py-3 text-sm font-semibold text-gray-700 text-right whitespace-nowrap">
+                                        <td colSpan={3} className="rm-cell-number">
                                             {i === 0 ? t('common.total') : ''}
                                         </td>
-                                        <td className="px-4 py-3 text-right font-bold text-gray-900 tabular-nums whitespace-nowrap">
+                                        <td className="rm-cell-currency font-bold">
                                             {formatCurrency(entry.total, entry.symbol)}
                                         </td>
                                         <td></td>

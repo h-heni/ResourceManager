@@ -81,7 +81,7 @@ namespace ResourceManager.Controllers
                         ClientName = i.Client?.Name ?? "Unknown",
                         ClientEmail = i.Client?.Email,
                         i.TotalAmount,
-                        i.Status,
+                        Status = i.Treated ? "Archived" : i.Status,
                         i.IsLocked,
                         i.Treated,
                         i.DevisId,
@@ -91,7 +91,11 @@ namespace ResourceManager.Controllers
                         PdfLanguage = i.Devis?.PdfLanguage,
                         AmountPaid = amountPaid,
                         PendingAmount = pendingAmount,
-                        RemainingAmount = (i.TotalAmount ?? 0) - amountPaid,
+                        RemainingAmount = Math.Max(0, (i.TotalAmount ?? 0) - (amountPaid + pendingAmount)),
+                        // Progress: cast to double BEFORE division to avoid integer division truncation
+                        Progress = (i.TotalAmount ?? 0) > 0
+                            ? Math.Min(100.0, (double)amountPaid / (double)(i.TotalAmount ?? 0) * 100.0)
+                            : 0.0,
                         IsOverdue = i.DueDate.HasValue && i.DueDate.Value < DateTime.UtcNow && i.Status != "Paid",
                         DaysUntilDue = i.DueDate.HasValue ? (int)(i.DueDate.Value - DateTime.UtcNow).TotalDays : (int?)null,
                         Payments = payments.Select(p => new {
@@ -144,16 +148,24 @@ namespace ResourceManager.Controllers
 
                 var selectedYear = year ?? DateTime.UtcNow.Year;
 
-                var archivedCount = await _context.Invoices
+                // Count archived invoices (Treated == true)
+                var archivedInvoiceCount = await _context.Invoices
+                    .IgnoreQueryFilters()
                     .AsNoTracking()
-                    .Where(i => i.CompanyId == user.CompanyId)
+                    .Where(i => i.Treated == true && i.CompanyId == user.CompanyId)
                     .Where(i => i.Date.Year == selectedYear)
-                    .Where(i => i.Status == "Paid" || i.Treated)
+                    .CountAsync();
+
+                // Count historical (imported) revenues for the same year
+                var historicalRevenueCount = await _context.HistoricalRevenues
+                    .IgnoreQueryFilters()
+                    .AsNoTracking()
+                    .Where(h => h.CompanyId == user.CompanyId && h.Date.Year == selectedYear)
                     .CountAsync();
 
                 return Ok(new
                 {
-                    count = archivedCount,
+                    count = archivedInvoiceCount + historicalRevenueCount,
                     year = selectedYear
                 });
             }
@@ -226,7 +238,8 @@ namespace ResourceManager.Controllers
                 i.TotalAmount,
                 i.Status,
                 AmountPaid = i.Payments?.Where(p => p.Status == "Completed").Sum(p => p.Amount) ?? 0,
-                RemainingAmount = (i.TotalAmount ?? 0) - (i.Payments?.Where(p => p.Status == "Completed").Sum(p => p.Amount) ?? 0)
+                PendingAmount = i.Payments?.Where(p => p.Status == "Pending").Sum(p => p.Amount) ?? 0,
+                RemainingAmount = Math.Max(0, (i.TotalAmount ?? 0) - ((i.Payments?.Where(p => p.Status == "Completed").Sum(p => p.Amount) ?? 0) + (i.Payments?.Where(p => p.Status == "Pending").Sum(p => p.Amount) ?? 0)))
             }).ToList();
 
             return Ok(overdueInvoices);
@@ -261,7 +274,8 @@ namespace ResourceManager.Controllers
                 i.TotalAmount,
                 i.Status,
                 AmountPaid = i.Payments?.Where(p => p.Status == "Completed").Sum(p => p.Amount) ?? 0,
-                RemainingAmount = (i.TotalAmount ?? 0) - (i.Payments?.Where(p => p.Status == "Completed").Sum(p => p.Amount) ?? 0)
+                PendingAmount = i.Payments?.Where(p => p.Status == "Pending").Sum(p => p.Amount) ?? 0,
+                RemainingAmount = Math.Max(0, (i.TotalAmount ?? 0) - ((i.Payments?.Where(p => p.Status == "Completed").Sum(p => p.Amount) ?? 0) + (i.Payments?.Where(p => p.Status == "Pending").Sum(p => p.Amount) ?? 0)))
             }).ToList();
 
             return Ok(dueSoonInvoices);
@@ -338,7 +352,31 @@ namespace ResourceManager.Controllers
             {
                 totalTVA = invoice.TaxAmount ?? 0;
             }
-            decimal amountPaid = invoice.Payments?.Where(p => p.Status != "Pending").Sum(p => p.Amount) ?? 0;
+            decimal amountPaid = invoice.Payments?.Where(p => p.Status == "Completed").Sum(p => p.Amount) ?? 0;
+            decimal pendingAmount = invoice.Payments?.Where(p => p.Status == "Pending").Sum(p => p.Amount) ?? 0;
+
+            // Audit Trail: Resolve User Names
+            var userIds = new HashSet<string>();
+            if (invoice.Payments != null)
+            {
+                foreach (var p in invoice.Payments)
+                {
+                    if (!string.IsNullOrEmpty(p.CreatedByUserId)) userIds.Add(p.CreatedByUserId);
+                    if (!string.IsNullOrEmpty(p.ConfirmedByUserId)) userIds.Add(p.ConfirmedByUserId);
+                }
+            }
+            if (!string.IsNullOrEmpty(invoice.TreatedByUserId)) userIds.Add(invoice.TreatedByUserId);
+
+            var userMap = new Dictionary<string, string>();
+            if (userIds.Any())
+            {
+                var users = await _context.Users.AsNoTracking()
+                    .Include(u => u.Profile)
+                    .Where(u => userIds.Contains(u.Id))
+                    .Select(u => new { u.Id, Name = (u.Profile != null ? (u.Profile.FirstName + " " + u.Profile.LastName).Trim() : null) ?? u.UserName ?? u.Email })
+                    .ToListAsync();
+                foreach(var u in users) userMap[u.Id] = u.Name ?? "Unknown";
+            }
 
             return Ok(new
             {
@@ -356,14 +394,21 @@ namespace ResourceManager.Controllers
                 clientAddress = invoice.Client?.Address,
                 clientEmail = invoice.Client?.Email,
                 clientPhone = invoice.Client?.Phone,
-                invoice.Status,
+                Status = invoice.Treated ? "Archived" : invoice.Status,
                 invoice.IsLocked,
                 invoice.Treated,
+                TreatedBy = (!string.IsNullOrEmpty(invoice.TreatedByUserId) && userMap.ContainsKey(invoice.TreatedByUserId)) ? userMap[invoice.TreatedByUserId] : null,
+                TreatedAt = invoice.TreatedAt,
                 Currency = invoice.Devis?.Currency,
                 CurrencySymbol = invoice.Devis?.CurrencySymbol,
                 PdfLanguage = invoice.Devis?.PdfLanguage,
                 amountPaid,
-                remainingAmount = (invoice.TotalAmount ?? 0) - amountPaid,
+                pendingAmount,
+                remainingAmount = Math.Max(0, (invoice.TotalAmount ?? 0) - (amountPaid + pendingAmount)),
+                // Progress: cast to double BEFORE division to avoid integer division truncation
+                Progress = (invoice.TotalAmount ?? 0) > 0
+                    ? Math.Min(100.0, (double)amountPaid / (double)(invoice.TotalAmount ?? 0) * 100.0)
+                    : 0.0,
                 payments = invoice.Payments?.Select(p => new
                 {
                     p.Id,
@@ -371,8 +416,12 @@ namespace ResourceManager.Controllers
                     p.PaymentDate,
                     p.Notes,
                     p.Status,
-                    p.IsScheduled
-                }).ToList(),
+                    p.IsScheduled,
+                    ConfirmedBy = (p.ConfirmedByUserId != null && userMap.ContainsKey(p.ConfirmedByUserId)) ? userMap[p.ConfirmedByUserId] : null,
+                    handledByName = (p.ConfirmedByUserId != null && userMap.ContainsKey(p.ConfirmedByUserId)) ? userMap[p.ConfirmedByUserId] : ((p.CreatedByUserId != null && userMap.ContainsKey(p.CreatedByUserId)) ? userMap[p.CreatedByUserId] : null),
+                    ConfirmedAt = p.ConfirmedAt,
+                    CreatedBy = (p.CreatedByUserId != null && userMap.ContainsKey(p.CreatedByUserId)) ? userMap[p.CreatedByUserId] : null
+                }).OrderByDescending(p => p.PaymentDate).ToList(),
                 items = invoice.InvoiceItems.Select(i => new
                 {
                     i.Id,
@@ -396,7 +445,12 @@ namespace ResourceManager.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateInvoice([FromBody] CreateInvoiceDto dto)
         {
-            if (!ModelState.IsValid) return BadRequest(ModelState);
+            if (!ModelState.IsValid)
+            {
+                var errors = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage);
+                _logger.LogWarning("CreateInvoice ModelState invalid: {Errors}", string.Join("; ", errors));
+                return BadRequest(ModelState);
+            }
 
             var userId = _userManager.GetUserId(User);
             if (string.IsNullOrEmpty(userId)) return Unauthorized();
@@ -449,7 +503,7 @@ namespace ResourceManager.Controllers
                 TfiscalName = companySettings?.CustomTaxName ?? "Timbre Fiscal",
                 CreatedByUserId = userId,
                 CreatedAt = DateTime.UtcNow,
-                Status = "Unpaid"
+                Status = "Pending"
             };
 
             // Map Items
@@ -460,7 +514,8 @@ namespace ResourceManager.Controllers
                     Description = itemDto.Description,
                     Quantity = itemDto.Quantity,
                     Price = itemDto.Price,
-                    Tva = itemDto.Tva
+                    Tva = itemDto.Tva,
+                    VatRate = itemDto.Tva && itemDto.VatRate.HasValue ? itemDto.VatRate.Value / 100m : null
                 });
             }
             
@@ -470,10 +525,18 @@ namespace ResourceManager.Controllers
             try
             {
                 await _context.SaveChangesAsync(); // Save first to get Invoice ID
+                _logger.LogInformation("Invoice {Number} created (ID={Id}, CompanyId={CompanyId})",
+                    invoice.Number, invoice.Id, invoice.CompanyId);
             }
             catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
             {
                 return Conflict(new { message = "Invoice number already exists for this company." });
+            }
+            catch (DbUpdateException ex)
+            {
+                _logger.LogError(ex, "DbUpdateException creating invoice. CompanyId={CompanyId}, ClientId={ClientId}, Number={Number}",
+                    invoice.CompanyId, invoice.ClientId, invoice.Number);
+                return StatusCode(500, new { message = "Failed to save invoice. Check server logs for details.", detail = ex.InnerException?.Message });
             }
 
             // Link Delivery Notes if provided
@@ -589,6 +652,7 @@ namespace ResourceManager.Controllers
                  Quantity = i.Quantity,
                  Price = i.Price,
                  Tva = i.Tva,
+                 VatRate = i.Tva && i.VatRate.HasValue ? i.VatRate.Value / 100m : null,
                  InvoiceId = invoice.Id
              }).ToList();
 
@@ -611,15 +675,9 @@ namespace ResourceManager.Controllers
 
             if (invoice == null) return NotFound();
 
-            // Determine payment status based on date
+            // ALL payments default to Pending — must be manually approved
             var paymentDate = dto.PaymentDate?.ToUniversalTime() ?? DateTime.UtcNow;
-            var paymentStatus = dto.Status;
-            
-            // If payment date is in future and not explicitly set to Completed, mark as Pending
-            if (paymentDate > DateTime.UtcNow && paymentStatus != "Completed")
-            {
-                paymentStatus = "Pending";
-            }
+            var paymentStatus = "Pending";
 
             // Calculate totals BEFORE adding the new payment to avoid double-counting
             // (EF Core adds the payment to navigation collection when we Add to context)
@@ -631,6 +689,13 @@ namespace ResourceManager.Controllers
             var totalPaidCompleted = existingPaidCompleted + (paymentStatus == "Completed" ? dto.Amount : 0);
             var totalPending = existingPending + (paymentStatus == "Pending" ? dto.Amount : 0);
 
+            // Over-allocation guard: confirmed + pending must not exceed totalAmount
+            if (totalPaidCompleted + totalPending > totalAmount && totalAmount > 0)
+            {
+                var maxAllowed = Math.Max(0, totalAmount - existingPaidCompleted - existingPending);
+                return BadRequest(new { message = $"Payment would exceed invoice total. Maximum allowed: {maxAllowed:N3}" });
+            }
+
             var payment = new Payment
             {
                 Amount = dto.Amount,
@@ -639,7 +704,10 @@ namespace ResourceManager.Controllers
                 InvoiceId = id,
                 CreatedByUserId = _userManager.GetUserId(User),
                 CreatedAt = DateTime.UtcNow,
-                Status = paymentStatus
+                Status = paymentStatus,
+                // ConfirmedBy is set only when payment is manually approved
+                ConfirmedByUserId = null,
+                ConfirmedAt = null
             };
 
             _context.Payments.Add(payment);
@@ -648,6 +716,9 @@ namespace ResourceManager.Controllers
             {
                 // Fully paid - update statuses
                 invoice.Status = "Paid";
+                invoice.Treated = true;
+                invoice.TreatedByUserId = _userManager.GetUserId(User);
+                invoice.TreatedAt = DateTime.UtcNow;
                 
                 // Update linked Devis to Completed
                 if (invoice.Devis != null)
@@ -671,7 +742,7 @@ namespace ResourceManager.Controllers
             {
                 invoice.Status = "PartiallyPaid";
             }
-            // If only pending payments, keep invoice status as Unpaid
+            // If only pending payments, keep invoice status as Pending
 
             await _context.SaveChangesAsync();
 
@@ -681,9 +752,83 @@ namespace ResourceManager.Controllers
                     : "Payment added successfully.",
                 amountPaid = totalPaidCompleted,
                 pendingAmount = totalPending,
-                remainingAmount = totalAmount - totalPaidCompleted,
+                remainingAmount = Math.Max(0, totalAmount - (totalPaidCompleted + totalPending)),
                 status = invoice.Status,
                 paymentStatus = paymentStatus
+            });
+        }
+
+        // DELETE: api/invoices/{id}/payments/{paymentId} - Remove a payment and recalculate status
+        [HttpDelete("{id}/payments/{paymentId}")]
+        [Authorize(Roles = "SuperAdmin,Manager,FreeUser")]
+        public async Task<IActionResult> DeletePayment(int id, int paymentId)
+        {
+            var invoice = await _context.Invoices
+                .Include(i => i.Payments)
+                .Include(i => i.Devis)
+                .FirstOrDefaultAsync(i => i.Id == id);
+
+            if (invoice == null) return NotFound();
+
+            var payment = invoice.Payments?.FirstOrDefault(p => p.Id == paymentId);
+            if (payment == null) return NotFound(new { message = "Payment not found." });
+
+            _context.Payments.Remove(payment);
+
+            // Recalculate invoice status after removal
+            var remainingPayments = invoice.Payments!.Where(p => p.Id != paymentId).ToList();
+            var totalPaidCompleted = remainingPayments.Where(p => p.Status == "Completed").Sum(p => p.Amount);
+            var totalPendingAmount = remainingPayments.Where(p => p.Status == "Pending").Sum(p => p.Amount);
+            var totalAmount = invoice.TotalAmount ?? 0;
+
+            if (totalPaidCompleted >= totalAmount && totalAmount > 0)
+            {
+                invoice.Status = "Paid";
+            }
+            else if (totalPaidCompleted > 0)
+            {
+                invoice.Status = "PartiallyPaid";
+            }
+            else
+            {
+                invoice.Status = "Pending";
+                invoice.IsLocked = false;
+            }
+
+            // If invoice was Paid and now isn't, revert Treated flag + linked Devis/DeliveryNotes
+            if (invoice.Status != "Paid")
+            {
+                invoice.Treated = false;
+                invoice.TreatedByUserId = null;
+                invoice.TreatedAt = null;
+
+                if (invoice.Devis != null)
+                {
+                    invoice.Devis.Status = "Accepted";
+                    invoice.Devis.Treated = false;
+                }
+
+                var deliveryNotes = await _context.DeliveryNotes
+                    .Where(dn => dn.InvoiceId == id)
+                    .ToListAsync();
+                foreach (var dn in deliveryNotes)
+                {
+                    dn.Treated = false;
+                }
+            }
+
+            invoice.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Deleted payment {PaymentId} from invoice {InvoiceId}. New status: {Status}", paymentId, id, invoice.Status);
+
+            return Ok(new
+            {
+                message = "Payment deleted successfully.",
+                amountPaid = totalPaidCompleted,
+                pendingAmount = totalPendingAmount,
+                remainingAmount = Math.Max(0, totalAmount - (totalPaidCompleted + totalPendingAmount)),
+                status = invoice.Status
             });
         }
 
@@ -1000,16 +1145,14 @@ namespace ResourceManager.Controllers
 
             if (result.Success)
             {
-                emailRecord.Status = result.Mode == ResourceManager.Services.EmailSendMode.Preview ? "Preview" : "Sent";
+                emailRecord.Status = "Sent";
                 await _context.SaveChangesAsync();
-                _logger.LogInformation("Invoice {InvoiceId} email processed ({Mode}) to {Email}", id, result.Mode, recipientEmail);
+                _logger.LogInformation("Invoice {InvoiceId} email sent to {Email}", id, recipientEmail);
 
                 return Ok(new { 
                     message = result.Message,
                     emailId = emailRecord.Id,
-                    status = emailRecord.Status,
-                    mode = result.Mode.ToString(),
-                    previewPath = result.PreviewPath
+                    status = emailRecord.Status
                 });
             }
             else

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ResourceManager.Data;
@@ -15,11 +16,13 @@ namespace ResourceManager.Controllers
     {
         private readonly AppDbContext _context;
         private readonly ILogger<ArchiveController> _logger;
+        private readonly UserManager<ApplicationUser> _userManager;
 
-        public ArchiveController(AppDbContext context, ILogger<ArchiveController> logger)
+        public ArchiveController(AppDbContext context, ILogger<ArchiveController> logger, UserManager<ApplicationUser> userManager)
         {
             _context = context;
             _logger = logger;
+            _userManager = userManager;
         }
 
         /// <summary>
@@ -31,9 +34,13 @@ namespace ResourceManager.Controllers
         {
             try
             {
-                // Get years from regular invoices with Paid status
+                var user = await GetCurrentUserAsync(_userManager);
+                if (user == null) return Unauthorized();
+
+                // Get years from archived invoices (Treated == true) using IgnoreQueryFilters
                 var invoiceYears = await _context.Invoices
-                    .Where(i => i.Status == "Paid")
+                    .IgnoreQueryFilters()
+                    .Where(i => i.Treated == true && i.CompanyId == user.CompanyId)
                     .Select(i => i.Date.Year)
                     .Distinct()
                     .ToListAsync();
@@ -103,16 +110,20 @@ namespace ResourceManager.Controllers
                 if (page < 1) page = 1;
                 if (pageSize < 1) pageSize = 20;
 
+                var user = await GetCurrentUserAsync(_userManager);
+                if (user == null) return Unauthorized();
+
                 // Determine the year to filter by
                 int filterYear = year ?? DateTime.UtcNow.Year;
 
-                // Get regular invoices with Paid status
+                // Get archived invoices (Treated == true) using IgnoreQueryFilters + manual CompanyId
                 var regularInvoices = await _context.Invoices
+                    .IgnoreQueryFilters()
                     .AsNoTracking()
                     .Include(i => i.Client)
                     .Include(i => i.Payments)
                     .Include(i => i.Devis)
-                    .Where(i => i.Status == "Paid" && i.Date.Year == filterYear)
+                    .Where(i => i.Treated == true && i.CompanyId == user.CompanyId && i.Date.Year == filterYear)
                     .ToListAsync();
 
                 var regularInvoiceData = regularInvoices.Select(i => {
