@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Plus, Trash2, Save, FileText, AlertCircle, PackagePlus, X, Check } from 'lucide-react';
 import api from '../services/api';
+import { logger } from '../lib/logger';
+import { useNotify } from '../hooks/useNotify';
 import { DEFAULT_CURRENCY, CURRENCY_OPTIONS, getCurrencySymbol } from '../lib/currencyUtils';
 
 interface Client {
@@ -47,6 +49,7 @@ interface ProductSuggestion {
 export default function DevisCreatePage() {
     const navigate = useNavigate();
     const { t } = useTranslation();
+    const { notify, NotifyBanner } = useNotify();
     const [loading, setLoading] = useState(false);
     const [clients, setClients] = useState<Client[]>([]);
     const [errors, setErrors] = useState<ValidationErrors>({});
@@ -124,7 +127,7 @@ export default function DevisCreatePage() {
                     setPdfLanguage(res.data.invoiceLanguage || 'fr');
                 }
             } catch (error) {
-                console.error("Error fetching tax settings", error);
+                logger.error("Error fetching tax settings", error);
             }
         };
         fetchTaxSettings();
@@ -137,7 +140,7 @@ export default function DevisCreatePage() {
             const data = res.data;
             setClients(Array.isArray(data) ? data : (data.data || []));
         } catch (error) {
-            console.error("Error fetching clients", error);
+            logger.error("Error fetching clients", error);
         }
     };
 
@@ -148,7 +151,7 @@ export default function DevisCreatePage() {
             setSuggestedQuoteNumber(res.data.suggestedNumber || '');
             setQuoteNumber(res.data.suggestedNumber || '');
         } catch (error) {
-            console.error('Error fetching last quote number', error);
+            logger.error('Error fetching last quote number', error);
         }
     };
 
@@ -193,7 +196,7 @@ export default function DevisCreatePage() {
     // Product autocomplete: search saved products as user types
     const searchProducts = useCallback((query: string, itemIndex: number) => {
         if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-        if (query.length < 2) {
+        if (query.length < 1) {
             setSuggestions([]);
             setActiveItemIndex(null);
             return;
@@ -273,8 +276,8 @@ export default function DevisCreatePage() {
             setItems(newItems);
             setShowCreateProduct(false);
         } catch (error) {
-            console.error('Error creating product', error);
-            alert(t('product.saveFailed'));
+            logger.error('Error creating product', error);
+            notify('error', t('product.saveFailed'));
         } finally {
             setCreatingProduct(false);
         }
@@ -334,6 +337,29 @@ export default function DevisCreatePage() {
 
         setLoading(true);
         try {
+            // Auto-create products for items not from catalog
+            const validItems = items.filter(item => item.description.trim() !== '');
+            const createdProducts: string[] = [];
+            for (let i = 0; i < validItems.length; i++) {
+                const item = validItems[i];
+                if (!item.fromCatalog && item.description.trim()) {
+                    try {
+                        await api.post('/ProductServices', {
+                            name: item.description.trim(),
+                            description: null,
+                            defaultUnitPrice: item.price,
+                            tvaRate: item.tva ? item.vatRate : 0,
+                            type: 'product',
+                            category: null,
+                            vatApplicable: item.tva,
+                        });
+                        createdProducts.push(item.description.trim());
+                    } catch {
+                        // Product may already exist — continue with quote creation
+                    }
+                }
+            }
+
             const payload = {
                 number: quoteNumber.trim(),
                 date: new Date(date),
@@ -354,9 +380,14 @@ export default function DevisCreatePage() {
 
             await api.post('/Devis', payload);
             navigate('/quotes');
-        } catch (error) {
-            console.error("Error creating quote", error);
-            alert(t('quote.deleteError'));
+        } catch (error: unknown) {
+            logger.error("Error creating quote", error);
+            // Show the real server error reason (e.g. stock / validation failure)
+            const axErr = error as { response?: { data?: { message?: string; title?: string; errors?: Record<string, string[]> } } };
+            const serverMsg = axErr?.response?.data?.message
+                || axErr?.response?.data?.title
+                || (axErr?.response?.data?.errors ? Object.values(axErr.response.data.errors).flat().join('; ') : null);
+            notify('error', serverMsg || t('quote.createFailed', 'Failed to create quote'));
         } finally {
             setLoading(false);
         }
@@ -364,6 +395,7 @@ export default function DevisCreatePage() {
 
     return (
         <div className="max-w-4xl mx-auto space-y-6 px-2 sm:px-0">
+            <NotifyBanner />
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-start space-x-4">
                     <button onClick={() => navigate('/quotes')} className="p-2 hover:bg-gray-100 rounded-full text-gray-500">

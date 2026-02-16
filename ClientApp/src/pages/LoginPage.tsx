@@ -1,13 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Lock, Mail, ArrowRight, Loader, AlertCircle, X, Clock } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { Mail, ArrowRight, Loader, Clock } from 'lucide-react';
 import { AxiosError } from 'axios';
 import api from '../services/api';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
 import { getErrorMessage, getErrorStatus } from '../utils/errorUtils';
 import { useTranslation } from 'react-i18next';
+import { logger } from '../lib/logger';
+import InlineMessage from '../components/InlineMessage';
+import PasswordInput from '../components/PasswordInput';
 
 export default function LoginPage() {
     const { t } = useTranslation();
@@ -69,28 +71,29 @@ export default function LoginPage() {
                 isProfileComplete,
                 user.BaseStoragePath || user.baseStoragePath
             );
-            toast.success(t('auth.messages.welcomeBack', { name: user.FirstName || user.firstName || email }));
-            // Redirect: company init if profile not complete, otherwise dashboard
             navigate(isProfileComplete ? '/dashboard' : '/company-init');
         } catch (err: unknown) {
-            console.error("Login Error:", err);
+            logger.error('Login Error:', err);
 
             // ─── Handle rate limiting (429) ───
             if (getErrorStatus(err) === 429) {
                 const retryHeader = err instanceof AxiosError ? err.response?.headers?.['retry-after'] : undefined;
                 const seconds = retryHeader ? parseInt(retryHeader, 10) : 30;
                 setRetryAfter(isNaN(seconds) ? 30 : seconds);
-                const rateMsg = t('auth.messages.rateLimit', { seconds: isNaN(seconds) ? 30 : seconds });
-                setError(rateMsg);
-                toast.error(rateMsg);
+                setError(t('auth.messages.rateLimit', { seconds: isNaN(seconds) ? 30 : seconds }));
                 setLoading(false);
-                return; // Do NOT navigate, do NOT clear error
+                return;
             }
 
-            // ─── Handle all other errors ───
-            const msg = getErrorMessage(err, t('auth.messages.loginFailedGeneric'));
-            setError(msg);
-            toast.error(msg);
+            // ─── Contextual error messages ───
+            const status = getErrorStatus(err);
+            if (status === 401) {
+                setError(t('auth.messages.wrongPassword'));
+            } else if (status === 404) {
+                setError(t('auth.messages.accountNotFound'));
+            } else {
+                setError(getErrorMessage(err, t('auth.messages.loginFailedGeneric')));
+            }
         } finally {
             setLoading(false);
         }
@@ -111,7 +114,7 @@ export default function LoginPage() {
 
                     <form onSubmit={handleLogin} className="space-y-6">
                         <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700 ml-1">{t('auth.email')}</label>
+                            <label className="text-sm font-medium text-gray-700 ms-1">{t('auth.email')}</label>
                             <div className="relative">
                                 <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                                 <input
@@ -127,48 +130,29 @@ export default function LoginPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700 ml-1">{t('auth.password')}</label>
-                            <div className="relative">
-                                <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-                                <input
-                                    id="login-password"
-                                    type="password"
-                                    required
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
-                                    placeholder={t('auth.placeholders.password')}
-                                />
-                            </div>
+                            <label className="text-sm font-medium text-gray-700 ms-1">{t('auth.password')}</label>
+                            <PasswordInput
+                                id="login-password"
+                                required
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder={t('auth.placeholders.password')}
+                            />
                         </div>
 
-                        {/* ─── Error banner: persistent until dismissed or user retries ─── */}
+                        {/* Inline error / rate-limit banner */}
                         {error && (
-                            <div id="login-error" className={cn(
-                                "p-3 rounded-lg text-sm flex items-start gap-2 animate-slide-up",
-                                isRateLimited
-                                    ? "bg-amber-50 text-amber-700 border border-amber-200"
-                                    : "bg-red-50 text-red-600 border border-red-200"
-                            )}>
-                                {isRateLimited
-                                    ? <Clock className="h-5 w-5 shrink-0 mt-0.5" />
-                                    : <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
-                                }
-                                <span className="flex-1">{error}</span>
-                                <button
-                                    type="button"
-                                    onClick={() => { setError(''); setRetryAfter(0); }}
-                                    className="shrink-0 p-0.5 rounded hover:bg-red-100 transition-colors"
-                                    aria-label={t('auth.messages.dismissError')}
-                                >
-                                    <X className="h-4 w-4" />
-                                </button>
-                            </div>
+                            <InlineMessage
+                                variant={isRateLimited ? 'warning' : 'error'}
+                                onDismiss={() => { setError(''); setRetryAfter(0); }}
+                            >
+                                {error}
+                            </InlineMessage>
                         )}
 
-                        {/* Rate-limit countdown */}
                         {isRateLimited && (
-                            <div className="text-center text-amber-600 text-sm font-medium animate-pulse">
+                            <div className="text-center text-amber-600 text-sm font-medium animate-pulse flex items-center justify-center gap-1.5">
+                                <Clock className="size-4" />
                                 {t('auth.messages.retryIn', { seconds: retryAfter })}
                             </div>
                         )}

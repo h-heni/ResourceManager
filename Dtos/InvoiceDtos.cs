@@ -4,7 +4,6 @@ namespace ResourceManager.DTOs
 {
     public class CreateInvoiceDto
     {
-        [Required]
         public string Number { get; set; } = string.Empty;
         
         [Required]

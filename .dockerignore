@@ -46,6 +46,12 @@ ClientApp/
 # Mobile (not needed for API)
 ResourceManager.Mobile/
 
+# Python test artifacts (not needed in production image)
+invoice_xml_generator/tests/
+invoice_xml_generator/__pycache__/
+invoice_xml_generator/**/__pycache__/
+.pytest_cache/
+
 # Tests (optional - remove if you want tests in image)
 # ResourceManager.Tests/
 

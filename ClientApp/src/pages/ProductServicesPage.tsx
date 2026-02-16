@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 import { useSettings } from '../hooks/useSettings';
+import { logger } from '../lib/logger';
 import Pagination from '../components/Pagination';
 
 interface ProductServiceItem {
@@ -64,7 +65,7 @@ export default function ProductServicesPage() {
             setTotalCount(data.totalCount || 0);
             setTotalPages(data.totalPages || 0);
         } catch (err) {
-            console.error('Failed to fetch products:', err);
+            logger.error('Failed to fetch products:', err);
         } finally {
             setLoading(false);
         }
@@ -146,7 +147,7 @@ export default function ProductServicesPage() {
             setShowModal(false);
             fetchItems();
         } catch (err) {
-            console.error('Failed to save:', err);
+            logger.error('Failed to save:', err);
             setSaveError(t('product.saveFailed', 'Failed to save product. Please try again.'));
         } finally {
             setSaving(false);
@@ -159,7 +160,7 @@ export default function ProductServicesPage() {
             await api.delete(`/ProductServices/${id}`);
             fetchItems();
         } catch (err) {
-            console.error('Failed to delete:', err);
+            logger.error('Failed to delete:', err);
         }
     };
 

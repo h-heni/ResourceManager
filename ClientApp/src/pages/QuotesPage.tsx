@@ -5,6 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { formatCurrency } from '../lib/formatNumber';
+import { logger } from '../lib/logger';
+import { useNotify } from '../hooks/useNotify';
 import { DEFAULT_CURRENCY } from '../lib/currencyUtils';
 
 interface DevisItem {
@@ -38,6 +40,7 @@ const getQuoteNumber = (quote: Devis & { Number?: string }) => quote.number || q
 
 export default function QuotesPage() {
     const { t } = useTranslation();
+    const { notify, NotifyBanner } = useNotify();
     const [quotes, setQuotes] = useState<Devis[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -79,7 +82,7 @@ export default function QuotesPage() {
             
             setQuotes(quotesWithDetails);
         } catch (error) {
-            console.error(t('quote.messages.fetchErrorLog'), error);
+            logger.error(t('quote.messages.fetchErrorLog'), error);
         } finally {
             setLoading(false);
         }
@@ -96,8 +99,8 @@ export default function QuotesPage() {
             link.click();
             link.remove();
         } catch (error) {
-            console.error(t('quote.messages.downloadErrorLog'), error);
-            alert(t('common.downloadFailed'));
+            logger.error(t('quote.messages.downloadErrorLog'), error);
+            notify('error', t('common.downloadFailed'));
         }
     };
 
@@ -107,8 +110,8 @@ export default function QuotesPage() {
             await api.delete(`/Devis/${id}`);
             fetchQuotes();
         } catch (error) {
-            console.error(t('quote.messages.deleteErrorLog'), error);
-            alert(t('quote.deleteError'));
+            logger.error(t('quote.messages.deleteErrorLog'), error);
+            notify('error', t('quote.deleteError'));
         }
     };
 
@@ -142,6 +145,7 @@ export default function QuotesPage() {
 
     return (
         <div className="space-y-6">
+            <NotifyBanner />
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-gray-900">{t('quote.title')}</h1>

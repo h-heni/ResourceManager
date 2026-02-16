@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Plus, Trash2, Save, FileText, Truck, User, Calendar, Package, AlertCircle } from 'lucide-react';
 import api from '../services/api';
+import { logger } from '../lib/logger';
+import { useNotify } from '../hooks/useNotify';
 import { DEFAULT_CURRENCY, CURRENCY_OPTIONS, getCurrencySymbol } from '../lib/currencyUtils';
 
 interface Client {
@@ -86,6 +88,7 @@ interface ProductSuggestion {
 export default function InvoiceCreatePage() {
     const navigate = useNavigate();
     const { t } = useTranslation();
+    const { notify, NotifyBanner } = useNotify();
     const { id: editId } = useParams<{ id: string }>();
     const isEditMode = !!editId;
     const [loading, setLoading] = useState(false);
@@ -211,8 +214,8 @@ export default function InvoiceCreatePage() {
                     : [{ description: '', quantity: 1, price: 0, tva: true, vatRate: Math.round((taxSettings.defaultVatRate) * 100), fromCatalog: false }]
             );
         } catch (error) {
-            console.error('Error fetching invoice for edit', error);
-            alert(t('createPage.loadFailed'));
+            logger.error('Error fetching invoice for edit', error);
+            notify('error', t('createPage.loadFailed'));
             navigate('/invoices');
         } finally {
             setLoadingInvoice(false);
@@ -264,7 +267,7 @@ export default function InvoiceCreatePage() {
                 setPdfLanguage(res.data.invoiceLanguage || 'fr');
             }
         } catch (error) {
-            console.error("Error fetching tax settings", error);
+            logger.error("Error fetching tax settings", error);
         }
     };
 
@@ -275,7 +278,7 @@ export default function InvoiceCreatePage() {
             setSuggestedNumber(res.data.suggestedNumber || '');
             setInvoiceNumber(res.data.suggestedNumber || '');
         } catch (error) {
-            console.error("Error fetching last invoice number", error);
+            logger.error("Error fetching last invoice number", error);
         }
     };
 
@@ -285,7 +288,7 @@ export default function InvoiceCreatePage() {
             const data = res.data;
             setClients(Array.isArray(data) ? data : (data.data || []));
         } catch (error) {
-            console.error("Error fetching clients", error);
+            logger.error("Error fetching clients", error);
         }
     };
 
@@ -306,7 +309,7 @@ export default function InvoiceCreatePage() {
             );
             setQuotes(clientQuotes);
         } catch (error) {
-            console.error("Error fetching devis", error);
+            logger.error("Error fetching devis", error);
         }
     };
 
@@ -349,7 +352,7 @@ export default function InvoiceCreatePage() {
             // Auto-select all linked delivery notes
             setSelectedDeliveryNoteIds(validNotes.map(dn => dn.id));
         } catch (error) {
-            console.error("Error fetching delivery notes", error);
+            logger.error("Error fetching delivery notes", error);
         }
     };
 
@@ -451,7 +454,7 @@ export default function InvoiceCreatePage() {
             // Fetch delivery notes linked to this quote
             await fetchDeliveryNotesForQuote(qid);
         } catch (error) {
-            console.error("Error fetching quote details", error);
+            logger.error("Error fetching quote details", error);
         }
     };
 
@@ -574,9 +577,14 @@ export default function InvoiceCreatePage() {
                 await api.post('/Invoices', payload);
             }
             navigate('/invoices');
-        } catch (error) {
-            console.error("Error creating invoice", error);
-            alert(t('createPage.createFailed'));
+        } catch (error: unknown) {
+            logger.error("Error creating invoice", error);
+            const axErr = error as { response?: { data?: { message?: string; detail?: string; title?: string; errors?: Record<string, string[]> } } };
+            const serverMsg = axErr?.response?.data?.message
+                || axErr?.response?.data?.detail
+                || axErr?.response?.data?.title
+                || (axErr?.response?.data?.errors ? Object.values(axErr.response.data.errors).flat().join('; ') : null);
+            notify('error', serverMsg || t('createPage.createFailed'));
         } finally {
             setLoading(false);
         }
@@ -584,6 +592,7 @@ export default function InvoiceCreatePage() {
 
     return (
         <div className="max-w-4xl mx-auto space-y-6 px-2 sm:px-0">
+            <NotifyBanner />
             {/* Header */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-start space-x-4">

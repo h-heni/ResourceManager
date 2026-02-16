@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 import { getErrorMessage } from '../utils/errorUtils';
+import { logger } from '../lib/logger';
 import { useAuth } from '../context/AuthContext';
 
 /* ─── Types ─── */
@@ -114,7 +115,7 @@ export default function DataManagementPage() {
             document.body.removeChild(link);
             window.URL.revokeObjectURL(url);
         } catch (error) {
-            console.error('Export failed:', error);
+            logger.error('Export failed:', error);
         } finally {
             setExportLoading(null);
         }

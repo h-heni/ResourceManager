@@ -66,7 +66,8 @@
     "viewDetails": "عرض التفاصيل",
     "imported": "مستورد",
     "viewOnly": "عرض فقط",
-    "year": "السنة"
+    "year": "السنة",
+    "new": "جديد"
   },
   "pagination": {
     "previous": "السابق",
@@ -116,6 +117,12 @@
       "signInPrompt": "يرجى تسجيل الدخول",
       "signingIn": "جارٍ تسجيل الدخول",
       "welcomeBack": "مرحباً بعودتك"
+    },
+    "checklist": {
+      "length": "6 أحرف على الأقل",
+      "uppercase": "حرف كبير واحد",
+      "number": "رقم واحد",
+      "special": "حرف خاص واحد"
     }
   },
   "nav": {
@@ -276,6 +283,7 @@
     "convertToInvoice": "تحويل إلى فاتورة",
     "createDeliveryNote": "إنشاء سند تسليم",
     "deleteError": "فشل حذف عرض السعر",
+    "createFailed": "فشل إنشاء عرض السعر",
     "noItems": "لا توجد بنود",
     "create": "إنشاء عرض سعر",
     "pageDescription": "إدارة عروض الأسعار والاقتراحات لعملائك",
@@ -572,7 +580,6 @@
     "totalRevenueLabel": "تسمية إجمالي الإيرادات",
     "totalUsers": "إجمالي المستخدمين",
     "pending": "معلّقة",
-    "pendingInvoices": "الفواتير المعلّقة",
     "users": "المستخدمون",
     "revenueByYear": "الإيرادات السنوية",
     "allTime": "جميع الأوقات",

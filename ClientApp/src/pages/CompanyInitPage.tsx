@@ -4,12 +4,13 @@ import {
     Building2, MapPin, Phone, Mail, Hash, DollarSign, Upload,
     Loader2, CheckCircle, PenTool, FolderOpen, Image, AlertCircle
 } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { useNotify } from '../hooks/useNotify';
 import { useTranslation } from 'react-i18next';
 import api from '../services/api';
 import { getErrorMessage } from '../utils/errorUtils';
 import { cn } from '../lib/utils';
 import { useAuth } from '../context/AuthContext';
+import { logger } from '../lib/logger';
 import { CURRENCY_OPTIONS } from '../lib/currencyUtils';
 
 const VAT_OPTIONS = [
@@ -21,6 +22,7 @@ const VAT_OPTIONS = [
 
 export default function CompanyInitPage() {
     const { t } = useTranslation();
+    const { notify, NotifyBanner } = useNotify();
     const navigate = useNavigate();
     const { updateProfileComplete } = useAuth();
     const logoInputRef = useRef<HTMLInputElement>(null);
@@ -156,17 +158,17 @@ export default function CompanyInitPage() {
             localStorage.setItem('user_isProfileComplete', 'true');
             localStorage.setItem('user_baseStoragePath', baseStoragePath);
 
-            toast.success(t('companyInit.toast.success'));
+            notify('success', t('companyInit.toast.success'));
 
             // Update AuthContext state so SettingsGuard unlocks the dashboard
             updateProfileComplete(true, baseStoragePath);
 
             navigate('/dashboard', { replace: true });
         } catch (err: unknown) {
-            console.error(t('companyInit.messages.setupErrorLog'), err);
+            logger.error(t('companyInit.messages.setupErrorLog'), err);
             const msg = getErrorMessage(err, t('companyInit.messages.submitFailed'));
             setError(msg);
-            toast.error(t('companyInit.toast.failed'));
+            notify('error', t('companyInit.toast.failed'));
         } finally {
             setSaving(false);
         }
@@ -180,6 +182,7 @@ export default function CompanyInitPage() {
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-[#F0FDF4] to-[#F9FAFB] flex items-center justify-center p-4">
+            <NotifyBanner />
             <div className="w-full max-w-2xl bg-white border border-slate-200 shadow-lg rounded-2xl overflow-hidden animate-fade-in">
                 {/* Header */}
                 <div className="bg-gradient-to-r from-[#065F46] to-[#14B8A6] px-8 py-6 text-white">
@@ -324,11 +327,12 @@ export default function CompanyInitPage() {
                                 <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
                                     <Image className="h-4 w-4" /> {t('settings.logo')}
                                     <span className="text-xs text-gray-400">({t('common.optional')})</span>
+                                    {logoPreview && <CheckCircle className="h-4 w-4 text-emerald-500" />}
                                 </label>
                                 <div className="flex items-center gap-4">
                                     {logoPreview ? (
                                         <div className="relative">
-                                            <img src={logoPreview} alt={t('settings.logo')} className="h-16 w-16 object-contain rounded-lg border border-gray-200" />
+                                            <img src={logoPreview} alt={t('settings.logo')} className="h-16 w-16 object-contain rounded-lg border-2 border-emerald-400" />
                                             <button type="button" onClick={() => { setLogoFile(null); setLogoPreview(null); }}
                                                 className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600">
                                                 &times;
@@ -352,11 +356,12 @@ export default function CompanyInitPage() {
                                 <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
                                     <PenTool className="h-4 w-4" /> {t('settings.signature')}
                                     <span className="text-xs text-gray-400">({t('common.optional')})</span>
+                                    {signaturePreview && <CheckCircle className="h-4 w-4 text-emerald-500" />}
                                 </label>
                                 <div className="flex items-center gap-4">
                                     {signaturePreview ? (
                                         <div className="relative">
-                                            <img src={signaturePreview} alt={t('settings.signature')} className="h-16 w-auto max-w-[120px] object-contain rounded-lg border border-gray-200" />
+                                            <img src={signaturePreview} alt={t('settings.signature')} className="h-16 w-auto max-w-[120px] object-contain rounded-lg border-2 border-emerald-400" />
                                             <button type="button" onClick={() => { setSignatureFile(null); setSignaturePreview(null); }}
                                                 className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600">
                                                 &times;

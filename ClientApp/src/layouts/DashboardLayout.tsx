@@ -25,6 +25,7 @@ import {
     Database
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { logger } from '../lib/logger';
 
 // Sub-navigation section type
 interface NavSection {
@@ -48,9 +49,9 @@ export default function DashboardLayout() {
     const { logout, canManageUsers, canManageSettings, displayName, isSuperAdmin, isManager } = useAuth();
     const { t } = useTranslation();
 
-    // Mobile detection: auto-collapse sidebar on small screens
-    const [sidebarOpen, setSidebarOpen] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 768);
-    const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+    // Below lg (1024 px) → mobile/tablet (drawer); lg+ → sidebar always visible
+    const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 1024);
+    const [drawerOpen, setDrawerOpen] = useState(false);
     const [companyName, setCompanyName] = useState<string>('');
     const [companyLogo, setCompanyLogo] = useState<string | null>(null);
     const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
@@ -108,7 +109,7 @@ export default function DashboardLayout() {
                 }
 
             } catch (error) {
-                console.error('Error fetching company branding:', error);
+                logger.error('Error fetching company branding:', error);
                 setCompanyName('Resource Manager');
             }
         };
@@ -127,9 +128,9 @@ export default function DashboardLayout() {
     // Handle window resize for responsive sidebar
     useEffect(() => {
         const handleResize = () => {
-            const mobile = window.innerWidth < 768;
+            const mobile = window.innerWidth < 1024;
             setIsMobile(mobile);
-            if (mobile) setSidebarOpen(false);
+            if (!mobile) setDrawerOpen(false);
         };
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
@@ -219,26 +220,24 @@ export default function DashboardLayout() {
         return (
             <button
                 key={item.path}
-                onClick={() => navigate(item.path)}
+                onClick={() => {
+                    navigate(item.path);
+                    if (isMobile) setDrawerOpen(false);
+                }}
                 className={cn(
-                    "w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 group text-left text-sm",
-                    indent && sidebarOpen && "pl-11",
+                    "w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors duration-200 group text-start text-sm",
+                    indent && "ps-11",
                     active
                         ? "bg-[#065F46] text-white shadow-sm"
                         : "text-slate-700 hover:bg-slate-100"
                 )}
             >
                 <item.icon size={18} className="flex-shrink-0" />
-                <span className={cn(
-                    "font-medium transition-all duration-200 overflow-hidden whitespace-nowrap",
-                    sidebarOpen ? "opacity-100 w-auto" : "opacity-0 w-0"
-                )}>
-                    {item.label}
-                </span>
-                {sidebarOpen && typeof item.badge === 'number' && item.badge > 0 && (
+                <span className="font-medium truncate">{item.label}</span>
+                {typeof item.badge === 'number' && item.badge > 0 && (
                     <span
                         className={cn(
-                            'ml-auto rounded-full px-2 py-0.5 text-xs font-semibold leading-none',
+                            'ms-auto rounded-full px-2 py-0.5 text-xs font-semibold leading-none',
                             active ? 'bg-white/20 text-white' : 'bg-[#ECFDF5] text-[#065F46]'
                         )}
                     >
@@ -258,34 +257,21 @@ export default function DashboardLayout() {
                 <button
                     onClick={() => toggleSection(section.key)}
                     className={cn(
-                        "w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 text-left text-sm",
+                        "w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors duration-200 text-start text-sm",
                         hasActiveChild
                             ? "text-[#065F46] font-semibold bg-[#065F46]/5"
                             : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                     )}
                 >
                     <section.icon size={18} className="flex-shrink-0" />
-                    <span className={cn(
-                        "font-medium transition-all duration-200 overflow-hidden whitespace-nowrap flex-1",
-                        sidebarOpen ? "opacity-100 w-auto" : "opacity-0 w-0"
-                    )}>
-                        {section.label}
+                    <span className="font-medium truncate flex-1">{section.label}</span>
+                    <span className="flex-shrink-0 text-slate-400">
+                        {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                     </span>
-                    {sidebarOpen && (
-                        <span className="flex-shrink-0 text-slate-400">
-                            {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                        </span>
-                    )}
                 </button>
-                {isExpanded && sidebarOpen && (
+                {isExpanded && (
                     <div className="space-y-0.5">
                         {section.children.map(child => renderNavItem(child, true))}
-                    </div>
-                )}
-                {/* When sidebar collapsed, show children as direct icons */}
-                {!sidebarOpen && (
-                    <div className="space-y-0.5">
-                        {section.children.map(child => renderNavItem(child, false))}
                     </div>
                 )}
             </div>
@@ -293,122 +279,106 @@ export default function DashboardLayout() {
     };
 
     // ════════════════════════════════════════════════════════
+    // SIDEBAR CONTENT (shared by desktop sidebar & mobile drawer)
+    // ════════════════════════════════════════════════════════
+
+    const sidebarContent = (
+        <>
+            {/* Company Header */}
+            <div className="h-[72px] flex items-center gap-3 px-4 border-b border-slate-200">
+                {companyLogo ? (
+                    <img
+                        src={companyLogo}
+                        alt="Company Logo"
+                        className="h-10 w-10 object-contain rounded-lg flex-shrink-0"
+                    />
+                ) : (
+                    <div className="size-10 rounded-lg bg-[#065F46] flex items-center justify-center flex-shrink-0">
+                        <LayoutDashboard className="size-6 text-white" />
+                    </div>
+                )}
+                <div className="min-w-0 flex-1">
+                    <div className="text-base font-semibold text-slate-900 truncate">
+                        {companyName || t('common.appName')}
+                    </div>
+                    <div className="text-xs text-slate-500">{t('common.appName')}</div>
+                </div>
+                {isMobile && (
+                    <button
+                        onClick={() => setDrawerOpen(false)}
+                        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors flex-shrink-0"
+                    >
+                        <X size={18} />
+                    </button>
+                )}
+            </div>
+
+            {/* Navigation */}
+            <nav className="flex-1 p-3 space-y-1 overflow-y-auto mt-1">
+                {topNavItems.map(item => renderNavItem(item))}
+                <div className="border-t border-slate-200 my-2" />
+                {navSections.map(section => renderSection(section))}
+                <div className="border-t border-slate-200 my-2" />
+                {bottomNavItems.map(item => renderNavItem(item))}
+            </nav>
+
+            {/* User info + Logout */}
+            <div className="p-3 border-t border-slate-200">
+                {userName && (
+                    <div className="text-xs text-slate-500 mb-2 truncate px-4">
+                        {userName}
+                    </div>
+                )}
+                <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 hover:bg-red-50 hover:text-red-600 transition-colors text-sm"
+                >
+                    <LogOut size={18} />
+                    <span className="font-medium">{t('nav.signOut')}</span>
+                </button>
+            </div>
+        </>
+    );
+
+    // ════════════════════════════════════════════════════════
     // MAIN RENDER
     // ════════════════════════════════════════════════════════
 
     return (
-        <div className="min-h-screen bg-[#F9FAFB] flex" style={{ fontFamily: 'Inter, system-ui, sans-serif' }} dir="ltr">
-            {/* Mobile overlay backdrop */}
-            {isMobile && sidebarOpen && (
-                <div 
-                    className="fixed inset-0 bg-black/50 z-40 md:hidden"
-                    onClick={() => setSidebarOpen(false)}
+        <div className="min-h-screen bg-[#F9FAFB] flex" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
+            {/* Mobile overlay — strictly conditional to avoid ghost shadow */}
+            {isMobile && drawerOpen && (
+                <div
+                    className="fixed inset-0 bg-black/50 z-40"
+                    onClick={() => setDrawerOpen(false)}
                 />
             )}
-            {/* Sidebar — Professional Green: white bg, green active states */}
-            <aside
-                className={cn(
-                    "fixed inset-y-0 start-0 z-50 transition-all duration-300 ease-in-out flex flex-col",
-                    "bg-white border-e border-slate-200",
-                    isMobile ? (sidebarOpen ? "w-72" : "w-0 -translate-x-full") : (sidebarOpen ? "w-72" : "w-20")
-                )}
-            >
-                {/* Company Header */}
-                <div className="h-[72px] flex items-center justify-between px-4 border-b border-slate-200">
-                    {sidebarOpen ? (
-                        <div className="flex items-center gap-3 overflow-hidden">
-                            {companyLogo ? (
-                                <img
-                                    src={companyLogo}
-                                    alt="Company Logo"
-                                    className="h-10 w-10 object-contain rounded-lg flex-shrink-0"
-                                />
-                            ) : (
-                                <div className="size-10 rounded-lg bg-[#065F46] flex items-center justify-center flex-shrink-0">
-                                    <LayoutDashboard className="size-6 text-white" />
-                                </div>
-                            )}
-                            <div className="min-w-0">
-                                <div className="text-base font-semibold text-slate-900 truncate">
-                                    {companyName || t('common.appName')}
-                                </div>
-                                <div className="text-xs text-slate-500">{t('common.appName')}</div>
-                            </div>
-                        </div>
-                    ) : (
-                        companyLogo ? (
-                            <img
-                                src={companyLogo}
-                                alt="Logo"
-                                className="h-10 w-10 object-contain rounded-lg mx-auto"
-                            />
-                        ) : (
-                            <div className="size-10 rounded-lg bg-[#065F46] flex items-center justify-center mx-auto">
-                                <LayoutDashboard className="size-5 text-white" />
-                            </div>
-                        )
+
+            {/* Sidebar: desktop = always visible; mobile = conditional drawer */}
+            {(!isMobile || drawerOpen) && (
+                <aside
+                    className={cn(
+                        "fixed inset-y-0 start-0 z-50 w-72 flex flex-col",
+                        "bg-white border-e border-slate-200",
+                        isMobile && "shadow-xl"
                     )}
-                    <button
-                        onClick={() => setSidebarOpen(!sidebarOpen)}
-                        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors flex-shrink-0"
-                    >
-                        {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
-                    </button>
-                </div>
-
-                {/* Navigation */}
-                <nav className="flex-1 p-3 space-y-1 overflow-y-auto mt-1">
-                    {/* Dashboard */}
-                    {topNavItems.map(item => renderNavItem(item))}
-
-                    {/* Separator */}
-                    <div className="border-t border-slate-200 my-2" />
-
-                    {/* Contextual Sections: Sales & Purchases */}
-                    {navSections.map(section => renderSection(section))}
-
-                    {/* Separator */}
-                    <div className="border-t border-slate-200 my-2" />
-
-                    {/* Management items */}
-                    {bottomNavItems.map(item => renderNavItem(item))}
-                </nav>
-
-                {/* User info + Logout */}
-                <div className="p-3 border-t border-slate-200">
-                    {sidebarOpen && userName && (
-                        <div className="text-xs text-slate-500 mb-2 truncate px-4">
-                            {userName}
-                        </div>
-                    )}
-                    <button
-                        onClick={handleLogout}
-                        className={cn(
-                            "w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 hover:bg-red-50 hover:text-red-600 transition-all text-sm",
-                            !sidebarOpen && "justify-center"
-                        )}
-                    >
-                        <LogOut size={18} />
-                        <span className={cn("font-medium transition-all duration-200 overflow-hidden", sidebarOpen ? "opacity-100 w-auto" : "opacity-0 w-0")}>
-                            {t('nav.signOut')}
-                        </span>
-                    </button>
-                </div>
-            </aside>
+                >
+                    {sidebarContent}
+                </aside>
+            )}
 
             {/* Main Content */}
             <main className={cn(
-                "transition-all duration-300 min-h-screen min-w-0 w-full",
-                isMobile ? "ms-0" : (sidebarOpen ? "ms-72 w-[calc(100%-18rem)]" : "ms-20 w-[calc(100%-5rem)]")
+                "min-h-screen min-w-0 w-full",
+                !isMobile && "ms-72"
             )}>
                 {/* Topbar */}
-                <div className="bg-white border-b border-slate-200 px-4 md:px-8 py-3 flex justify-between items-center">
+                <div className="bg-white border-b border-slate-200 px-4 lg:px-8 py-3 flex justify-between items-center">
                     <div className="flex items-center gap-3">
-                        {/* Mobile hamburger menu */}
                         {isMobile && (
                             <button
-                                onClick={() => setSidebarOpen(true)}
-                                className="p-2 rounded-lg hover:bg-slate-100 text-slate-600 md:hidden"
+                                onClick={() => setDrawerOpen(true)}
+                                className="p-2 rounded-lg hover:bg-slate-100 text-slate-600"
                                 aria-label={t('nav.openMenu', 'Open menu')}
                             >
                                 <Menu size={20} />
@@ -417,19 +387,19 @@ export default function DashboardLayout() {
                         {companyLogo && (
                             <img src={companyLogo} alt="" className="h-7 w-7 object-contain rounded" />
                         )}
-                        <span className="text-sm font-medium text-slate-600 hidden md:inline">
+                        <span className="text-sm font-medium text-slate-600 hidden lg:inline">
                             {companyName}
                         </span>
                         {userName && (
                             <>
-                                <div className="w-px h-5 bg-slate-200 hidden md:block" />
-                                <span className="text-sm text-slate-500 hidden md:inline">{userName}</span>
+                                <div className="w-px h-5 bg-slate-200 hidden lg:block" />
+                                <span className="text-sm text-slate-500 hidden lg:inline">{userName}</span>
                             </>
                         )}
                     </div>
                     <div className="flex items-center gap-3">
                         {!isSuperAdmin && <NotificationBell />}
-                        <div className="w-px h-6 bg-slate-200"></div>
+                        <div className="w-px h-6 bg-slate-200" />
                         <LanguageSelector />
                     </div>
                 </div>

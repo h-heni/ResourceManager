@@ -4,7 +4,6 @@ namespace ResourceManager.DTOs
 {
     public class CreateDevisDto
     {
-        [Required]
         public string Number { get; set; } = string.Empty;
         
         [Required]

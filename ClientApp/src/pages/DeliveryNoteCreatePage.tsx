@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Plus, Trash2, Save, Package, FileText, History, User, Calendar, AlertCircle, CheckCircle } from 'lucide-react';
 import api from '../services/api';
+import { logger } from '../lib/logger';
+import { useNotify } from '../hooks/useNotify';
 import { DEFAULT_CURRENCY, CURRENCY_OPTIONS, getCurrencySymbol } from '../lib/currencyUtils';
 
 interface DevisItem {
@@ -58,6 +60,7 @@ interface ValidationErrors {
 export default function DeliveryNoteCreatePage() {
     const navigate = useNavigate();
     const { t } = useTranslation();
+    const { notify, NotifyBanner } = useNotify();
     const [loading, setLoading] = useState(false);
     const [pendingDevis, setPendingDevis] = useState<Devis[]>([]);
     const [selectedDevis, setSelectedDevis] = useState<Devis | null>(null);
@@ -105,7 +108,7 @@ export default function DeliveryNoteCreatePage() {
                     setPdfLanguage(res.data.invoiceLanguage || 'fr');
                 }
             } catch (error) {
-                console.error('Error fetching currency settings', error);
+                logger.error('Error fetching currency settings', error);
             }
         };
         fetchCurrencySettings();
@@ -165,7 +168,7 @@ export default function DeliveryNoteCreatePage() {
             );
             setPendingDevis(draftDevis);
         } catch (error) {
-            console.error("Error fetching devis", error);
+            logger.error("Error fetching devis", error);
         }
     };
 
@@ -205,7 +208,7 @@ export default function DeliveryNoteCreatePage() {
 
             setExistingDeliveryNotes(detailedNotes.filter(Boolean) as ExistingDeliveryNote[]);
         } catch (error) {
-            console.error("Error fetching existing delivery notes", error);
+            logger.error("Error fetching existing delivery notes", error);
         }
     };
 
@@ -235,7 +238,7 @@ export default function DeliveryNoteCreatePage() {
             await fetchExistingDeliveryNotes(devisId);
 
         } catch (error) {
-            console.error("Error fetching devis details", error);
+            logger.error("Error fetching devis details", error);
         }
     };
 
@@ -304,9 +307,14 @@ export default function DeliveryNoteCreatePage() {
 
             await api.post('/DeliveryNotes', payload);
             navigate('/delivery-notes');
-        } catch (error) {
-            console.error("Error creating BL", error);
-            alert(t('deliveryNote.messages.createFailed'));
+        } catch (error: unknown) {
+            logger.error("Error creating BL", error);
+            const axErr = error as { response?: { data?: { message?: string; detail?: string; title?: string; errors?: Record<string, string[]> } } };
+            const serverMsg = axErr?.response?.data?.message
+                || axErr?.response?.data?.detail
+                || axErr?.response?.data?.title
+                || (axErr?.response?.data?.errors ? Object.values(axErr.response.data.errors).flat().join('; ') : null);
+            notify('error', serverMsg || t('deliveryNote.messages.createFailed'));
         } finally {
             setLoading(false);
         }
@@ -321,6 +329,7 @@ export default function DeliveryNoteCreatePage() {
 
     return (
         <div className="max-w-4xl mx-auto space-y-6 px-2 sm:px-0">
+            <NotifyBanner />
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-start space-x-4">
                     <button onClick={() => navigate('/delivery-notes')} className="p-2 hover:bg-gray-100 rounded-full text-gray-500">

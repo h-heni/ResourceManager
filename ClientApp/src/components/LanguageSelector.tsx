@@ -50,7 +50,7 @@ export default function LanguageSelector() {
       </button>
       
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50 animate-scale-up">
+        <div className="absolute end-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50 animate-scale-up">
           <div className="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100 mb-1">
             {t('nav.selectLanguage', 'Select Language')}
           </div>
@@ -58,7 +58,7 @@ export default function LanguageSelector() {
             <button
               key={lang.code}
               onClick={() => changeLanguage(lang.code)}
-              className={`w-full px-4 py-2.5 text-left text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors ${
+              className={`w-full px-4 py-2.5 text-start text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors ${
                 i18n.language === lang.code 
                   ? 'bg-[#065F46]/5 text-[#065F46] font-medium' 
                   : 'text-gray-700'
@@ -67,7 +67,7 @@ export default function LanguageSelector() {
               <span className="text-lg">{lang.flag}</span>
               <span>{lang.name}</span>
               {i18n.language === lang.code && (
-                <span className="ml-auto text-[#065F46]">✓</span>
+                <span className="ms-auto text-[#065F46]">✓</span>
               )}
             </button>
           ))}

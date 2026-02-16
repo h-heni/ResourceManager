@@ -34,8 +34,25 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [user, setUser] = useState<User | null>(null);
-    const [loading, setLoading] = useState(true);
+    // ──── Synchronous restore: immediately hydrate user from localStorage ────
+    // This prevents the "Refresh = Logout" loop by making isAuthenticated=true
+    // BEFORE the async refresh runs, so ProtectedRoute never redirects.
+    const [user, setUser] = useState<User | null>(() => {
+        const savedEmail = localStorage.getItem('user_email');
+        if (!savedEmail) return null;
+        const savedRoles = localStorage.getItem('user_roles');
+        return {
+            email: savedEmail,
+            roles: savedRoles ? JSON.parse(savedRoles) : [],
+            firstName: localStorage.getItem('user_firstName') || '',
+            lastName: localStorage.getItem('user_lastName') || '',
+            isProfileComplete: localStorage.getItem('user_isProfileComplete') === 'true',
+            baseStoragePath: localStorage.getItem('user_baseStoragePath') || undefined,
+        };
+    });
+    // If we have cached user data, skip the loading gate so UI renders immediately.
+    // The async refresh below will silently update the token in the background.
+    const [loading, setLoading] = useState(() => !localStorage.getItem('user_email'));
     const navigate = useNavigate();
     const isRestoringRef = useRef(false); // Guard against concurrent restoreSession calls
 

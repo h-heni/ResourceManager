@@ -10,6 +10,7 @@ import {
 import api from '../services/api';
 import { invalidateSettingsCache } from '../hooks/useSettings';
 import { DEFAULT_CURRENCY, CURRENCY_SYMBOL_MAP, CURRENCY_OPTIONS } from '../lib/currencyUtils';
+import PasswordInput from '../components/PasswordInput';
 import { getErrorMessage } from '../utils/errorUtils';
 
 // ═══════════════════════════════════════════════════════════════
@@ -794,6 +795,7 @@ Best regards,
                                             <h4 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
                                                 <Image size={18} className="text-[#065F46]" />
                                                 {t('settings.logo', 'Company Logo')}
+                                                {settings.hasLogoData && <CheckCircle size={16} className="text-emerald-500" />}
                                             </h4>
                                             <div className="flex items-start gap-6">
                                                 <div className="flex-shrink-0">
@@ -840,18 +842,22 @@ Best regards,
                                         <div className="max-w-md space-y-4">
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.currentPassword', 'Current Password')}</label>
-                                                <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)}
-                                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none" />
+                                                <PasswordInput value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} />
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.newPassword', 'New Password')}</label>
-                                                <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
-                                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none" />
+                                                <PasswordInput value={newPassword} onChange={e => setNewPassword(e.target.value)}
+                                                    showChecklist
+                                                    checklistLabels={{
+                                                        length: t('auth.checklist.length', 'At least 6 characters'),
+                                                        uppercase: t('auth.checklist.uppercase', 'One uppercase letter'),
+                                                        number: t('auth.checklist.number', 'One number'),
+                                                        special: t('auth.checklist.special', 'One special character'),
+                                                    }} />
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.confirmPassword', 'Confirm New Password')}</label>
-                                                <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
-                                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none" />
+                                                <PasswordInput value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} />
                                             </div>
                                             <button onClick={handleChangePassword} disabled={changingPassword}
                                                 className="flex items-center px-6 py-3 bg-[#065F46] text-white rounded-xl hover:bg-[#047857] transition-all disabled:opacity-50">

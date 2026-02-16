@@ -3,6 +3,8 @@ import { Plus, Search, Edit2, Trash2, Upload } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
+import { logger } from '../lib/logger';
+import { useNotify } from '../hooks/useNotify';
 import { useTranslation } from 'react-i18next';
 
 interface Supplier {
@@ -15,6 +17,7 @@ interface Supplier {
 
 export default function SuppliersPage() {
     const { t } = useTranslation();
+    const { notify, NotifyBanner } = useNotify();
     const { user } = useAuth();
     const isManager = user?.roles?.includes('Manager') || user?.roles?.includes('SuperAdmin') || user?.roles?.includes('FreeUser');
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -42,7 +45,7 @@ export default function SuppliersPage() {
             const data = Array.isArray(res.data) ? res.data : (res.data.data || []);
             setSuppliers(data);
         } catch (error) {
-            console.error("Error fetching suppliers", error);
+            logger.error("Error fetching suppliers", error);
         } finally {
             setLoading(false);
         }
@@ -77,8 +80,8 @@ export default function SuppliersPage() {
             setIsModalOpen(false);
             fetchSuppliers();
         } catch (error) {
-            console.error("Error saving supplier", error);
-            alert(t('supplier.messages.saveFailed'));
+            logger.error("Error saving supplier", error);
+            notify('error', t('supplier.messages.saveFailed'));
         } finally {
             setSaving(false);
         }
@@ -90,7 +93,7 @@ export default function SuppliersPage() {
             await api.delete(`/Fournisseurs/${id}`);
             fetchSuppliers();
         } catch (error) {
-            console.error("Error deleting supplier", error);
+            logger.error("Error deleting supplier", error);
         }
     };
 
@@ -101,6 +104,7 @@ export default function SuppliersPage() {
 
     return (
         <div className="space-y-6">
+            <NotifyBanner />
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-gray-900">{t('supplier.title')}</h1>
@@ -164,10 +168,10 @@ export default function SuppliersPage() {
                                                         await api.post(`/Fournisseurs/${supplier.id}/upload-invoice`, formData, {
                                                             headers: { 'Content-Type': 'multipart/form-data' }
                                                         });
-                                                        alert(t('supplier.messages.uploadSuccess'));
+                                                        notify('success', t('supplier.messages.uploadSuccess'));
                                                     } catch (error) {
-                                                        console.error("Upload failed", error);
-                                                        alert(t('supplier.messages.uploadFailed'));
+                                                        logger.error("Upload failed", error);
+                                                        notify('error', t('supplier.messages.uploadFailed'));
                                                     }
                                                 };
                                                 input.click();

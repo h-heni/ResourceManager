@@ -1,32 +1,85 @@
 /**
- * Format a number with space as thousands separator and comma as decimal separator.
- * Examples:
- *   formatNumber(12345.67)     → "12 345,67"
- *   formatNumber(12345.678, 3) → "12 345,678"
- *   formatNumber(0)            → "0,00"
- *   formatNumber(1000)         → "1 000,00"
+ * Locale-aware number and currency formatting.
+ *
+ * Locale behaviour:
+ *   EN: 12,345.670 TND     (comma thousands, period decimal)
+ *   FR: 12 345,670 DT      (space thousands, comma decimal)
+ *   AR: ١٢٬٣٤٥٫٦٧٠ دت    (Eastern Arabic numerals, Arabic separators)
+ *   DE: 12.345,670 TND     (period thousands, comma decimal)
+ *
+ * When no locale is supplied the functions default to French-style formatting
+ * (space thousands, comma decimal) to stay backward-compatible.
  */
-export function formatNumber(value: number | null | undefined, decimals = 3): string {
-    if (value == null || isNaN(value)) return '0' + ',' + '0'.repeat(decimals);
 
-    const fixed = Math.abs(value).toFixed(decimals);
-    const [intPart, decPart] = fixed.split('.');
+import i18n from '../i18n';
+import { getLocaleCurrencySymbol } from './currencyUtils';
 
-    // Add space as thousands separator
-    const formatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+// ── Intl locale tags used by the browser ──
+const INTL_LOCALE_MAP: Record<string, string> = {
+    en: 'en-US',
+    fr: 'fr-FR',
+    ar: 'ar-TN',
+    de: 'de-DE',
+};
 
-    const sign = value < 0 ? '-' : '';
-    return `${sign}${formatted},${decPart}`;
+function resolveIntlLocale(locale?: string): string {
+    const lang = (locale || i18n.language || 'fr').split('-')[0].toLowerCase();
+    return INTL_LOCALE_MAP[lang] || INTL_LOCALE_MAP.fr;
 }
 
 /**
- * Shorthand: format with currency symbol appended.
- * Example: formatCurrency(12345.67, 'TND') → "12 345,670 TND"
+ * Format a number using the current (or supplied) locale.
+ *
+ * @param value    The numeric value (null/undefined → "0…")
+ * @param decimals Fractional digits (default 3 for TND / millimes)
+ * @param locale   Optional override; otherwise uses the active i18n language
+ *
+ * @example
+ *   formatNumber(12345.67)            → "12 345,670"  (FR default)
+ *   formatNumber(12345.67, 3, 'ar')   → "١٢٬٣٤٥٫٦٧٠" (Eastern Arabic)
+ *   formatNumber(12345.67, 2, 'en')   → "12,345.67"
+ */
+export function formatNumber(
+    value: number | null | undefined,
+    decimals = 3,
+    locale?: string
+): string {
+    const v = value == null || isNaN(value) ? 0 : value;
+    const intlLocale = resolveIntlLocale(locale);
+    return new Intl.NumberFormat(intlLocale, {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+        useGrouping: true,
+    }).format(v);
+}
+
+/**
+ * Currencies that use 3 decimal places (millimes / fils).
+ * All others default to 2.
+ */
+const THREE_DECIMAL_CURRENCIES = new Set(['TND', 'BHD', 'KWD', 'OMR']);
+
+/** Return the standard number of decimal places for a currency. */
+export function getCurrencyDecimals(currency: string): number {
+    return THREE_DECIMAL_CURRENCIES.has(currency) ? 3 : 2;
+}
+
+/**
+ * Format a number with its locale-aware currency symbol.
+ *
+ * @example
+ *   formatCurrency(12345.67, 'TND')           → "12 345,670 DT"   (FR)
+ *   formatCurrency(12345.67, 'TND', 3, 'en')  → "12,345.670 TND"  (EN)
+ *   formatCurrency(12345.67, 'TND', 3, 'ar')  → "١٢٬٣٤٥٫٦٧٠ دت" (AR)
  */
 export function formatCurrency(
     value: number | null | undefined,
     currency: string,
-    decimals = 3
+    decimals?: number,
+    locale?: string
 ): string {
-    return `${formatNumber(value, decimals)} ${currency}`;
+    const d = decimals ?? getCurrencyDecimals(currency);
+    const lang = (locale || i18n.language || 'fr').split('-')[0].toLowerCase();
+    const symbol = getLocaleCurrencySymbol(currency, lang);
+    return `${formatNumber(value, d, lang)} ${symbol}`;
 }

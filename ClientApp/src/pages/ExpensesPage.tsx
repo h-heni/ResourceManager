@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../hooks/useSettings';
 import { formatCurrency } from '../lib/formatNumber';
 import { CURRENCY_OPTIONS, DEFAULT_CURRENCY } from '../lib/currencyUtils';
+import { logger } from '../lib/logger';
 import Pagination from '../components/Pagination';
 
 interface Expense {
@@ -108,7 +109,7 @@ export default function ExpensesPage() {
             setTotalPages(data.totalPages || 0);
             setSummary(sumRes.data);
         } catch (err) {
-            console.error('Failed to fetch expenses:', err);
+            logger.error('Failed to fetch expenses:', err);
         } finally {
             setLoading(false);
         }
@@ -177,7 +178,7 @@ export default function ExpensesPage() {
             setShowModal(false);
             await fetchExpenses();
         } catch (err) {
-            console.error('Failed to save expense:', err);
+            logger.error('Failed to save expense:', err);
         } finally {
             setSaving(false);
         }
@@ -191,7 +192,7 @@ export default function ExpensesPage() {
             await api.delete(`/Expenses/${id}`);
             await fetchExpenses();
         } catch (err) {
-            console.error('Failed to delete expense:', err);
+            logger.error('Failed to delete expense:', err);
             await fetchExpenses(); // revert on error
         }
     };

@@ -66,7 +66,8 @@
     "viewDetails": "View Details",
     "imported": "Imported",
     "viewOnly": "View Only",
-    "year": "Year"
+    "year": "Year",
+    "new": "New"
   },
   "pagination": {
     "previous": "Previous",
@@ -116,6 +117,12 @@
       "signInPrompt": "Sign In Prompt",
       "signingIn": "Signing In",
       "welcomeBack": "Welcome Back"
+    },
+    "checklist": {
+      "length": "At least 6 characters",
+      "uppercase": "One uppercase letter",
+      "number": "One number",
+      "special": "One special character"
     }
   },
   "nav": {
@@ -276,6 +283,7 @@
     "convertToInvoice": "Convert to Invoice",
     "createDeliveryNote": "Create Delivery Note",
     "deleteError": "Failed to delete quote",
+    "createFailed": "Failed to create quote",
     "noItems": "No items",
     "create": "Create Quote",
     "pageDescription": "Manage quotes and proposals for your clients",
@@ -541,7 +549,7 @@
     "regeneratedPdf": "{{count}} PDF(s) regenerated",
     "failedPdf": "{{count}} failed",
     "manualUploadNeeded": "{{count}} uploaded file(s) need manual re-upload",
-    "uploadedFilesMissing": "{{count}} uploaded file(s) missing â€” must be re-uploaded manually. Check Settings > PDF Storage.",
+    "uploadedFilesMissing": "{{count}} uploaded file(s) missing — must be re-uploaded manually. Check Settings > PDF Storage.",
     "regenerating": "Regenerating {{count}} missing PDF(s)...",
     "adminSubtitle": "Admin Subtitle",
     "adminTitle": "Admin Title",
@@ -572,7 +580,6 @@
     "totalRevenueLabel": "Total Revenue",
     "totalUsers": "Total Users",
     "pending": "Pending",
-    "pendingInvoices": "Pending Invoices",
     "users": "Users",
     "allTime": "All Time",
     "lastYear": "Last Year",
@@ -599,7 +606,7 @@
     "supplierPayment": "Supplier Payment",
     "noNotifications": "No notifications yet",
     "unread": "unread",
-    "summary": "{{unread}} unread Â· {{due}} due payment(s)",
+    "summary": "{{unread}} unread · {{due}} due payment(s)",
     "justNow": "Just now",
     "agoMin": "{{count}}m ago",
     "agoHour": "{{count}}h ago",
@@ -738,7 +745,7 @@
     "withIssues": "With Issues",
     "allClean": "All invoices pass consistency checks!",
     "issues": "issue(s)",
-    "fixNow": "Fix now â†’",
+    "fixNow": "Fix now →",
     "consistencyFailed": "Consistency check failed",
     "pendingPayments": "Pending Payments"
   },

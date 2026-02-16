@@ -4,6 +4,7 @@ import { Building, MapPin, Hash, Phone, Loader, CheckCircle } from 'lucide-react
 import { useTranslation } from 'react-i18next';
 import api from '../services/api';
 import { getErrorMessage } from '../utils/errorUtils';
+import { logger } from '../lib/logger';
 import { cn } from '../lib/utils';
 
 export default function CompanySetupPage() {
@@ -34,7 +35,7 @@ export default function CompanySetupPage() {
             localStorage.removeItem('needsCompanySetup');
             navigate('/dashboard');
         } catch (err: unknown) {
-            console.error(err);
+            logger.error(err);
             const msg = getErrorMessage(err, t('companySetup.setupFailed'));
             setError(msg);
         } finally {

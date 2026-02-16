@@ -29,26 +29,52 @@ export const CHART_COLORS = {
 export const CURRENCY_SYMBOL_MAP: Record<string, string> = {
     TND: 'TND',
     USD: '$',
-    EUR: '€',
-    GBP: '£',
-    MAD: 'MAD',
-    DZD: 'DZD',
+    EUR: '\u20AC',
+    GBP: '\u00A3',
+    SAR: 'SAR',
+    QAR: 'QAR',
+};
+
+/**
+ * Locale-aware currency symbol map.
+ * EN: TND / SAR / QAR (ISO codes)
+ * FR: DT / SAR / QAR
+ * AR: \u062F\u062A / \u0631.\u0633 / \u0631.\u0642
+ */
+const LOCALE_CURRENCY_SYMBOLS: Record<string, Record<string, string>> = {
+    en: { TND: 'TND', SAR: 'SAR', QAR: 'QAR' },
+    fr: { TND: 'DT',  SAR: 'SAR', QAR: 'QAR' },
+    ar: { TND: '\u062F\u062A', SAR: '\u0631.\u0633', QAR: '\u0631.\u0642' },
+    de: { TND: 'TND', SAR: 'SAR', QAR: 'QAR' },
 };
 
 export const CURRENCY_OPTIONS = [
     { code: 'TND', symbol: 'TND', label: 'TND - Tunisian Dinar' },
     { code: 'USD', symbol: '$', label: 'USD - US Dollar' },
-    { code: 'EUR', symbol: '€', label: 'EUR - Euro' },
-    { code: 'GBP', symbol: '£', label: 'GBP - British Pound' },
-    { code: 'MAD', symbol: 'MAD', label: 'MAD - Moroccan Dirham' },
-    { code: 'DZD', symbol: 'DZD', label: 'DZD - Algerian Dinar' },
+    { code: 'EUR', symbol: '\u20AC', label: 'EUR - Euro' },
+    { code: 'GBP', symbol: '\u00A3', label: 'GBP - British Pound' },
+    { code: 'SAR', symbol: 'SAR', label: 'SAR - Saudi Riyal' },
+    { code: 'QAR', symbol: 'QAR', label: 'QAR - Qatari Riyal' },
 ] as const;
 
 /**
- * Get display symbol for a currency code.
+ * Get display symbol for a currency code (locale-unaware fallback).
  * Returns the code itself if not in the map.
  */
 export function getCurrencySymbol(code: string): string {
+    return CURRENCY_SYMBOL_MAP[code] || code;
+}
+
+/**
+ * Get locale-aware currency display symbol.
+ * @param code  ISO 4217 currency code (e.g. 'TND')
+ * @param locale  Active UI locale (e.g. 'fr', 'ar')
+ * @returns Localized symbol: EN \u2192 "TND", FR \u2192 "DT", AR \u2192 "\u062F\u062A"
+ */
+export function getLocaleCurrencySymbol(code: string, locale: string): string {
+    const lang = locale.split('-')[0].toLowerCase();
+    const localeMap = LOCALE_CURRENCY_SYMBOLS[lang];
+    if (localeMap && localeMap[code]) return localeMap[code];
     return CURRENCY_SYMBOL_MAP[code] || code;
 }
 

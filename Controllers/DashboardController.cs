@@ -34,7 +34,39 @@ namespace ResourceManager.Controllers
             try
             {
                 var now = DateTime.UtcNow;
-                var selectedYear = year ?? now.Year;
+                // Include ALL years from both client & supplier invoices (IgnoreQueryFilters
+                // so soft-deleted and archived records are still visible in the year picker).
+                var clientYears = await _context.Invoices
+                    .IgnoreQueryFilters()
+                    .AsNoTracking()
+                    .Select(x => x.Date.Year)
+                    .Distinct()
+                    .ToListAsync();
+
+                var supplierYears = await _context.FournisseurInvoices
+                    .IgnoreQueryFilters()
+                    .AsNoTracking()
+                    .Where(si => si.InvoiceDate != null)
+                    .Select(si => si.InvoiceDate!.Value.Year)
+                    .Distinct()
+                    .ToListAsync();
+
+                var availableYears = clientYears
+                    .Union(supplierYears)
+                    .Distinct()
+                    .OrderByDescending(y => y)
+                    .ToList();
+
+                if (!availableYears.Any())
+                    availableYears = new List<int> { now.Year };
+
+                var minAvailableYear = availableYears.Min();
+                var maxAvailableYear = availableYears.Max();
+
+                var selectedYear = year.HasValue
+                    ? (availableYears.Contains(year.Value) ? year.Value : maxAvailableYear)
+                    : maxAvailableYear;
+
                 var startOfYear = new DateTime(selectedYear, 1, 1, 0, 0, 0, DateTimeKind.Utc);
                 var endOfYear = startOfYear.AddYears(1);
 
@@ -245,15 +277,19 @@ namespace ResourceManager.Controllers
                     .Sum(h => h.AmountPaid);
             }
 
-            // Pending Invoices Count and Amount
+            // Pending Invoices Count and Amount (Pending = TotalAmount - AmountPaid)
             var pendingInvoicesList = filteredInvoices.Where(i => i.Status == "Pending" && !i.Treated).ToList();
             var pendingInvoicesCount = pendingInvoicesList.Count;
-            var pendingInvoicesAmount = pendingInvoicesList.Sum(i => i.TotalAmount ?? 0);
+            var pendingInvoicesAmount = isMixedMode
+                ? pendingInvoicesList.Sum(i => ConvertAmount(i.RemainingAmount, i.Devis?.Currency ?? defaultCurrency))
+                : pendingInvoicesList.Sum(i => i.RemainingAmount);
 
             // Partially Paid
             var partiallyPaidList = filteredInvoices.Where(i => i.Status == "PartiallyPaid").ToList();
             var partiallyPaidCount = partiallyPaidList.Count;
-            var partiallyPaidAmount = partiallyPaidList.Sum(i => i.RemainingAmount);
+            var partiallyPaidAmount = isMixedMode
+                ? partiallyPaidList.Sum(i => ConvertAmount(i.RemainingAmount, i.Devis?.Currency ?? defaultCurrency))
+                : partiallyPaidList.Sum(i => i.RemainingAmount);
 
             // Pending Payments (Scheduled future payments)
             var pendingPayments = filteredInvoices
@@ -272,8 +308,8 @@ namespace ResourceManager.Controllers
             var revenueByMonth = revenueInvoices
                 .GroupBy(i => i.Date.Month)
                 .ToDictionary(g => g.Key, g => isMixedMode
-                    ? g.Sum(i => ConvertAmount(i.TotalAmount ?? 0, i.Devis?.Currency ?? defaultCurrency))
-                    : g.Sum(i => i.TotalAmount ?? 0));
+                    ? g.Sum(i => ConvertAmount(i.AmountPaid, i.Devis?.Currency ?? defaultCurrency))
+                    : g.Sum(i => i.AmountPaid));
 
             var chart = Enumerable.Range(1, 12).Select(month => {
                 var invoiceAmount = revenueByMonth.GetValueOrDefault(month, 0);
@@ -288,11 +324,39 @@ namespace ResourceManager.Controllers
                 };
             }).ToList();
 
-            // Monthly comparison (this month vs last month) — invoice totals
-            var thisMonthRevenue = chart.FirstOrDefault(c => c.month == now.Month)?.amount ?? 0;
+            // Current period vs previous period comparison (Month/Year, includes imported + regular)
+            var currentPeriodStart = new DateTime(selectedYear, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+            var nextPeriodStart = currentPeriodStart.AddMonths(1);
+            var previousPeriodStart = currentPeriodStart.AddMonths(-1);
 
-            int lastMonthNum = now.Month > 1 ? now.Month - 1 : 12;
-            var lastMonthRevenue = chart.FirstOrDefault(c => c.month == lastMonthNum)?.amount ?? 0;
+            decimal SumPeriodRevenue(DateTime periodStart, DateTime periodEnd)
+            {
+                var regular = yearInvoices
+                    .Where(i => !string.Equals(i.Status, "Draft", StringComparison.OrdinalIgnoreCase)
+                             && i.Date >= periodStart
+                             && i.Date < periodEnd)
+                    .Sum(i => isMixedMode
+                        ? ConvertAmount(i.AmountPaid, i.Devis?.Currency ?? defaultCurrency)
+                        : ((i.Devis?.Currency ?? defaultCurrency) == selectedCurrency ? i.AmountPaid : 0m));
+
+                // Imported historical revenues are treated as imported invoice totals
+                var imported = yearHistoricalRevenues
+                    .Where(h => h.Date >= periodStart && h.Date < periodEnd)
+                    .Sum(h => isMixedMode
+                        ? ConvertAmount(h.AmountPaid, h.Currency ?? defaultCurrency)
+                        : ((h.Currency ?? defaultCurrency) == selectedCurrency ? h.AmountPaid : 0m));
+
+                return regular + imported;
+            }
+
+            var thisMonthRevenue = SumPeriodRevenue(currentPeriodStart, nextPeriodStart);
+            var lastMonthRevenue = SumPeriodRevenue(previousPeriodStart, currentPeriodStart);
+            var growthDisplay = lastMonthRevenue == 0
+                ? (thisMonthRevenue > 0 ? "New" : "0%")
+                : $"{(((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100):+0.0;-0.0;0.0}%";
+            var growthPercentage = lastMonthRevenue == 0
+                ? (thisMonthRevenue > 0 ? 100m : 0m)
+                : ((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100m;
 
             // Client stats
             var activeClients = filteredInvoices
@@ -364,7 +428,7 @@ namespace ResourceManager.Controllers
                 .Where(i => i.ClientId.HasValue)
                 .GroupBy(i => i.ClientId!.Value)
                 .Select(g => {
-                    var totalAmount = g.Sum(i => NormalizeAmount(i.TotalAmount ?? 0, i.Devis?.Currency ?? defaultCurrency));
+                    var totalAmount = g.Sum(i => NormalizeAmount(i.AmountPaid, i.Devis?.Currency ?? defaultCurrency));
                     return new {
                         clientId = g.Key,
                         clientName = g.First().Client?.Name ?? "Unknown",
@@ -432,6 +496,8 @@ namespace ResourceManager.Controllers
                 selectedCurrency,
                 availableCurrencies,
                 defaultCurrency,
+                availableYears,
+                minAvailableYear,
                 isMixedMode,
                 exchangeRate = isMixedMode ? exchangeRate : null,
                 currencyBreakdownRevenue = isMixedMode ? currencyBreakdownRevenue : null,
@@ -452,6 +518,8 @@ namespace ResourceManager.Controllers
                 totalExpenses,
                 thisMonthRevenue,
                 lastMonthRevenue,
+                growthDisplay,
+                growthPercentage,
                 activeClients,
                 totalSuppliers,
                 supplierInvoices = supplierInvoicesCount,
@@ -470,6 +538,8 @@ namespace ResourceManager.Controllers
                     selectedCurrency = currency ?? "TND",
                     availableCurrencies = new[] { currency ?? "TND" },
                     defaultCurrency = "TND",
+                    availableYears = new[] { year ?? DateTime.UtcNow.Year },
+                    minAvailableYear = year ?? DateTime.UtcNow.Year,
                     isMixedMode = false,
                     exchangeRate = (decimal?)null,
                     currencyBreakdownRevenue = (object?)null,
@@ -487,6 +557,8 @@ namespace ResourceManager.Controllers
                     totalExpenses = 0m,
                     thisMonthRevenue = 0m,
                     lastMonthRevenue = 0m,
+                    growthDisplay = "0%",
+                    growthPercentage = 0m,
                     activeClients = 0,
                     totalSuppliers = 0,
                     supplierInvoices = 0,

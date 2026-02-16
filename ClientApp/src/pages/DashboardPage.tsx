@@ -43,6 +43,7 @@ interface DashboardStats {
     /* multi-currency metadata from backend */
     selectedCurrency: string;
     availableCurrencies: string[];
+    availableYears?: number[];
     defaultCurrency: string;
     selectedYear: number;
 
@@ -61,6 +62,8 @@ interface DashboardStats {
     totalSuppliers: number;
     supplierInvoices: number;
     totalExpenses: number;
+    growthDisplay?: string;
+    growthPercentage?: number;
     statusBreakdown: StatusBreakdown[];
     topClients: TopClient[];
     revenueChart: ChartPoint[];
@@ -108,7 +111,7 @@ export default function DashboardPage() {
     /* ─── Year filter state ─── */
     const currentYear = new Date().getFullYear();
     const [selectedYear, setSelectedYear] = useState<number>(currentYear);
-    const availableYears = Array.from({ length: currentYear - 2019 }, (_, i) => currentYear - i);
+    const [availableYears, setAvailableYears] = useState<number[]>([currentYear]);
 
     /* ─── Data fetch (skipped for SuperAdmin) ─── */
     const fetchStats = async (currency?: string, mixedMode?: boolean, yearOverride?: number) => {
@@ -129,32 +132,41 @@ export default function DashboardPage() {
                 api.get(`/Dashboard/revenue-summary${queryParam}`),
                 api.get(`/Invoices/archived/count?year=${yearParam}`)
             ]);
-            console.log('fetchStats', { queryParam, dashRes, expensesRes, revenueRes, archivedRes });
 
             let archivedCountFallback: number | null = null;
 
             if (dashRes.status === 'fulfilled') {
                 const d = dashRes.value.data;
+                const dynamicYears = Array.isArray(d.availableYears) && d.availableYears.length > 0
+                    ? d.availableYears
+                    : [currentYear];
+
+                setAvailableYears(dynamicYears);
+                setSelectedYear(d.selectedYear ?? currentYear);
+
                 setStats({
                     selectedCurrency: d.selectedCurrency || DEFAULT_CURRENCY,
                     availableCurrencies: d.availableCurrencies || [],
+                    availableYears: dynamicYears,
                     defaultCurrency: d.defaultCurrency || DEFAULT_CURRENCY,
-                    selectedYear: d.selectedYear || currentYear,
-                    totalRevenue: d.totalRevenue || 0,
-                    pendingInvoicesCount: d.pendingInvoicesCount || 0,
-                    pendingInvoicesAmount: d.pendingInvoicesAmount || 0,
-                    partiallyPaidCount: d.partiallyPaidCount || 0,
-                    partiallyPaidAmount: d.partiallyPaidAmount || 0,
-                    pendingPaymentsCount: d.pendingPaymentsCount || 0,
-                    pendingPaymentsAmount: d.pendingPaymentsAmount || 0,
-                    thisMonthRevenue: d.thisMonthRevenue || 0,
-                    lastMonthRevenue: d.lastMonthRevenue || 0,
-                    totalInvoiceCount: d.totalInvoiceCount || 0,
-                    paidInvoiceCount: d.paidInvoiceCount || 0,
-                    activeClients: d.activeClients || 0,
-                    totalSuppliers: d.totalSuppliers || 0,
-                    supplierInvoices: d.supplierInvoices || 0,
-                    totalExpenses: d.totalExpenses || 0,
+                    selectedYear: d.selectedYear ?? currentYear,
+                    totalRevenue: d.totalRevenue ?? 0,
+                    pendingInvoicesCount: d.pendingInvoicesCount ?? 0,
+                    pendingInvoicesAmount: d.pendingInvoicesAmount ?? 0,
+                    partiallyPaidCount: d.partiallyPaidCount ?? 0,
+                    partiallyPaidAmount: d.partiallyPaidAmount ?? 0,
+                    pendingPaymentsCount: d.pendingPaymentsCount ?? 0,
+                    pendingPaymentsAmount: d.pendingPaymentsAmount ?? 0,
+                    thisMonthRevenue: d.thisMonthRevenue ?? 0,
+                    lastMonthRevenue: d.lastMonthRevenue ?? 0,
+                    totalInvoiceCount: d.totalInvoiceCount ?? 0,
+                    paidInvoiceCount: d.paidInvoiceCount ?? 0,
+                    activeClients: d.activeClients ?? 0,
+                    totalSuppliers: d.totalSuppliers ?? 0,
+                    supplierInvoices: d.supplierInvoices ?? 0,
+                    totalExpenses: d.totalExpenses ?? 0,
+                    growthDisplay: d.growthDisplay,
+                    growthPercentage: d.growthPercentage,
                     statusBreakdown: d.statusBreakdown || [],
                     topClients: d.topClients || [],
                     revenueChart: d.revenueChart || [],
@@ -344,8 +356,11 @@ export default function DashboardPage() {
 
     const calculateGrowth = () => {
         if (!stats) return '+0%';
+        if (stats.growthDisplay) {
+            return stats.growthDisplay === 'New' ? t('common.new', 'New') : stats.growthDisplay;
+        }
         const { thisMonthRevenue, lastMonthRevenue } = stats;
-        if (lastMonthRevenue === 0) return thisMonthRevenue > 0 ? '+100%' : '+0%';
+        if (lastMonthRevenue === 0) return thisMonthRevenue > 0 ? t('common.new', 'New') : '+0%';
         const growth = ((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100;
         return growth >= 0 ? `+${growth.toFixed(1)}%` : `${growth.toFixed(1)}%`;
     };
@@ -400,7 +415,7 @@ export default function DashboardPage() {
         {
             title: t('dashboard.pendingInvoices'),
             value: stats ? `${stats.pendingInvoicesCount}` : '-',
-            subtitle: stats?.pendingInvoicesAmount ? fmt(stats.pendingInvoicesAmount) : undefined,
+            subtitle: stats ? fmt(stats.pendingInvoicesAmount ?? 0) : undefined,
             icon: FileText,
             iconColor: CHART_COLORS.unpaid,
         },
@@ -640,8 +655,8 @@ export default function DashboardPage() {
                     <h3 className="text-sm font-semibold text-gray-900 mb-3">{t('dashboard.salesOverview', 'Sales')}</h3>
                     <div className="grid grid-cols-3 gap-3">
                         <div className="text-center">
-                            <p className="text-lg font-bold text-gray-900">{formatNumber(selectedYearRevenue)}</p>
-                            <p className="text-xs text-gray-500 mt-0.5">{cur} {t('dashboard.totalRevenueLabel', 'Revenue')}</p>
+                            <p className="text-lg font-bold text-gray-900">{fmt(selectedYearRevenue)}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">{t('dashboard.totalRevenueLabel', 'Revenue')}</p>
                         </div>
                         <div className="text-center">
                             <p className="text-lg font-bold text-gray-900">{(stats?.totalInvoiceCount ?? 0) - archivedInvoiceCount}</p>
@@ -686,8 +701,8 @@ export default function DashboardPage() {
                     <h3 className="text-sm font-semibold text-gray-900 mb-3">{t('dashboard.purchasesOverview', 'Purchases')}</h3>
                     <div className="grid grid-cols-3 gap-3">
                         <div className="text-center">
-                            <p className="text-lg font-bold text-gray-900">{formatNumber(stats?.totalExpenses ?? 0)}</p>
-                            <p className="text-xs text-gray-500 mt-0.5">{cur} {t('expense.totalExpenses', 'Expenses')}</p>
+                            <p className="text-lg font-bold text-gray-900">{fmt(stats?.totalExpenses ?? 0)}</p>
+                            <p className="text-xs text-gray-500 mt-0.5"> {t('expense.totalExpenses', 'Expenses')}</p>
                         </div>
                         <div className="text-center">
                             <p className="text-lg font-bold text-gray-900">{stats?.supplierInvoices ?? 0}</p>

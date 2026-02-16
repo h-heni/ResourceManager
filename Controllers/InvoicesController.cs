@@ -462,18 +462,8 @@ namespace ResourceManager.Controllers
             var companySettings = await _context.CompanySettings
                 .FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
 
-            var normalizedNumber = dto.Number?.Trim() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(normalizedNumber))
-            {
-                normalizedNumber = await GenerateNextInvoiceNumberAsync(user.CompanyId, dto.Date.ToUniversalTime().Year);
-            }
-
-            var duplicateNumberExists = await _context.Invoices
-                .AnyAsync(i => i.CompanyId == user.CompanyId && i.Number == normalizedNumber);
-            if (duplicateNumberExists)
-            {
-                return Conflict(new { message = "Invoice number already exists for this company." });
-            }
+            var userProvidedNumber = dto.Number?.Trim() ?? string.Empty;
+            var isAutoNumber = string.IsNullOrWhiteSpace(userProvidedNumber);
 
             string? sourceDevisNumber = null;
             if (dto.DevisId.HasValue && dto.DevisId.Value > 0)
@@ -489,85 +479,131 @@ namespace ResourceManager.Controllers
 
                 sourceDevisNumber = linkedDevis.Number;
             }
-            
-            var invoice = new Invoice
-            {
-                Number = normalizedNumber,
-                Date = dto.Date.ToUniversalTime(), // Ensure UTC
-                DueDate = dto.DueDate?.ToUniversalTime(), // Payment due date
-                ClientId = dto.ClientId,
-                DevisId = dto.DevisId,
-                SourceDevisNumber = sourceDevisNumber,
-                // Apply custom tax from company settings
-                Tfiscal = companySettings?.CustomTaxEnabled == true ? companySettings.CustomTaxAmount : 0,
-                TfiscalName = companySettings?.CustomTaxName ?? "Timbre Fiscal",
-                CreatedByUserId = userId,
-                CreatedAt = DateTime.UtcNow,
-                Status = "Pending"
-            };
 
-            // Map Items
-            foreach (var itemDto in dto.Items)
+            // Retry loop for auto-numbered invoices (handles concurrent number collisions)
+            var maxAttempts = isAutoNumber ? 5 : 1;
+            Invoice? invoice = null;
+
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                invoice.InvoiceItems.Add(new InvoiceItem
+                var normalizedNumber = isAutoNumber
+                    ? await GenerateNextInvoiceNumberAsync(user.CompanyId, dto.Date.ToUniversalTime().Year)
+                    : userProvidedNumber;
+
+                if (!isAutoNumber)
                 {
-                    Description = itemDto.Description,
-                    Quantity = itemDto.Quantity,
-                    Price = itemDto.Price,
-                    Tva = itemDto.Tva,
-                    VatRate = itemDto.Tva && itemDto.VatRate.HasValue ? itemDto.VatRate.Value / 100m : null
-                });
-            }
-            
-            invoice.CalculTotalAmount();
-
-            _context.Invoices.Add(invoice);
-            try
-            {
-                await _context.SaveChangesAsync(); // Save first to get Invoice ID
-                _logger.LogInformation("Invoice {Number} created (ID={Id}, CompanyId={CompanyId})",
-                    invoice.Number, invoice.Id, invoice.CompanyId);
-            }
-            catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
-            {
-                return Conflict(new { message = "Invoice number already exists for this company." });
-            }
-            catch (DbUpdateException ex)
-            {
-                _logger.LogError(ex, "DbUpdateException creating invoice. CompanyId={CompanyId}, ClientId={ClientId}, Number={Number}",
-                    invoice.CompanyId, invoice.ClientId, invoice.Number);
-                return StatusCode(500, new { message = "Failed to save invoice. Check server logs for details.", detail = ex.InnerException?.Message });
-            }
-
-            // Link Delivery Notes if provided
-            if (dto.DeliveryNoteIds != null && dto.DeliveryNoteIds.Any())
-            {
-                var deliveryNotes = await _context.DeliveryNotes
-                    .Where(dn => dto.DeliveryNoteIds.Contains(dn.Id))
-                    .ToListAsync();
-                
-                foreach (var dn in deliveryNotes)
-                {
-                    dn.InvoiceId = invoice.Id; 
-                    // Should we also copy items if not provided? 
-                    // Requirement says "link ... is a must". 
-                    // Assuming user manually adds items or frontend handles copying.
-                    // For now, we strictly link them.
+                    var duplicateNumberExists = await _context.Invoices
+                        .IgnoreQueryFilters()
+                        .AnyAsync(i => i.CompanyId == user.CompanyId && i.Number == normalizedNumber);
+                    if (duplicateNumberExists)
+                    {
+                        return Conflict(new { message = "Invoice number already exists for this company." });
+                    }
                 }
-                await _context.SaveChangesAsync();
-            }
 
-            // Update Devis status to Completed when invoice is created
-            if (dto.DevisId.HasValue && dto.DevisId.Value > 0)
-            {
-                var devis = await _context.Devis.FindAsync(dto.DevisId.Value);
-                if (devis != null)
+                invoice = new Invoice
                 {
-                    devis.Status = "Completed";
-                    devis.Treated = true;
-                    await _context.SaveChangesAsync();
-                    _logger.LogInformation("Devis {DevisId} status updated to Completed after invoice creation.", dto.DevisId.Value);
+                    Number = normalizedNumber,
+                    Date = dto.Date.ToUniversalTime(),
+                    DueDate = dto.DueDate?.ToUniversalTime(),
+                    ClientId = dto.ClientId,
+                    DevisId = dto.DevisId,
+                    SourceDevisNumber = sourceDevisNumber,
+                    Tfiscal = companySettings?.CustomTaxEnabled == true ? companySettings.CustomTaxAmount : 0,
+                    TfiscalName = companySettings?.CustomTaxName ?? "Timbre Fiscal",
+                    CreatedByUserId = userId,
+                    CreatedAt = DateTime.UtcNow,
+                    Status = "Pending"
+                };
+
+                // Map Items
+                foreach (var itemDto in dto.Items)
+                {
+                    invoice.InvoiceItems.Add(new InvoiceItem
+                    {
+                        Description = itemDto.Description,
+                        Quantity = itemDto.Quantity,
+                        Price = itemDto.Price,
+                        Tva = itemDto.Tva,
+                        VatRate = itemDto.Tva && itemDto.VatRate.HasValue ? itemDto.VatRate.Value / 100m : null
+                    });
                 }
+
+                invoice.CalculTotalAmount();
+
+                _context.Invoices.Add(invoice);
+                try
+                {
+                    var strategy = _context.Database.CreateExecutionStrategy();
+                    await strategy.ExecuteAsync(async () =>
+                    {
+                        await using var transaction = await _context.Database.BeginTransactionAsync();
+
+                        await _context.SaveChangesAsync();
+                        _logger.LogInformation("Invoice {Number} created (ID={Id}, CompanyId={CompanyId})",
+                            invoice.Number, invoice.Id, invoice.CompanyId);
+
+                        // Link Delivery Notes if provided
+                        if (dto.DeliveryNoteIds != null && dto.DeliveryNoteIds.Any())
+                        {
+                            var deliveryNotes = await _context.DeliveryNotes
+                                .Where(dn => dto.DeliveryNoteIds.Contains(dn.Id))
+                                .ToListAsync();
+
+                            foreach (var dn in deliveryNotes)
+                            {
+                                dn.InvoiceId = invoice.Id;
+                            }
+                            await _context.SaveChangesAsync();
+                        }
+
+                        // Update Devis status to Completed when invoice is created
+                        if (dto.DevisId.HasValue && dto.DevisId.Value > 0)
+                        {
+                            var devis = await _context.Devis.FindAsync(dto.DevisId.Value);
+                            if (devis != null)
+                            {
+                                devis.Status = "Completed";
+                                devis.Treated = true;
+                                await _context.SaveChangesAsync();
+                                _logger.LogInformation("Devis {DevisId} status updated to Completed after invoice creation.", dto.DevisId.Value);
+                            }
+                        }
+
+                        await transaction.CommitAsync();
+                    });
+                    break; // Success — exit retry loop
+                }
+                catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex) && isAutoNumber && attempt < maxAttempts)
+                {
+                    _context.ChangeTracker.Clear();
+                    _logger.LogWarning(ex, "Invoice number collision for company {CompanyId}, retry {Attempt}", user.CompanyId, attempt);
+                    invoice = null;
+                    continue;
+                }
+                catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+                {
+                    _context.ChangeTracker.Clear();
+                    return Conflict(new { message = "Invoice number already exists for this company." });
+                }
+                catch (DbUpdateException ex)
+                {
+                    _context.ChangeTracker.Clear();
+                    _logger.LogError(ex, "DbUpdateException creating invoice. CompanyId={CompanyId}, ClientId={ClientId}, Number={Number}",
+                        invoice.CompanyId, invoice.ClientId, invoice.Number);
+                    return StatusCode(500, new { message = "Failed to save invoice. Check server logs for details.", detail = ex.InnerException?.Message ?? ex.Message });
+                }
+                catch (Exception ex)
+                {
+                    _context.ChangeTracker.Clear();
+                    _logger.LogError(ex, "Unexpected error creating invoice. Number={Number}", invoice.Number);
+                    return StatusCode(500, new { message = "Failed to create invoice.", detail = ex.InnerException?.Message ?? ex.Message });
+                }
+            } // end retry loop
+
+            if (invoice == null || invoice.Id == 0)
+            {
+                return Conflict(new { message = "Failed to generate a unique invoice number. Please retry." });
             }
 
             // Return safe projection without sensitive user data
@@ -675,9 +711,11 @@ namespace ResourceManager.Controllers
 
             if (invoice == null) return NotFound();
 
-            // ALL payments default to Pending — must be manually approved
+            // Immediate payments (PaymentDate <= now or null, Status = "Completed") are auto-confirmed.
+            // Scheduled future payments default to "Pending" — must be manually approved.
             var paymentDate = dto.PaymentDate?.ToUniversalTime() ?? DateTime.UtcNow;
-            var paymentStatus = "Pending";
+            var isImmediate = paymentDate <= DateTime.UtcNow.AddMinutes(1) && dto.Status == "Completed";
+            var paymentStatus = isImmediate ? "Completed" : "Pending";
 
             // Calculate totals BEFORE adding the new payment to avoid double-counting
             // (EF Core adds the payment to navigation collection when we Add to context)
@@ -705,9 +743,9 @@ namespace ResourceManager.Controllers
                 CreatedByUserId = _userManager.GetUserId(User),
                 CreatedAt = DateTime.UtcNow,
                 Status = paymentStatus,
-                // ConfirmedBy is set only when payment is manually approved
-                ConfirmedByUserId = null,
-                ConfirmedAt = null
+                // Auto-confirm immediate payments
+                ConfirmedByUserId = isImmediate ? _userManager.GetUserId(User) : null,
+                ConfirmedAt = isImmediate ? DateTime.UtcNow : null
             };
 
             _context.Payments.Add(payment);
@@ -749,7 +787,7 @@ namespace ResourceManager.Controllers
             return Ok(new { 
                 message = paymentStatus == "Pending" 
                     ? "Scheduled payment added successfully." 
-                    : "Payment added successfully.",
+                    : "Payment recorded successfully.",
                 amountPaid = totalPaidCompleted,
                 pendingAmount = totalPending,
                 remainingAmount = Math.Max(0, totalAmount - (totalPaidCompleted + totalPending)),
@@ -1253,6 +1291,7 @@ namespace ResourceManager.Controllers
             var prefix = $"{InvoiceNumberPrefix}{yearSuffix}-";
 
             var existingYearNumbers = await _context.Invoices
+                .IgnoreQueryFilters()
                 .AsNoTracking()
                 .Where(i => i.CompanyId == companyId && i.Date.Year == year && i.Number.StartsWith(prefix))
                 .Select(i => i.Number)

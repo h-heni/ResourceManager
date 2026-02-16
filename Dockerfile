@@ -40,7 +40,11 @@ RUN apk add --no-cache ca-certificates && \
     freetype \
     libstdc++ \
     tesseract-ocr \
-    curl
+    curl \
+    python3
+
+# Copy invoice XML generator (Python package — stdlib only, no pip needed)
+COPY invoice_xml_generator /app/invoice_xml_generator
 
 # Create non-root user for security
 RUN adduser -D -u 1001 appuser

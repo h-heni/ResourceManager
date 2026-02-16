@@ -3,7 +3,9 @@ import api from '../services/api';
 import { getErrorMessage, getErrorStatus, getAxiosResponseData } from '../utils/errorUtils';
 import { useAuth } from '../context/AuthContext';
 import { Plus, Users, AlertCircle, Trash2, KeyRound, X, Building2, Settings, Mail, CheckCircle, UserPlus } from 'lucide-react';
+import { logger } from '../lib/logger';
 import { useTranslation } from 'react-i18next';
+import { useNotify } from '../hooks/useNotify';
 
 interface UserDto {
     id: string;
@@ -18,6 +20,7 @@ interface UserDto {
 export default function UsersPage() {
     const { t } = useTranslation();
     const { user } = useAuth();
+    const { notify, NotifyBanner } = useNotify();
     const [users, setUsers] = useState<UserDto[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -77,7 +80,7 @@ export default function UsersPage() {
             const data = res.data;
             setUsers(Array.isArray(data) ? data : (data.data || []));
         } catch (err: unknown) {
-            console.error("Failed to fetch users", err);
+            logger.error("Failed to fetch users", err);
             const status = getErrorStatus(err);
             if (status === 403) {
                 setError(t('users.messages.forbidden'));
@@ -99,14 +102,14 @@ export default function UsersPage() {
             setShowEmployeeModal(false);
             setNewEmployee({ email: '', password: '', firstName: '', lastName: '' });
             fetchUsers();
-            alert(t('users.messages.employeeCreated'));
+            notify('success', t('users.messages.employeeCreated'));
         } catch (err: unknown) {
-            console.error("Failed to create employee", err);
+            logger.error("Failed to create employee", err);
             const responseData = getAxiosResponseData(err);
             const errorMsg = responseData?.errors
                 ? Object.values(responseData.errors as Record<string, string[]>).flat().join(', ')
                 : getErrorMessage(err, t('users.messages.employeeCreateFailed'));
-            alert(errorMsg);
+            notify('error', errorMsg);
         } finally {
             setActionLoading(false);
         }
@@ -120,9 +123,9 @@ export default function UsersPage() {
             await api.post('/superadmin/invite-manager', { email: newTenant.email });
             setInvitationSent(true);
         } catch (err: unknown) {
-            console.error("Failed to send invitation", err);
+            logger.error("Failed to send invitation", err);
             const errorMsg = getErrorMessage(err, t('users.messages.tenantCreateFailed'));
-            alert(errorMsg);
+            notify('error', errorMsg);
         } finally {
             setActionLoading(false);
         }
@@ -137,12 +140,12 @@ export default function UsersPage() {
             setDirectTenantCreated(true);
             fetchUsers();
         } catch (err: unknown) {
-            console.error("Failed to create tenant directly", err);
+            logger.error("Failed to create tenant directly", err);
             const responseData = getAxiosResponseData(err);
             const errorMsg = responseData?.errors
                 ? Object.values(responseData.errors as Record<string, string[]>).flat().join(', ')
                 : getErrorMessage(err, t('users.messages.tenantCreateFailed'));
-            alert(errorMsg);
+            notify('error', errorMsg);
         } finally {
             setActionLoading(false);
         }
@@ -150,7 +153,7 @@ export default function UsersPage() {
 
     const handleDeleteUser = async (targetUser: UserDto) => {
         if (targetUser.email === user?.email) {
-            alert(t('users.messages.cannotDeleteSelf'));
+            notify('warning', t('users.messages.cannotDeleteSelf'));
             return;
         }
 
@@ -164,11 +167,11 @@ export default function UsersPage() {
         try {
             await api.delete(`/Users/${targetUser.id}`);
             fetchUsers();
-            alert(t('users.messages.deleted'));
+            notify('success', t('users.messages.deleted'));
         } catch (err: unknown) {
-            console.error("Failed to delete user", err);
+            logger.error("Failed to delete user", err);
             const errorMsg = getErrorMessage(err, t('users.messages.deleteFailed'));
-            alert(errorMsg);
+            notify('error', errorMsg);
         } finally {
             setActionLoading(false);
         }
@@ -179,7 +182,7 @@ export default function UsersPage() {
         if (!selectedUser) return;
 
         if (newPassword.length < 6) {
-            alert(t('users.messages.passwordMin'));
+            notify('warning', t('users.messages.passwordMin'));
             return;
         }
 
@@ -189,11 +192,11 @@ export default function UsersPage() {
             setShowResetPasswordModal(false);
             setSelectedUser(null);
             setNewPassword('');
-            alert(t('users.messages.passwordResetSuccess'));
+            notify('success', t('users.messages.passwordResetSuccess'));
         } catch (err: unknown) {
-            console.error("Failed to reset password", err);
+            logger.error("Failed to reset password", err);
             const errorMsg = getErrorMessage(err, t('users.messages.passwordResetFailed'));
-            alert(errorMsg);
+            notify('error', errorMsg);
         } finally {
             setActionLoading(false);
         }
@@ -228,9 +231,9 @@ export default function UsersPage() {
         setActionLoading(true);
         try {
             await api.post(`/Users/${targetUser.id}/reset-settings`);
-            alert(t('users.messages.resetSettingsSuccess'));
+            notify('success', t('users.messages.resetSettingsSuccess'));
         } catch (err: unknown) {
-            alert(getErrorMessage(err, t('users.messages.resetSettingsFailed')));
+            notify('error', getErrorMessage(err, t('users.messages.resetSettingsFailed')));
         } finally {
             setActionLoading(false);
         }
@@ -264,6 +267,7 @@ export default function UsersPage() {
 
     return (
         <div className="animate-fade-in">
+            <NotifyBanner />
             <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
                     <h1 className="text-3xl font-bold text-gray-900">{t('users.title')}</h1>
@@ -696,9 +700,8 @@ export default function UsersPage() {
                                                             <option value="EUR">EUR</option>
                                                             <option value="USD">USD</option>
                                                             <option value="GBP">GBP</option>
-                                                            <option value="MAD">MAD</option>
-                                                            <option value="DZD">DZD</option>
                                                             <option value="SAR">SAR</option>
+                                                            <option value="QAR">QAR</option>
                                                             <option value="AED">AED</option>
                                                         </select>
                                                     </div>

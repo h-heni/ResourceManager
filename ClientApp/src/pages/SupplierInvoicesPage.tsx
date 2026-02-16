@@ -10,6 +10,8 @@ import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { formatCurrency } from '../lib/formatNumber';
 import { DEFAULT_CURRENCY, CURRENCY_OPTIONS, getCurrencySymbol } from '../lib/currencyUtils';
+import { logger } from '../lib/logger';
+import { useNotify } from '../hooks/useNotify';
 import { getErrorMessage } from '../utils/errorUtils';
 
 // ═══════════════════════════════════════════════════════════════
@@ -99,6 +101,7 @@ const AUTOSAVE_KEY = 'supplier-invoice-draft';
 export default function SupplierInvoicesPage() {
     const navigate = useNavigate();
     const { t } = useTranslation();
+    const { notify, NotifyBanner } = useNotify();
     const { user } = useAuth();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const isManager = user?.roles?.includes('Manager') || user?.roles?.includes('SuperAdmin') || user?.roles?.includes('FreeUser');
@@ -253,7 +256,7 @@ export default function SupplierInvoicesPage() {
             const data = res.data.data || [];
             setInvoices(data);
         } catch (error) {
-            console.error('Error fetching supplier invoices:', error);
+            logger.error('Error fetching supplier invoices:', error);
         } finally {
             setLoading(false);
         }
@@ -395,7 +398,7 @@ export default function SupplierInvoicesPage() {
                 message: data.message,
             });
         } catch (error: unknown) {
-            console.error('Upload error:', error);
+            logger.error('Upload error:', error);
             setStatus({
                 type: 'error',
                 message: getErrorMessage(error, t('supplierInvoice.uploadFailed', 'Failed to upload and extract PDF')),
@@ -520,7 +523,7 @@ export default function SupplierInvoicesPage() {
                 resetReviewState();
             }, 1500);
         } catch (error: unknown) {
-            console.error('Confirm error:', error);
+            logger.error('Confirm error:', error);
             setStatus({
                 type: 'error',
                 message: getErrorMessage(error, t('supplierInvoice.saveFailed', 'Failed to save supplier invoice')),
@@ -550,7 +553,7 @@ export default function SupplierInvoicesPage() {
             await api.delete(`/SupplierInvoices/${id}`);
             fetchInvoices();
         } catch (error) {
-            console.error('Delete error:', error);
+            logger.error('Delete error:', error);
         }
     };
 
@@ -602,7 +605,7 @@ export default function SupplierInvoicesPage() {
         }
 
         if (isScheduledPayment && !scheduledDate) {
-            alert(t('payment.selectScheduledDate'));
+            notify('warning', t('payment.selectScheduledDate'));
             return;
         }
 
@@ -738,7 +741,7 @@ export default function SupplierInvoicesPage() {
             }
             setView('review');
         } catch (error) {
-            console.error('Error loading invoice:', error);
+            logger.error('Error loading invoice:', error);
             setStatus({ type: 'error', message: t('supplierInvoice.loadFailed', 'Failed to load invoice details') });
         }
     };
@@ -764,7 +767,7 @@ export default function SupplierInvoicesPage() {
             })));
             setShowDetailModal(true);
         } catch (error) {
-            console.error('Error loading invoice:', error);
+            logger.error('Error loading invoice:', error);
             setStatus({ type: 'error', message: t('supplierInvoice.loadFailed', 'Failed to load invoice details') });
         }
     };
@@ -776,6 +779,7 @@ export default function SupplierInvoicesPage() {
     if (view === 'list') {
         return (
             <div className="space-y-6">
+                <NotifyBanner />
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
                         <h1 className="text-3xl font-bold text-gray-900">{t('supplierInvoice.title', 'Supplier Invoices')}</h1>
@@ -824,7 +828,7 @@ export default function SupplierInvoicesPage() {
                     </div>
                 )}
 
-                {/* Active / Paid Tabs */}
+                {/* Active / Archived Tabs */}
                 <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
                     <button
                         onClick={() => setActiveTab('active')}
@@ -843,7 +847,7 @@ export default function SupplierInvoicesPage() {
                             activeTab === 'paid' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
                         }`}
                     >
-                        {t('supplierInvoice.paidInvoices', 'Paid')}
+                        {t('quote.archived', 'Archived')}
                         <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-emerald-100 text-emerald-700">
                             {invoices.filter(i => i.paymentStatus === 'Paid').length}
                         </span>

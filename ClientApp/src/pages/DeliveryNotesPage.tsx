@@ -4,6 +4,8 @@ import { Plus, Search, Trash2, Download, Eye, FileText, Package, Calendar, Filte
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { getErrorMessage } from '../utils/errorUtils';
+import { logger } from '../lib/logger';
+import { useNotify } from '../hooks/useNotify';
 import { useAuth } from '../context/AuthContext';
 
 interface DeliveryNoteItem {
@@ -28,6 +30,7 @@ interface DeliveryNote {
 
 export default function DeliveryNotesPage() {
     const { t } = useTranslation();
+    const { notify, NotifyBanner } = useNotify();
     const [notes, setNotes] = useState<DeliveryNote[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -54,7 +57,7 @@ export default function DeliveryNotesPage() {
             const data = Array.isArray(res.data) ? res.data : (res.data.data || []);
             setNotes(data);
         } catch (error) {
-            console.error("Error fetching delivery notes", error);
+            logger.error("Error fetching delivery notes", error);
         } finally {
             setLoading(false);
         }
@@ -62,7 +65,7 @@ export default function DeliveryNotesPage() {
 
     const handleDelete = async (id: number) => {
         if (!isManager) {
-            alert(t('common.managerOnly'));
+            notify('warning', t('common.managerOnly'));
             return;
         }
         if (!confirm(t('deliveryNote.confirmDelete'))) return;
@@ -70,8 +73,8 @@ export default function DeliveryNotesPage() {
             await api.delete(`/DeliveryNotes/${id}`);
             fetchNotes();
         } catch (error: unknown) {
-            console.error("Error deleting delivery note", error);
-            alert(getErrorMessage(error, t('deliveryNote.deleteFailed')));
+            logger.error("Error deleting delivery note", error);
+            notify('error', getErrorMessage(error, t('deliveryNote.deleteFailed')));
         }
     };
 
@@ -86,8 +89,8 @@ export default function DeliveryNotesPage() {
             link.click();
             link.remove();
         } catch (error) {
-            console.error("Error downloading PDF", error);
-            alert(t('common.downloadFailed'));
+            logger.error("Error downloading PDF", error);
+            notify('error', t('common.downloadFailed'));
         }
     };
 
@@ -97,8 +100,8 @@ export default function DeliveryNotesPage() {
             const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
             window.open(url, '_blank');
         } catch (error) {
-            console.error("Error viewing PDF", error);
-            alert(t('common.viewFailed'));
+            logger.error("Error viewing PDF", error);
+            notify('error', t('common.viewFailed'));
         }
     };
 
@@ -123,6 +126,7 @@ export default function DeliveryNotesPage() {
 
     return (
         <div className="space-y-6">
+            <NotifyBanner />
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-gray-900">📦 {t('nav.deliveryNotes')}</h1>

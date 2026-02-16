@@ -4,6 +4,8 @@ import api from '../services/api';
 import { getErrorMessage } from '../utils/errorUtils';
 import Modal from '../components/Modal';
 import Pagination from '../components/Pagination';
+import { logger } from '../lib/logger';
+import { useNotify } from '../hooks/useNotify';
 import { useTranslation } from 'react-i18next';
 
 interface Client {
@@ -17,6 +19,7 @@ interface Client {
 
 export default function ClientsPage() {
     const { t } = useTranslation();
+    const { notify, NotifyBanner } = useNotify();
     const [clients, setClients] = useState<Client[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -52,7 +55,7 @@ export default function ClientsPage() {
             setTotalCount(data.totalCount || 0);
             setTotalPages(data.totalPages || 0);
         } catch (error) {
-            console.error("Error fetching clients", error);
+            logger.error("Error fetching clients", error);
         } finally {
             setLoading(false);
         }
@@ -88,9 +91,9 @@ export default function ClientsPage() {
             setIsModalOpen(false);
             fetchClients();
         } catch (error: unknown) {
-            console.error("Error saving client", error);
+            logger.error("Error saving client", error);
             const msg = getErrorMessage(error, t('client.messages.saveFailed'));
-            alert(msg);
+            notify('error', msg);
         } finally {
             setSaving(false);
         }
@@ -102,7 +105,7 @@ export default function ClientsPage() {
             await api.delete(`/Clients/${id}`);
             fetchClients();
         } catch (error) {
-            console.error("Error deleting client", error);
+            logger.error("Error deleting client", error);
         }
     };
 
@@ -113,6 +116,7 @@ export default function ClientsPage() {
 
     return (
         <div className="space-y-6">
+            <NotifyBanner />
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-gray-900">{t('client.title')}</h1>

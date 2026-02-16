@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 import { formatCurrency as fmtCurrency } from '../lib/formatNumber';
+import { logger } from '../lib/logger';
+import { useNotify } from '../hooks/useNotify';
 import { DEFAULT_CURRENCY } from '../lib/currencyUtils';
 
 interface Payment {
@@ -103,6 +105,7 @@ export default function InvoiceDetailView({
     isManager = false
 }: Props) {
     const { t } = useTranslation();
+    const { notify, NotifyBanner } = useNotify();
     const [invoice, setInvoice] = useState<InvoiceDetails | null>(null);
     const [loading, setLoading] = useState(true);
     const [downloadingRemainingPdf, setDownloadingRemainingPdf] = useState(false);
@@ -116,7 +119,7 @@ export default function InvoiceDetailView({
                 const res = await api.get(`/Invoices/${invoiceId}/details`);
                 setInvoice(res.data);
             } catch (err: unknown) {
-                console.error('Error fetching invoice details:', err);
+                logger.error('Error fetching invoice details:', err);
                 // Fallback to basic invoice data
                 try {
                     const basicRes = await api.get(`/Invoices/${invoiceId}`);
@@ -190,8 +193,8 @@ export default function InvoiceDetailView({
                 };
             });
         } catch (err) {
-            console.error('Error deleting payment:', err);
-            alert(t('payment.deleteFailed', 'Failed to delete payment'));
+            logger.error('Error deleting payment:', err);
+            notify('error', t('payment.deleteFailed', 'Failed to delete payment'));
         }
     };
     // 1. Force conversion and provide fallbacks
@@ -318,7 +321,7 @@ export default function InvoiceDetailView({
                                     link.remove();
                                     window.URL.revokeObjectURL(url);
                                 } catch (err) {
-                                    console.error('Error downloading remaining payment PDF', err);
+                                    logger.error('Error downloading remaining payment PDF', err);
                                 } finally {
                                     setDownloadingRemainingPdf(false);
                                 }
@@ -370,6 +373,7 @@ export default function InvoiceDetailView({
 
                 {/* Tab Content */}
                 <div className="flex-1 overflow-y-auto p-6">
+                    <NotifyBanner />
                     {activeTab === 'details' && (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             {/* Invoice Info */}

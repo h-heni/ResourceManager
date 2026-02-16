@@ -1,4 +1,5 @@
 import { Component } from 'react';
+import { logger } from '../lib/logger';
 import type { ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 
@@ -33,8 +34,8 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
 
     componentDidCatch(error: Error, errorInfo: ErrorInfo) {
         const scope = this.props.scope ?? 'Unknown';
-        console.error(`[ErrorBoundary:${scope}] Caught render error:`, error);
-        console.error(`[ErrorBoundary:${scope}] Component stack:`, errorInfo.componentStack);
+        logger.error(`[ErrorBoundary:${scope}] Caught render error:`, error);
+        logger.error(`[ErrorBoundary:${scope}] Component stack:`, errorInfo.componentStack);
     }
 
     handleRetry = () => {

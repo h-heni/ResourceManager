@@ -7,6 +7,7 @@ import fr from './locales/fr.json';
 import de from './locales/de.json';
 import ar from './locales/ar.json';
 import { validateTranslationResources } from './translationValidator';
+import { logger } from '../lib/logger';
 
 const resources = {
   en: { translation: en },
@@ -23,15 +24,15 @@ if (import.meta.env.DEV) {
   const validation = validateTranslationResources(translationMap, 'en');
 
   if (!validation.isValid) {
-    console.warn('[i18n] Translation key mismatch detected compared to en locale.');
+    logger.warn('[i18n] Translation key mismatch detected compared to en locale.');
     for (const [language, keys] of Object.entries(validation.missingByLanguage)) {
       if (keys.length > 0) {
-        console.warn(`[i18n] Missing keys in ${language}:`, keys);
+        logger.warn(`[i18n] Missing keys in ${language}:`, keys);
       }
     }
     for (const [language, keys] of Object.entries(validation.extraByLanguage)) {
       if (keys.length > 0) {
-        console.warn(`[i18n] Extra keys in ${language}:`, keys);
+        logger.warn(`[i18n] Extra keys in ${language}:`, keys);
       }
     }
   }

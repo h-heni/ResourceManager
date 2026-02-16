@@ -182,51 +182,88 @@ namespace ResourceManager.Controllers
                 .FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
 
             var devisDate = dto.Date.ToUniversalTime();
-            var maxAttempts = 5;
+            var userProvidedNumber = dto.Number?.Trim() ?? string.Empty;
+            var isAutoNumber = string.IsNullOrWhiteSpace(userProvidedNumber);
+            var maxAttempts = isAutoNumber ? 5 : 1;
             Devis? devis = null;
+            string? createFailureReason = null;
 
             for (var attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                var generatedNumber = await GenerateNextDevisNumberAsync(user.CompanyId, devisDate.Year);
-                devis = new Devis
-                {
-                    Number = generatedNumber,
-                    Date = devisDate,
-                    ClientId = dto.ClientId,
-                    CreatedByUserId = userId,
-                    CreatedAt = DateTime.UtcNow,
-                    Status = "Draft",
-                    Currency = dto.Currency ?? companySettings?.Currency,
-                    CurrencySymbol = dto.CurrencySymbol ?? companySettings?.CurrencySymbol,
-                    PdfLanguage = dto.PdfLanguage ?? companySettings?.InvoiceLanguage,
-                    Tfiscal = companySettings?.CustomTaxEnabled == true ? companySettings.CustomTaxAmount : 0,
-                    TfiscalName = companySettings?.CustomTaxName ?? "Timbre Fiscal"
-                };
-
-                foreach (var itemDto in dto.Items)
-                {
-                    devis.DevisItems.Add(new DevisItem
-                    {
-                        Description = itemDto.Description,
-                        Quantity = itemDto.Quantity,
-                        Price = itemDto.Price,
-                        Tva = itemDto.Tva,
-                        VatRate = itemDto.VatRate
-                    });
-                }
-
-                devis.CalculTotalAmount();
-                _context.Devis.Add(devis);
-
                 try
                 {
+                    var finalNumber = isAutoNumber
+                        ? await GenerateNextDevisNumberAsync(user.CompanyId, devisDate.Year)
+                        : userProvidedNumber;
+
+                    if (!isAutoNumber)
+                    {
+                        var duplicateExists = await _context.Devis
+                            .IgnoreQueryFilters()
+                            .AnyAsync(d => d.CompanyId == user.CompanyId && d.Number == finalNumber);
+                        if (duplicateExists)
+                        {
+                            return Conflict(new { message = "Quote number already exists for this company." });
+                        }
+                    }
+
+                    devis = new Devis
+                    {
+                        Number = finalNumber,
+                        Date = devisDate,
+                        ClientId = dto.ClientId,
+                        CreatedByUserId = userId,
+                        CreatedAt = DateTime.UtcNow,
+                        Status = "Draft",
+                        Currency = dto.Currency ?? companySettings?.Currency,
+                        CurrencySymbol = dto.CurrencySymbol ?? companySettings?.CurrencySymbol,
+                        PdfLanguage = dto.PdfLanguage ?? companySettings?.InvoiceLanguage,
+                        Tfiscal = companySettings?.CustomTaxEnabled == true ? companySettings.CustomTaxAmount : 0,
+                        TfiscalName = companySettings?.CustomTaxName ?? "Timbre Fiscal"
+                    };
+
+                    foreach (var itemDto in dto.Items)
+                    {
+                        var product = await FindOrCreateProductFromItemAsync(itemDto, user.CompanyId, userId);
+                        if (product == null)
+                        {
+                            createFailureReason = $"Failed to create product from quote item '{itemDto.Description}'.";
+                            throw new InvalidOperationException(createFailureReason);
+                        }
+
+                        devis.DevisItems.Add(new DevisItem
+                        {
+                            Description = itemDto.Description,
+                            Quantity = itemDto.Quantity,
+                            Price = itemDto.Price,
+                            Tva = itemDto.Tva,
+                            VatRate = itemDto.VatRate
+                        });
+                    }
+
+                    devis.CalculTotalAmount();
+                    _context.Devis.Add(devis);
+
                     await _context.SaveChangesAsync();
                     break;
                 }
-                catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex) && attempt < maxAttempts)
+                catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex) && isAutoNumber && attempt < maxAttempts)
                 {
                     _logger.LogWarning(ex, "Quote number collision for company {CompanyId}, retry {Attempt}", user.CompanyId, attempt);
                     _context.ChangeTracker.Clear();
+                    devis = null;
+                }
+                catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+                {
+                    _context.ChangeTracker.Clear();
+                    _logger.LogWarning(ex, "Quote number collision for company {CompanyId} after max retries", user.CompanyId);
+                    return Conflict(new { message = "Failed to generate a unique quote number. Please retry." });
+                }
+                catch (Exception ex) when (ex is InvalidOperationException || ex is DbUpdateException)
+                {
+                    _context.ChangeTracker.Clear();
+                    _logger.LogError(ex, "Quote creation failed for company {CompanyId}", user.CompanyId);
+                    return BadRequest(new { message = createFailureReason ?? "Failed to create quote and related products.", detail = ex.InnerException?.Message ?? ex.Message });
                 }
             }
 
@@ -461,12 +498,77 @@ namespace ResourceManager.Controllers
             return File(pdfData, "application/pdf", $"Devis_{devis.Number}.pdf");
         }
 
+        private async Task<ProductService?> FindOrCreateProductFromItemAsync(CreateDevisItemDto itemDto, int companyId, string? userId)
+        {
+            var rawDescription = itemDto.Description?.Trim();
+            if (string.IsNullOrWhiteSpace(rawDescription))
+                return null;
+
+            var productName = ExtractProductName(rawDescription);
+            if (string.IsNullOrWhiteSpace(productName))
+                return null;
+
+            // 1. Check the local change tracker first (handles multiple items with same product in one request)
+            var localMatch = _context.ChangeTracker.Entries<ProductService>()
+                .Where(e => e.State == EntityState.Added)
+                .Select(e => e.Entity)
+                .FirstOrDefault(p => p.CompanyId == companyId
+                    && string.Equals(p.Name, productName, StringComparison.OrdinalIgnoreCase));
+
+            if (localMatch != null)
+                return localMatch;
+
+            // 2. Query the database (case-insensitive)
+            var existing = await _context.ProductServices
+                .FirstOrDefaultAsync(p => p.CompanyId == companyId && p.Name.ToLower() == productName.ToLower());
+
+            if (existing != null)
+                return existing;
+
+            var product = new ProductService
+            {
+                Name = productName,
+                Description = ExtractProductDescription(rawDescription),
+                DefaultUnitPrice = itemDto.Price,
+                TvaRate = itemDto.VatRate ?? 0m,
+                Type = "product",
+                Category = null,
+                VatApplicable = itemDto.Tva,
+                CompanyId = companyId,
+                CreatedByUserId = userId,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.ProductServices.Add(product);
+            return product;
+        }
+
+        private static string ExtractProductName(string fullDescription)
+        {
+            var separatorIndex = fullDescription.IndexOf(" - ", StringComparison.Ordinal);
+            if (separatorIndex <= 0)
+                return fullDescription.Trim();
+
+            return fullDescription[..separatorIndex].Trim();
+        }
+
+        private static string? ExtractProductDescription(string fullDescription)
+        {
+            var separatorIndex = fullDescription.IndexOf(" - ", StringComparison.Ordinal);
+            if (separatorIndex < 0 || separatorIndex + 3 >= fullDescription.Length)
+                return null;
+
+            var details = fullDescription[(separatorIndex + 3)..].Trim();
+            return string.IsNullOrWhiteSpace(details) ? null : details;
+        }
+
         private async Task<string> GenerateNextDevisNumberAsync(int companyId, int year)
         {
             var yearSuffix = (year % 100).ToString("D2");
             var prefix = $"{DevisNumberPrefix}{yearSuffix}-";
 
             var existingYearNumbers = await _context.Devis
+                .IgnoreQueryFilters()
                 .AsNoTracking()
                 .Where(d => d.CompanyId == companyId && d.Date.Year == year && d.Number.StartsWith(prefix))
                 .Select(d => d.Number)
@@ -491,6 +593,7 @@ namespace ResourceManager.Controllers
             var prefix = $"{InvoiceNumberPrefix}{yearSuffix}-";
 
             var existingYearNumbers = await _context.Invoices
+                .IgnoreQueryFilters()
                 .AsNoTracking()
                 .Where(i => i.CompanyId == companyId && i.Date.Year == year && i.Number.StartsWith(prefix))
                 .Select(i => i.Number)

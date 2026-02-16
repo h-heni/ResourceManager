@@ -4,6 +4,8 @@ using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Xml.Linq;
 using QRCoder;
 namespace ResourceManager.Services
@@ -110,6 +112,142 @@ namespace ResourceManager.Services
                 ShowBankRIB = settings?.ShowBankRIB ?? true,
                 ShowBankIBAN = settings?.ShowBankIBAN ?? true
             };
+        }
+    }
+
+    internal static class FiscalComplianceHelper
+    {
+        public static string NormalizeCurrency(string? currencyCode)
+            => string.IsNullOrWhiteSpace(currencyCode) ? string.Empty : currencyCode.Trim().ToUpperInvariant();
+
+        public static string BuildZatcaQrBase64(string sellerName, string vatNumber, DateTime timestampUtc, decimal invoiceTotal, decimal vatTotal)
+        {
+            var payload = new List<byte>();
+            payload.AddRange(EncodeTlvField(1, sellerName));
+            payload.AddRange(EncodeTlvField(2, vatNumber));
+            payload.AddRange(EncodeTlvField(3, timestampUtc.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture)));
+            payload.AddRange(EncodeTlvField(4, invoiceTotal.ToString("F2", CultureInfo.InvariantCulture)));
+            payload.AddRange(EncodeTlvField(5, vatTotal.ToString("F2", CultureInfo.InvariantCulture)));
+            return Convert.ToBase64String(payload.ToArray());
+        }
+
+        public static string ComputeSha256Base64(string value)
+        {
+            using var sha = SHA256.Create();
+            var bytes = Encoding.UTF8.GetBytes(value);
+            var hash = sha.ComputeHash(bytes);
+            return Convert.ToBase64String(hash);
+        }
+
+        public static string BuildUbl21Xml(Invoice invoice, PdfSettings settings)
+        {
+            XNamespace inv = "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2";
+            XNamespace cac = "urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2";
+            XNamespace cbc = "urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2";
+            XNamespace ext = "urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2";
+
+            var unsignedBody = new XElement(inv + "Invoice",
+                new XAttribute(XNamespace.Xmlns + "cac", cac),
+                new XAttribute(XNamespace.Xmlns + "cbc", cbc),
+                new XElement(cbc + "ID", invoice.Number ?? string.Empty),
+                new XElement(cbc + "IssueDate", invoice.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)),
+                new XElement(cbc + "DocumentCurrencyCode", NormalizeCurrency(settings.CurrencySymbol) == "SAR" ? "SAR" : (string.IsNullOrWhiteSpace(settings.CurrencySymbol) ? "SAR" : settings.CurrencySymbol.Trim().ToUpperInvariant())),
+                new XElement(cac + "AccountingSupplierParty",
+                    new XElement(cac + "Party",
+                        new XElement(cac + "PartyName", new XElement(cbc + "Name", settings.CompanyName ?? string.Empty)),
+                        new XElement(cac + "PartyTaxScheme",
+                            new XElement(cbc + "CompanyID", settings.CompanyTaxId ?? string.Empty)
+                        )
+                    )
+                ),
+                new XElement(cac + "LegalMonetaryTotal",
+                    new XElement(cbc + "TaxExclusiveAmount", (invoice.SubTotal ?? 0).ToString("F2", CultureInfo.InvariantCulture)),
+                    new XElement(cbc + "TaxInclusiveAmount", (invoice.TotalAmount ?? 0).ToString("F2", CultureInfo.InvariantCulture)),
+                    new XElement(cbc + "PayableAmount", (invoice.TotalAmount ?? 0).ToString("F2", CultureInfo.InvariantCulture))
+                )
+            );
+
+            var hash = ComputeSha256Base64(unsignedBody.ToString(SaveOptions.DisableFormatting));
+            var full = new XElement(inv + "Invoice",
+                new XAttribute(XNamespace.Xmlns + "cac", cac),
+                new XAttribute(XNamespace.Xmlns + "cbc", cbc),
+                new XAttribute(XNamespace.Xmlns + "ext", ext),
+                new XElement(ext + "UBLExtensions",
+                    new XElement(ext + "UBLExtension",
+                        new XElement(ext + "ExtensionContent",
+                            new XElement("Hash", hash)
+                        )
+                    )
+                ),
+                unsignedBody.Elements()
+            );
+
+            return full.ToString(SaveOptions.DisableFormatting);
+        }
+
+        public static string BuildTeifXml(Invoice invoice, PdfSettings settings, string uniqueReferenceId)
+        {
+            var issuedAt = invoice.Date.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
+            var unsigned = $"TEIF|1.8.7|{uniqueReferenceId}|{invoice.Number}|{issuedAt}|{(invoice.TotalAmount ?? 0).ToString("F3", CultureInfo.InvariantCulture)}|{(invoice.TaxAmount ?? 0).ToString("F3", CultureInfo.InvariantCulture)}";
+            var digest = ComputeSha256Base64(unsigned);
+
+            var teif = new XElement("TEIFInvoice",
+                new XAttribute("schemaVersion", "1.8.7"),
+                new XElement("Header",
+                    new XElement("UniqueReferenceId", uniqueReferenceId),
+                    new XElement("InvoiceNumber", invoice.Number ?? string.Empty),
+                    new XElement("IssueDate", issuedAt),
+                    new XElement("Currency", NormalizeCurrency(settings.CurrencySymbol) == "TND" ? "TND" : (string.IsNullOrWhiteSpace(settings.CurrencySymbol) ? "TND" : settings.CurrencySymbol.Trim().ToUpperInvariant()))
+                ),
+                new XElement("Totals",
+                    new XElement("SubTotal", (invoice.SubTotal ?? 0).ToString("F3", CultureInfo.InvariantCulture)),
+                    new XElement("VatTotal", (invoice.TaxAmount ?? 0).ToString("F3", CultureInfo.InvariantCulture)),
+                    new XElement("InvoiceTotal", (invoice.TotalAmount ?? 0).ToString("F3", CultureInfo.InvariantCulture))
+                ),
+                new XElement("DigitalSignature",
+                    new XElement("DigestMethod", "SHA-256"),
+                    new XElement("DigestValue", digest),
+                    new XElement("Signer", settings.CompanyName ?? string.Empty)
+                )
+            );
+
+            return teif.ToString(SaveOptions.DisableFormatting);
+        }
+
+        /// <summary>
+        /// Build TND QR payload as a short pipe-delimited electronic seal string.
+        /// Format: MatriculeFiscal|InvoiceNumber|Date|TotalTTC(3dec)|SHA256Digest
+        /// This is scannable and human-readable — NOT the full TEIF XML.
+        /// </summary>
+        public static string BuildTndQrPayload(Invoice invoice, PdfSettings settings, string uniqueReferenceId)
+        {
+            var matricule = !string.IsNullOrWhiteSpace(settings.CompanyTaxId)
+                ? settings.CompanyTaxId.Trim()
+                : "0000000";
+            var invoiceNumber = invoice.Number ?? string.Empty;
+            var dateStr = invoice.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            var totalTtc = (invoice.TotalAmount ?? 0).ToString("F3", CultureInfo.InvariantCulture);
+
+            // Payload to sign: first 4 fields
+            var sealBody = $"{matricule}|{invoiceNumber}|{dateStr}|{totalTtc}";
+
+            // SHA-256 digest of the payload
+            var digest = ComputeSha256Base64(sealBody);
+
+            // Final QR string: 5 pipe-delimited fields
+            return $"{sealBody}|{digest}";
+        }
+
+        private static byte[] EncodeTlvField(byte tag, string value)
+        {
+            var text = value ?? string.Empty;
+            var valueBytes = Encoding.UTF8.GetBytes(text);
+            var encodedLength = Math.Min(valueBytes.Length, byte.MaxValue);
+            var tlv = new byte[encodedLength + 2];
+            tlv[0] = tag;
+            tlv[1] = (byte)encodedLength;
+            Array.Copy(valueBytes, 0, tlv, 2, encodedLength);
+            return tlv;
         }
     }
 
@@ -437,12 +575,10 @@ namespace ResourceManager.Services
                     column.Item().PaddingTop(15).Element(compose => ComposeBankInfo(compose));
                 }
 
-                if (Settings.ShowSignature || Settings.ShowStamp)
+                if (HasBottomSectionContent())
                 {
-                    column.Item().PaddingTop(16).Element(ComposeSignature);
+                    column.Item().PaddingTop(10).Element(ComposeBottomSection);
                 }
-                
-                column.Item().PaddingTop(30).Element(ComposeFooterSection);
             });
         }
 
@@ -506,6 +642,21 @@ namespace ResourceManager.Services
         string GenerateInvoiceXml()
         {
             if (Model is not Invoice invoice) return "";
+
+            var currency = FiscalComplianceHelper.NormalizeCurrency(Settings.CurrencySymbol);
+            if (currency == "SAR")
+            {
+                return FiscalComplianceHelper.BuildUbl21Xml(invoice, Settings);
+            }
+
+            if (currency == "TND")
+            {
+                var uniqueReference = invoice.VerificationToken
+                    ?? Settings.VerificationToken
+                    ?? invoice.Number
+                    ?? Guid.NewGuid().ToString("N");
+                return FiscalComplianceHelper.BuildTeifXml(invoice, Settings, uniqueReference);
+            }
             
             var xml = new XElement("Invoice",
                 new XElement("Number", invoice.Number),
@@ -559,18 +710,47 @@ namespace ResourceManager.Services
         {
             try
             {
-                if (Model is not Invoice) return Array.Empty<byte>();
+                if (Model is not Invoice invoice) return Array.Empty<byte>();
 
                 var currency = string.IsNullOrWhiteSpace(Settings.CurrencySymbol) ? "EUR" : Settings.CurrencySymbol.Trim();
-                var secureUrl = BuildSecureVerificationUrl();
-                var qrPayload =
-                    "{" +
-                    $"\"invoiceNumber\":\"{EscapeJsonValue(Model.Number ?? string.Empty)}\"," +
-                    $"\"companyName\":\"{EscapeJsonValue(Settings.CompanyName ?? string.Empty)}\"," +
-                    $"\"totalAmount\":\"{(Model.TotalAmount ?? 0).ToString("F3", CultureInfo.InvariantCulture)}\"," +
-                    $"\"currency\":\"{EscapeJsonValue(currency)}\"," +
-                    $"\"secureUrl\":\"{EscapeJsonValue(secureUrl)}\"" +
-                    "}";
+                var currencyCode = FiscalComplianceHelper.NormalizeCurrency(currency);
+
+                string qrPayload;
+                if (currencyCode == "SAR")
+                {
+                    qrPayload = FiscalComplianceHelper.BuildZatcaQrBase64(
+                        Settings.CompanyName ?? string.Empty,
+                        Settings.CompanyTaxId ?? string.Empty,
+                        DateTime.UtcNow,
+                        invoice.TotalAmount ?? 0,
+                        invoice.TaxAmount ?? 0);
+                }
+                else if (currencyCode == "TND")
+                {
+                    var uniqueReference = invoice.VerificationToken
+                        ?? Settings.VerificationToken
+                        ?? invoice.Number
+                        ?? Guid.NewGuid().ToString("N");
+                    qrPayload = FiscalComplianceHelper.BuildTndQrPayload(invoice, Settings, uniqueReference);
+                }
+                else
+                {
+                    var secureUrl = BuildSecureVerificationUrl();
+                    var complianceXml = GenerateInvoiceXml();
+                    var xmlHash = string.IsNullOrWhiteSpace(complianceXml)
+                        ? string.Empty
+                        : FiscalComplianceHelper.ComputeSha256Base64(complianceXml);
+
+                    qrPayload =
+                        "{" +
+                        $"\"invoiceNumber\":\"{EscapeJsonValue(Model.Number ?? string.Empty)}\"," +
+                        $"\"companyName\":\"{EscapeJsonValue(Settings.CompanyName ?? string.Empty)}\"," +
+                        $"\"totalAmount\":\"{(Model.TotalAmount ?? 0).ToString("F2", CultureInfo.InvariantCulture)}\"," +
+                        $"\"currency\":\"{EscapeJsonValue(currency)}\"," +
+                        $"\"xmlHash\":\"{EscapeJsonValue(xmlHash)}\"," +
+                        $"\"secureUrl\":\"{EscapeJsonValue(secureUrl)}\"" +
+                        "}";
+                }
                 
                 using var qrGenerator = new QRCodeGenerator();
                 var qrCodeData = qrGenerator.CreateQrCode(qrPayload, QRCodeGenerator.ECCLevel.M);
@@ -707,53 +887,54 @@ namespace ResourceManager.Services
 
         
 
-        private void ComposeFooterSection(IContainer container)
+        private bool HasBottomSectionContent()
         {
-            if (string.IsNullOrWhiteSpace(Settings.FooterText))
-                return;
+            var hasQr = Model is Invoice && GenerateQrCode().Length > 0;
+            var hasFooter = !string.IsNullOrWhiteSpace(Settings.FooterText);
+            return hasQr || hasFooter || HasSignatureContent();
+        }
 
-            var footerText = Settings.FooterText;
+        private bool HasSignatureContent()
+        {
+            if (!Settings.ShowSignature && !Settings.ShowStamp)
+                return false;
 
+            return !string.IsNullOrWhiteSpace(Settings.PdfSignatureText)
+                || !string.IsNullOrWhiteSpace(Settings.PdfSignerPosition)
+                || (Settings.ShowSignatureOnPdf && Settings.SignatureImageData?.Length > 0);
+        }
+
+        private void ComposeBottomSection(IContainer container)
+        {
             var qrBytes = Model is Invoice ? GenerateQrCode() : Array.Empty<byte>();
+            var hasSignatureContent = HasSignatureContent();
 
-            container.Column(col =>
+            container.Row(row =>
             {
-                col.Spacing(6);
-
-                col.Item().Row(row =>
+                row.RelativeItem().Column(leftCol =>
                 {
-                    row.RelativeItem().Column(leftCol =>
-                    {
-                        if (qrBytes.Length > 0)
-                            leftCol.Item().Width(96).Height(96).Image(qrBytes).FitArea();
-                    });
+                    leftCol.Spacing(6);
+                    if (qrBytes.Length > 0)
+                        leftCol.Item().Width(96).Height(96).Image(qrBytes).FitArea();
 
+                    if (!string.IsNullOrWhiteSpace(Settings.FooterText))
+                        leftCol.Item().Text(Settings.FooterText).FontSize(10).FontColor("#4A5568").Italic();
                 });
 
-                col.Item().Row(row =>
+                row.ConstantItem(20);
+                row.RelativeItem().AlignRight().AlignBottom().Column(rightCol =>
                 {
-                    row.RelativeItem().Text(footerText).FontSize(10).FontColor("#4A5568").Italic();
-                    row.ConstantItem(20);
-                    row.RelativeItem();
+                    if (hasSignatureContent)
+                        ComposeSignatureContent(rightCol.Item());
                 });
             });
         }
 
-        void ComposeSignature(IContainer container)
+        private void ComposeSignatureContent(IContainer container)
         {
-            if (!Settings.ShowSignature && !Settings.ShowStamp)
-                return;
-
-            var hasSignatureContent = !string.IsNullOrWhiteSpace(Settings.PdfSignatureText)
-                || !string.IsNullOrWhiteSpace(Settings.PdfSignerPosition)
-                || (Settings.ShowSignatureOnPdf && Settings.SignatureImageData?.Length > 0);
-
-            if (!hasSignatureContent)
-                return;
-
             container.Column(sigCol =>
             {
-                sigCol.Item().PaddingTop(8).AlignRight().Column(innerCol =>
+                sigCol.Item().AlignRight().Column(innerCol =>
                 {
                     if (!string.IsNullOrWhiteSpace(Settings.PdfSignatureText))
                         innerCol.Item().AlignCenter().Text(Settings.PdfSignatureText).FontSize(16).Italic().Bold().FontColor("#1A202C");
@@ -765,11 +946,6 @@ namespace ResourceManager.Services
 
                     if (Settings.ShowSignatureOnPdf && Settings.SignatureImageData?.Length > 0)
                         innerCol.Item().PaddingTop(6).AlignCenter().Width(120).Height(50).Image(Settings.SignatureImageData).FitArea();
-
-                    else
-                    {
-                        innerCol.Item().PaddingTop(16).AlignCenter().Width(160).BorderBottom(1).BorderColor("#CBD5E0").PaddingBottom(20);
-                    }
                 });
             });
         }
@@ -837,8 +1013,9 @@ namespace ResourceManager.Services
             container.Page(page =>
             {
                 page.Size(PageSizes.A4);
-                page.Margin(50);
-                page.DefaultTextStyle(x => x.FontSize(10).FontColor(TextGrey));
+                page.MarginHorizontal(36);
+                page.MarginVertical(28);
+                page.DefaultTextStyle(x => x.FontSize(9.5f).FontColor(TextGrey));
 
                 // ── Watermark ──
                 page.Background().AlignCenter().AlignMiddle()
@@ -914,7 +1091,7 @@ namespace ResourceManager.Services
 
                 if (Settings.ShowLogo && LogoBytes.Length > 0)
                 {
-                    row.ConstantItem(120).Height(120).Image(LogoBytes).FitUnproportionally();
+                    row.ConstantItem(96).Height(96).Image(LogoBytes).FitUnproportionally();
                 }
             });
         }
@@ -942,9 +1119,9 @@ namespace ResourceManager.Services
                 Phone = string.Empty
             };
 
-            container.PaddingVertical(20).Column(column =>
+            container.PaddingVertical(8).Column(column =>
             {
-                column.Spacing(5);
+                column.Spacing(3);
 
                 // ── From / Client addresses ──
                 column.Item().Row(row =>
@@ -955,23 +1132,21 @@ namespace ResourceManager.Services
                 });
 
                 // ── Payment Summary Table ──
-                column.Item().PaddingTop(30).Element(ComposePaymentSummary);
+                column.Item().PaddingTop(12).Element(ComposePaymentSummary);
 
                 // ── Professional Reminder Message ──
-                column.Item().PaddingTop(30).Element(ComposeReminderMessage);
+                column.Item().PaddingTop(10).Element(ComposeReminderMessage);
 
                 // ── Bank info (if available) ──
                 if (HasBankInfo())
                 {
-                    column.Item().PaddingTop(15).Element(ComposeBankInfo);
+                    column.Item().PaddingTop(8).Element(ComposeBankInfo);
                 }
 
-                if (Settings.ShowSignature || Settings.ShowStamp)
+                if (HasBottomSectionContent())
                 {
-                    column.Item().PaddingTop(16).Element(ComposeSignature);
+                    column.Item().PaddingTop(8).Element(ComposeBottomSection);
                 }
-
-                column.Item().PaddingTop(30).Element(ComposeFooterSection);
             });
         }
 
@@ -1011,11 +1186,11 @@ namespace ResourceManager.Services
                 // Helper for label rows
                 void AddRow(string label, string value, bool isAmount = false, bool isHighlight = false)
                 {
-                    table.Cell().Background("#F8F9FA").Border(1).BorderColor("#E2E8F0").Padding(10)
-                        .Text(label).SemiBold().FontSize(10).FontColor(HeaderDark);
+                    table.Cell().Background("#F8F9FA").Border(1).BorderColor("#E2E8F0").Padding(7)
+                        .Text(label).SemiBold().FontSize(9.5f).FontColor(HeaderDark);
 
                     var cell = table.Cell().Background(isHighlight ? BrandBlue : Colors.White)
-                        .Border(1).BorderColor("#E2E8F0").Padding(10);
+                        .Border(1).BorderColor("#E2E8F0").Padding(7);
 
                     if (isAmount)
                     {
@@ -1085,10 +1260,10 @@ namespace ResourceManager.Services
                      "If payment has already been made, please disregard this notice."
             };
 
-            container.Background("#FFFBEB").Border(1).BorderColor("#FDE68A").Padding(15).Column(col =>
+            container.Background("#FFFBEB").Border(1).BorderColor("#FDE68A").Padding(10).Column(col =>
             {
-                col.Item().Text(reminderTitle).Bold().FontSize(12).FontColor("#92400E");
-                col.Item().PaddingTop(8).Text(reminderBody).FontSize(10).FontColor("#78350F").LineHeight(1.5f);
+                col.Item().Text(reminderTitle).Bold().FontSize(11).FontColor("#92400E");
+                col.Item().PaddingTop(6).Text(reminderBody).FontSize(9.5f).FontColor("#78350F").LineHeight(1.4f);
             });
         }
 
@@ -1108,15 +1283,38 @@ namespace ResourceManager.Services
             try
             {
                 var currency = string.IsNullOrWhiteSpace(Settings.CurrencySymbol) ? "EUR" : Settings.CurrencySymbol.Trim();
-                var secureUrl = BuildSecureVerificationUrl();
-                var qrPayload =
-                    "{" +
-                    $"\"invoiceNumber\":\"{EscapeJsonValue(Invoice.Number ?? string.Empty)}\"," +
-                    $"\"companyName\":\"{EscapeJsonValue(Settings.CompanyName ?? string.Empty)}\"," +
-                    $"\"totalAmount\":\"{(Invoice.TotalAmount ?? 0).ToString("F3", CultureInfo.InvariantCulture)}\"," +
-                    $"\"currency\":\"{EscapeJsonValue(currency)}\"," +
-                    $"\"secureUrl\":\"{EscapeJsonValue(secureUrl)}\"" +
-                    "}";
+                var currencyCode = FiscalComplianceHelper.NormalizeCurrency(currency);
+
+                string qrPayload;
+                if (currencyCode == "SAR")
+                {
+                    qrPayload = FiscalComplianceHelper.BuildZatcaQrBase64(
+                        Settings.CompanyName ?? string.Empty,
+                        Settings.CompanyTaxId ?? string.Empty,
+                        DateTime.UtcNow,
+                        Invoice.TotalAmount ?? 0,
+                        Invoice.TaxAmount ?? 0);
+                }
+                else if (currencyCode == "TND")
+                {
+                    var uniqueReference = Invoice.VerificationToken
+                        ?? Settings.VerificationToken
+                        ?? Invoice.Number
+                        ?? Guid.NewGuid().ToString("N");
+                    qrPayload = FiscalComplianceHelper.BuildTndQrPayload(Invoice, Settings, uniqueReference);
+                }
+                else
+                {
+                    var secureUrl = BuildSecureVerificationUrl();
+                    qrPayload =
+                        "{" +
+                        $"\"invoiceNumber\":\"{EscapeJsonValue(Invoice.Number ?? string.Empty)}\"," +
+                        $"\"companyName\":\"{EscapeJsonValue(Settings.CompanyName ?? string.Empty)}\"," +
+                        $"\"totalAmount\":\"{(Invoice.TotalAmount ?? 0).ToString("F2", CultureInfo.InvariantCulture)}\"," +
+                        $"\"currency\":\"{EscapeJsonValue(currency)}\"," +
+                        $"\"secureUrl\":\"{EscapeJsonValue(secureUrl)}\"" +
+                        "}";
+                }
 
                 using var qrGenerator = new QRCodeGenerator();
                 var qrCodeData = qrGenerator.CreateQrCode(qrPayload, QRCodeGenerator.ECCLevel.M);
@@ -1147,53 +1345,54 @@ namespace ResourceManager.Services
                 .Replace("\"", "\\\"");
         }
 
-        private void ComposeFooterSection(IContainer container)
+        private bool HasBottomSectionContent()
         {
-            if (string.IsNullOrWhiteSpace(Settings.FooterText))
-                return;
+            var hasQr = GenerateQrCode().Length > 0;
+            var hasFooter = !string.IsNullOrWhiteSpace(Settings.FooterText);
+            return hasQr || hasFooter || HasSignatureContent();
+        }
 
-            var footerText = Settings.FooterText;
+        private bool HasSignatureContent()
+        {
+            if (!Settings.ShowSignature && !Settings.ShowStamp)
+                return false;
 
+            return !string.IsNullOrWhiteSpace(Settings.PdfSignatureText)
+                || !string.IsNullOrWhiteSpace(Settings.PdfSignerPosition)
+                || (Settings.ShowSignatureOnPdf && Settings.SignatureImageData?.Length > 0);
+        }
+
+        private void ComposeBottomSection(IContainer container)
+        {
             var qrBytes = GenerateQrCode();
+            var hasSignatureContent = HasSignatureContent();
 
-            container.Column(col =>
+            container.Row(row =>
             {
-                col.Spacing(6);
-
-                col.Item().Row(row =>
+                row.RelativeItem().Column(leftCol =>
                 {
-                    row.RelativeItem().Column(leftCol =>
-                    {
-                        if (qrBytes.Length > 0)
-                            leftCol.Item().Width(96).Height(96).Image(qrBytes).FitArea();
-                    });
+                    leftCol.Spacing(6);
+                    if (qrBytes.Length > 0)
+                        leftCol.Item().Width(96).Height(96).Image(qrBytes).FitArea();
 
+                    if (!string.IsNullOrWhiteSpace(Settings.FooterText))
+                        leftCol.Item().Text(Settings.FooterText).FontSize(10).FontColor("#4A5568").Italic();
                 });
 
-                col.Item().Row(row =>
+                row.ConstantItem(20);
+                row.RelativeItem().AlignRight().AlignBottom().Column(rightCol =>
                 {
-                    row.RelativeItem().Text(footerText).FontSize(10).FontColor("#4A5568").Italic();
-                    row.ConstantItem(20);
-                    row.RelativeItem();
+                    if (hasSignatureContent)
+                        ComposeSignatureContent(rightCol.Item());
                 });
             });
         }
 
-        private void ComposeSignature(IContainer container)
+        private void ComposeSignatureContent(IContainer container)
         {
-            if (!Settings.ShowSignature && !Settings.ShowStamp)
-                return;
-
-            var hasSignatureContent = !string.IsNullOrWhiteSpace(Settings.PdfSignatureText)
-                || !string.IsNullOrWhiteSpace(Settings.PdfSignerPosition)
-                || (Settings.ShowSignatureOnPdf && Settings.SignatureImageData?.Length > 0);
-
-            if (!hasSignatureContent)
-                return;
-
             container.Column(sigCol =>
             {
-                sigCol.Item().PaddingTop(8).AlignRight().Column(innerCol =>
+                sigCol.Item().AlignRight().Column(innerCol =>
                 {
                     if (!string.IsNullOrWhiteSpace(Settings.PdfSignatureText))
                     {
@@ -1211,8 +1410,6 @@ namespace ResourceManager.Services
                     {
                         innerCol.Item().PaddingTop(6).AlignCenter().Width(120).Height(50).Image(Settings.SignatureImageData).FitArea();
                     }
-
-
                 });
             });
         }

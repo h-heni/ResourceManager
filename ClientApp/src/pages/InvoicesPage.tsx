@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Search, Download, Eye, DollarSign, X, Mail, Send, Calendar, Clock, Edit2, Archive, Filter, CheckCircle, FileWarning, AlertCircle } from 'lucide-react';
+import { Plus, Search, Download, Eye, DollarSign, X, Mail, Send, Calendar, Clock, Edit2, Archive, Filter, CheckCircle, FileWarning } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { getErrorMessage } from '../utils/errorUtils';
@@ -9,6 +9,8 @@ import InvoiceDetailView from '../components/InvoiceDetailView';
 import Pagination from '../components/Pagination';
 import { formatCurrency } from '../lib/formatNumber';
 import { DEFAULT_CURRENCY } from '../lib/currencyUtils';
+import { logger } from '../lib/logger';
+import { useNotify } from '../hooks/useNotify';
 import { getInvoiceStatusColor } from '../lib/utils';
 
 interface Payment {
@@ -86,6 +88,7 @@ export default function InvoicesPage() {
     const [invoiceNumberSort, setInvoiceNumberSort] = useState<'asc' | 'desc'>('asc');
     
     const navigate = useNavigate();
+    const { notify, NotifyBanner } = useNotify();
     const { user } = useAuth();
     const activeTotalPages = Math.max(1, Math.ceil(activeTotalCount / pageSize));
     const archivedTotalPages = Math.max(1, Math.ceil(archivedTotalCount / pageSize));
@@ -132,7 +135,7 @@ export default function InvoicesPage() {
             setInvoices(items);
             setActiveTotalCount(totalCount);
         } catch (error) {
-            console.error("Error fetching invoices", error);
+            logger.error("Error fetching invoices", error);
         } finally {
             setLoading(false);
         }
@@ -148,7 +151,7 @@ export default function InvoicesPage() {
                 setSelectedYear(res.data.latestYear);
             }
         } catch (error) {
-            console.error("Error fetching available years", error);
+            logger.error("Error fetching available years", error);
         }
     };
 
@@ -163,7 +166,7 @@ export default function InvoicesPage() {
             setArchivedInvoices(items);
             setArchivedTotalCount(totalCount);
         } catch (error) {
-            console.error("Error fetching archived invoices", error);
+            logger.error("Error fetching archived invoices", error);
         } finally {
             setLoadingArchive(false);
         }
@@ -171,7 +174,7 @@ export default function InvoicesPage() {
 
     const handleDelete = async (id: number) => {
         if (!isManager) {
-            alert(t('common.managerOnly'));
+            notify('warning', t('common.managerOnly'));
             return;
         }
         if (!confirm(t('invoice.messages.confirmDelete'))) return;
@@ -179,8 +182,8 @@ export default function InvoicesPage() {
             await api.delete(`/Invoices/${id}`);
             fetchInvoices(activePage, pageSize);
         } catch (error: unknown) {
-            console.error("Error deleting invoice", error);
-            alert(getErrorMessage(error, t('invoice.messages.deleteFailed')));
+            logger.error("Error deleting invoice", error);
+            notify('error', getErrorMessage(error, t('invoice.messages.deleteFailed')));
         }
     };
 
@@ -228,8 +231,8 @@ export default function InvoicesPage() {
             link.remove();
             window.URL.revokeObjectURL(url);
         } catch (error) {
-            console.error("Error downloading PDF", error);
-            alert(t('common.downloadFailed'));
+            logger.error("Error downloading PDF", error);
+            notify('error', t('common.downloadFailed'));
         } finally {
             setDownloadingInvoiceId(null);
         }
@@ -257,8 +260,8 @@ export default function InvoicesPage() {
             link.remove();
             window.URL.revokeObjectURL(url);
         } catch (error) {
-            console.error('Error downloading remaining payment PDF', error);
-            alert(t('common.downloadFailed'));
+            logger.error('Error downloading remaining payment PDF', error);
+            notify('error', t('common.downloadFailed'));
         } finally {
             activeDownloadIdsRef.current.delete(id);
             setDownloadingInvoiceId(null);
@@ -333,7 +336,7 @@ export default function InvoicesPage() {
 
     const handleSendEmail = async () => {
         if (!emailInvoice || !emailTo) {
-            alert(t('email.enterRecipient'));
+            notify('warning', t('email.enterRecipient'));
             return;
         }
 
@@ -345,11 +348,11 @@ export default function InvoicesPage() {
                 body: emailBody,
                 attachPdf: true
             });
-            alert(t('email.sentSuccess'));
+            notify('success', t('email.sentSuccess'));
             setShowEmailModal(false);
         } catch (error: unknown) {
-            console.error("Error sending email", error);
-            alert(`${t('email.sendFailed')}: ${getErrorMessage(error)}`);
+            logger.error("Error sending email", error);
+            notify('error', `${t('email.sendFailed')}: ${getErrorMessage(error)}`);
         } finally {
             setSendingEmail(false);
         }
@@ -360,13 +363,13 @@ export default function InvoicesPage() {
         
         const amount = parseFloat(paymentAmount);
         if (isNaN(amount) || amount <= 0) {
-            alert(t('supplierInvoice.invalidPaymentAmount'));
+            notify('warning', t('supplierInvoice.invalidPaymentAmount'));
             return;
         }
 
         // If scheduled payment, validate date
         if (isScheduledPayment && !scheduledDate) {
-            alert(t('payment.selectScheduledDate'));
+            notify('warning', t('payment.selectScheduledDate'));
             return;
         }
 
@@ -381,17 +384,19 @@ export default function InvoicesPage() {
                 paymentDate,
                 notes: paymentNotes || null,
                 isScheduled: isScheduledPayment,
-                status: 'Pending'
+                status: isScheduledPayment ? 'Pending' : 'Completed'
             });
             setShowPaymentModal(false);
             fetchInvoices(activePage, pageSize);
             
             if (isScheduledPayment) {
-                alert(t('payment.scheduledSuccess'));
+                notify('success', t('payment.scheduledSuccess'));
             }
-        } catch (error) {
-            console.error("Error adding payment", error);
-            alert(t('supplierInvoice.paymentFailed'));
+        } catch (error: unknown) {
+            logger.error("Error adding payment", error);
+            const axErr = error as { response?: { data?: { message?: string; detail?: string } } };
+            const serverMsg = axErr?.response?.data?.message || axErr?.response?.data?.detail;
+            notify('error', serverMsg || t('supplierInvoice.paymentFailed'));
         } finally {
             setSubmittingPayment(false);
         }
@@ -430,6 +435,7 @@ export default function InvoicesPage() {
 
     return (
         <div className="space-y-6">
+            <NotifyBanner />
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-gray-900">{t('nav.invoices')}</h1>

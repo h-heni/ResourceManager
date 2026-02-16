@@ -88,9 +88,11 @@ namespace ResourceManager.Controllers
             if (string.IsNullOrWhiteSpace(q))
                 return Ok(Array.Empty<object>());
 
+            var lower = q.Trim().ToLower();
+
             var results = await _context.ProductServices
                 .AsNoTracking()
-                .Where(p => p.Name.Contains(q) || (p.Description != null && p.Description.Contains(q)))
+                .Where(p => p.Name.ToLower().Contains(lower) || (p.Description != null && p.Description.ToLower().Contains(lower)))
                 .OrderBy(p => p.Name)
                 .Take(20)
                 .Select(p => new

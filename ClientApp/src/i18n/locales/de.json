@@ -66,7 +66,8 @@
     "viewDetails": "Details anzeigen",
     "imported": "Importiert",
     "viewOnly": "Nur Ansicht",
-    "year": "Jahr"
+    "year": "Jahr",
+    "new": "Neu"
   },
   "pagination": {
     "previous": "Zurück",
@@ -115,7 +116,13 @@
       "retryIn": "Erneut versuchen in",
       "signInPrompt": "Bitte anmelden",
       "signingIn": "Wird angemeldet",
-      "welcomeBack": "Willkommen zurück"
+      "welcomeBack": "Willkommen zur\u00fcck"
+    },
+    "checklist": {
+      "length": "Mindestens 6 Zeichen",
+      "uppercase": "Ein Gro\u00dfbuchstabe",
+      "number": "Eine Zahl",
+      "special": "Ein Sonderzeichen"
     }
   },
   "nav": {
@@ -276,7 +283,8 @@
     "quoteNumber": "Angebotsnummer",
     "convertToInvoice": "In Rechnung umwandeln",
     "createDeliveryNote": "Lieferschein erstellen",
-    "deleteError": "Zitat konnte nicht gelöscht werden",
+    "deleteError": "Zitat konnte nicht gel\u00f6scht werden",
+    "createFailed": "Angebot konnte nicht erstellt werden",
     "noItems": "Keine Artikel",
     "create": "Angebot erstellen",
     "pageDescription": "Verwalten Sie Angebote und Vorschläge für Ihre Kunden",
@@ -573,7 +581,6 @@
     "totalRevenueLabel": "Gesamtumsatz",
     "totalUsers": "Anzahl Benutzer",
     "pending": "Ausstehend",
-    "pendingInvoices": "Ausstehende Rechnungen",
     "users": "Benutzer",
     "allTime": "Alle Zeiten",
     "lastYear": "Letztes Jahr",

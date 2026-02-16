@@ -3,6 +3,8 @@ import { Bell, Check, X, Clock, DollarSign, CalendarPlus, Banknote } from 'lucid
 import api from '../services/api';
 import { DEFAULT_CURRENCY } from '../lib/currencyUtils';
 import { useAuth } from '../context/AuthContext';
+import { logger } from '../lib/logger';
+import { queryClient } from '../lib/queryClient';
 
 interface Notification {
     id: number;
@@ -117,7 +119,7 @@ export default function NotificationBell() {
             setDuePayments(duePaymentsList);
             setDueSupplierPayments(dueSupplierList);
         } catch (error) {
-            console.error('Error fetching notification count:', error);
+            logger.error('Error fetching notification count:', error);
         }
     };
 
@@ -134,7 +136,7 @@ export default function NotificationBell() {
             setDuePayments(dueRes.status === 'fulfilled' ? (dueRes.value.data || []) : []);
             setDueSupplierPayments(dueSupplierRes.status === 'fulfilled' ? (dueSupplierRes.value.data || []) : []);
         } catch (error) {
-            console.error('Error fetching notifications:', error);
+            logger.error('Error fetching notifications:', error);
         } finally {
             setLoading(false);
         }
@@ -156,7 +158,7 @@ export default function NotificationBell() {
             // Recalculate count from actual state
             fetchNotificationCount();
         } catch (error) {
-            console.error('Error marking notification as read:', error);
+            logger.error('Error marking notification as read:', error);
         }
     };
 
@@ -166,7 +168,7 @@ export default function NotificationBell() {
             setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
             fetchNotificationCount();
         } catch (error) {
-            console.error('Error marking all as read:', error);
+            logger.error('Error marking all as read:', error);
         }
     };
 
@@ -177,7 +179,7 @@ export default function NotificationBell() {
             // Always refetch count from server — never decrement locally
             await fetchNotificationCount();
         } catch (error) {
-            console.error('Error deleting notification:', error);
+            logger.error('Error deleting notification:', error);
         }
     };
 
@@ -191,12 +193,19 @@ export default function NotificationBell() {
             } else {
                 await api.post(`/Notifications/${notificationId}/confirm-payment`);
             }
+
+            await Promise.allSettled([
+                queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+                queryClient.invalidateQueries({ queryKey: ['invoices'] }),
+                queryClient.invalidateQueries({ queryKey: ['notifications'] })
+            ]);
+
             // Refetch everything from server — the single source of truth
             await fetchNotificationCount();
             await fetchNotifications();
             window.dispatchEvent(new CustomEvent('payment-status-changed'));
         } catch (error) {
-            console.error('Error confirming payment:', error);
+            logger.error('Error confirming payment:', error);
         } finally {
             setConfirmingId(null);
         }
@@ -226,7 +235,7 @@ export default function NotificationBell() {
             await fetchNotifications();
             window.dispatchEvent(new CustomEvent('payment-status-changed'));
         } catch (error) {
-            console.error('Error extending payment:', error);
+            logger.error('Error extending payment:', error);
         }
     };
 
@@ -234,12 +243,19 @@ export default function NotificationBell() {
         setConfirmingId(paymentId);
         try {
             await api.post(`/Notifications/confirm-supplier-payment/${paymentId}`);
+
+            await Promise.allSettled([
+                queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+                queryClient.invalidateQueries({ queryKey: ['supplierInvoices'] }),
+                queryClient.invalidateQueries({ queryKey: ['notifications'] })
+            ]);
+
             // Refetch from server — single source of truth
             await fetchNotificationCount();
             await fetchNotifications();
             window.dispatchEvent(new CustomEvent('payment-status-changed'));
         } catch (error) {
-            console.error('Error confirming supplier payment:', error);
+            logger.error('Error confirming supplier payment:', error);
         } finally {
             setConfirmingId(null);
         }
@@ -262,7 +278,7 @@ export default function NotificationBell() {
             await fetchNotifications();
             window.dispatchEvent(new CustomEvent('payment-status-changed'));
         } catch (error) {
-            console.error('Error extending supplier payment:', error);
+            logger.error('Error extending supplier payment:', error);
         }
     };
 
@@ -303,7 +319,7 @@ export default function NotificationBell() {
             </button>
 
             {isOpen && (
-                <div className="absolute right-0 mt-2 w-96 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden animate-scale-up">
+                <div className="absolute end-0 mt-2 w-96 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden animate-scale-up">
                     {/* Header */}
                     <div className="px-4 py-3 bg-gradient-to-r from-[#065F46] to-[#14B8A6] text-white flex justify-between items-center">
                         <div className="flex items-center gap-2">

@@ -347,6 +347,9 @@ namespace ResourceManager.Controllers
             var user = await _userManager.FindByIdAsync(userId);
             if (user == null) return Unauthorized();
 
+            if (!dto.InvoiceDate.HasValue)
+                return BadRequest(new { message = "Invoice Date is required." });
+
             if (string.IsNullOrWhiteSpace(dto.TempFilePath))
                 return BadRequest(new { message = "No file path provided" });
 
@@ -468,6 +471,9 @@ namespace ResourceManager.Controllers
                 .Include(f => f.Items)
                 .FirstOrDefaultAsync(f => f.Id == id);
             if (invoice == null) return NotFound();
+
+            if (!dto.InvoiceDate.HasValue && !invoice.InvoiceDate.HasValue)
+                return BadRequest(new { message = "Invoice Date is required." });
 
             invoice.InvoiceNumber = dto.InvoiceNumber ?? invoice.InvoiceNumber;
             invoice.InvoiceDate = dto.InvoiceDate ?? invoice.InvoiceDate;

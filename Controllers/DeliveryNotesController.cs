@@ -6,6 +6,7 @@ using ResourceManager.DTOs;
 using ResourceManager.Services;
 using Microsoft.AspNetCore.Identity;
 using QuestPDF.Fluent;
+using System.Text.RegularExpressions;
 
 namespace ResourceManager.Controllers
 {
@@ -126,56 +127,93 @@ namespace ResourceManager.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateDeliveryNote([FromBody] DeliveryNoteDto dto) 
         {
-            // Note: The user provided DeliveryNoteDto in Dtos namespace likely, but I haven't seen it in DTOs folder.
-            // I'll check DTOs folder again or create a new DTO if needed.
-            // Wait, models.cs showed DeliveryNoteDto? No, list_dir showed DeliveryNoteDto.cs in DTOs.
-            
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
             var userId = _userManager.GetUserId(User);
+            if (string.IsNullOrEmpty(userId)) return Unauthorized();
 
-            var note = new DeliveryNote
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null) return Unauthorized();
+
+            var userProvidedNumber = dto.Number?.Trim() ?? string.Empty;
+            var isAutoNumber = string.IsNullOrWhiteSpace(userProvidedNumber);
+            var maxAttempts = isAutoNumber ? 5 : 1;
+            DeliveryNote? note = null;
+
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                Number = dto.Number ?? $"BL-{DateTime.UtcNow:yyyyMMdd-HHmmss}",
-                Date = dto.Date.ToUniversalTime(), // Ensure UTC
-                ClientId = dto.ClientId, // If linked to Client directly
-                InvoiceId = dto.InvoiceId, // Linked Invoice
-                
-                CreatedByUserId = userId,
-                CreatedAt = DateTime.UtcNow
-            };
+                var noteNumber = isAutoNumber
+                    ? await GenerateNextDeliveryNoteNumberAsync(user.CompanyId, dto.Date.ToUniversalTime().Year)
+                    : userProvidedNumber;
+
+                note = new DeliveryNote
+                {
+                    Number = noteNumber,
+                    Date = dto.Date.ToUniversalTime(),
+                    ClientId = dto.ClientId,
+                    InvoiceId = dto.InvoiceId,
+                    CreatedByUserId = userId,
+                    CreatedAt = DateTime.UtcNow
+                };
             
-            // Items
-            if (dto.DeliveryNoteItems != null)
-            {
-                foreach(var item in dto.DeliveryNoteItems)
+                // Items
+                if (dto.DeliveryNoteItems != null)
                 {
-                    note.DeliveryNoteItems.Add(new DeliveryNoteItem
+                    foreach(var item in dto.DeliveryNoteItems)
                     {
-                        Description = item.Description,
-                        Quantity = item.Quantity,
-                        TotalEstimated = item.Quantity * 0 // Price is 0/Unknown usually for DN? 
-                        // Model has Price nullable.
-                    });
+                        note.DeliveryNoteItems.Add(new DeliveryNoteItem
+                        {
+                            Description = item.Description,
+                            Quantity = item.Quantity,
+                            TotalEstimated = item.Quantity * 0
+                        });
+                    }
                 }
-            }
 
-            // Link to Devis if provided (REQUIRED for proper flow)
-            if (dto.DevisId.HasValue)
-            {
-                var devis = await _context.Devis.FindAsync(dto.DevisId.Value);
-                if (devis != null)
+                // Link to Devis if provided (REQUIRED for proper flow)
+                if (dto.DevisId.HasValue)
                 {
-                    note.DevisId = devis.Id;
-                    note.ClientId = devis.ClientId; // Get client from Devis
-                    devis.Status = "Accepted"; // Change to Accepted when delivery note is created
-                    devis.Treated = false; // Not fully treated until Invoice is paid
-                    devis.UpdatedAt = DateTime.UtcNow;
+                    var devis = await _context.Devis.FindAsync(dto.DevisId.Value);
+                    if (devis != null)
+                    {
+                        note.DevisId = devis.Id;
+                        note.ClientId = devis.ClientId;
+                        devis.Status = "Accepted";
+                        devis.Treated = false;
+                        devis.UpdatedAt = DateTime.UtcNow;
+                    }
+                }
+
+                _context.DeliveryNotes.Add(note);
+                try
+                {
+                    await _context.SaveChangesAsync();
+                    break; // Success — exit retry loop
+                }
+                catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex) && isAutoNumber && attempt < maxAttempts)
+                {
+                    _context.ChangeTracker.Clear();
+                    _logger.LogWarning(ex, "Delivery note number collision for company {CompanyId}, retry {Attempt}", user.CompanyId, attempt);
+                    note = null;
+                    continue;
+                }
+                catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+                {
+                    _context.ChangeTracker.Clear();
+                    return Conflict(new { message = "Delivery note number already exists. Please retry.", detail = ex.InnerException?.Message ?? ex.Message });
+                }
+                catch (DbUpdateException ex)
+                {
+                    _context.ChangeTracker.Clear();
+                    _logger.LogError(ex, "DbUpdateException creating delivery note. Number={Number}", note.Number);
+                    return StatusCode(500, new { message = "Failed to save delivery note.", detail = ex.InnerException?.Message ?? ex.Message });
                 }
             }
 
-            _context.DeliveryNotes.Add(note);
-            await _context.SaveChangesAsync();
+            if (note == null || note.Id == 0)
+            {
+                return Conflict(new { message = "Failed to generate a unique delivery note number. Please retry." });
+            }
 
             return CreatedAtAction(nameof(GetDeliveryNote), new { id = note.Id }, note);
         }
@@ -324,6 +362,40 @@ namespace ResourceManager.Controllers
             }
 
             return File(pdfData, "application/pdf", $"BL_{note.Number}.pdf");
+        }
+
+        private async Task<string> GenerateNextDeliveryNoteNumberAsync(int companyId, int year)
+        {
+            var yearSuffix = (year % 100).ToString("D2");
+            var prefix = $"BL{yearSuffix}-";
+
+            var existingNumbers = await _context.DeliveryNotes
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(dn => dn.CompanyId == companyId && dn.Date.Year == year && dn.Number.StartsWith(prefix))
+                .Select(dn => dn.Number)
+                .ToListAsync();
+
+            var maxSequence = 0;
+            foreach (var number in existingNumbers)
+            {
+                var match = Regex.Match(number, $"^{Regex.Escape(prefix)}(\\d+)$", RegexOptions.IgnoreCase);
+                if (match.Success && int.TryParse(match.Groups[1].Value, out var sequence))
+                {
+                    maxSequence = Math.Max(maxSequence, sequence);
+                }
+            }
+
+            return $"{prefix}{(maxSequence + 1):D3}";
+        }
+
+        private static bool IsUniqueConstraintViolation(DbUpdateException exception)
+        {
+            var message = exception.InnerException?.Message ?? exception.Message;
+            return message.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase)
+                   || message.Contains("duplicate", StringComparison.OrdinalIgnoreCase)
+                   || message.Contains("2601", StringComparison.OrdinalIgnoreCase)
+                   || message.Contains("2627", StringComparison.OrdinalIgnoreCase);
         }
     }
 }
