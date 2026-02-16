@@ -270,15 +270,20 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             echo "Verifying deployment (with retries)..."
+            HEALTHY=false
             for i in 1 2 3 4 5; do
               if curl -f -s -o /dev/null http://localhost/health; then
-                echo "Nginx health OK"
+                HEALTHY=true
+                echo "Nginx health OK on attempt $i"
                 break
               fi
-              echo "Attempt $i: waiting for nginx..."
+              echo "Attempt $i/5: waiting for nginx..."
               sleep 5
             done
-            curl -f http://localhost/health || exit 1
+            if [ "$HEALTHY" != "true" ]; then
+              echo "ERROR: Nginx health check failed after 5 attempts"
+              exit 1
+            fi
             curl -f http://localhost/api/health || exit 1
             echo "Deployment verified OK"
 
