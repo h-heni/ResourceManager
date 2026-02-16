@@ -75,7 +75,7 @@ export default function SetupAccountPage() {
         };
 
         validateToken();
-    }, [token]);
+    }, [token, t]);
 
     const handleChange = (field: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         setForm(prev => ({ ...prev, [field]: e.target.value }));

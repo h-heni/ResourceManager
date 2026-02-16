@@ -7,6 +7,7 @@
 const isDev = import.meta.env.DEV;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function noop(..._args: any[]): void { /* silent */ }
 
 export const logger = {
