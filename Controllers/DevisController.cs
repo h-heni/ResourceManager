@@ -395,16 +395,84 @@ namespace ResourceManager.Controllers
                 Status = "Unpaid"
             };
 
-            foreach (var item in devis.DevisItems)
+            // Check for linked delivery notes – they represent what was actually delivered
+            var deliveryNotes = await _context.DeliveryNotes
+                .Include(dn => dn.DeliveryNoteItems)
+                .Where(dn => dn.DevisId == devis.Id)
+                .ToListAsync();
+
+            if (deliveryNotes.Count > 0)
             {
-                invoice.InvoiceItems.Add(new InvoiceItem
+                // Build a lookup from devis items by description (case-insensitive) for price/tax info
+                var devisItemLookup = devis.DevisItems
+                    .GroupBy(di => di.Description.Trim().ToLowerInvariant())
+                    .ToDictionary(g => g.Key, g => g.First());
+
+                // Aggregate all delivery note items by description
+                var aggregated = new Dictionary<string, (string Description, int Quantity, decimal Price, bool Tva, decimal VatRate)>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var dn in deliveryNotes)
                 {
-                    Description = item.Description,
-                    Quantity = item.Quantity,
-                    Price = item.Price,
-                    Tva = item.Tva,
-                    VatRate = item.VatRate
-                });
+                    foreach (var dnItem in dn.DeliveryNoteItems)
+                    {
+                        var key = dnItem.Description.Trim().ToLowerInvariant();
+                        if (aggregated.TryGetValue(key, out var existing))
+                        {
+                            aggregated[key] = (existing.Description, existing.Quantity + (dnItem.Quantity ?? 0), existing.Price, existing.Tva, existing.VatRate);
+                        }
+                        else
+                        {
+                            // Lookup price from original quote item
+                            decimal price = 0;
+                            bool tva = false;
+                            decimal vatRate = 0;
+
+                            if (devisItemLookup.TryGetValue(key, out var devisItem))
+                            {
+                                price = devisItem.Price ?? 0;
+                                tva = devisItem.Tva;
+                                vatRate = devisItem.VatRate ?? 0;
+                            }
+                            else if (dnItem.Price.HasValue)
+                            {
+                                // New item added via delivery note – use its own pricing
+                                price = dnItem.Price.Value;
+                                tva = (dnItem.TaxRate ?? 0) > 0;
+                                vatRate = dnItem.TaxRate ?? 0;
+                            }
+
+                            aggregated[key] = (dnItem.Description, dnItem.Quantity ?? 0, price, tva, vatRate);
+                        }
+                    }
+                }
+
+                foreach (var kvp in aggregated)
+                {
+                    var (description, quantity, price, tva, vatRate) = kvp.Value;
+                    invoice.InvoiceItems.Add(new InvoiceItem
+                    {
+                        Description = description,
+                        Quantity = quantity,
+                        Price = price,
+                        Tva = tva,
+                        VatRate = vatRate
+                    });
+                }
+            }
+            else
+            {
+                // No delivery notes – fall back to original devis items
+                foreach (var item in devis.DevisItems)
+                {
+                    invoice.InvoiceItems.Add(new InvoiceItem
+                    {
+                        Description = item.Description,
+                        Quantity = item.Quantity,
+                        Price = item.Price,
+                        Tva = item.Tva,
+                        VatRate = item.VatRate
+                    });
+                }
             }
 
             invoice.CalculTotalAmount();
@@ -413,10 +481,26 @@ namespace ResourceManager.Controllers
             devis.Status = "Accepted";
             devis.UpdatedAt = DateTime.UtcNow;
 
+            // Link delivery notes to the new invoice
+            foreach (var dn in deliveryNotes)
+            {
+                dn.InvoiceId = invoice.Id;
+            }
+
             _context.Invoices.Add(invoice);
             try
             {
                 await _context.SaveChangesAsync();
+
+                // Re-link delivery notes now that invoice has an Id
+                if (deliveryNotes.Count > 0)
+                {
+                    foreach (var dn in deliveryNotes)
+                    {
+                        dn.InvoiceId = invoice.Id;
+                    }
+                    await _context.SaveChangesAsync();
+                }
             }
             catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
             {

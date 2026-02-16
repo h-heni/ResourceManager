@@ -34,6 +34,8 @@ interface Devis {
     devisItems?: DevisItem[];
     currency?: string;
     currencySymbol?: string;
+    tfiscal?: number;
+    tfiscalName?: string;
 }
 
 const getQuoteNumber = (quote: Devis & { Number?: string }) => quote.number || quote.Number || '';
@@ -200,16 +202,16 @@ export default function QuotesPage() {
             ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {filteredQuotes.map((quote) => (
-                        <div key={quote.id} className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+                        <div key={quote.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
                             {/* Header */}
-                            <div className="flex justify-between items-start mb-4">
+                            <div className="flex justify-between items-start mb-3">
                                 <div className="flex items-center space-x-3">
-                                    <div className="h-12 w-12 bg-[#065F46]/5 rounded-xl flex items-center justify-center text-[#065F46] font-bold">
-                                        <FileText size={24} />
+                                    <div className="h-10 w-10 bg-[#065F46]/5 rounded-xl flex items-center justify-center text-[#065F46] font-bold">
+                                        <FileText size={20} />
                                     </div>
                                     <div>
-                                        <h3 className="text-lg font-bold text-gray-900">{t('quote.quoteNumberLabel')}: {getQuoteNumber(quote)}</h3>
-                                        <p className="text-sm text-gray-500">{quote.clientName || t('common.unknown')}</p>
+                                        <h3 className="text-base font-bold text-gray-900">#{getQuoteNumber(quote)}</h3>
+                                        <p className="text-sm font-semibold text-gray-800">{quote.clientName || t('common.unknown')}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center space-x-2">
@@ -237,7 +239,7 @@ export default function QuotesPage() {
                             </div>
 
                             {/* Date and Total */}
-                            <div className="flex items-center justify-between text-sm mb-4 pb-4 border-b border-gray-100">
+                            <div className="flex items-center justify-between text-sm mb-3 pb-3 border-b border-gray-100">
                                 <span className="text-gray-500 flex items-center">
                                     <Calendar size={16} className="mr-2" />
                                     {quote.date ? new Date(quote.date).toLocaleDateString() : t('quote.notAvailable')}
@@ -247,11 +249,11 @@ export default function QuotesPage() {
 
                             {/* Items Section - Always Visible */}
                             <div className="space-y-2">
-                                <h4 className="text-sm font-semibold text-gray-700 mb-2">{t('quote.items')}</h4>
+                                <h4 className="text-sm font-semibold text-gray-700 mb-1">{t('quote.items')}</h4>
                                 {quote.devisItems && quote.devisItems.length > 0 ? (
-                                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
                                         {quote.devisItems.map((item, idx) => (
-                                            <div key={item.id || idx} className="bg-gray-50 p-3 rounded-lg text-sm">
+                                            <div key={item.id || idx} className="bg-gray-50 p-2.5 rounded-lg text-sm">
                                                 <div className="flex justify-between items-start">
                                                     <span className="font-medium text-gray-800 flex-1">{item.description}</span>
                                                     <span className="text-[#065F46] font-semibold ml-2">
@@ -272,7 +274,7 @@ export default function QuotesPage() {
 
                                 {/* Totals */}
                                 {quote.devisItems && quote.devisItems.length > 0 && (
-                                    <div className="pt-3 mt-3 border-t border-gray-200 space-y-1">
+                                    <div className="pt-2 mt-2 border-t border-gray-200 space-y-1">
                                         <div className="flex justify-between text-sm text-gray-600">
                                             <span>{t('invoice.subtotal')}:</span>
                                             <span>{formatCurrency(quote.subTotal, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
@@ -281,6 +283,12 @@ export default function QuotesPage() {
                                             <span>{t('invoice.tax')}:</span>
                                             <span>{formatCurrency(quote.taxAmount, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
                                         </div>
+                                        {quote.tfiscal != null && quote.tfiscal > 0 && (
+                                            <div className="flex justify-between text-sm text-gray-600">
+                                                <span>{quote.tfiscalName || t('invoice.timbre')}:</span>
+                                                <span>{formatCurrency(quote.tfiscal, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
+                                            </div>
+                                        )}
                                         <div className="flex justify-between text-sm font-bold text-[#065F46]">
                                             <span>{t('invoice.total')}:</span>
                                             <span>{formatCurrency(quote.totalAmount, quote.currencySymbol || DEFAULT_CURRENCY)}</span>

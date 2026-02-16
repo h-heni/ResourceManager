@@ -19,7 +19,14 @@ namespace ResourceManager.Controllers
         private readonly ILogger<SettingsController> _logger;
         private readonly IEmailService _emailService;
         private const long MaxLogoSize = 2 * 1024 * 1024; // 2MB max
-        private readonly string[] _allowedImageTypes = { "image/jpeg", "image/png", "image/gif", "image/webp" };
+        private readonly string[] _allowedImageTypes = { "image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp" };
+
+        /// <summary>Normalise non-standard MIME variants (e.g. image/jpg → image/jpeg).</summary>
+        private static string NormaliseMime(string contentType)
+        {
+            var ct = contentType?.Trim().ToLowerInvariant() ?? string.Empty;
+            return ct == "image/jpg" ? "image/jpeg" : ct;
+        }
 
         public SettingsController(
             AppDbContext context,
@@ -176,7 +183,8 @@ namespace ResourceManager.Controllers
                 return BadRequest(new { message = "File size must be less than 2MB" });
             }
 
-            if (!_allowedImageTypes.Contains(file.ContentType.ToLower()))
+            var normalisedMime = NormaliseMime(file.ContentType);
+            if (!_allowedImageTypes.Contains(normalisedMime))
             {
                 return BadRequest(new { message = "Only JPEG, PNG, GIF, and WebP images are allowed" });
             }
@@ -199,7 +207,7 @@ namespace ResourceManager.Controllers
                 const int maxCompressedSize = 500 * 1024; // 500KB
                 
                 byte[] finalBytes = originalBytes;
-                string contentType = file.ContentType;
+                string contentType = normalisedMime;
                 
                 if (originalBytes.Length > maxCompressedSize)
                 {
@@ -281,7 +289,8 @@ namespace ResourceManager.Controllers
         {
             if (file == null || file.Length == 0) return BadRequest(new { message = "No file uploaded" });
             if (file.Length > MaxLogoSize) return BadRequest(new { message = "File must be less than 2MB" });
-            if (!_allowedImageTypes.Contains(file.ContentType.ToLower()))
+            var normalisedSigMime = NormaliseMime(file.ContentType);
+            if (!_allowedImageTypes.Contains(normalisedSigMime))
                 return BadRequest(new { message = "Only JPEG, PNG, GIF, and WebP images are allowed" });
 
             var user = await GetCurrentUserAsync(_userManager);
@@ -293,7 +302,7 @@ namespace ResourceManager.Controllers
             using var ms = new MemoryStream();
             await file.CopyToAsync(ms);
             settings.SignatureImageData = ms.ToArray();
-            settings.SignatureImageContentType = file.ContentType;
+            settings.SignatureImageContentType = normalisedSigMime;
             settings.ShowSignatureOnPdf = true;
             settings.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();

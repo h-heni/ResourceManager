@@ -286,12 +286,8 @@ namespace ResourceManager.Services
             }
             else
             {
-                // 2) Fallback: read from wwwroot/images/logo.png
-                var logoPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images", "logo.png");
-                if (!File.Exists(logoPath))
-                    logoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot", "images", "logo.png");
-
-                LogoBytes = File.Exists(logoPath) ? File.ReadAllBytes(logoPath) : Array.Empty<byte>();
+                // No default placeholder — layout adjusts gracefully when logo is absent
+                LogoBytes = Array.Empty<byte>();
             }
         }
         
@@ -419,7 +415,7 @@ namespace ResourceManager.Services
 
                 if (Settings.ShowLogo && LogoBytes.Length > 0)
                 {
-                    row.ConstantItem(120).Height(120).Image(LogoBytes).FitUnproportionally();
+                    row.ConstantItem(120).MaxHeight(50).Image(LogoBytes).FitArea();
                 }
             });
         }
@@ -945,7 +941,7 @@ namespace ResourceManager.Services
                         innerCol.Item().PaddingTop(4).AlignCenter().Text(Settings.PdfSignerPosition).FontSize(10).FontColor(Colors.Grey.Medium);
 
                     if (Settings.ShowSignatureOnPdf && Settings.SignatureImageData?.Length > 0)
-                        innerCol.Item().PaddingTop(6).AlignCenter().Width(120).Height(50).Image(Settings.SignatureImageData).FitArea();
+                        innerCol.Item().PaddingTop(6).AlignCenter().Width(120).MaxHeight(40).Image(Settings.SignatureImageData).FitArea();
                 });
             });
         }
@@ -981,10 +977,8 @@ namespace ResourceManager.Services
             }
             else
             {
-                var logoPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "images", "logo.png");
-                if (!File.Exists(logoPath))
-                    logoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "wwwroot", "images", "logo.png");
-                LogoBytes = File.Exists(logoPath) ? File.ReadAllBytes(logoPath) : Array.Empty<byte>();
+                // No default placeholder — layout adjusts gracefully when logo is absent
+                LogoBytes = Array.Empty<byte>();
             }
         }
 
@@ -1091,7 +1085,7 @@ namespace ResourceManager.Services
 
                 if (Settings.ShowLogo && LogoBytes.Length > 0)
                 {
-                    row.ConstantItem(96).Height(96).Image(LogoBytes).FitUnproportionally();
+                    row.ConstantItem(96).MaxHeight(50).Image(LogoBytes).FitArea();
                 }
             });
         }
@@ -1408,7 +1402,7 @@ namespace ResourceManager.Services
 
                     if (Settings.ShowSignatureOnPdf && Settings.SignatureImageData?.Length > 0)
                     {
-                        innerCol.Item().PaddingTop(6).AlignCenter().Width(120).Height(50).Image(Settings.SignatureImageData).FitArea();
+                        innerCol.Item().PaddingTop(6).AlignCenter().Width(120).MaxHeight(40).Image(Settings.SignatureImageData).FitArea();
                     }
                 });
             });

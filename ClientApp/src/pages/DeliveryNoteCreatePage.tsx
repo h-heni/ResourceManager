@@ -1,7 +1,7 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Plus, Trash2, Save, Package, FileText, History, User, Calendar, AlertCircle, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Save, Package, FileText, History, User, Calendar, AlertCircle, CheckCircle, PackagePlus, X, Check } from 'lucide-react';
 import api from '../services/api';
 import { logger } from '../lib/logger';
 import { useNotify } from '../hooks/useNotify';
@@ -43,6 +43,15 @@ interface ExistingDeliveryNote {
     deliveryNoteItems?: DeliveryNoteItem[];
 }
 
+interface ProductSuggestion {
+    id: number;
+    name: string;
+    description?: string;
+    defaultUnitPrice: number;
+    vatApplicable: boolean;
+    tvaRate?: number;
+}
+
 interface DeliveryItem {
     description: string;
     quantity: number;
@@ -68,6 +77,18 @@ export default function DeliveryNoteCreatePage() {
     const [errors, setErrors] = useState<ValidationErrors>({});
     const [touched, setTouched] = useState<Record<string, boolean>>({});
     const [submitted, setSubmitted] = useState(false);
+
+    // Product autocomplete state
+    const [suggestions, setSuggestions] = useState<ProductSuggestion[]>([]);
+    const [activeItemIndex, setActiveItemIndex] = useState<number | null>(null);
+    const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+    const suggestionsRef = useRef<HTMLDivElement>(null);
+
+    // Inline product creation state
+    const [showCreateProduct, setShowCreateProduct] = useState(false);
+    const [createProductForIndex, setCreateProductForIndex] = useState<number>(0);
+    const [newProduct, setNewProduct] = useState({ name: '', description: '', defaultUnitPrice: 0, vatRate: 19 });
+    const [creatingProduct, setCreatingProduct] = useState(false);
 
     // Currency & Language state (per-document override)
     const [pdfCurrency, setPdfCurrency] = useState('');
@@ -277,6 +298,85 @@ export default function DeliveryNoteCreatePage() {
         const newItems = [...items];
         (newItems[index] as unknown as Record<string, string | number | boolean>)[field] = value;
         setItems(newItems);
+    };
+
+    // Product autocomplete: search saved products as user types
+    const searchProducts = useCallback((query: string, itemIndex: number) => {
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+        if (query.length < 1) {
+            setSuggestions([]);
+            setActiveItemIndex(null);
+            return;
+        }
+        searchTimerRef.current = setTimeout(async () => {
+            try {
+                const res = await api.get(`/ProductServices/search?q=${encodeURIComponent(query)}`);
+                const data = Array.isArray(res.data) ? res.data : (res.data.data || []);
+                setSuggestions(data.slice(0, 8));
+                setActiveItemIndex(itemIndex);
+            } catch {
+                setSuggestions([]);
+            }
+        }, 250);
+    }, []);
+
+    const selectProduct = (product: ProductSuggestion, itemIndex: number) => {
+        const newItems = [...items];
+        newItems[itemIndex] = {
+            ...newItems[itemIndex],
+            description: product.name + (product.description ? ` - ${product.description}` : ''),
+        };
+        setItems(newItems);
+        setSuggestions([]);
+        setActiveItemIndex(null);
+    };
+
+    const dismissSuggestions = () => {
+        setTimeout(() => {
+            setSuggestions([]);
+            setActiveItemIndex(null);
+        }, 200);
+    };
+
+    // Open inline product creation form
+    const openCreateProduct = (itemIndex: number) => {
+        const currentDesc = items[itemIndex]?.description || '';
+        setNewProduct({ name: currentDesc, description: '', defaultUnitPrice: 0, vatRate: 19 });
+        setCreateProductForIndex(itemIndex);
+        setShowCreateProduct(true);
+        setSuggestions([]);
+        setActiveItemIndex(null);
+    };
+
+    // Create a new product via API and autofill the current line item
+    const handleCreateProduct = async () => {
+        if (!newProduct.name.trim()) return;
+        setCreatingProduct(true);
+        try {
+            const res = await api.post('/ProductServices', {
+                name: newProduct.name.trim(),
+                description: newProduct.description.trim() || null,
+                defaultUnitPrice: newProduct.defaultUnitPrice,
+                tvaRate: newProduct.vatRate,
+                type: 'product',
+                category: null,
+                vatApplicable: newProduct.vatRate > 0,
+            });
+            const created = res.data;
+            // Auto-fill the line item description
+            const newItems = [...items];
+            newItems[createProductForIndex] = {
+                ...newItems[createProductForIndex],
+                description: created.name + (created.description ? ` - ${created.description}` : ''),
+            };
+            setItems(newItems);
+            setShowCreateProduct(false);
+        } catch (error) {
+            logger.error('Error creating product', error);
+            notify('error', t('product.saveFailed'));
+        } finally {
+            setCreatingProduct(false);
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -590,16 +690,66 @@ export default function DeliveryNoteCreatePage() {
 
                             return (
                                 <div key={index} className="grid grid-cols-2 md:grid-cols-12 gap-4 items-end p-4 md:p-0 bg-gray-50 md:bg-white rounded-xl md:rounded-none border border-gray-100 md:border-0 mb-4 md:mb-0">
-                                    <div className="col-span-2 md:col-span-8">
+                                    <div className="col-span-2 md:col-span-8 relative">
                                         <label className="text-xs font-semibold text-gray-500 mb-1 block">{t('invoice.description')}</label>
                                         <input
                                             type="text"
                                             value={item.description}
-                                            onChange={e => updateItem(index, 'description', e.target.value)}
-                                            onBlur={() => handleBlur('items')}
+                                            onChange={e => {
+                                                updateItem(index, 'description', e.target.value);
+                                                searchProducts(e.target.value, index);
+                                            }}
+                                            onBlur={() => { handleBlur('items'); dismissSuggestions(); }}
                                             className={`w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-[#065F46] ${item.description.trim() === '' && touched.items ? 'border-amber-400' : 'border-gray-200'
                                                 }`}
+                                            placeholder={t('devis.descriptionPlaceholder', 'Type to search products...')}
+                                            autoComplete="off"
                                         />
+                                        {/* Product suggestions dropdown */}
+                                        {activeItemIndex === index && suggestions.length > 0 && (
+                                            <div ref={suggestionsRef} className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-52 overflow-y-auto">
+                                                {suggestions.map(product => (
+                                                    <button
+                                                        key={product.id}
+                                                        type="button"
+                                                        onMouseDown={() => selectProduct(product, index)}
+                                                        className="w-full px-3 py-2 text-left hover:bg-[#065F46]/5 flex justify-between items-center text-sm border-b border-gray-50 last:border-0"
+                                                    >
+                                                        <div>
+                                                            <span className="font-medium text-gray-900">{product.name}</span>
+                                                            {product.description && (
+                                                                <span className="text-gray-400 ml-1 text-xs">— {product.description}</span>
+                                                            )}
+                                                        </div>
+                                                        <span className="text-[#065F46] font-medium text-xs whitespace-nowrap ml-2">
+                                                            {product.defaultUnitPrice.toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}
+                                                        </span>
+                                                    </button>
+                                                ))}
+                                                {/* Create new product option */}
+                                                <button
+                                                    type="button"
+                                                    onMouseDown={() => openCreateProduct(index)}
+                                                    className="w-full px-3 py-2.5 text-left hover:bg-emerald-50 flex items-center text-sm font-medium text-emerald-700 border-t border-gray-100"
+                                                >
+                                                    <PackagePlus size={16} className="mr-2" />
+                                                    {t('product.createNew', 'Create New Product')}...
+                                                </button>
+                                            </div>
+                                        )}
+                                        {/* Show create option when no suggestions and user typed ≥2 chars */}
+                                        {activeItemIndex === index && suggestions.length === 0 && item.description.length >= 2 && (
+                                            <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg">
+                                                <button
+                                                    type="button"
+                                                    onMouseDown={() => openCreateProduct(index)}
+                                                    className="w-full px-3 py-2.5 text-left hover:bg-emerald-50 flex items-center text-sm font-medium text-emerald-700"
+                                                >
+                                                    <PackagePlus size={16} className="mr-2" />
+                                                    {t('product.createNew', 'Create New Product')}: &quot;{item.description}&quot;
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="col-span-1 md:col-span-2">
                                         <label className="text-xs font-semibold text-gray-500 mb-1 block">
@@ -642,6 +792,99 @@ export default function DeliveryNoteCreatePage() {
                     </button>
                 </div>
             </div>
+
+            {/* Create Product Modal */}
+            {showCreateProduct && (
+                <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowCreateProduct(false)}>
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                            <h3 className="text-lg font-bold text-gray-900 flex items-center">
+                                <PackagePlus size={20} className="mr-2 text-emerald-600" />
+                                {t('product.createNew', 'Create New Product')}
+                            </h3>
+                            <button onClick={() => setShowCreateProduct(false)} className="p-1 hover:bg-gray-100 rounded-full">
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    {t('product.name', 'Product Name')} <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    value={newProduct.name}
+                                    onChange={e => setNewProduct(prev => ({ ...prev, name: e.target.value }))}
+                                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                                    placeholder={t('product.namePlaceholder', 'e.g. Web Design Service')}
+                                    autoFocus
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    {t('product.description', 'Description')}
+                                </label>
+                                <input
+                                    type="text"
+                                    value={newProduct.description}
+                                    onChange={e => setNewProduct(prev => ({ ...prev, description: e.target.value }))}
+                                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                                    placeholder={t('product.descriptionPlaceholder', 'Optional details...')}
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        {t('product.defaultPrice', 'Default Unit Price')}
+                                    </label>
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            step="0.001"
+                                            value={newProduct.defaultUnitPrice}
+                                            onChange={e => setNewProduct(prev => ({ ...prev, defaultUnitPrice: parseFloat(e.target.value) || 0 }))}
+                                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none pr-14"
+                                        />
+                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">{pdfCurrencySymbol || DEFAULT_CURRENCY}</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        {t('product.tax', 'Tax (TVA)')}
+                                    </label>
+                                    <select
+                                        value={newProduct.vatRate}
+                                        onChange={e => setNewProduct(prev => ({ ...prev, vatRate: parseInt(e.target.value) }))}
+                                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                                    >
+                                        <option value={0}>{t('invoice.noTax', 'No Tax')}</option>
+                                        <option value={7}>TVA 7%</option>
+                                        <option value={13}>TVA 13%</option>
+                                        <option value={19}>TVA 19%</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
+                            <button
+                                onClick={() => setShowCreateProduct(false)}
+                                className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-xl transition-colors"
+                            >
+                                {t('common.cancel', 'Cancel')}
+                            </button>
+                            <button
+                                onClick={handleCreateProduct}
+                                disabled={!newProduct.name.trim() || creatingProduct}
+                                className="px-5 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <Check size={16} className="mr-1.5" />
+                                {creatingProduct ? t('common.creating', 'Creating...') : t('product.createAndUse', 'Create & Use')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
