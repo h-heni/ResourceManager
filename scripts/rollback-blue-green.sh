@@ -116,10 +116,14 @@ if [ "$CURRENT_ENV" = "blue" ]; then
     ROLLBACK_ENV="green"
     ROLLBACK_API_PORT=7176
     ROLLBACK_WEB_PORT=8081
+    ROLLBACK_API_HOST="green-api"
+    ROLLBACK_WEB_HOST="green-web"
 else
     ROLLBACK_ENV="blue"
     ROLLBACK_API_PORT=7175
     ROLLBACK_WEB_PORT=8080
+    ROLLBACK_API_HOST="blue-api"
+    ROLLBACK_WEB_HOST="blue-web"
 fi
 
 log_info "Rolling back to: $ROLLBACK_ENV"
@@ -211,9 +215,17 @@ else
     echo "ACTIVE_ENV=$ROLLBACK_ENV" >> "$ENV_FILE"
 fi
 
-# Reload Nginx configuration
-if ! docker exec nginx nginx -s reload; then
-    log_error "Failed to reload Nginx configuration"
+# Update ACTIVE_API_HOST and ACTIVE_WEB_HOST in .env
+grep -q "^ACTIVE_API_HOST=" "$ENV_FILE" \
+    && sed -i "s/^ACTIVE_API_HOST=.*/ACTIVE_API_HOST=$ROLLBACK_API_HOST/" "$ENV_FILE" \
+    || echo "ACTIVE_API_HOST=$ROLLBACK_API_HOST" >> "$ENV_FILE"
+grep -q "^ACTIVE_WEB_HOST=" "$ENV_FILE" \
+    && sed -i "s/^ACTIVE_WEB_HOST=.*/ACTIVE_WEB_HOST=$ROLLBACK_WEB_HOST/" "$ENV_FILE" \
+    || echo "ACTIVE_WEB_HOST=$ROLLBACK_WEB_HOST" >> "$ENV_FILE"
+
+# Recreate Nginx with updated config (envsubst runs at container startup)
+if ! $DOCKER_COMPOSE -f "$COMPOSE_FILE" up -d --force-recreate nginx; then
+    log_error "Failed to recreate Nginx container"
     log_error "Attempting to restart Nginx container..."
     
     if ! $DOCKER_COMPOSE -f "$COMPOSE_FILE" restart nginx; then

@@ -73,8 +73,10 @@ fi
 
 if [ "$ACTIVE_ENV" = "blue" ]; then
     TARGET_ENV="green"; TARGET_API_PORT=7176; TARGET_WEB_PORT=8081
+    TARGET_API_HOST="green-api"; TARGET_WEB_HOST="green-web"
 else
     TARGET_ENV="blue";  TARGET_API_PORT=7175; TARGET_WEB_PORT=8080
+    TARGET_API_HOST="blue-api"; TARGET_WEB_HOST="blue-web"
 fi
 
 log_info "Active: $ACTIVE_ENV → Deploying to: $TARGET_ENV"
@@ -150,9 +152,14 @@ grep -q "^ACTIVE_ENV=" "$ENV_FILE" \
     && sed -i.bak "s/^ACTIVE_ENV=.*/ACTIVE_ENV=$TARGET_ENV/" "$ENV_FILE" \
     || echo "ACTIVE_ENV=$TARGET_ENV" >> "$ENV_FILE"
 
-$DC -f "$COMPOSE_FILE" up -d nginx 2>/dev/null || true
-sleep 2
-docker exec nginx nginx -s reload 2>/dev/null || $DC -f "$COMPOSE_FILE" restart nginx
+grep -q "^ACTIVE_API_HOST=" "$ENV_FILE" \
+    && sed -i "s/^ACTIVE_API_HOST=.*/ACTIVE_API_HOST=$TARGET_API_HOST/" "$ENV_FILE" \
+    || echo "ACTIVE_API_HOST=$TARGET_API_HOST" >> "$ENV_FILE"
+grep -q "^ACTIVE_WEB_HOST=" "$ENV_FILE" \
+    && sed -i "s/^ACTIVE_WEB_HOST=.*/ACTIVE_WEB_HOST=$TARGET_WEB_HOST/" "$ENV_FILE" \
+    || echo "ACTIVE_WEB_HOST=$TARGET_WEB_HOST" >> "$ENV_FILE"
+
+$DC -f "$COMPOSE_FILE" up -d --force-recreate nginx 2>/dev/null || true
 
 # ── Verify via proxy ──
 

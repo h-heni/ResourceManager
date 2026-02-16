@@ -19,6 +19,7 @@ public class HealthController : ControllerBase
     }
 
     [HttpGet("/health")]
+    [HttpGet("/api/health")]
     public async Task<IActionResult> Get()
     {
         try
