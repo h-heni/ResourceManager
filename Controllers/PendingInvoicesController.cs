@@ -58,8 +58,11 @@ namespace ResourceManager.Controllers
                 return BadRequest(new { message = "Supplier name is required." });
 
             var userId = _userManager.GetUserId(User);
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized(new { message = "User session is invalid." });
+
             var user = await _userManager.FindByIdAsync(userId);
-            if (user == null) return Unauthorized();
+            if (user == null) return Unauthorized(new { message = "User not found." });
 
             try
             {
@@ -201,8 +204,11 @@ namespace ResourceManager.Controllers
         public async Task<IActionResult> SyncToLocal()
         {
             var userId = _userManager.GetUserId(User);
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized(new { message = "User session is invalid." });
+
             var user = await _userManager.FindByIdAsync(userId);
-            if (user == null) return Unauthorized();
+            if (user == null) return Unauthorized(new { message = "User not found." });
 
             // Get company settings for BaseStoragePath
             var settings = await _context.CompanySettings

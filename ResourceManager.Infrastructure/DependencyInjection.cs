@@ -6,6 +6,7 @@ using ResourceManager.Application.Interfaces;
 using ResourceManager.Domain.Interfaces;
 using ResourceManager.Infrastructure.Repositories;
 using ResourceManager.Infrastructure.Services;
+using ResourceManager.Infrastructure.Services.EInvoicing;
 using StackExchange.Redis;
 
 namespace ResourceManager.Infrastructure;
@@ -27,6 +28,9 @@ public static class DependencyInjection
         
         // Services
         services.AddScoped<ICurrentUserService, CurrentUserService>();
+        
+        // E-Invoicing
+        services.AddSingleton<IEInvoiceService, EInvoiceService>();
         
         return services;
     }

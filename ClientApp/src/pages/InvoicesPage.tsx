@@ -527,24 +527,24 @@ export default function InvoicesPage() {
                             <thead>
                                 <tr>
                                     <th
-                                        className="cursor-pointer select-none text-start px-4 py-3 font-semibold text-gray-600"
+                                        className="rm-th-id cursor-pointer select-none"
                                         onClick={() => setInvoiceNumberSort(prev => prev === 'asc' ? 'desc' : 'asc')}
                                     >
                                         {t('invoice.invoiceNumber', 'Invoice #')} {invoiceNumberSort === 'asc' ? '↑' : '↓'}
                                     </th>
-                                    <th className="text-start px-4 py-3 font-semibold text-gray-600">{t('invoice.client')}</th>
-                                    <th className="text-start px-4 py-3 font-semibold text-gray-600">{t('invoice.date')}</th>
-                                    <th className="text-end px-4 py-3 font-semibold text-gray-600">{t('invoice.total')}</th>
-                                    <th className="text-end px-4 py-3 font-semibold text-gray-600">{t('invoice.amountPaid')}</th>
-                                    <th className="text-end px-4 py-3 font-semibold text-gray-600">{t('invoice.remaining')}</th>
-                                    <th className="text-center px-4 py-3 font-semibold text-gray-600">{t('common.status')}</th>
-                                    <th className="text-end px-4 py-3 font-semibold text-gray-600">{t('common.actions')}</th>
+                                    <th>{t('invoice.client')}</th>
+                                    <th className="rm-th-date">{t('invoice.date')}</th>
+                                    <th className="rm-th-number">{t('invoice.total')}</th>
+                                    <th className="rm-th-number">{t('invoice.amountPaid')}</th>
+                                    <th className="rm-th-number">{t('invoice.remaining')}</th>
+                                    <th className="rm-th-status">{t('common.status')}</th>
+                                    <th className="rm-th-actions">{t('common.actions')}</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {sortedInvoices.map((invoice) => (
-                                    <tr key={invoice.id} className="group hover:bg-gray-50 border-b border-gray-100 transition-colors">
-                                        <td className="text-start px-4 py-3 whitespace-nowrap font-semibold text-[#065F46]">
+                                    <tr key={invoice.id} className="group">
+                                        <td className="rm-cell-text whitespace-nowrap font-semibold text-[#065F46]">
                                             {invoice.source === 'historical' && invoice.invoiceId ? (
                                                 <button
                                                     type="button"
@@ -560,16 +560,16 @@ export default function InvoicesPage() {
                                                 </span>
                                             )}
                                         </td>
-                                        <td className="text-start px-4 py-3 text-gray-900">
+                                        <td className="rm-cell-text">
                                             <span title={invoice.clientName || undefined}>
                                                 {invoice.clientName || t('common.unknown')}
                                             </span>
                                         </td>
-                                        <td className="text-start px-4 py-3 text-gray-600">{invoice.date ? new Date(invoice.date).toLocaleDateString() : t('users.table.notAvailable')}</td>
-                                        <td className="text-end px-4 py-3 font-medium text-gray-900">
+                                        <td className="rm-cell-date">{invoice.date ? new Date(invoice.date).toLocaleDateString() : t('users.table.notAvailable')}</td>
+                                        <td className="rm-cell-currency">
                                             {formatCurrency(invoice.totalAmount, invoice.currencySymbol || DEFAULT_CURRENCY)}
                                         </td>
-                                        <td className="text-end px-4 py-3">
+                                        <td className="rm-cell-currency">
                                             <div className="flex flex-col items-end">
                                                 <span className="text-emerald-600 font-medium">
                                                     {formatCurrency(invoice.amountPaid, invoice.currencySymbol || DEFAULT_CURRENCY)}
@@ -582,10 +582,10 @@ export default function InvoicesPage() {
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="text-end px-4 py-3 text-amber-600 font-medium">
+                                        <td className="rm-cell-currency text-amber-600">
                                             {invoice.remainingAmount > 0 ? formatCurrency(invoice.remainingAmount, invoice.currencySymbol || DEFAULT_CURRENCY) : '—'}
                                         </td>
-                                        <td className="text-center px-4 py-3">
+                                        <td className="rm-cell-status text-center">
                                             <span className={`px-3 py-1 text-xs font-semibold rounded-full inline-block ${getInvoiceStatusColor(invoice.status)}`}>
                                                 {t(`invoice.status.${invoice.status}`, invoice.status)}
                                             </span>
@@ -595,7 +595,7 @@ export default function InvoicesPage() {
                                                 </span>
                                             )}
                                         </td>
-                                        <td className="text-end px-4 py-3">
+                                        <td className="rm-cell-actions">
                                             <div className="flex items-center justify-end gap-0.5">
                                                 {/* Don't show action buttons for historical archived items */}
                                                 {!(viewMode === 'archived' && invoice.source === 'historical') && (

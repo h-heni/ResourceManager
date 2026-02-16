@@ -99,28 +99,6 @@ jobs:
           if-no-files-found: ignore
 
   # ============================================
-  # 1b. Invoice XML Generator (Python) Tests
-  # ============================================
-  python-tests:
-    name: Python Invoice Generators
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install test dependencies
-        run: pip install pytest
-
-      - name: Run invoice generator tests
-        run: python -m pytest invoice_xml_generator/tests/ -v --tb=short
-
-  # ============================================
   # 2. Frontend Build & Lint
   # ============================================
   frontend:
@@ -167,7 +145,7 @@ jobs:
   docker:
     name: Docker Build & Push
     runs-on: ubuntu-latest
-    needs: [backend, frontend, python-tests]
+    needs: [backend, frontend]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read

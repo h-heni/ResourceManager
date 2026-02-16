@@ -34,8 +34,8 @@ namespace ResourceManager.Controllers
             try
             {
                 var now = DateTime.UtcNow;
-                // Include ALL years from both client & supplier invoices (IgnoreQueryFilters
-                // so soft-deleted and archived records are still visible in the year picker).
+                // Include ALL years from client invoices, supplier invoices, and historical records.
+                // Use IgnoreQueryFilters so soft-deleted and archived records are still visible in the year picker.
                 var clientYears = await _context.Invoices
                     .IgnoreQueryFilters()
                     .AsNoTracking()
@@ -43,16 +43,34 @@ namespace ResourceManager.Controllers
                     .Distinct()
                     .ToListAsync();
 
+                // For supplier invoices, use InvoiceDate if available, otherwise fall back to CreatedAt
                 var supplierYears = await _context.FournisseurInvoices
                     .IgnoreQueryFilters()
                     .AsNoTracking()
-                    .Where(si => si.InvoiceDate != null)
-                    .Select(si => si.InvoiceDate!.Value.Year)
+                    .Select(si => (si.InvoiceDate ?? si.CreatedAt).Year)
+                    .Distinct()
+                    .ToListAsync();
+
+                // Include historical revenue years (imported records)
+                var historicalRevenueYears = await _context.HistoricalRevenues
+                    .IgnoreQueryFilters()
+                    .AsNoTracking()
+                    .Select(h => h.Date.Year)
+                    .Distinct()
+                    .ToListAsync();
+
+                // Include historical expense years (imported records)
+                var historicalExpenseYears = await _context.HistoricalExpenses
+                    .IgnoreQueryFilters()
+                    .AsNoTracking()
+                    .Select(h => h.Date.Year)
                     .Distinct()
                     .ToListAsync();
 
                 var availableYears = clientYears
                     .Union(supplierYears)
+                    .Union(historicalRevenueYears)
+                    .Union(historicalExpenseYears)
                     .Distinct()
                     .OrderByDescending(y => y)
                     .ToList();

@@ -1,3 +1,0 @@
-# invoice_xml_generator — no external runtime dependencies (stdlib only)
-# Dev / test dependencies:
-pytest>=8.0

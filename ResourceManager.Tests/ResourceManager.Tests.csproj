@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ResourceManager.API.csproj" />
+    <ProjectReference Include="..\ResourceManager.Infrastructure\ResourceManager.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

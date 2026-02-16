@@ -312,37 +312,7 @@ paket-files/
 # CodeRush personal settings
 .cr/personal
 
-# ============================================
-# Python
-# ============================================
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.venv/
-venv/
-ENV/
-env/
-.env.py
-*.egg-info/
-*.egg
-dist/
-build/
-*.whl
-pip-log.txt
-pip-delete-this-directory.txt
-.Python
-develop-eggs/
-eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.manifest
-*.spec
-.installed.cfg
+
 MANIFEST
 htmlcov/
 .tox/
