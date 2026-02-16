@@ -39,8 +39,8 @@ RUN rm -rf ./*
 # Copy built assets from build stage
 COPY --from=build /app/dist .
 
-# Copy custom nginx config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copy nginx config as template (envsubst replaces BACKEND_API_HOST/PORT at startup)
+COPY nginx.conf /etc/nginx/default.conf.template
 
 # Create non-root user
 RUN adduser -D -u 1001 appuser && \
@@ -53,9 +53,13 @@ RUN adduser -D -u 1001 appuser && \
 # Expose port
 EXPOSE 80
 
+# Default env vars for API proxy (overridden by docker-compose)
+ENV BACKEND_API_HOST=api
+ENV BACKEND_API_PORT=8080
+
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:80/health || exit 1
 
-# Start nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Start nginx (envsubst replaces only our custom env vars, leaving nginx $vars intact)
+CMD ["sh", "-c", "envsubst '${BACKEND_API_HOST} ${BACKEND_API_PORT}' < /etc/nginx/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]

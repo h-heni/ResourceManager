@@ -289,6 +289,8 @@ services:
     # ENVIRONMENT (if needed for nginx templating)
     environment:
       - NGINX_ENTRYPOINT_QUIET_LOGS=1
+      - BACKEND_API_HOST=api
+      - BACKEND_API_PORT=8080
     
     # DEPENDENCIES - Wait for API to be healthy
     depends_on:
