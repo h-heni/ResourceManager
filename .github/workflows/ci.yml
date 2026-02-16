@@ -269,7 +269,15 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            echo "Verifying..."
+            echo "Verifying deployment (with retries)..."
+            for i in 1 2 3 4 5; do
+              if curl -f -s -o /dev/null http://localhost/health; then
+                echo "Nginx health OK"
+                break
+              fi
+              echo "Attempt $i: waiting for nginx..."
+              sleep 5
+            done
             curl -f http://localhost/health || exit 1
             curl -f http://localhost/api/health || exit 1
             echo "Deployment verified OK"
