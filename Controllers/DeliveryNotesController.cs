@@ -230,16 +230,10 @@ namespace ResourceManager.Controllers
 
             if (note == null) return NotFound();
 
-            // Block update if already linked to a paid invoice
-            if (note.InvoiceId.HasValue)
+            // Managers and employees cannot edit once an invoice has been linked
+            if ((User.IsInRole("Manager") || User.IsInRole("Employee")) && note.InvoiceId.HasValue)
             {
-                var linkedInvoice = await _context.Invoices
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(i => i.Id == note.InvoiceId.Value);
-                if (linkedInvoice?.Status == "Paid")
-                {
-                    return BadRequest(new { message = "Cannot modify a delivery note linked to a paid invoice." });
-                }
+                return BadRequest(new { message = "Document is locked: Invoice already generated." });
             }
 
             note.Number = dto.Number ?? note.Number;

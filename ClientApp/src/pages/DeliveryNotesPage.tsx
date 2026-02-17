@@ -221,10 +221,13 @@ export default function DeliveryNotesPage() {
                                         </td>
                                         <td className="rm-cell-text">
                                             {note.invoiceId ? (
-                                                <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#065F46]/10 text-[#065F46] text-xs font-semibold rounded-full">
-                                                    <FileText size={12} />
-                                                    {t('invoice.title')} #{note.invoiceNumber}
-                                                </span>
+                                                <div className="flex flex-col gap-1">
+                                                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-[#065F46]/10 text-[#065F46] text-xs font-semibold rounded-full">
+                                                        <FileText size={12} />
+                                                        {t('invoice.title')} #{note.invoiceNumber}
+                                                    </span>
+                                                    <span className="text-xs text-amber-700">{t('document.lockedInvoiceGenerated', 'Document is locked: Invoice already generated.')}</span>
+                                                </div>
                                             ) : note.devisId ? (
                                                 <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
                                                     <FileText size={12} />
