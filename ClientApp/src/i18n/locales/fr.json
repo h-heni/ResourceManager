@@ -340,6 +340,7 @@
       "overDeliveryTitle": "Sur-livraison détectée",
       "previousDeliveryNotes": "Bons de livraison précédents",
       "previousDeliveryNotesHelp": "Quantités déjà livrées dans les bons de livraison précédents.",
+      "productNotInCatalog": "Chaque article doit être sélectionné depuis le catalogue ou créé comme nouveau produit",
       "totalDelivered": "Total livré"
     }
   },

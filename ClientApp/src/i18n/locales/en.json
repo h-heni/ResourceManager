@@ -340,6 +340,7 @@
       "overDeliveryTitle": "Over-delivery detected",
       "previousDeliveryNotes": "Previous delivery notes",
       "previousDeliveryNotesHelp": "Quantities already delivered in previous delivery notes.",
+      "productNotInCatalog": "Each item must be selected from the product catalog or created as a new product",
       "totalDelivered": "Total delivered"
     }
   },

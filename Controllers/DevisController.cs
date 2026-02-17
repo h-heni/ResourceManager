@@ -145,8 +145,11 @@ namespace ResourceManager.Controllers
                 devis.SubTotal,
                 devis.TaxAmount,
                 devis.TotalAmount,
+                devis.Tfiscal,
+                devis.TfiscalName,
                 devis.Currency,
                 devis.CurrencySymbol,
+                devis.PdfLanguage,
                 DevisItems = devis.DevisItems.Select(i => new {
                     i.Id,
                     i.Description,
@@ -480,12 +483,6 @@ namespace ResourceManager.Controllers
             // Update Devis status
             devis.Status = "Accepted";
             devis.UpdatedAt = DateTime.UtcNow;
-
-            // Link delivery notes to the new invoice
-            foreach (var dn in deliveryNotes)
-            {
-                dn.InvoiceId = invoice.Id;
-            }
 
             _context.Invoices.Add(invoice);
             try

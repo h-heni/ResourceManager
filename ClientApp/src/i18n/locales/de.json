@@ -341,6 +341,7 @@
       "overDeliveryTitle": "Überlieferung erkannt",
       "previousDeliveryNotes": "Vorherige Lieferscheine",
       "previousDeliveryNotesHelp": "Bereits in früheren Lieferscheinen gelieferte Mengen.",
+      "productNotInCatalog": "Jeder Artikel muss aus dem Produktkatalog ausgewählt oder als neues Produkt erstellt werden",
       "totalDelivered": "Insgesamt geliefert"
     }
   },

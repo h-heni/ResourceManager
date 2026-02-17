@@ -340,6 +340,7 @@
       "overDeliveryTitle": "تم اكتشاف تسليم زائد",
       "previousDeliveryNotes": "أذون التسليم السابقة",
       "previousDeliveryNotesHelp": "الكميات التي تم تسليمها بالفعل في أذون التسليم السابقة.",
+      "productNotInCatalog": "يجب اختيار كل عنصر من كتالوج المنتجات أو إنشاؤه كمنتج جديد",
       "totalDelivered": "إجمالي المسلم"
     }
   },

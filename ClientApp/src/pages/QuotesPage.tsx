@@ -200,100 +200,86 @@ export default function QuotesPage() {
             {loading ? (
                 <div className="text-center py-20 text-gray-500">{t('quote.loading')}</div>
             ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {filteredQuotes.map((quote) => (
-                        <div key={quote.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-                            {/* Header */}
-                            <div className="flex justify-between items-start mb-3">
-                                <div className="flex items-center space-x-3">
-                                    <div className="h-10 w-10 bg-[#065F46]/5 rounded-xl flex items-center justify-center text-[#065F46] font-bold">
-                                        <FileText size={20} />
-                                    </div>
-                                    <div>
-                                        <h3 className="text-base font-bold text-gray-900">#{getQuoteNumber(quote)}</h3>
-                                        <p className="text-sm font-semibold text-gray-800">{quote.clientName || t('common.unknown')}</p>
-                                    </div>
+                        <div key={quote.id} className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow flex flex-col">
+                            {/* Header: Client + Quote# + Status */}
+                            <div className="flex items-start justify-between mb-2">
+                                <div className="min-w-0 flex-1">
+                                    <h3 className="text-sm font-bold text-gray-900 truncate">{quote.clientName || t('common.unknown')}</h3>
+                                    <span className="text-xs text-gray-500">#{getQuoteNumber(quote)}</span>
                                 </div>
-                                <div className="flex items-center space-x-2">
-                                    <button
-                                        onClick={() => handleDownloadPdf(quote.id, getQuoteNumber(quote))}
-                                        className="p-2 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
-                                        title={t('quote.downloadPdf')}
-                                    >
-                                        <Download size={18} />
-                                    </button>
-                                    {/* Delete allowed for Draft and Active quotes (not Completed or Accepted) */}
-                                    {(quote.status === 'Draft' || quote.status === 'Active') && (
-                                        <button
-                                            onClick={() => handleDeleteQuote(quote.id)}
-                                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                            title={t('quote.deleteQuote')}
-                                        >
-                                            <Trash2 size={18} />
-                                        </button>
-                                    )}
-                                    <span className={`px-3 py-1 text-xs font-semibold rounded-full ${getStatusColor(quote.status)}`}>
-                                        {quote.status ? t(`quote.status.${quote.status}`, quote.status) : t('invoice.draft')}
-                                    </span>
-                                </div>
-                            </div>
-
-                            {/* Date and Total */}
-                            <div className="flex items-center justify-between text-sm mb-3 pb-3 border-b border-gray-100">
-                                <span className="text-gray-500 flex items-center">
-                                    <Calendar size={16} className="mr-2" />
-                                    {quote.date ? new Date(quote.date).toLocaleDateString() : t('quote.notAvailable')}
+                                <span className={`ml-2 flex-shrink-0 px-2 py-0.5 text-[10px] font-semibold rounded-full ${getStatusColor(quote.status)}`}>
+                                    {quote.status ? t(`quote.status.${quote.status}`, quote.status) : t('invoice.draft')}
                                 </span>
-                                <span className="font-bold text-[#065F46] text-lg">{formatCurrency(quote.totalAmount, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
                             </div>
 
-                            {/* Items Section - Always Visible */}
-                            <div className="space-y-2">
-                                <h4 className="text-sm font-semibold text-gray-700 mb-1">{t('quote.items')}</h4>
-                                {quote.devisItems && quote.devisItems.length > 0 ? (
-                                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                                        {quote.devisItems.map((item, idx) => (
-                                            <div key={item.id || idx} className="bg-gray-50 p-2.5 rounded-lg text-sm">
-                                                <div className="flex justify-between items-start">
-                                                    <span className="font-medium text-gray-800 flex-1">{item.description}</span>
-                                                    <span className="text-[#065F46] font-semibold ml-2">
-                                                        {formatCurrency((item.quantity || 0) * (item.price || 0), quote.currencySymbol || DEFAULT_CURRENCY)}
-                                                    </span>
-                                                </div>
-                                                <div className="flex justify-between text-xs text-gray-500 mt-1">
-                                                    <span>{t('quote.qtyLabel', { value: item.quantity || 0 })}</span>
-                                                    <span>{t('quote.unitPriceLabel', { value: formatCurrency(item.price, quote.currencySymbol || DEFAULT_CURRENCY) })}</span>
-                                                    {item.tva && <span className="text-orange-500">{t('quote.taxRateLabel', { rate: ((item.vatRate ?? 0.19) * 100).toFixed(0) })}</span>}
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <p className="text-sm text-gray-400 italic">{t('quote.noItemsInQuote')}</p>
-                                )}
+                            {/* Date */}
+                            <div className="flex items-center text-xs text-gray-400 mb-2">
+                                <Calendar size={12} className="mr-1" />
+                                {quote.date ? new Date(quote.date).toLocaleDateString() : t('quote.notAvailable')}
+                            </div>
 
-                                {/* Totals */}
-                                {quote.devisItems && quote.devisItems.length > 0 && (
-                                    <div className="pt-2 mt-2 border-t border-gray-200 space-y-1">
-                                        <div className="flex justify-between text-sm text-gray-600">
-                                            <span>{t('invoice.subtotal')}:</span>
-                                            <span>{formatCurrency(quote.subTotal, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
-                                        </div>
-                                        <div className="flex justify-between text-sm text-gray-600">
-                                            <span>{t('invoice.tax')}:</span>
-                                            <span>{formatCurrency(quote.taxAmount, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
-                                        </div>
-                                        {quote.tfiscal != null && quote.tfiscal > 0 && (
-                                            <div className="flex justify-between text-sm text-gray-600">
-                                                <span>{quote.tfiscalName || t('invoice.timbre')}:</span>
-                                                <span>{formatCurrency(quote.tfiscal, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
+                            {/* Items metadata: Qty / Unit Price / Tax */}
+                            {quote.devisItems && quote.devisItems.length > 0 ? (
+                                <div className="space-y-1 mb-2 flex-1">
+                                    {quote.devisItems.slice(0, 3).map((item, idx) => (
+                                        <div key={item.id || idx} className="bg-gray-50 px-2 py-1.5 rounded text-xs">
+                                            <p className="font-medium text-gray-800 truncate">{item.description}</p>
+                                            <div className="flex justify-between text-[10px] text-gray-500 mt-0.5">
+                                                <span>{t('quote.qtyLabel', { value: item.quantity || 0 })}</span>
+                                                <span>{formatCurrency(item.price, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
+                                                {item.tva && <span className="text-orange-500">{((item.vatRate ?? 0.19) * 100).toFixed(0)}%</span>}
                                             </div>
-                                        )}
-                                        <div className="flex justify-between text-sm font-bold text-[#065F46]">
-                                            <span>{t('invoice.total')}:</span>
-                                            <span>{formatCurrency(quote.totalAmount, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
                                         </div>
+                                    ))}
+                                    {quote.devisItems.length > 3 && (
+                                        <p className="text-[10px] text-gray-400 text-center">+{quote.devisItems.length - 3} {t('quote.items').toLowerCase()}</p>
+                                    )}
+                                </div>
+                            ) : (
+                                <p className="text-xs text-gray-400 italic mb-2 flex-1">{t('quote.noItemsInQuote')}</p>
+                            )}
+
+                            {/* Totals */}
+                            <div className="pt-2 border-t border-gray-100 space-y-0.5 text-xs">
+                                <div className="flex justify-between text-gray-500">
+                                    <span>{t('invoice.subtotal')}</span>
+                                    <span>{formatCurrency(quote.subTotal, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
+                                </div>
+                                <div className="flex justify-between text-gray-500">
+                                    <span>{t('invoice.tax')}</span>
+                                    <span>{formatCurrency(quote.taxAmount, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
+                                </div>
+                                {quote.tfiscal != null && quote.tfiscal > 0 && (
+                                    <div className="flex justify-between text-gray-500">
+                                        <span>{quote.tfiscalName || t('invoice.timbre')}</span>
+                                        <span>{formatCurrency(quote.tfiscal, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
                                     </div>
+                                )}
+                                <div className="flex justify-between font-bold text-[#065F46]">
+                                    <span>{t('invoice.total')}</span>
+                                    <span>{formatCurrency(quote.totalAmount, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
+                                </div>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex items-center justify-end gap-1 mt-2 pt-2 border-t border-gray-50">
+                                <button
+                                    onClick={() => handleDownloadPdf(quote.id, getQuoteNumber(quote))}
+                                    className="p-1.5 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
+                                    title={t('quote.downloadPdf')}
+                                >
+                                    <Download size={15} />
+                                </button>
+                                {(quote.status === 'Draft' || quote.status === 'Active') && (
+                                    <button
+                                        onClick={() => handleDeleteQuote(quote.id)}
+                                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                        title={t('quote.deleteQuote')}
+                                    >
+                                        <Trash2 size={15} />
+                                    </button>
                                 )}
                             </div>
                         </div>

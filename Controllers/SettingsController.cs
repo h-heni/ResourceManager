@@ -20,12 +20,23 @@ namespace ResourceManager.Controllers
         private readonly IEmailService _emailService;
         private const long MaxLogoSize = 2 * 1024 * 1024; // 2MB max
         private readonly string[] _allowedImageTypes = { "image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp" };
+        private static readonly HashSet<string> AllowedImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+            { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
 
         /// <summary>Normalise non-standard MIME variants (e.g. image/jpg → image/jpeg).</summary>
         private static string NormaliseMime(string contentType)
         {
             var ct = contentType?.Trim().ToLowerInvariant() ?? string.Empty;
             return ct == "image/jpg" ? "image/jpeg" : ct;
+        }
+
+        /// <summary>Validates both MIME type and file extension (case-insensitive, safe on Linux).</summary>
+        private bool IsAllowedImage(IFormFile file)
+        {
+            var normalisedMime = NormaliseMime(file.ContentType);
+            if (!_allowedImageTypes.Contains(normalisedMime)) return false;
+            var ext = Path.GetExtension(file.FileName); // case-insensitive via HashSet
+            return string.IsNullOrEmpty(ext) || AllowedImageExtensions.Contains(ext);
         }
 
         public SettingsController(
@@ -184,9 +195,9 @@ namespace ResourceManager.Controllers
             }
 
             var normalisedMime = NormaliseMime(file.ContentType);
-            if (!_allowedImageTypes.Contains(normalisedMime))
+            if (!IsAllowedImage(file))
             {
-                return BadRequest(new { message = "Only JPEG, PNG, GIF, and WebP images are allowed" });
+                return BadRequest(new { message = "Only JPEG, PNG, GIF, and WebP images are allowed (check file extension and type)" });
             }
 
             var user = await GetCurrentUserAsync(_userManager);
@@ -290,8 +301,8 @@ namespace ResourceManager.Controllers
             if (file == null || file.Length == 0) return BadRequest(new { message = "No file uploaded" });
             if (file.Length > MaxLogoSize) return BadRequest(new { message = "File must be less than 2MB" });
             var normalisedSigMime = NormaliseMime(file.ContentType);
-            if (!_allowedImageTypes.Contains(normalisedSigMime))
-                return BadRequest(new { message = "Only JPEG, PNG, GIF, and WebP images are allowed" });
+            if (!IsAllowedImage(file))
+                return BadRequest(new { message = "Only JPEG, PNG, GIF, and WebP images are allowed (check file extension and type)" });
 
             var user = await GetCurrentUserAsync(_userManager);
             if (user == null) return Unauthorized();

@@ -57,6 +57,7 @@ interface DeliveryItem {
     quantity: number;
     quotedQuantity: number; // Original quoted amount
     remainingQuantity: number; // What's left to deliver
+    fromCatalog: boolean; // true when from quote, product catalog, or inline-created
 }
 
 // Validation errors interface
@@ -99,7 +100,7 @@ export default function DeliveryNoteCreatePage() {
     const [selectedDevisId, setSelectedDevisId] = useState('');
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [items, setItems] = useState<DeliveryItem[]>([
-        { description: '', quantity: 1, quotedQuantity: 0, remainingQuantity: 0 }
+        { description: '', quantity: 1, quotedQuantity: 0, remainingQuantity: 0, fromCatalog: false }
     ]);
 
     // Calculate already delivered quantities per description
@@ -158,6 +159,14 @@ export default function DeliveryNoteCreatePage() {
         );
         if (hasInvalidItems) {
             newErrors.items = t('createPage.itemsInvalid');
+        }
+
+        // Strict validation: every non-empty item must come from the catalog or quote
+        const hasUnresolvedItems = items.some(item =>
+            item.description.trim() !== '' && !item.fromCatalog
+        );
+        if (hasUnresolvedItems) {
+            newErrors.items = t('deliveryNote.messages.productNotInCatalog', 'Each item must be selected from the product catalog or created as a new product');
         }
 
         // Over-delivery is allowed - just show info message, not blocking error
@@ -240,7 +249,7 @@ export default function DeliveryNoteCreatePage() {
         if (!devisId) {
             setSelectedDevis(null);
             setExistingDeliveryNotes([]);
-            setItems([{ description: '', quantity: 1, quotedQuantity: 0, remainingQuantity: 0 }]);
+            setItems([{ description: '', quantity: 1, quotedQuantity: 0, remainingQuantity: 0, fromCatalog: false }]);
             return;
         }
 
@@ -275,18 +284,19 @@ export default function DeliveryNoteCreatePage() {
                     description: item.description,
                     quantity: remaining, // Default to remaining quantity
                     quotedQuantity: item.quantity || 0,
-                    remainingQuantity: remaining
+                    remainingQuantity: remaining,
+                    fromCatalog: true // Items from the linked quote are trusted
                 };
             });
 
             // Filter out items with 0 remaining, but keep at least one
             const itemsToDeliver = newItems.filter(item => item.remainingQuantity > 0);
-            setItems(itemsToDeliver.length > 0 ? itemsToDeliver : [{ description: '', quantity: 1, quotedQuantity: 0, remainingQuantity: 0 }]);
+            setItems(itemsToDeliver.length > 0 ? itemsToDeliver : [{ description: '', quantity: 1, quotedQuantity: 0, remainingQuantity: 0, fromCatalog: false }]);
         }
     }, [selectedDevis, deliveredQuantitiesByDescription]);
 
     const addItem = () => {
-        setItems([...items, { description: '', quantity: 1, quotedQuantity: 0, remainingQuantity: 0 }]);
+        setItems([...items, { description: '', quantity: 1, quotedQuantity: 0, remainingQuantity: 0, fromCatalog: false }]);
     };
 
     const removeItem = (index: number) => {
@@ -325,6 +335,7 @@ export default function DeliveryNoteCreatePage() {
         newItems[itemIndex] = {
             ...newItems[itemIndex],
             description: product.name + (product.description ? ` - ${product.description}` : ''),
+            fromCatalog: true,
         };
         setItems(newItems);
         setSuggestions([]);
@@ -368,6 +379,7 @@ export default function DeliveryNoteCreatePage() {
             newItems[createProductForIndex] = {
                 ...newItems[createProductForIndex],
                 description: created.name + (created.description ? ` - ${created.description}` : ''),
+                fromCatalog: true,
             };
             setItems(newItems);
             setShowCreateProduct(false);
@@ -697,11 +709,18 @@ export default function DeliveryNoteCreatePage() {
                                             value={item.description}
                                             onChange={e => {
                                                 updateItem(index, 'description', e.target.value);
+                                                // Reset catalog flag when user manually types (must re-select or create)
+                                                if (item.fromCatalog) updateItem(index, 'fromCatalog', false);
                                                 searchProducts(e.target.value, index);
                                             }}
                                             onBlur={() => { handleBlur('items'); dismissSuggestions(); }}
-                                            className={`w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-[#065F46] ${item.description.trim() === '' && touched.items ? 'border-amber-400' : 'border-gray-200'
-                                                }`}
+                                            className={`w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-[#065F46] ${
+                                                item.description.trim() !== '' && !item.fromCatalog && submitted
+                                                    ? 'border-red-400 bg-red-50'
+                                                    : item.description.trim() === '' && touched.items
+                                                        ? 'border-amber-400'
+                                                        : 'border-gray-200'
+                                            }`}
                                             placeholder={t('devis.descriptionPlaceholder', 'Type to search products...')}
                                             autoComplete="off"
                                         />
@@ -749,6 +768,12 @@ export default function DeliveryNoteCreatePage() {
                                                     {t('product.createNew', 'Create New Product')}: &quot;{item.description}&quot;
                                                 </button>
                                             </div>
+                                        )}
+                                        {/* Unresolved item hint */}
+                                        {item.description.trim() !== '' && !item.fromCatalog && submitted && (
+                                            <p className="text-xs text-red-600 mt-1">
+                                                {t('deliveryNote.messages.productNotInCatalog', 'Select from catalog or create a new product')}
+                                            </p>
                                         )}
                                     </div>
                                     <div className="col-span-1 md:col-span-2">
