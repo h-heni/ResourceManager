@@ -36,6 +36,7 @@ interface Devis {
     currencySymbol?: string;
     tfiscal?: number;
     tfiscalName?: string;
+    invoiceId?: number;
 }
 
 const getQuoteNumber = (quote: Devis & { Number?: string }) => quote.number || quote.Number || '';
@@ -209,8 +210,38 @@ export default function QuotesPage() {
                                     <h3 className="text-sm font-bold text-gray-900 truncate">{quote.clientName || t('common.unknown')}</h3>
                                     <span className="text-xs text-gray-500">#{getQuoteNumber(quote)}</span>
                                 </div>
-                                <span className={`ml-2 flex-shrink-0 px-2 py-0.5 text-[10px] font-semibold rounded-full ${getStatusColor(quote.status)}`}>
-                                    {quote.status ? t(`quote.status.${quote.status}`, quote.status) : t('invoice.draft')}
+                                <div className="flex items-center space-x-2">
+                                    <button
+                                        onClick={() => handleDownloadPdf(quote.id, getQuoteNumber(quote))}
+                                        className="p-2 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
+                                        title={t('quote.downloadPdf')}
+                                    >
+                                        <Download size={18} />
+                                    </button>
+                                    {/* Delete allowed for Draft and Active quotes (not Completed or Accepted) */}
+                                    {(quote.status === 'Draft' || quote.status === 'Active') && (
+                                        <button
+                                            onClick={() => handleDeleteQuote(quote.id)}
+                                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                            title={t('quote.deleteQuote')}
+                                        >
+                                            <Trash2 size={18} />
+                                        </button>
+                                    )}
+                                    <span className={`px-3 py-1 text-xs font-semibold rounded-full ${getStatusColor(quote.status)}`}>
+                                        {quote.status ? t(`quote.status.${quote.status}`, quote.status) : t('invoice.draft')}
+                                    </span>
+                                </div>
+                            </div>
+                            {(quote.invoiceId != null || quote.status === 'Completed') && (
+                                <p className="mb-3 text-xs text-amber-700">{t('document.lockedInvoiceGenerated', 'Document is locked: Invoice already generated.')}</p>
+                            )}
+
+                            {/* Date and Total */}
+                            <div className="flex items-center justify-between text-sm mb-3 pb-3 border-b border-gray-100">
+                                <span className="text-gray-500 flex items-center">
+                                    <Calendar size={16} className="mr-2" />
+                                    {quote.date ? new Date(quote.date).toLocaleDateString() : t('quote.notAvailable')}
                                 </span>
                             </div>
 

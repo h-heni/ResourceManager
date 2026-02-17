@@ -1091,5 +1091,8 @@
     "passwordMinLength": "يجب أن تتكون كلمة المرور من 6 أحرف على الأقل.",
     "defaultCurrency": "العملة الافتراضية",
     "defaultLanguage": "اللغة الافتراضية"
+  },
+  "document": {
+    "lockedInvoiceGenerated": "المستند مقفل: تم إنشاء الفاتورة بالفعل."
   }
 }

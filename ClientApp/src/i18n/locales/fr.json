@@ -119,10 +119,10 @@
       "welcomeBack": "Bon retour"
     },
     "checklist": {
-      "length": "Au moins 6 caract\u00e8res",
+      "length": "Au moins 6 caractères",
       "uppercase": "Une lettre majuscule",
       "number": "Un chiffre",
-      "special": "Un caract\u00e8re sp\u00e9cial"
+      "special": "Un caractère spécial"
     }
   },
   "nav": {
@@ -1091,5 +1091,8 @@
     "passwordMinLength": "Le mot de passe doit contenir au moins 6 caractères.",
     "defaultCurrency": "Devise par défaut",
     "defaultLanguage": "Langue par défaut"
+  },
+  "document": {
+    "lockedInvoiceGenerated": "Document verrouillé : facture déjà générée."
   }
 }

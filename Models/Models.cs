@@ -21,6 +21,8 @@ namespace ResourceManager.Models
 
         [ForeignKey("CreatedByUserId")]
         public ApplicationUser? CreatedByUser { get; set; }
+        public string? CreatedBy { get; set; }
+        public string? ModifiedBy { get; set; }
         public  DateTime CreatedAt { get; set; }
         public  DateTime? UpdatedAt { get; set; }= default;
         public  DateTime? DeletedAt { get; set; }= default;

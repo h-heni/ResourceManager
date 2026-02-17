@@ -97,7 +97,7 @@ namespace ResourceManager.Controllers
                 var role = roles.FirstOrDefault() ?? "FreeUser";
 
                 // Generate short-lived access token (15 min)
-                var accessToken = GenerateAccessToken(user.Id.ToString(), user.Email!, role, user.CompanyId);
+                var accessToken = GenerateAccessToken(user.Id.ToString(), user.Email!, role, user.CompanyId, userProfile?.FirstName);
 
                 // Generate & persist refresh token (7 days, HttpOnly cookie)
                 var refreshToken = await CreateRefreshTokenAsync(user.Id);
@@ -477,15 +477,15 @@ namespace ResourceManager.Controllers
             var roles = await _userManager.GetRolesAsync(user);
             var role = roles.FirstOrDefault() ?? "FreeUser";
 
-            var accessToken = GenerateAccessToken(user.Id.ToString(), user.Email!, role, user.CompanyId);
-            SetRefreshTokenCookie(refreshTokenValue);
-
             // Fetch profile + company settings bypassing tenant filter (refresh is [AllowAnonymous])
             var userProfile = await _context.UserProfiles
                 .IgnoreQueryFilters()
                 .Where(p => p.UserId == user.Id)
                 .Select(p => new { p.FirstName, p.LastName })
                 .FirstOrDefaultAsync();
+
+            var accessToken = GenerateAccessToken(user.Id.ToString(), user.Email!, role, user.CompanyId, userProfile?.FirstName);
+            SetRefreshTokenCookie(refreshTokenValue);
 
             var companySettings = await _context.CompanySettings
                 .IgnoreQueryFilters()
@@ -542,7 +542,7 @@ namespace ResourceManager.Controllers
                 ?? "unknown";
         }
 
-        private string GenerateAccessToken(string userId, string email, string role, int companyId)
+        private string GenerateAccessToken(string userId, string email, string role, int companyId, string? firstName = null)
         {
             var jwtKey = _configuration["Jwt:Key"]
                 ?? throw new InvalidOperationException("JWT Key not configured");
@@ -557,6 +557,10 @@ namespace ResourceManager.Controllers
                 new(ClaimTypes.Role, role),
                 new Claim("CompanyId", companyId.ToString())
             };
+            if (!string.IsNullOrWhiteSpace(firstName))
+            {
+                claims.Add(new Claim("FirstName", firstName));
+            }
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {

@@ -149,6 +149,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
         // Get User ID (string)
         string? currentUserId = user?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        string? currentUserFirstName = user?.FindFirst("FirstName")?.Value
+            ?? user?.FindFirst(ClaimTypes.GivenName)?.Value;
 
         // 2. Look at the Change Tracker
         var addedEntities = ChangeTracker.Entries()
@@ -192,12 +194,36 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
                 userProp.SetValue(entry.Entity, currentUserId);
             }
 
+            var createdByNameProp = entry.Entity.GetType().GetProperty("CreatedBy");
+            if (createdByNameProp != null && !string.IsNullOrWhiteSpace(currentUserFirstName))
+            {
+                createdByNameProp.SetValue(entry.Entity, currentUserFirstName);
+            }
+
             // --- STAMP 3: CREATED DATE ---
             // While we are here, let's auto-set the date too!
             var dateProp = entry.Entity.GetType().GetProperty("CreatedAt");
             if (dateProp != null)
             {
                 dateProp.SetValue(entry.Entity, DateTime.UtcNow);
+            }
+        }
+
+        var modifiedEntities = ChangeTracker.Entries()
+            .Where(e => e.State == EntityState.Modified);
+
+        foreach (var entry in modifiedEntities)
+        {
+            var updatedAtProp = entry.Entity.GetType().GetProperty("UpdatedAt");
+            if (updatedAtProp != null)
+            {
+                updatedAtProp.SetValue(entry.Entity, DateTime.UtcNow);
+            }
+
+            var modifiedByNameProp = entry.Entity.GetType().GetProperty("ModifiedBy");
+            if (modifiedByNameProp != null && !string.IsNullOrWhiteSpace(currentUserFirstName))
+            {
+                modifiedByNameProp.SetValue(entry.Entity, currentUserFirstName);
             }
         }
 
