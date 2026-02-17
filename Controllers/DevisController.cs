@@ -311,6 +311,12 @@ namespace ResourceManager.Controllers
             var devis = await _context.Devis.Include(d => d.DevisItems).FirstOrDefaultAsync(d => d.Id == id);
             if (devis == null) return NotFound();
 
+            if ((User.IsInRole("Manager") || User.IsInRole("Employee")) &&
+                await _context.Invoices.AsNoTracking().AnyAsync(i => i.DevisId == devis.Id))
+            {
+                return BadRequest(new { message = "Document is locked: Invoice already generated." });
+            }
+
             if (devis.Status == "Accepted") return BadRequest("Cannot modify an accepted quote.");
 
             var duplicateNumberExists = await _context.Devis

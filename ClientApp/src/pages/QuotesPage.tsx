@@ -36,6 +36,7 @@ interface Devis {
     currencySymbol?: string;
     tfiscal?: number;
     tfiscalName?: string;
+    invoiceId?: number;
 }
 
 const getQuoteNumber = (quote: Devis & { Number?: string }) => quote.number || quote.Number || '';
@@ -237,6 +238,9 @@ export default function QuotesPage() {
                                     </span>
                                 </div>
                             </div>
+                            {(quote.invoiceId != null || quote.status === 'Completed') && (
+                                <p className="mb-3 text-xs text-amber-700">{t('document.lockedInvoiceGenerated', 'Document is locked: Invoice already generated.')}</p>
+                            )}
 
                             {/* Date and Total */}
                             <div className="flex items-center justify-between text-sm mb-3 pb-3 border-b border-gray-100">

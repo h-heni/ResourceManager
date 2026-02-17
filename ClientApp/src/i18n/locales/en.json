@@ -1,4 +1,4 @@
-﻿{
+{
   "common": {
     "loading": "Loading...",
     "save": "Save",
@@ -1090,5 +1090,8 @@
     "passwordMinLength": "Password must be at least 6 characters.",
     "defaultCurrency": "Default Currency",
     "defaultLanguage": "Default Language"
+  },
+  "document": {
+    "lockedInvoiceGenerated": "Document is locked: Invoice already generated."
   }
 }

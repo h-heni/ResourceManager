@@ -684,9 +684,9 @@ Best regards,
     // ═══════════════════════════════════════════════════════════════
 
     return (
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-6xl mx-auto px-4 py-6 lg:px-10">
             {/* Header */}
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col gap-4 mb-6 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center space-x-3">
                     <Settings className="text-[#065F46]" size={28} />
                     <div>
@@ -695,7 +695,7 @@ Best regards,
                     </div>
                 </div>
                 <button onClick={() => handleSave()} disabled={saving}
-                    className="flex items-center px-6 py-3 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all disabled:opacity-50">
+                    className="w-full sm:w-auto flex items-center justify-center px-6 py-3 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all disabled:opacity-50">
                     {saving ? <Loader2 size={20} className="mr-2 animate-spin" /> : <Save size={20} className="mr-2" />}
                     {saving ? t('common.loading', 'Saving...') : t('common.save', 'Save Changes')}
                 </button>
@@ -719,12 +719,12 @@ Best regards,
             )}
 
             {/* Main layout: Sidebar + Content */}
-            <div className="flex gap-6">
+            <div className="flex flex-col gap-6 lg:flex-row">
                 {/* ═══════════ LEFT SIDEBAR ═══════════ */}
-                <div className="w-56 flex-shrink-0 space-y-1.5">
+                <div className="w-full lg:w-56 lg:flex-shrink-0 flex lg:block gap-1.5 overflow-x-auto pb-1 lg:overflow-visible lg:pb-0">
                     {sections.map(sec => (
                         <button key={sec.key} onClick={() => setActiveSection(sec.key)}
-                            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all text-sm font-medium ${
+                            className={`w-auto lg:w-full flex-shrink-0 flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all text-sm font-medium ${
                                 activeSection === sec.key
                                     ? 'bg-[#065F46] text-white shadow-md'
                                     : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-100'
@@ -741,14 +741,14 @@ Best regards,
                     {activeSection === 'personal' && (
                         <div className="space-y-6">
                             {/* Sub-tabs */}
-                            <div className="flex gap-2 bg-gray-100 p-1 rounded-xl">
+                            <div className="flex gap-2 bg-gray-100 p-1 rounded-xl overflow-x-auto">
                                 {([
                                     { key: 'company' as PersonalTab, label: t('settings.companyInfo', 'Company Information'), icon: Building2 },
                                     { key: 'password' as PersonalTab, label: t('settings.changePassword', 'Password'), icon: Lock },
                                     { key: 'userinfo' as PersonalTab, label: t('settings.userInfo', 'User Info'), icon: User },
                                 ]).map(tab => (
                                     <button key={tab.key} onClick={() => setPersonalTab(tab.key)}
-                                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                                        className={`flex-shrink-0 sm:flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
                                             personalTab === tab.key ? 'bg-white text-[#065F46] shadow-sm' : 'text-gray-600 hover:text-gray-900'
                                         }`}>
                                         <tab.icon size={16} />{tab.label}
@@ -756,7 +756,7 @@ Best regards,
                                 ))}
                             </div>
 
-                            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8">
+                            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 lg:p-8">
                                 {personalTab === 'company' && (
                                     <div className="space-y-6">
                                         <h3 className="text-lg font-semibold text-gray-900 flex items-center">
@@ -797,7 +797,7 @@ Best regards,
                                                 {t('settings.logo', 'Company Logo')}
                                                 {settings.hasLogoData && <CheckCircle size={16} className="text-emerald-500" />}
                                             </h4>
-                                            <div className="flex items-start gap-6">
+                                            <div className="flex flex-col sm:flex-row items-start gap-6">
                                                 <div className="flex-shrink-0">
                                                     {logoPreview ? (
                                                         <div className="relative group">
@@ -899,13 +899,13 @@ Best regards,
                     {/* ──── SECTION 2: Email Settings ──── */}
                     {activeSection === 'email' && (
                         <div className="space-y-6">
-                            <div className="flex gap-2 bg-gray-100 p-1 rounded-xl">
+                            <div className="flex gap-2 bg-gray-100 p-1 rounded-xl overflow-x-auto">
                                 {([
                                     { key: 'connection' as EmailTab, label: t('settings.emailConnection', 'Email Connection'), icon: Mail },
                                     { key: 'template' as EmailTab, label: t('settings.emailTemplate', 'Email Template'), icon: FileText },
                                 ]).map(tab => (
                                     <button key={tab.key} onClick={() => setEmailTab(tab.key)}
-                                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                                        className={`flex-shrink-0 sm:flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
                                             emailTab === tab.key ? 'bg-white text-[#065F46] shadow-sm' : 'text-gray-600 hover:text-gray-900'
                                         }`}>
                                         <tab.icon size={16} />{tab.label}
@@ -913,7 +913,7 @@ Best regards,
                                 ))}
                             </div>
 
-                            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8">
+                            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 lg:p-8">
                                 {emailTab === 'connection' && (
                                     <div className="space-y-6">
                                         <h3 className="text-lg font-semibold text-gray-900 flex items-center">
@@ -1059,7 +1059,7 @@ Best regards,
                     {/* ──── SECTION 3: PDF Settings ──── */}
                     {activeSection === 'pdf' && (
                         <div className="space-y-6">
-                            <div className="flex gap-2 bg-gray-100 p-1 rounded-xl">
+                            <div className="flex gap-2 bg-gray-100 p-1 rounded-xl overflow-x-auto">
                                 {([
                                     { key: 'signature' as PdfTab, label: t('settings.signature', 'Signature'), icon: PenTool },
                                     { key: 'branding' as PdfTab, label: t('settings.branding', 'Branding'), icon: Palette },
@@ -1067,7 +1067,7 @@ Best regards,
                                     { key: 'storage' as PdfTab, label: t('settings.storage', 'Storage'), icon: HardDrive },
                                 ]).map(tab => (
                                     <button key={tab.key} onClick={() => setPdfTab(tab.key)}
-                                        className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                                        className={`flex-shrink-0 sm:flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
                                             pdfTab === tab.key ? 'bg-white text-[#065F46] shadow-sm' : 'text-gray-600 hover:text-gray-900'
                                         }`}>
                                         <tab.icon size={16} />{tab.label}
@@ -1075,7 +1075,7 @@ Best regards,
                                 ))}
                             </div>
 
-                            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8">
+                            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 lg:p-8">
                                 {/* Signature Tab */}
                                 {pdfTab === 'signature' && (
                                     <div className="space-y-6">
@@ -1086,7 +1086,7 @@ Best regards,
                                         <p className="text-sm text-gray-500">{t('settings.signatureDesc', 'Upload your company stamp or signature image. This will appear at the bottom of generated invoices and quotes.')}</p>
 
                                         <div className="p-6 border-2 border-dashed border-gray-200 rounded-xl">
-                                            <div className="flex items-start gap-6">
+                                            <div className="flex flex-col sm:flex-row items-start gap-6">
                                                 <div className="flex-shrink-0">
                                                     {signaturePreview ? (
                                                         <div className="relative group">

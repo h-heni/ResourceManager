@@ -142,7 +142,7 @@ namespace ResourceManager.Services
                     var totalPaidCompleted = inv.Payments?.Where(p => p.Status == "Completed").Sum(p => p.Amount) ?? 0;
                     var totalAmount = inv.TotalAmount ?? 0;
 
-                    if (totalPaidCompleted >= totalAmount && totalAmount > 0)
+                    if (totalAmount - totalPaidCompleted <= 0)
                     {
                         inv.Status = "Paid";
                         inv.IsLocked = true;

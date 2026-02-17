@@ -415,7 +415,7 @@ namespace ResourceManager.Services
 
                 if (Settings.ShowLogo && LogoBytes.Length > 0)
                 {
-                    row.ConstantItem(120).MaxHeight(50).Image(LogoBytes).FitArea();
+                    row.ConstantItem(120).MaxHeight(50).MaxWidth(120).Image(LogoBytes).FitArea();
                 }
             });
         }
@@ -941,7 +941,7 @@ namespace ResourceManager.Services
                         innerCol.Item().PaddingTop(4).AlignCenter().Text(Settings.PdfSignerPosition).FontSize(10).FontColor(Colors.Grey.Medium);
 
                     if (Settings.ShowSignatureOnPdf && Settings.SignatureImageData?.Length > 0)
-                        innerCol.Item().PaddingTop(6).AlignCenter().Width(120).MaxHeight(40).Image(Settings.SignatureImageData).FitArea();
+                        innerCol.Item().PaddingTop(6).AlignCenter().Width(120).MaxHeight(40).MaxWidth(120).Image(Settings.SignatureImageData).FitArea();
                 });
             });
         }
@@ -1085,7 +1085,7 @@ namespace ResourceManager.Services
 
                 if (Settings.ShowLogo && LogoBytes.Length > 0)
                 {
-                    row.ConstantItem(96).MaxHeight(50).Image(LogoBytes).FitArea();
+                    row.ConstantItem(96).MaxHeight(50).MaxWidth(96).Image(LogoBytes).FitArea();
                 }
             });
         }
@@ -1402,7 +1402,7 @@ namespace ResourceManager.Services
 
                     if (Settings.ShowSignatureOnPdf && Settings.SignatureImageData?.Length > 0)
                     {
-                        innerCol.Item().PaddingTop(6).AlignCenter().Width(120).MaxHeight(40).Image(Settings.SignatureImageData).FitArea();
+                        innerCol.Item().PaddingTop(6).AlignCenter().Width(120).MaxHeight(40).MaxWidth(120).Image(Settings.SignatureImageData).FitArea();
                     }
                 });
             });
