@@ -8,41 +8,41 @@ using UglyToad.PdfPig.Content;
 namespace ResourceManager.Services
 {
     /// <summary>
-    /// Service for scanning and extracting data from fournisseur (supplier) PDF invoices and images
+    /// Service for scanning and extracting data from supplier PDF invoices and images
     /// Supports: PDF files (text-based and image-based), photos (JPG, PNG, BMP, TIFF, WebP)
     /// </summary>
-    public interface IFournisseurPdfScannerService
+    public interface ISupplierPdfScannerService
     {
         /// <summary>
-        /// Scan a PDF and extract fournisseur invoice data
+        /// Scan a PDF and extract supplier invoice data
         /// </summary>
-        Task<FournisseurScanResult> ScanPdfAsync(Stream pdfStream, string fileName);
+        Task<SupplierScanResult> ScanPdfAsync(Stream pdfStream, string fileName);
         
         /// <summary>
         /// Scan an image (photo / uploaded image) and extract invoice data via OCR
         /// </summary>
-        Task<FournisseurScanResult> ScanImageAsync(Stream imageStream, string fileName);
+        Task<SupplierScanResult> ScanImageAsync(Stream imageStream, string fileName);
         
         /// <summary>
         /// Save the scanned/corrected data to database
         /// </summary>
-        Task<Fournisseur?> SaveScannedDataAsync(int companyId, FournisseurScanResult scanResult, FournisseurScanCorrections? corrections = null);
+        Task<Supplier?> SaveScannedDataAsync(int companyId, SupplierScanResult scanResult, SupplierScanCorrections? corrections = null);
     }
 
-    public class FournisseurPdfScannerService : IFournisseurPdfScannerService
+    public class SupplierPdfScannerService : ISupplierPdfScannerService
     {
-        private readonly ILogger<FournisseurPdfScannerService> _logger;
+        private readonly ILogger<SupplierPdfScannerService> _logger;
         private readonly string _tessDataPath;
 
-        public FournisseurPdfScannerService(ILogger<FournisseurPdfScannerService> logger)
+        public SupplierPdfScannerService(ILogger<SupplierPdfScannerService> logger)
         {
             _logger = logger;
             _tessDataPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "tessdata");
         }
 
-        public async Task<FournisseurScanResult> ScanImageAsync(Stream imageStream, string fileName)
+        public async Task<SupplierScanResult> ScanImageAsync(Stream imageStream, string fileName)
         {
-            var result = new FournisseurScanResult
+            var result = new SupplierScanResult
             {
                 FileName = fileName,
                 ScannedAt = DateTime.UtcNow
@@ -115,9 +115,9 @@ namespace ResourceManager.Services
             }
         }
 
-        public async Task<FournisseurScanResult> ScanPdfAsync(Stream pdfStream, string fileName)
+        public async Task<SupplierScanResult> ScanPdfAsync(Stream pdfStream, string fileName)
         {
-            var result = new FournisseurScanResult
+            var result = new SupplierScanResult
             {
                 FileName = fileName,
                 ScannedAt = DateTime.UtcNow
@@ -407,7 +407,7 @@ namespace ResourceManager.Services
             }
         }
 
-        private void ParseExtractedText(string text, FournisseurScanResult result)
+        private void ParseExtractedText(string text, SupplierScanResult result)
         {
             int matchedFields = 0;
             int totalFields = 8;
@@ -497,7 +497,7 @@ namespace ResourceManager.Services
             }
 
             // ═══════════════════════════════════════════════════════════════
-            // FOURNISSEUR NAME (Usually at top of invoice)
+            // SUPPLIER NAME (Usually at top of invoice)
             // ═══════════════════════════════════════════════════════════════
             var namePatterns = new[]
             {
@@ -516,7 +516,7 @@ namespace ResourceManager.Services
                     var name = match.Groups[1].Value.Trim();
                     if (name.Length >= 2 && !IsCommonWord(name))
                     {
-                        result.ExtractedData.FournisseurName = name;
+                        result.ExtractedData.SupplierName = name;
                         matchedFields++;
                         break;
                     }
@@ -524,7 +524,7 @@ namespace ResourceManager.Services
             }
 
             // If no name found, try first significant line (likely company header)
-            if (string.IsNullOrEmpty(result.ExtractedData.FournisseurName) && lines.Length > 0)
+            if (string.IsNullOrEmpty(result.ExtractedData.SupplierName) && lines.Length > 0)
             {
                 for (int i = 0; i < Math.Min(5, lines.Length); i++)
                 {
@@ -533,8 +533,8 @@ namespace ResourceManager.Services
                         !Regex.IsMatch(line, @"(?:Facture|Invoice|Rechnung|Date|Total|N°)", RegexOptions.IgnoreCase) &&
                         char.IsLetter(line[0]))
                     {
-                        result.ExtractedData.FournisseurName = line;
-                        result.Warnings.Add("Fournisseur name may need verification (auto-detected from first line)");
+                        result.ExtractedData.SupplierName = line;
+                        result.Warnings.Add("Supplier name may need verification (auto-detected from first line)");
                         matchedFields++;
                         break;
                     }
@@ -749,8 +749,8 @@ namespace ResourceManager.Services
             ExtractLineItems(text, lines, result);
 
             // Add warnings for missing critical fields
-            if (string.IsNullOrEmpty(result.ExtractedData.FournisseurName))
-                result.Warnings.Add("Could not extract fournisseur name");
+            if (string.IsNullOrEmpty(result.ExtractedData.SupplierName))
+                result.Warnings.Add("Could not extract supplier name");
             if (string.IsNullOrEmpty(result.ExtractedData.InvoiceNumber))
                 result.Warnings.Add("Could not extract invoice number");
             if (!result.ExtractedData.InvoiceDate.HasValue)
@@ -879,7 +879,7 @@ namespace ResourceManager.Services
         /// Extract line items from invoice text 
         /// Uses multiple strategies to handle different invoice layouts
         /// </summary>
-        private void ExtractLineItems(string text, string[] lines, FournisseurScanResult result)
+        private void ExtractLineItems(string text, string[] lines, SupplierScanResult result)
         {
             try
             {
@@ -1176,16 +1176,16 @@ namespace ResourceManager.Services
             return words.Any(w => headers.Contains(w.Trim()));
         }
 
-        public async Task<Fournisseur?> SaveScannedDataAsync(int companyId, FournisseurScanResult scanResult, FournisseurScanCorrections? corrections = null)
+        public async Task<Supplier?> SaveScannedDataAsync(int companyId, SupplierScanResult scanResult, SupplierScanCorrections? corrections = null)
         {
-            // Create fournisseur with extracted/corrected data
+            // Create supplier with extracted/corrected data
             var data = scanResult.ExtractedData;
             
             // Apply corrections if provided
             if (corrections != null)
             {
-                if (!string.IsNullOrWhiteSpace(corrections.FournisseurName))
-                    data.FournisseurName = corrections.FournisseurName;
+                if (!string.IsNullOrWhiteSpace(corrections.SupplierName))
+                    data.SupplierName = corrections.SupplierName;
                 if (!string.IsNullOrWhiteSpace(corrections.Email))
                     data.Email = corrections.Email;
                 if (!string.IsNullOrWhiteSpace(corrections.Phone))
@@ -1204,16 +1204,16 @@ namespace ResourceManager.Services
                     data.TVA = corrections.TVA;
             }
 
-            var fournisseur = new Fournisseur
+            var supplier = new Supplier
             {
                 CompanyId = companyId,
-                Name = data.FournisseurName ?? "Unknown",
+                Name = data.SupplierName ?? "Unknown",
                 Phone = data.Phone ?? string.Empty,
                 Address = data.Address ?? string.Empty,
                 CreatedAt = DateTime.UtcNow
             };
 
-            return await Task.FromResult(fournisseur);
+            return await Task.FromResult(supplier);
         }
     }
 
@@ -1221,7 +1221,7 @@ namespace ResourceManager.Services
     // RESULT MODELS
     // ═══════════════════════════════════════════════════════════════
 
-    public class FournisseurScanResult
+    public class SupplierScanResult
     {
         public bool Success { get; set; }
         public string FileName { get; set; } = string.Empty;
@@ -1231,14 +1231,14 @@ namespace ResourceManager.Services
         public string RawExtractedText { get; set; } = string.Empty;
         public byte[]? PdfBytes { get; set; }
         
-        public FournisseurExtractedData ExtractedData { get; set; } = new();
+        public SupplierExtractedData ExtractedData { get; set; } = new();
         public List<string> Warnings { get; set; } = new();
         public List<string> Errors { get; set; } = new();
     }
 
-    public class FournisseurExtractedData
+    public class SupplierExtractedData
     {
-        public string? FournisseurName { get; set; }
+        public string? SupplierName { get; set; }
         public string? Email { get; set; }
         public string? Phone { get; set; }
         public string? Address { get; set; }
@@ -1262,9 +1262,9 @@ namespace ResourceManager.Services
         public decimal TotalHT { get; set; }
     }
 
-    public class FournisseurScanCorrections
+    public class SupplierScanCorrections
     {
-        public string? FournisseurName { get; set; }
+        public string? SupplierName { get; set; }
         public string? Email { get; set; }
         public string? Phone { get; set; }
         public string? Address { get; set; }

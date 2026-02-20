@@ -28,7 +28,7 @@ interface LineItem {
 }
 
 interface ExtractedData {
-    fournisseurName: string;
+    supplierName: string;
     invoiceNumber: string;
     invoiceDate: string;
     dueDate: string;
@@ -68,8 +68,8 @@ interface SupplierInvoice {
     extractionStatus: string;
     confidenceScore: number | null;
     createdAt: string;
-    fournisseurName: string | null;
-    fournisseurId: number | null;
+    supplierName: string | null;
+    supplierId: number | null;
     itemCount: number;
     amountPaid: number;
     pendingAmount: number;
@@ -129,15 +129,15 @@ export default function SupplierInvoicesPage() {
     const [, setExtractedData] = useState<ExtractedData | null>(null);
     const [lineItems, setLineItems] = useState<LineItem[]>([]);
     const [headerData, setHeaderData] = useState({
-        fournisseurName: '',
+        supplierName: '',
         invoiceNumber: '',
         invoiceDate: '',
         dueDate: '',
         totalHT: '',
         totalTTC: '',
         tva: '',
-        fournisseurPhone: '',
-        fournisseurAddress: '',
+        supplierPhone: '',
+        supplierAddress: '',
     });
     const [warnings, setWarnings] = useState<string[]>([]);
     const [confidenceScore, setConfidenceScore] = useState<number>(0);
@@ -150,7 +150,7 @@ export default function SupplierInvoicesPage() {
         name: string;
         address?: string;
         phone?: string;
-        matriculeFiscal?: string;
+        taxId?: string;
         email?: string;
     }
     const [suppliers, setSuppliers] = useState<SupplierFull[]>([]);
@@ -264,11 +264,11 @@ export default function SupplierInvoicesPage() {
 
     const fetchSuppliers = async () => {
         try {
-            const res = await api.get('/Fournisseurs?size=9999');
+            const res = await api.get('/Suppliers?size=9999');
             const data = Array.isArray(res.data) ? res.data : (res.data.data || []);
-            setSuppliers(data.map((s: { id: number; name: string; address?: string; phone?: string; matriculeFiscal?: string; email?: string }) => ({
+            setSuppliers(data.map((s: { id: number; name: string; address?: string; phone?: string; taxId?: string; email?: string }) => ({
                 id: s.id, name: s.name, address: s.address, phone: s.phone,
-                matriculeFiscal: s.matriculeFiscal, email: s.email
+                taxId: s.taxId, email: s.email
             })));
         } catch {
             // Non-critical
@@ -364,7 +364,7 @@ export default function SupplierInvoicesPage() {
 
             // Populate header data
             setHeaderData({
-                fournisseurName: data.extractedData.fournisseurName || '',
+                supplierName: data.extractedData.supplierName || '',
                 invoiceNumber: data.extractedData.invoiceNumber || '',
                 invoiceDate: data.extractedData.invoiceDate
                     ? new Date(data.extractedData.invoiceDate).toISOString().split('T')[0]
@@ -375,8 +375,8 @@ export default function SupplierInvoicesPage() {
                 totalHT: data.extractedData.totalHT?.toString() || '',
                 totalTTC: data.extractedData.totalTTC?.toString() || '',
                 tva: data.extractedData.tva?.toString() || '',
-                fournisseurPhone: data.extractedData.phone || '',
-                fournisseurAddress: data.extractedData.address || '',
+                supplierPhone: data.extractedData.phone || '',
+                supplierAddress: data.extractedData.address || '',
             });
 
             // Populate line items
@@ -486,10 +486,10 @@ export default function SupplierInvoicesPage() {
                     totalHT: finalTotalHT,
                     totalTTC: finalTotalTTC,
                     tva: finalTVA,
-                    fournisseurId: selectedSupplierId || undefined,
-                    fournisseurName: !selectedSupplierId ? headerData.fournisseurName : undefined,
-                    fournisseurAddress: headerData.fournisseurAddress || undefined,
-                    fournisseurPhone: headerData.fournisseurPhone || undefined,
+                    supplierId: selectedSupplierId || undefined,
+                    supplierName: !selectedSupplierId ? headerData.supplierName : undefined,
+                    supplierAddress: headerData.supplierAddress || undefined,
+                    supplierPhone: headerData.supplierPhone || undefined,
                     currency: supplierCurrency || undefined,
                     currencySymbol: supplierCurrencySymbol || undefined,
                     items,
@@ -504,10 +504,10 @@ export default function SupplierInvoicesPage() {
                     totalHT: finalTotalHT,
                     totalTTC: finalTotalTTC,
                     tva: finalTVA,
-                    fournisseurId: selectedSupplierId || undefined,
-                    fournisseurName: !selectedSupplierId ? headerData.fournisseurName : undefined,
-                    fournisseurAddress: headerData.fournisseurAddress || undefined,
-                    fournisseurPhone: headerData.fournisseurPhone || undefined,
+                    supplierId: selectedSupplierId || undefined,
+                    supplierName: !selectedSupplierId ? headerData.supplierName : undefined,
+                    supplierAddress: headerData.supplierAddress || undefined,
+                    supplierPhone: headerData.supplierPhone || undefined,
                     items,
                 };
                 await api.put(`/SupplierInvoices/${currentInvoiceId}/confirm`, payload);
@@ -567,15 +567,15 @@ export default function SupplierInvoicesPage() {
         setExtractedData(null);
         setLineItems([]);
         setHeaderData({
-            fournisseurName: '',
+            supplierName: '',
             invoiceNumber: '',
             invoiceDate: '',
             dueDate: '',
             totalHT: '',
             totalTTC: '',
             tva: '',
-            fournisseurPhone: '',
-            fournisseurAddress: '',
+            supplierPhone: '',
+            supplierAddress: '',
         });
         setWarnings([]);
         setConfidenceScore(0);
@@ -619,7 +619,7 @@ export default function SupplierInvoicesPage() {
                 amount,
                 paymentDate,
                 notes: paymentNotes || undefined,
-                status: 'Pending',
+                status: isScheduledPayment ? 'Pending' : 'Completed',
             });
             setShowPaymentModal(false);
             setSelectedInvoice(null);
@@ -688,7 +688,7 @@ export default function SupplierInvoicesPage() {
     const filteredInvoices = invoices.filter(inv => {
         const matchesSearch = (inv.fileName?.toLowerCase() || '').includes(search.toLowerCase()) ||
             (inv.invoiceNumber?.toLowerCase() || '').includes(search.toLowerCase()) ||
-            (inv.fournisseurName?.toLowerCase() || '').includes(search.toLowerCase());
+            (inv.supplierName?.toLowerCase() || '').includes(search.toLowerCase());
         const matchesTab = activeTab === 'active'
             ? inv.paymentStatus !== 'Paid'
             : inv.paymentStatus === 'Paid';
@@ -705,15 +705,15 @@ export default function SupplierInvoicesPage() {
             const data = res.data;
             setCurrentInvoiceId(data.id);
             setHeaderData({
-                fournisseurName: data.fournisseurName || '',
+                supplierName: data.supplierName || '',
                 invoiceNumber: data.invoiceNumber || '',
                 invoiceDate: data.invoiceDate ? new Date(data.invoiceDate).toISOString().split('T')[0] : '',
                 dueDate: data.dueDate ? new Date(data.dueDate).toISOString().split('T')[0] : '',
                 totalHT: data.totalHT?.toString() || '',
                 totalTTC: data.totalTTC?.toString() || '',
                 tva: data.tva?.toString() || '',
-                fournisseurPhone: data.fournisseurPhone || '',
-                fournisseurAddress: data.fournisseurAddress || '',
+                supplierPhone: data.supplierPhone || '',
+                supplierAddress: data.supplierAddress || '',
             });
             setLineItems((data.items || []).map((item: { description: string; quantity: number; unitPrice: number; taxRate?: number; totalHT: number }, i: number) => ({
                 id: `item-${Date.now()}-${i}`,
@@ -723,7 +723,7 @@ export default function SupplierInvoicesPage() {
                 taxRate: item.taxRate ?? 0.19,
                 totalHT: item.totalHT,
             })));
-            setSelectedSupplierId(data.fournisseurId);
+            setSelectedSupplierId(data.supplierId);
             setConfidenceScore(data.confidenceScore || 0);
             // Fetch the file via authenticated API and create blob URL for iframe preview
             replacePreviewFileUrl(null);
@@ -788,17 +788,10 @@ export default function SupplierInvoicesPage() {
                     <div className="flex gap-3">
                         <button
                             onClick={runConsistencyCheck}
-                            className={`flex items-center px-4 py-2 rounded-xl transition-all border ${
-                                consistencyResult && consistencyResult.invoicesWithIssues === 0
-                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                                    : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
-                            }`}
+                            className="flex items-center px-4 py-2 bg-emerald-600 text-white rounded-xl shadow-md hover:bg-emerald-700 transition-all transform hover:scale-105"
                         >
-                            <ShieldCheck size={18} className="mr-2" />
+                            <ShieldCheck size={18} className="mr-2 text-white" />
                             {t('supplierInvoice.consistencyCheck', 'Check')}
-                            {consistencyResult && consistencyResult.invoicesWithIssues === 0 && (
-                                <CheckCircle size={14} className="ml-1.5 text-emerald-600" />
-                            )}
                         </button>
                         <button
                             onClick={() => navigate('/suppliers')}
@@ -887,14 +880,24 @@ export default function SupplierInvoicesPage() {
                 ) : (
                     <div className="rm-table-card">
                         <table className="rm-table">
+                            <colgroup>
+                                <col style={{ width: '14%' }} />{/* Invoice # */}
+                                <col style={{ width: '13%' }} />{/* Supplier */}
+                                <col style={{ width: '11%' }} />{/* Date */}
+                                <col style={{ width: '13%' }} />{/* Total TTC */}
+                                <col style={{ width: '13%' }} />{/* Paid */}
+                                <col style={{ width: '13%' }} />{/* Remaining */}
+                                <col style={{ width: '12%' }} />{/* Status */}
+                                <col style={{ width: '11%' }} />{/* Actions */}
+                            </colgroup>
                             <thead>
                                 <tr>
                                     <th className="rm-th-id">{t('supplierInvoice.invoiceNumber', 'Invoice #')}</th>
-                                    <th>{t('supplierInvoice.supplier', 'Supplier')}</th>
+                                    <th className="rm-th-text">{t('supplierInvoice.supplier', 'Supplier')}</th>
                                     <th className="rm-th-date">{t('common.date', 'Date')}</th>
-                                    <th className="rm-th-number">{t('invoice.totalTTC', 'Total TTC')}</th>
-                                    <th className="rm-th-number">{t('supplierInvoice.paid', 'Paid')}</th>
-                                    <th className="rm-th-number">{t('supplierInvoice.remaining', 'Remaining')}</th>
+                                    <th className="rm-th-currency">{t('invoice.totalTTC', 'Total TTC')}</th>
+                                    <th className="rm-th-currency">{t('supplierInvoice.paid', 'Paid')}</th>
+                                    <th className="rm-th-currency">{t('supplierInvoice.remaining', 'Remaining')}</th>
                                     <th className="rm-th-status">{t('common.status', 'Status')}</th>
                                     <th className="rm-th-actions">{t('common.actions', 'Actions')}</th>
                                 </tr>
@@ -903,10 +906,10 @@ export default function SupplierInvoicesPage() {
                                 {filteredInvoices.map(inv => (
                                     <tr key={inv.id}>
                                         <td className="rm-cell-text">
-                                            <div className="font-medium text-gray-900 whitespace-nowrap">{inv.invoiceNumber || '—'}</div>
-                                            <div className="text-xs text-gray-400 break-all">{inv.fileName}</div>
+                                            <div className="font-medium text-gray-900 whitespace-nowrap truncate">{inv.invoiceNumber || '—'}</div>
+                                            <div className="text-xs text-gray-400 truncate">{inv.fileName}</div>
                                         </td>
-                                        <td className="rm-cell-text text-sm text-gray-600">{inv.fournisseurName || '—'}</td>
+                                        <td className="rm-cell-text text-sm text-gray-600 truncate">{inv.supplierName || '—'}</td>
                                         <td className="rm-cell-date">
                                             {inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString() : '—'}
                                         </td>
@@ -951,7 +954,7 @@ export default function SupplierInvoicesPage() {
                                                             onClick={() => openPaymentHistory(inv)}
                                                             className="text-xs text-[#065F46] hover:text-[#065F46]"
                                                         >
-                                                            +{inv.payments.length - 3} more
+                                                            +{inv.payments.length - 3} {t('supplierInvoice.morePayments', { count: inv.payments.length - 3, defaultValue: 'more' })}
                                                         </button>
                                                     )}
                                                 </div>
@@ -980,13 +983,15 @@ export default function SupplierInvoicesPage() {
                                                 >
                                                     <Eye size={18} />
                                                 </button>
-                                                <button
-                                                    onClick={() => handleViewInvoice(inv.id)}
-                                                    className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                                                    title={t('common.edit', 'Edit')}
-                                                >
-                                                    <Edit2 size={18} />
-                                                </button>
+                                                {(inv.paymentStatus === 'Pending' || inv.paymentStatus === 'Unpaid') && (
+                                                    <button
+                                                        onClick={() => handleViewInvoice(inv.id)}
+                                                        className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                                                        title={t('common.edit', 'Edit')}
+                                                    >
+                                                        <Edit2 size={18} />
+                                                    </button>
+                                                )}
                                                 {/* Delete - manager only */}
                                                 {isManager && (
                                                     <button
@@ -1055,7 +1060,7 @@ export default function SupplierInvoicesPage() {
                             <div className="p-6 space-y-4">
                                 {/* Invoice summary */}
                                 <div className="bg-gray-50 rounded-xl p-4">
-                                    <p className="text-sm text-gray-600">{t('supplierInvoice.supplier', 'Supplier')}: <span className="font-bold">{selectedInvoice.fournisseurName}</span></p>
+                                    <p className="text-sm text-gray-600">{t('supplierInvoice.supplier', 'Supplier')}: <span className="font-bold">{selectedInvoice.supplierName}</span></p>
                                     <p className="text-sm text-gray-600">{t('supplierInvoice.invoiceNumber', 'Invoice')}: <span className="font-bold">{selectedInvoice.invoiceNumber || selectedInvoice.fileName}</span></p>
                                     <div className="grid grid-cols-3 gap-2 mt-3">
                                         <div>
@@ -1194,12 +1199,14 @@ export default function SupplierInvoicesPage() {
                                     {t('supplierInvoice.invoiceDetails', 'Invoice Details')}
                                 </h3>
                                 <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={() => { setShowDetailModal(false); handleViewInvoice(detailInvoice.id); }}
-                                        className="px-3 py-1.5 text-sm bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100 flex items-center gap-1"
-                                    >
-                                        <Edit2 size={14} /> {t('common.edit', 'Edit')}
-                                    </button>
+                                    {(detailInvoice.paymentStatus === 'Pending' || detailInvoice.paymentStatus === 'Unpaid') && (
+                                        <button
+                                            onClick={() => { setShowDetailModal(false); handleViewInvoice(detailInvoice.id); }}
+                                            className="px-3 py-1.5 text-sm bg-amber-50 text-amber-700 rounded-lg hover:bg-amber-100 flex items-center gap-1"
+                                        >
+                                            <Edit2 size={14} /> {t('common.edit', 'Edit')}
+                                        </button>
+                                    )}
                                     <button onClick={() => setShowDetailModal(false)} className="p-1.5 hover:bg-gray-100 rounded-lg">
                                         <X size={20} />
                                     </button>
@@ -1214,7 +1221,7 @@ export default function SupplierInvoicesPage() {
                                     </div>
                                     <div>
                                         <p className="text-xs text-gray-500 uppercase font-medium">{t('supplierInvoice.supplier', 'Supplier')}</p>
-                                        <p className="font-semibold text-gray-900">{detailInvoice.fournisseurName || '—'}</p>
+                                        <p className="font-semibold text-gray-900">{detailInvoice.supplierName || '—'}</p>
                                     </div>
                                     <div>
                                         <p className="text-xs text-gray-500 uppercase font-medium">{t('common.date', 'Date')}</p>
@@ -1269,7 +1276,7 @@ export default function SupplierInvoicesPage() {
                                             <tbody className="divide-y divide-gray-100">
                                                 {detailItems.map(item => (
                                                     <tr key={item.id}>
-                                                        <td className="px-3 py-2 text-gray-900">{item.description || '—'}</td>
+                                                        <td className="px-3 py-2 text-left text-gray-900">{item.description || '—'}</td>
                                                         <td className="px-3 py-2 text-right text-gray-600">{item.quantity}</td>
                                                         <td className="px-3 py-2 text-right text-gray-600">{item.unitPrice.toFixed(3)}</td>
                                                         <td className="px-3 py-2 text-right font-medium text-gray-900">{item.totalHT.toFixed(3)}</td>
@@ -1344,10 +1351,10 @@ export default function SupplierInvoicesPage() {
                                         </div>
                                     ))
                                 ) : (
-                                    <p className="text-gray-500 text-center py-4">No payments recorded yet.</p>
+                                    <p className="text-gray-500 text-center py-4">{t('supplierInvoice.noPaymentsRecorded', 'No payments recorded yet.')}</p>
                                 )}
                                 <div className="pt-3 border-t border-gray-200 flex justify-between text-sm">
-                                    <span className="text-gray-600 font-medium">Total Paid:</span>
+                                    <span className="text-gray-600 font-medium">{t('supplierInvoice.totalPaid', 'Total Paid')}:</span>
                                     <span className="font-bold text-emerald-600">{formatCurrency(historyInvoice.amountPaid, historyInvoice.currencySymbol || DEFAULT_CURRENCY)}</span>
                                 </div>
                             </div>
@@ -1551,7 +1558,7 @@ export default function SupplierInvoicesPage() {
                     <div>
                         <h1 className="text-3xl font-bold text-gray-900">{t('supplierInvoice.reviewTitle', 'Review Extracted Data')}</h1>
                         <p className="text-gray-500 mt-1">
-                            Verify and correct the extracted information before saving
+                            {t('supplierInvoice.verifyExtracted', 'Verify and correct the extracted information before saving')}
                             {confidenceScore > 0 && (
                                 <span className={`ml-2 inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
                                     confidenceScore >= 0.7 ? 'bg-emerald-100 text-emerald-700' :
@@ -1569,7 +1576,7 @@ export default function SupplierInvoicesPage() {
                         onClick={handleDiscard}
                         className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200"
                     >
-                        Cancel
+                        {t('common.cancel', 'Cancel')}
                     </button>
                     <button
                         onClick={handleConfirm}
@@ -1687,9 +1694,9 @@ export default function SupplierInvoicesPage() {
                                         if (s) {
                                             setHeaderData(prev => ({
                                                 ...prev,
-                                                fournisseurName: s.name,
-                                                fournisseurAddress: s.address || prev.fournisseurAddress,
-                                                fournisseurPhone: s.phone || prev.fournisseurPhone,
+                                                supplierName: s.name,
+                                                supplierAddress: s.address || prev.supplierAddress,
+                                                supplierPhone: s.phone || prev.supplierPhone,
                                             }));
                                         }
                                     }
@@ -1705,8 +1712,8 @@ export default function SupplierInvoicesPage() {
                         {!selectedSupplierId && (
                             <input
                                 type="text"
-                                value={headerData.fournisseurName}
-                                onChange={e => setHeaderData(prev => ({ ...prev, fournisseurName: e.target.value }))}
+                                value={headerData.supplierName}
+                                onChange={e => setHeaderData(prev => ({ ...prev, supplierName: e.target.value }))}
                                 placeholder={t('supplierInvoice.newSupplierName', 'Or type new supplier name')}
                                 className="w-full mt-2 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
                             />
@@ -1719,7 +1726,7 @@ export default function SupplierInvoicesPage() {
                             value={headerData.invoiceNumber}
                             onChange={e => setHeaderData(prev => ({ ...prev, invoiceNumber: e.target.value }))}
                             className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
-                            placeholder="e.g. FACT-2025-001"
+                            placeholder={t('supplierInvoice.invoiceNumberPlaceholder', 'e.g. FACT-2025-001')}
                         />
                     </div>
                     <div>
@@ -1748,8 +1755,8 @@ export default function SupplierInvoicesPage() {
                         <label className="block text-sm font-medium text-gray-700 mb-1">📞 {t('common.phone', 'Phone')}</label>
                         <input
                             type="text"
-                            value={headerData.fournisseurPhone}
-                            onChange={e => setHeaderData(prev => ({ ...prev, fournisseurPhone: e.target.value }))}
+                            value={headerData.supplierPhone}
+                            onChange={e => setHeaderData(prev => ({ ...prev, supplierPhone: e.target.value }))}
                             className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
                             placeholder="+216..."
                         />
@@ -1759,10 +1766,10 @@ export default function SupplierInvoicesPage() {
                         <label className="block text-sm font-medium text-gray-700 mb-1">📍 {t('common.address', 'Address')}</label>
                         <input
                             type="text"
-                            value={headerData.fournisseurAddress}
-                            onChange={e => setHeaderData(prev => ({ ...prev, fournisseurAddress: e.target.value }))}
+                            value={headerData.supplierAddress}
+                            onChange={e => setHeaderData(prev => ({ ...prev, supplierAddress: e.target.value }))}
                             className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
-                            placeholder="Supplier address..."
+                            placeholder={t('supplier.addressPlaceholder', 'Supplier address...')}
                         />
                     </div>
                 </div>
@@ -1771,7 +1778,7 @@ export default function SupplierInvoicesPage() {
                 <div className="mt-4 pt-4 border-t border-gray-100">
                     {/* Currency selection */}
                     <div className="mb-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Document Currency</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('supplierInvoice.documentCurrency', 'Document Currency')}</label>
                         <select
                             value={supplierCurrency}
                             onChange={e => {
@@ -1784,7 +1791,7 @@ export default function SupplierInvoicesPage() {
                                 <option key={opt.code} value={opt.code}>{opt.label}</option>
                             ))}
                         </select>
-                        <p className="text-xs text-gray-500 mt-1">Currency of this supplier invoice</p>
+                        <p className="text-xs text-gray-500 mt-1">{t('supplierInvoice.currencyOfInvoice', 'Currency of this supplier invoice')}</p>
                     </div>
                     <div className="grid grid-cols-3 gap-3">
                         <div>
@@ -1864,7 +1871,7 @@ export default function SupplierInvoicesPage() {
                             <tbody className="divide-y divide-gray-100">
                                 {lineItems.map(item => (
                                     <tr key={item.id} className="group hover:bg-gray-50">
-                                        <td className="px-3 py-2">
+                                        <td className="px-3 py-2 text-left">
                                             <input
                                                 type="text"
                                                 value={item.description}
@@ -1873,7 +1880,7 @@ export default function SupplierInvoicesPage() {
                                                 placeholder={t('invoice.itemDescription', 'Item description')}
                                             />
                                         </td>
-                                        <td className="px-3 py-2">
+                                        <td className="px-3 py-2 text-center">
                                             <input
                                                 type="number"
                                                 min="1"
@@ -1882,7 +1889,7 @@ export default function SupplierInvoicesPage() {
                                                 className="w-full px-2 py-1.5 bg-transparent border border-transparent hover:border-gray-300 focus:border-[#065F46] rounded focus:ring-1 focus:ring-[#065F46] outline-none text-sm text-center"
                                             />
                                         </td>
-                                        <td className="px-3 py-2">
+                                        <td className="px-3 py-2 text-right">
                                             <input
                                                 type="number"
                                                 step="0.001"
@@ -1923,7 +1930,7 @@ export default function SupplierInvoicesPage() {
                         onClick={handleDiscard}
                         className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200"
                     >
-                        Discard
+                        {t('common.discard', 'Discard')}
                     </button>
                     <button
                         onClick={handleConfirm}

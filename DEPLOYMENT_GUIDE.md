@@ -476,10 +476,7 @@ Developer pushes to main
 | `ACTIVE_ENV` | auto | `blue` | Set by deploy script |
 | `WEB_PORT` | no | `80` | Change if 80 is taken |
 | `CORS_ORIGIN_1` | **YES** | `http://85.214.180.48` | Your VPS IP |
-| `CORS_ORIGIN_2` | no | `http://yourdomain.com` | Your domain |
-| `GOOGLE_CLIENT_ID` | no | `xxx.apps.google...` | For Gmail |
-| `GOOGLE_CLIENT_SECRET` | no | `GOCSPX-...` | For Gmail |
-| `GOOGLE_REFRESH_TOKEN` | no | `1//0...` | For Gmail |
+| `CORS_ORIGIN_2` | no | `http://rscmanager.com` | Your domain |
 | `SUPABASE_URL` | no | `https://x.supabase.co` | For file storage |
 | `SUPABASE_KEY` | no | `eyJhbGci...` | For file storage |
 

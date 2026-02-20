@@ -70,8 +70,8 @@ public class FullStackIntegrationTests : IAsyncLifetime
         }
 
         // Seed companies (Company doesn't inherit Shared, so no FK auto-stamp issues)
-        _company1 = new Company { Name = "Alpha Corp", Address = "A", MatriculeFiscal = "A1", Phone = "+1", Email = "a@a.com", CreatedAt = DateTime.UtcNow };
-        _company2 = new Company { Name = "Beta Corp", Address = "B", MatriculeFiscal = "B1", Phone = "+2", Email = "b@b.com", CreatedAt = DateTime.UtcNow };
+        _company1 = new Company { Name = "Alpha Corp", Address = "A", TaxId = "A1", Phone = "+1", Email = "a@a.com", CreatedAt = DateTime.UtcNow };
+        _company2 = new Company { Name = "Beta Corp", Address = "B", TaxId = "B1", Phone = "+2", Email = "b@b.com", CreatedAt = DateTime.UtcNow };
         context.Companies.Add(_company1);
         context.Companies.Add(_company2);
         await context.SaveChangesAsync();
@@ -170,7 +170,7 @@ public class FullStackIntegrationTests : IAsyncLifetime
         {
             Name = "Client A",
             Address = "456 Client Rd",
-            MatriculeFiscal = "DEF456",
+            TaxId = "DEF456",
             Phone = "+216 71 111 111",
             CompanyId = _company1.Id,
             CreatedAt = DateTime.UtcNow
@@ -630,7 +630,7 @@ public class FullStackIntegrationTests : IAsyncLifetime
         // 3. Complete — create new company + user
         var newCompany = new Company
         {
-            Name = "New Corp", Address = "New St", MatriculeFiscal = "NEW1",
+            Name = "New Corp", Address = "New St", TaxId = "NEW1",
             Phone = "+216 00 000", Email = "invited@newcorp.com", CreatedAt = DateTime.UtcNow
         };
         saCtx.Companies.Add(newCompany);

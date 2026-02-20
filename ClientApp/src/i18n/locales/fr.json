@@ -58,6 +58,8 @@
     "apply": "Appliquer",
     "creating": "Création",
     "downloading": "Téléchargement",
+    "sending": "Envoi en cours...",
+    "processing": "Traitement en cours...",
     "from": "De",
     "hide": "Masquer",
     "select": "Sélectionner",
@@ -67,7 +69,16 @@
     "imported": "Importé",
     "viewOnly": "Lecture seule",
     "year": "Année",
-    "new": "Nouveau"
+    "new": "Nouveau",
+    "discard": "Abandonner",
+    "quantity": "Qté",
+    "refresh": "Actualiser",
+    "retry": "Réessayer",
+    "archivedBy": "Archivé par",
+    "confirmedBy": "Confirmé par"
+  },
+  "detail": {
+    "taxId": "Matricule Fiscal"
   },
   "pagination": {
     "previous": "Précédent",
@@ -90,6 +101,30 @@
     "loginError": "Échec de la connexion",
     "signupSuccess": "Compte créé avec succès",
     "signupError": "Échec de l'inscription",
+    "forgotPasswordTitle": "Mot de passe oublié",
+    "forgotPasswordSubtitle": "Entrez votre email et nous vous enverrons un lien de réinitialisation",
+    "emailPlaceholder": "Entrez votre adresse email",
+    "sendResetLink": "Envoyer le lien",
+    "backToLogin": "Retour à la connexion",
+    "checkEmail": "Vérifiez votre email",
+    "resetEmailSent": "Si un compte existe avec cet email, vous recevrez un lien de réinitialisation. Vérifiez votre boîte de réception et vos spams.",
+    "resetPasswordTitle": "Réinitialiser le mot de passe",
+    "resetPasswordSubtitle": "Entrez votre nouveau mot de passe ci-dessous",
+    "newPassword": "Nouveau mot de passe",
+    "newPasswordPlaceholder": "Entrez le nouveau mot de passe",
+    "confirmPassword": "Confirmer le mot de passe",
+    "confirmPasswordPlaceholder": "Confirmez le nouveau mot de passe",
+    "resetPassword": "Réinitialiser",
+    "passwordRequirements": "Le mot de passe doit contenir au moins 8 caractères",
+    "passwordMismatch": "Les mots de passe ne correspondent pas",
+    "passwordTooShort": "Le mot de passe doit contenir au moins 8 caractères",
+    "resetFailed": "Échec de la réinitialisation. Veuillez réessayer.",
+    "passwordResetSuccess": "Mot de passe réinitialisé",
+    "redirectingToLogin": "Redirection vers la connexion...",
+    "loginNow": "Se connecter maintenant",
+    "invalidResetLink": "Lien invalide",
+    "resetLinkExpiredOrInvalid": "Ce lien de réinitialisation est invalide ou expiré. Veuillez en demander un nouveau.",
+    "requestNewLink": "Demander un nouveau lien",
     "placeholders": {
       "companyName": "Entrez le nom légal de votre entreprise",
       "firstName": "Votre prénom",
@@ -100,6 +135,7 @@
     },
     "messages": {
       "accountCreated": "Compte créé",
+      "accountCreatedDetail": "Votre compte a été créé avec succès. Vous pouvez maintenant vous connecter.",
       "backToLogin": "Retour à la connexion",
       "createAccount": "Créer un compte",
       "createAccountSubtitle": "Entrez vos informations pour commencer",
@@ -116,7 +152,9 @@
       "retryIn": "Réessayez dans",
       "signInPrompt": "Connectez-vous à votre compte",
       "signingIn": "Connexion en cours...",
-      "welcomeBack": "Bon retour"
+      "welcomeBack": "Bon retour",
+      "wrongPassword": "Email ou mot de passe incorrect. Veuillez réessayer.",
+      "accountNotFound": "Aucun compte trouvé avec cette adresse email."
     },
     "checklist": {
       "length": "Au moins 6 caractères",
@@ -143,7 +181,8 @@
     "salesSection": "Ventes",
     "purchasesSection": "Achats",
     "dataManagement": "Gestion des données",
-    "selectLanguage": "Changer de langue"
+    "selectLanguage": "Changer de langue",
+    "subscriptions": "Abonnements"
   },
   "invoice": {
     "title": "Facture",
@@ -163,6 +202,7 @@
     "unitPrice": "Prix unitaire",
     "tax": "TVA",
     "subtotal": "Total H TVA",
+    "vat": "TVA",
     "taxAmount": "Montant TVA",
     "fiscalStamp": "Timbre fiscal",
     "totalAmount": "Montant total",
@@ -272,6 +312,7 @@
       "formattingHint": "Astuce de formatage"
     },
     "noTax": "Pas de taxe",
+    "draft": "Brouillon",
     "viewDetails": "Voir les détails",
     "price": "Prix",
     "save": "Enregistrer"
@@ -294,11 +335,15 @@
     "archived": "Archivé",
     "searchPlaceholder": "Rechercher par numéro ou client...",
     "save": "Enregistrer le devis",
+    "editQuote": "Modifier le devis",
+    "editLoadFailed": "Échec du chargement du devis",
+    "onlyDraftEditable": "Seuls les devis en brouillon peuvent être modifiés",
     "qtyLabel": "Quantité",
     "items": "Articles",
     "quoteNumberLabel": "Numéro de devis",
     "taxRateLabel": "Taux de TVA %",
     "unitPriceLabel": "Prix unitaire",
+    "descriptionPlaceholder": "Description de l'article",
     "status": {
       "Draft": "Brouillon",
       "Accepted": "Accepté",
@@ -328,6 +373,8 @@
     "linkedDoc": "Document lié",
     "noData": "Aucun bon de livraison trouvé",
     "confirmDelete": "Êtes-vous sûr de vouloir supprimer ce bon de livraison ?",
+    "editDeliveryNote": "Modifier le bon de livraison",
+    "editLoadFailed": "Échec du chargement du bon de livraison",
     "deleteFailed": "Échec de la suppression du bon de livraison",
     "delivered": "Livré",
     "messages": {
@@ -375,6 +422,7 @@
   "supplier": {
     "title": "Fournisseurs",
     "newSupplier": "Nouveau Fournisseur",
+    "addressPlaceholder": "Adresse du fournisseur...",
     "messages": {
       "addTitle": "Ajouter un fournisseur",
       "address": "Adresse",
@@ -457,6 +505,12 @@
     "emailSignature": "Signature email",
     "emailSettings": "Paramètres email",
     "emailConnection": "Connexion email",
+    "sendTestEmail": "Envoyer un email de test",
+    "reloadConfig": "Recharger la config",
+    "smtpInfo": "Configuration SMTP",
+    "smtpInfoText": "L'email est envoyé via le serveur SMTP de votre domaine (mail.rscmanager.com). La configuration est gérée via les variables d'environnement sur le serveur.",
+    "emailReady": "Le service email est actif",
+    "emailNotReady": "Le service email n'est pas configuré",
     "pdfSettings": "Paramètres PDF",
     "personalCompany": "Personnel & Entreprise",
     "changePassword": "Changer le mot de passe",
@@ -500,7 +554,7 @@
     "noSubfolders": "Aucun sous-dossier",
     "onDisk": "Sur le disque",
     "parentFolder": "Dossier parent",
-    "pdfSignerPosition": "Position de la signature PDF",
+    "pdfSignerPosition": "Poste ou titre du signataire du PDF",
     "pdfStorageFolder": "Dossier de stockage PDF",
     "pdfStorageFolderDesc": "Emplacement où les PDF sont sauvegardés",
     "recoveryComplete": "Récupération terminée",
@@ -508,12 +562,44 @@
     "regenerateMissing": "Régénérer les manquants",
     "regeneratingPdfs": "Régénération des PDF...",
     "selectFolder": "Sélectionner un dossier",
-    "signerPositionHelp": "Aide pour la position de la signature",
-    "signerPositionPlaceholder": "ex: 10,20",
+    "signerPositionHelp": "Aide pour la position ou le titre du signataire du PDF",
+    "signerPositionPlaceholder": "Poste ou titre du signataire du PDF",
     "totalRegistered": "Total enregistré",
     "useThisFolder": "Utiliser ce dossier",
     "proInvoiceTokenHelp": "Jeton affiché sur les documents officiels de facture pro forma.",
-    "proInvoiceTokenSignature": "Signature du jeton de facture pro forma"
+    "proInvoiceTokenSignature": "Signature du jeton de facture pro forma",
+    "logoHint": "PNG ou JPG, max 2 Mo. Apparaît sur les PDF et les e-mails.",
+    "signatureHint": "PNG avec fond transparent recommandé. Max 2 Mo.",
+    "signatureNameHelp": "Le nom qui apparaît en gras sur la signature du PDF",
+    "uploadSignatureFirst": "Téléchargez d'abord une signature",
+    "livePdfPreview": "Aperçu PDF en direct",
+    "previewDesc": "Prévisualisez votre facture avec les couleurs, le logo, la signature et la langue actuels.",
+    "lockedSettingsHint": "Les paramètres de devise et de taxe sont verrouillés après la configuration initiale. Les informations bancaires restent modifiables.",
+    "defaultVatRate": "Taux de TVA par défaut (%)",
+    "customTaxHint": "Configurez une taxe personnalisée comme le Timbre Fiscal",
+    "bankInfoHint": "Affiché sur les PDF de facture pour le paiement. Basculez la visibilité de chaque champ.",
+    "exampleCalculation": "Exemple de calcul de facture",
+    "confirmStoragePath": "Confirmer le chemin de stockage",
+    "noPermission": "Vous n'avez pas la permission d'accéder aux paramètres.",
+    "colorPreview": "Aperçu des couleurs",
+    "generating": "Génération...",
+    "generatePreview": "Générer l'aperçu",
+    "bankNameLabel": "Nom de la banque",
+    "bankBICLabel": "BIC / SWIFT",
+    "bankIBANLabel": "IBAN",
+    "showField": "Afficher",
+    "cannotModifyLater": "Cet emplacement ne peut pas être modifié ultérieurement.",
+    "financialLockWarning": "Les paramètres financiers (devise, taux TVA, taxe personnalisée) seront également verrouillés après cette sauvegarde.",
+    "subtotal": "Sous-total",
+    "thankYouPlaceholder": "Merci pour votre confiance !",
+    "emailSubjectPlaceholder": "Facture #@InvoiceNumber de @CompanyName",
+    "emailBodyPlaceholder": "Saisissez votre modèle d'email avec les placeholders @...",
+    "emailSignaturePlaceholder": "Cordialement,\nJean Dupont\nResponsable financier",
+    "exchangeRatePlaceholder": "ex : 3.3",
+    "bankNamePlaceholder": "ex : BIAT",
+    "bankBICPlaceholder": "ex : BIATTNTT",
+    "bankIBANPlaceholder": "ex : TN59 0800 6012 0108 0187 5250",
+    "pdfFooterPlaceholder": "Merci pour votre confiance !"
   },
   "dashboard": {
     "title": "Tableau de bord",
@@ -583,7 +669,13 @@
     "pending": "En attente",
     "users": "Utilisateurs",
     "revenueByYear": "Chiffre d'affaires par année",
+    "expensesByYear": "Dépenses par année",
+    "topSoldProducts": "Produits les plus vendus",
+    "topPurchasedProducts": "Produits les plus achetés",
+    "fetchError": "Échec du chargement des données du tableau de bord. Veuillez réessayer.",
+    "share": "Part",
     "allTime": "Tous les temps",
+    "allYears": "Toutes les années",
     "lastYear": "L'année dernière"
   },
   "notifications": {
@@ -748,7 +840,14 @@
     "issues": "problème(s)",
     "fixNow": "Corriger →",
     "consistencyFailed": "La vérification a échoué",
-    "pendingPayments": "Paiements en attente"
+    "pendingPayments": "Paiements en attente",
+    "totalPaid": "Total payé",
+    "noPaymentsRecorded": "Aucun paiement enregistré.",
+    "verifyExtracted": "Vérifiez et corrigez les informations extraites avant de sauvegarder",
+    "documentCurrency": "Devise du document",
+    "currencyOfInvoice": "Devise de cette facture fournisseur",
+    "invoiceNumberPlaceholder": "ex. FACT-2025-001",
+    "morePayments": "+{{count}} de plus"
   },
   "expense": {
     "title": "Autres dépenses",
@@ -865,7 +964,10 @@
     "suggested": "Suggéré",
     "titleEdit": "Modifier la Facture",
     "titleNew": "Créer une Nouvelle Facture",
-    "updateButton": "Mettre à jour la facture"
+    "updateButton": "Mettre à jour la facture",
+    "currencyFromQuote": "La devise est héritée du devis lié",
+    "inheritedFromQuote": "Hérité du devis",
+    "languageFromQuote": "La langue est héritée du devis lié"
   },
   "dataManagement": {
     "dropOrSelect": "Glissez ou sélectionnez",
@@ -880,7 +982,10 @@
     "importDesc": "Importez des données depuis un fichier CSV",
     "selectFile": "Sélectionner un fichier",
     "subtitle": "Gérer l'import et l'export de vos données",
-    "title": "Gestion des données"
+    "title": "Gestion des données",
+    "requiredColumns": "Colonnes requises :",
+    "optionalColumns": "Colonnes optionnelles :",
+    "downloadTemplateCsv": "Télécharger le modèle CSV"
   },
   "devis": {
     "descriptionPlaceholder": "Description..."
@@ -934,6 +1039,8 @@
     "steps": {
       "companyInfo": "Info de l'entreprise",
       "financialBranding": "Financier & Image",
+      "financial": "Financier & Banque",
+      "brandingPdf": "Image & PDF",
       "storageFinish": "Stockage & Finir"
     },
     "defaultVatRate": "Taux de TVA par défaut",
@@ -946,9 +1053,21 @@
     "setupSummary": "Résumé de la Configuration",
     "notSet": "Non défini",
     "selected": "Sélectionné",
+    "existing": "Existant",
     "none": "Aucun",
     "continue": "Continuer",
     "completeSetup": "Terminer & Commencer",
+    "testPath": "Tester le Chemin",
+    "browse": "Parcourir",
+    "pathTestSuccess": "Le chemin est valide et accessible en écriture",
+    "pathTestFailed": "Échec du test. Vérifiez les permissions.",
+    "bankInfoDesc": "Affiché sur les PDFs de factures pour le paiement. Basculez la visibilité de chaque champ.",
+    "bankName": "Nom de la Banque",
+    "showOnPdf": "Afficher",
+    "fileSystemLanguage": "Langue des Dossiers",
+    "fileSystemLanguageWarning": "Permanent — ne peut pas être modifié une fois enregistré. Détermine les noms de dossiers.",
+    "fileSystemLanguageLocked": "Cette langue est verrouillée et ne peut pas être modifiée.",
+    "pdfFooterPlaceholder": "Merci pour votre confiance !",
     "validation": {
       "companyNameRequired": "Le nom de l'entreprise est requis",
       "companyAddressRequired": "L'adresse de l'entreprise est requise",
@@ -975,6 +1094,10 @@
     }
   },
   "users": {
+    "capacity": {
+      "label": "Capacité",
+      "full": "Complet"
+    },
     "actions": {
       "addEmployee": "Ajouter employé",
       "addTenant": "Ajouter entreprise",
@@ -1007,7 +1130,12 @@
       "newPasswordPlaceholder": "Entrez le nouveau mot de passe",
       "passwordRequired": "Le mot de passe est requis",
       "emailPlaceholder": "manager@entreprise.com",
-      "phone": "Téléphone"
+      "phone": "Téléphone",
+      "employeeCapacity": "Capacité employés",
+      "employeeCapacityHint": "Nombre maximum d'employés pour ce locataire",
+      "employeeCapacityPlaceholder": "ex : 10",
+      "preferredLanguage": "Langue préférée",
+      "preferredLanguageHint": "Langue par défaut pour cet utilisateur"
     },
     "messages": {
       "authRequired": "Authentification requise",
@@ -1090,9 +1218,86 @@
     "passwordMismatch": "Les mots de passe ne correspondent pas.",
     "passwordMinLength": "Le mot de passe doit contenir au moins 6 caractères.",
     "defaultCurrency": "Devise par défaut",
-    "defaultLanguage": "Langue par défaut"
+    "defaultLanguage": "Langue par défaut",
+    "language": "Langue de l'application",
+    "languageHint": "Cette langue sera utilisée dans toute l'application",
+    "languageSection": "Choisissez votre langue",
+    "languageSectionDesc": "Sélectionnez votre langue préférée. Le formulaire et l'application basculeront immédiatement."
   },
   "document": {
     "lockedInvoiceGenerated": "Document verrouillé : facture déjà générée."
+  },
+  "directoryBrowser": {
+    "title": "Sélectionner le Dossier de Stockage",
+    "selectDrive": "Sélectionner un lecteur",
+    "goUp": "Remonter",
+    "newFolder": "Nouveau Dossier",
+    "newFolderPlaceholder": "Entrez le nom du dossier...",
+    "create": "Créer",
+    "createFolderError": "Échec de la création du dossier",
+    "browseError": "Échec de la navigation dans les répertoires",
+    "emptyFolder": "Ce dossier est vide",
+    "accessDenied": "Accès refusé",
+    "selectFolder": "Sélectionner ce Dossier"
+  },
+  "subscription": {
+    "title": "Gestion des abonnements",
+    "subtitle": "Gérer les abonnements, la capacité et l'accès des entreprises.",
+    "fetchError": "Échec du chargement des entreprises.",
+    "actionError": "L'action a échoué.",
+    "saved": "Enregistré avec succès.",
+    "saveFailed": "Échec de l'enregistrement.",
+    "search": "Rechercher par nom, email ou ID...",
+    "noResults": "Aucune entreprise trouvée.",
+    "daysLeft": "jours restants",
+    "expired": "Expiré",
+    "capacityFull": "Complet",
+    "unlimited": "0 = Illimité",
+    "maxEmployees": "Max",
+    "capacityWarning": "Les employés actuels ({{count}}) dépassent cette limite. Le manager ne pourra pas ajouter de nouveaux employés tant que certains ne seront pas supprimés.",
+    "extend1m": "+1 Mois",
+    "extend1y": "+1 An",
+    "reactivate": "Réactiver",
+    "suspend": "Suspendre",
+    "edit": "Modifier",
+    "stats": {
+      "total": "Total entreprises",
+      "active": "Actives",
+      "expiring": "Expiration proche",
+      "suspended": "Suspendues / Expirées"
+    },
+    "filter": {
+      "all": "Tous",
+      "active": "Actif",
+      "expired": "Expiré",
+      "suspended": "Suspendu"
+    },
+    "col": {
+      "company": "Entreprise",
+      "status": "Statut",
+      "expiry": "Date d'expiration",
+      "capacity": "Employés",
+      "actions": "Actions"
+    },
+    "status": {
+      "active": "Actif",
+      "suspended": "Suspendu",
+      "expired": "Expiré",
+      "expiring": "Expiration"
+    },
+    "field": {
+      "status": "Statut du compte",
+      "expiry": "Date d'expiration de l'abonnement",
+      "capacity": "Capacité employés"
+    }
+  },
+  "accountLocked": {
+    "suspendedTitle": "Compte suspendu",
+    "suspendedMessage": "Le compte de votre entreprise a été suspendu par l'administrateur. Tout accès à l'application est temporairement bloqué.",
+    "expiredTitle": "Abonnement expiré",
+    "expiredMessage": "L'abonnement de votre entreprise a expiré. Veuillez contacter votre administrateur pour renouveler l'abonnement et restaurer l'accès.",
+    "expiredOn": "Expiré le",
+    "contactAdmin": "Veuillez contacter l'administrateur de votre entreprise pour obtenir de l'aide.",
+    "logout": "Se déconnecter"
   }
 }

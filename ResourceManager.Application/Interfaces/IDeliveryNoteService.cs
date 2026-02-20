@@ -31,7 +31,7 @@ public record DeliveryNoteDto(
     DateTime Date,
     int? ClientId,
     string? ClientName,
-    int? DevisId,
+    int? QuoteId,
     int? InvoiceId,
     bool Treated,
     List<DeliveryNoteItemDto> Items
@@ -48,7 +48,7 @@ public record CreateDeliveryNoteRequest(
     string Number,
     DateTime Date,
     int? ClientId,
-    int? DevisId,
+    int? QuoteId,
     List<CreateDeliveryNoteItemRequest> Items
 );
 

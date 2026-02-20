@@ -7,7 +7,7 @@ namespace ResourceManager.Dtos
         [Required(ErrorMessage = "Company name is required.")]
         public string CompanyName { get; set; } = string.Empty;
         public string Address { get; set; } = string.Empty;
-        public string MatriculeFiscal { get; set; } = string.Empty;
+        public string TaxId { get; set; } = string.Empty;
         [Phone]
         public string Phone { get; set; } = string.Empty;
         [EmailAddress]

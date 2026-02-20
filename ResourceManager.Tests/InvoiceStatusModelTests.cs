@@ -257,48 +257,48 @@ public class InvoiceStatusModelTests
     }
 
     // ═══════════════════════════════════════════════════════════
-    // 8. FournisseurInvoice Computed PaymentStatus
+    // 8. SupplierInvoice Computed PaymentStatus
     // ═══════════════════════════════════════════════════════════
 
     [Fact]
-    public void FournisseurInvoice_NoPayments_StatusIsPending()
+    public void SupplierInvoice_NoPayments_StatusIsPending()
     {
-        var fi = new FournisseurInvoice { TotalTTC = 1000 };
+        var fi = new SupplierInvoice { TotalTTC = 1000 };
 
         Assert.Equal("Pending", fi.PaymentStatus);
     }
 
     [Fact]
-    public void FournisseurInvoice_PartialPayment_StatusIsPartiallyPaid()
+    public void SupplierInvoice_PartialPayment_StatusIsPartiallyPaid()
     {
-        var fi = new FournisseurInvoice { TotalTTC = 1000 };
+        var fi = new SupplierInvoice { TotalTTC = 1000 };
         fi.Payments.Add(new SupplierPayment { Amount = 500, Status = "Completed" });
 
         Assert.Equal("PartiallyPaid", fi.PaymentStatus);
     }
 
     [Fact]
-    public void FournisseurInvoice_FullPayment_StatusIsPaid()
+    public void SupplierInvoice_FullPayment_StatusIsPaid()
     {
-        var fi = new FournisseurInvoice { TotalTTC = 1000 };
+        var fi = new SupplierInvoice { TotalTTC = 1000 };
         fi.Payments.Add(new SupplierPayment { Amount = 1000, Status = "Completed" });
 
         Assert.Equal("Paid", fi.PaymentStatus);
     }
 
     [Fact]
-    public void FournisseurInvoice_OnlyPendingPayments_StatusIsPending()
+    public void SupplierInvoice_OnlyPendingPayments_StatusIsPending()
     {
-        var fi = new FournisseurInvoice { TotalTTC = 1000 };
+        var fi = new SupplierInvoice { TotalTTC = 1000 };
         fi.Payments.Add(new SupplierPayment { Amount = 1000, Status = "Pending" });
 
         Assert.Equal("Pending", fi.PaymentStatus);
     }
 
     [Fact]
-    public void FournisseurInvoice_ComputedAmountPaid_ExcludesPendingPayments()
+    public void SupplierInvoice_ComputedAmountPaid_ExcludesPendingPayments()
     {
-        var fi = new FournisseurInvoice { TotalTTC = 1000 };
+        var fi = new SupplierInvoice { TotalTTC = 1000 };
         fi.Payments.Add(new SupplierPayment { Amount = 300, Status = "Completed" });
         fi.Payments.Add(new SupplierPayment { Amount = 500, Status = "Pending" });
 
@@ -412,11 +412,11 @@ public class InvoiceStatusModelTests
         Assert.Equal(0, invoice.RemainingAmount); // But remaining is 0
     }
 
-    /// <summary>FournisseurInvoice remaining also includes pending</summary>
+    /// <summary>SupplierInvoice remaining also includes pending</summary>
     [Fact]
-    public void FournisseurInvoice_RemainingIncludesPending()
+    public void SupplierInvoice_RemainingIncludesPending()
     {
-        var fi = new FournisseurInvoice { TotalTTC = 1000 };
+        var fi = new SupplierInvoice { TotalTTC = 1000 };
         fi.Payments.Add(new SupplierPayment { Amount = 400, Status = "Completed" });
         fi.Payments.Add(new SupplierPayment { Amount = 300, Status = "Pending" });
 
@@ -425,11 +425,11 @@ public class InvoiceStatusModelTests
         Assert.Equal(400, fi.AmountPaid);
     }
 
-    /// <summary>FournisseurInvoice remaining never negative</summary>
+    /// <summary>SupplierInvoice remaining never negative</summary>
     [Fact]
-    public void FournisseurInvoice_RemainingNeverNegative()
+    public void SupplierInvoice_RemainingNeverNegative()
     {
-        var fi = new FournisseurInvoice { TotalTTC = 500 };
+        var fi = new SupplierInvoice { TotalTTC = 500 };
         fi.Payments.Add(new SupplierPayment { Amount = 400, Status = "Completed" });
         fi.Payments.Add(new SupplierPayment { Amount = 200, Status = "Pending" });
 

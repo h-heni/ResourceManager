@@ -77,7 +77,9 @@ namespace ResourceManager.Controllers
                 ExpirationDate = DateTime.UtcNow.AddHours(InvitationExpirationHours),
                 IsUsed = false,
                 CreatedAt = DateTime.UtcNow,
-                CreatedByUserId = currentUserId
+                CreatedByUserId = currentUserId,
+                EmployeeCapacity = dto.EmployeeCapacity,
+                PreferredLanguage = string.IsNullOrWhiteSpace(dto.PreferredLanguage) ? "fr" : dto.PreferredLanguage.Trim()
             };
 
             _context.ManagerInvitations.Add(invitation);
@@ -148,7 +150,7 @@ namespace ResourceManager.Controllers
             if (invitation.ExpirationDate < DateTime.UtcNow)
                 return Ok(new { valid = false, error = "This invitation has expired." });
 
-            return Ok(new { valid = true, email = invitation.Email });
+            return Ok(new { valid = true, email = invitation.Email, preferredLanguage = invitation.PreferredLanguage });
         }
 
         /// <summary>
@@ -198,9 +200,10 @@ namespace ResourceManager.Controllers
                     {
                         Name = dto.CompanyName,
                         Address = fullAddress,
-                        MatriculeFiscal = dto.TaxNumber ?? string.Empty,
+                        TaxId = dto.TaxNumber ?? string.Empty,
                         Phone = dto.Phone ?? string.Empty,
                         Email = invitation.Email,
+                        EmployeeLimit = invitation.EmployeeCapacity,
                         CreatedAt = DateTime.UtcNow
                     };
 

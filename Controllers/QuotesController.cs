@@ -12,15 +12,15 @@ using System.Text.RegularExpressions;
 
 namespace ResourceManager.Controllers
 {
-    public class DevisController : BaseApiController
+    public class QuotesController : BaseApiController
     {
         private const string DevisNumberPrefix = "DV";
         private const string InvoiceNumberPrefix = "FA";
         private readonly AppDbContext _context;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ILocalPdfStorageService _pdfStorageService;
-        private readonly ILogger<DevisController> _logger;
-        public DevisController(AppDbContext context, UserManager<ApplicationUser> userManager, ILocalPdfStorageService pdfStorageService, ILogger<DevisController> logger)
+        private readonly ILogger<QuotesController> _logger;
+        public QuotesController(AppDbContext context, UserManager<ApplicationUser> userManager, ILocalPdfStorageService pdfStorageService, ILogger<QuotesController> logger)
         {
             _context = context;
             _userManager = userManager;
@@ -42,7 +42,7 @@ namespace ResourceManager.Controllers
             var yearSuffix = (year % 100).ToString("D2");
             var prefix = $"{DevisNumberPrefix}{yearSuffix}-";
 
-            var yearNumbers = await _context.Devis
+            var yearNumbers = await _context.Quotes
                 .AsNoTracking()
                 .Where(d => d.CompanyId == user.CompanyId && d.Date.Year == year && d.Number.StartsWith(prefix))
                 .Select(d => d.Number)
@@ -73,10 +73,18 @@ namespace ResourceManager.Controllers
                 if (page < 1) page = 1;
                 if (size < 1) size = 20;
 
-                var query = _context.Devis
+                var query = _context.Quotes
                     .AsNoTracking()
                     .Include(d => d.Client)
-                    .OrderByDescending(d => d.Date);
+                    .AsQueryable();
+
+                // Employee role: hide archived (Treated) records
+                if (User.IsInRole("Employee"))
+                {
+                    query = query.Where(d => !d.Treated);
+                }
+
+                query = query.OrderByDescending(d => d.Date);
 
                 var totalCount = await query.CountAsync();
                 var totalPages = (int)Math.Ceiling(totalCount / (double)size);
@@ -109,7 +117,7 @@ namespace ResourceManager.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error fetching quotes (devis)");
+                _logger.LogError(ex, "Error fetching quotes");
                 return Ok(new {
                     Data = Array.Empty<object>(),
                     Page = page,
@@ -124,14 +132,20 @@ namespace ResourceManager.Controllers
         [HttpGet("{id}")]
         public async Task<IActionResult> GetDevisById(int id)
         {
-            var devis = await _context.Devis
+            var devis = await _context.Quotes
                 .Include(d => d.Client)
-                .Include(d => d.DevisItems)
+                .Include(d => d.QuoteItems)
                 .Include(d => d.CreatedByUser)
                     .ThenInclude(u => u!.Profile)
                 .FirstOrDefaultAsync(d => d.Id == id);
 
             if (devis == null) return NotFound();
+
+            // Employee role cannot access archived (Treated) quotes
+            if (User.IsInRole("Employee") && devis.Treated)
+            {
+                return NotFound(new { message = "Quote not found or access denied" });
+            }
 
             // Return with createdByUser info for display (firstName + lastName for display name)
             return Ok(new {
@@ -140,6 +154,10 @@ namespace ResourceManager.Controllers
                 devis.Date,
                 devis.ClientId,
                 ClientName = devis.Client?.Name,
+                ClientAddress = devis.Client?.Address,
+                ClientTaxId = devis.Client?.TaxId,
+                ClientPhone = devis.Client?.Phone,
+                ClientEmail = devis.Client?.Email,
                 devis.Status,
                 devis.Treated,
                 devis.SubTotal,
@@ -150,7 +168,9 @@ namespace ResourceManager.Controllers
                 devis.Currency,
                 devis.CurrencySymbol,
                 devis.PdfLanguage,
-                DevisItems = devis.DevisItems.Select(i => new {
+                devis.CreatedBy,
+                devis.ModifiedBy,
+                QuoteItems = devis.QuoteItems.Select(i => new {
                     i.Id,
                     i.Description,
                     i.Quantity,
@@ -171,7 +191,7 @@ namespace ResourceManager.Controllers
 
         // POST: api/devis
         [HttpPost]
-        public async Task<IActionResult> CreateDevis([FromBody] CreateDevisDto dto)
+        public async Task<IActionResult> CreateDevis([FromBody] CreateQuoteDto dto)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
@@ -188,7 +208,7 @@ namespace ResourceManager.Controllers
             var userProvidedNumber = dto.Number?.Trim() ?? string.Empty;
             var isAutoNumber = string.IsNullOrWhiteSpace(userProvidedNumber);
             var maxAttempts = isAutoNumber ? 5 : 1;
-            Devis? devis = null;
+            Quote? devis = null;
             string? createFailureReason = null;
 
             for (var attempt = 1; attempt <= maxAttempts; attempt++)
@@ -201,7 +221,7 @@ namespace ResourceManager.Controllers
 
                     if (!isAutoNumber)
                     {
-                        var duplicateExists = await _context.Devis
+                        var duplicateExists = await _context.Quotes
                             .IgnoreQueryFilters()
                             .AnyAsync(d => d.CompanyId == user.CompanyId && d.Number == finalNumber);
                         if (duplicateExists)
@@ -210,7 +230,7 @@ namespace ResourceManager.Controllers
                         }
                     }
 
-                    devis = new Devis
+                    devis = new Quote
                     {
                         Number = finalNumber,
                         Date = devisDate,
@@ -234,7 +254,7 @@ namespace ResourceManager.Controllers
                             throw new InvalidOperationException(createFailureReason);
                         }
 
-                        devis.DevisItems.Add(new DevisItem
+                        devis.QuoteItems.Add(new QuoteItem
                         {
                             Description = itemDto.Description,
                             Quantity = itemDto.Quantity,
@@ -245,7 +265,7 @@ namespace ResourceManager.Controllers
                     }
 
                     devis.CalculTotalAmount();
-                    _context.Devis.Add(devis);
+                    _context.Quotes.Add(devis);
 
                     await _context.SaveChangesAsync();
                     break;
@@ -287,7 +307,7 @@ namespace ResourceManager.Controllers
                 devis.TotalAmount,
                 devis.Tfiscal,
                 devis.TfiscalName,
-                DevisItems = devis.DevisItems.Select(i => new {
+                QuoteItems = devis.QuoteItems.Select(i => new {
                     i.Id,
                     i.Description,
                     i.Quantity,
@@ -300,9 +320,9 @@ namespace ResourceManager.Controllers
             });
         }
 
-        // PUT: api/devis/{id}
+        // PUT: api/quotes/{id}
         [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateDevis(int id, [FromBody] UpdateDevisDto dto)
+        public async Task<IActionResult> UpdateDevis(int id, [FromBody] UpdateQuoteDto dto)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
@@ -311,18 +331,16 @@ namespace ResourceManager.Controllers
                 return BadRequest(new { message = "Quote number is required." });
             }
 
-            var devis = await _context.Devis.Include(d => d.DevisItems).FirstOrDefaultAsync(d => d.Id == id);
+            var devis = await _context.Quotes.Include(d => d.QuoteItems).FirstOrDefaultAsync(d => d.Id == id);
             if (devis == null) return NotFound();
 
-            if ((User.IsInRole("Manager") || User.IsInRole("Employee")) &&
-                await _context.Invoices.AsNoTracking().AnyAsync(i => i.DevisId == devis.Id))
+            // Only Draft quotes can be edited
+            if (devis.Treated || devis.Status != "Draft")
             {
-                return BadRequest(new { message = "Document is locked: Invoice already generated." });
+                return BadRequest(new { message = "Only Draft quotes can be modified." });
             }
 
-            if (devis.Status == "Accepted") return BadRequest("Cannot modify an accepted quote.");
-
-            var duplicateNumberExists = await _context.Devis
+            var duplicateNumberExists = await _context.Quotes
                 .AnyAsync(d => d.Id != id && d.CompanyId == devis.CompanyId && d.Number == dto.Number);
             if (duplicateNumberExists)
             {
@@ -333,15 +351,15 @@ namespace ResourceManager.Controllers
             devis.Date = dto.Date.ToUniversalTime();
             devis.ClientId = dto.ClientId;
 
-            _context.DevisItems.RemoveRange(devis.DevisItems);
-            devis.DevisItems = dto.Items.Select(i => new DevisItem
+            _context.QuoteItems.RemoveRange(devis.QuoteItems);
+            devis.QuoteItems = dto.Items.Select(i => new QuoteItem
             {
                 Description = i.Description,
                 Quantity = i.Quantity,
                 Price = i.Price,
                 Tva = i.Tva,
                 VatRate = i.VatRate,
-                DevisId = devis.Id
+                QuoteId = devis.Id
             }).ToList();
 
             devis.CalculTotalAmount();
@@ -356,7 +374,7 @@ namespace ResourceManager.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteDevis(int id)
         {
-            var devis = await _context.Devis.FindAsync(id);
+            var devis = await _context.Quotes.FindAsync(id);
             if (devis == null) return NotFound();
 
             devis.IsDeleted = true;
@@ -370,15 +388,15 @@ namespace ResourceManager.Controllers
         [HttpPost("{id}/convert-to-invoice")]
         public async Task<IActionResult> ConvertToInvoice(int id)
         {
-            var devis = await _context.Devis
-                .Include(d => d.DevisItems)
+            var devis = await _context.Quotes
+                .Include(d => d.QuoteItems)
                 .FirstOrDefaultAsync(d => d.Id == id);
 
             if (devis == null) return NotFound();
 
             var alreadyConverted = await _context.Invoices
                 .AsNoTracking()
-                .AnyAsync(i => i.DevisId == devis.Id);
+                .AnyAsync(i => i.QuoteId == devis.Id);
             if (alreadyConverted)
             {
                 return Conflict(new { message = "An invoice already exists for this quote." });
@@ -395,8 +413,8 @@ namespace ResourceManager.Controllers
                 Number = invoiceNumber,
                 Date = DateTime.UtcNow,
                 ClientId = devis.ClientId,
-                DevisId = devis.Id, // Link original Devis
-                SourceDevisNumber = devis.Number,
+                QuoteId = devis.Id, // Link original Quote
+                SourceQuoteNumber = devis.Number,
                 Tfiscal = devis.Tfiscal,
                 TfiscalName = devis.TfiscalName,
                 CreatedByUserId = userId,
@@ -407,13 +425,13 @@ namespace ResourceManager.Controllers
             // Check for linked delivery notes – they represent what was actually delivered
             var deliveryNotes = await _context.DeliveryNotes
                 .Include(dn => dn.DeliveryNoteItems)
-                .Where(dn => dn.DevisId == devis.Id)
+                .Where(dn => dn.QuoteId == devis.Id)
                 .ToListAsync();
 
             if (deliveryNotes.Count > 0)
             {
                 // Build a lookup from devis items by description (case-insensitive) for price/tax info
-                var devisItemLookup = devis.DevisItems
+                var devisItemLookup = devis.QuoteItems
                     .GroupBy(di => di.Description.Trim().ToLowerInvariant())
                     .ToDictionary(g => g.Key, g => g.First());
 
@@ -470,8 +488,8 @@ namespace ResourceManager.Controllers
             }
             else
             {
-                // No delivery notes – fall back to original devis items
-                foreach (var item in devis.DevisItems)
+                // No delivery notes – fall back to original quote items
+                foreach (var item in devis.QuoteItems)
                 {
                     invoice.InvoiceItems.Add(new InvoiceItem
                     {
@@ -510,18 +528,24 @@ namespace ResourceManager.Controllers
                 return Conflict(new { message = "Failed to create invoice due to duplicate number. Please retry." });
             }
 
-            return Ok(new { InvoiceId = invoice.Id, InvoiceNumber = invoice.Number, SourceQuoteNumber = invoice.SourceDevisNumber, Message = "Converted successfully" });
+            return Ok(new { InvoiceId = invoice.Id, InvoiceNumber = invoice.Number, SourceQuoteNumber = invoice.SourceQuoteNumber, Message = "Converted successfully" });
         }
         // GET: api/devis/{id}/pdf
         [HttpGet("{id}/pdf")]
         public async Task<IActionResult> GetPdf(int id)
         {
-            var devis = await _context.Devis
+            var devis = await _context.Quotes
                 .Include(d => d.Client)
-                .Include(d => d.DevisItems)
+                .Include(d => d.QuoteItems)
                 .FirstOrDefaultAsync(d => d.Id == id);
 
             if (devis == null) return NotFound();
+
+            // Employee role cannot access archived (Treated) quotes
+            if (User.IsInRole("Employee") && devis.Treated)
+            {
+                return NotFound(new { message = "Quote not found or access denied" });
+            }
 
             // Get current user and company settings for PDF
             var userId = _userManager.GetUserId(User);
@@ -553,7 +577,7 @@ namespace ResourceManager.Controllers
                 devis.TfiscalName = pdfSettings.CustomTaxName;
             }
 
-            var document = new Document<Devis>(devis, pdfSettings);
+            var document = new Document<Quote>(devis, pdfSettings);
             byte[] pdfData;
             try
             {
@@ -585,7 +609,7 @@ namespace ResourceManager.Controllers
             return File(pdfData, "application/pdf", $"Devis_{devis.Number}.pdf");
         }
 
-        private async Task<ProductService?> FindOrCreateProductFromItemAsync(CreateDevisItemDto itemDto, int companyId, string? userId)
+        private async Task<ProductService?> FindOrCreateProductFromItemAsync(CreateQuoteItemDto itemDto, int companyId, string? userId)
         {
             var rawDescription = itemDto.Description?.Trim();
             if (string.IsNullOrWhiteSpace(rawDescription))
@@ -654,7 +678,7 @@ namespace ResourceManager.Controllers
             var yearSuffix = (year % 100).ToString("D2");
             var prefix = $"{DevisNumberPrefix}{yearSuffix}-";
 
-            var existingYearNumbers = await _context.Devis
+            var existingYearNumbers = await _context.Quotes
                 .IgnoreQueryFilters()
                 .AsNoTracking()
                 .Where(d => d.CompanyId == companyId && d.Date.Year == year && d.Number.StartsWith(prefix))

@@ -51,12 +51,84 @@ namespace ResourceManager.Controllers
             _emailService = emailService;
         }
 
+        // GET: api/settings/branding - Company branding info (accessible by ALL authenticated users)
+        // AllowAnonymous overrides the class-level [Authorize(Roles=...)] so Employee can access this.
+        // The method still returns Unauthorized() for truly anonymous requests.
+        [HttpGet("branding")]
+        [AllowAnonymous]
+        public async Task<IActionResult> GetBranding()
+        {
+            var user = await GetCurrentUserAsync(_userManager);
+            if (user == null) return Unauthorized();
+
+            var settings = await _context.CompanySettings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
+
+            var company = await _context.Companies.FindAsync(user.CompanyId);
+
+            return Ok(new {
+                CompanyName = company?.Name ?? "Resource Manager",
+                HasLogoData = company?.LogoData != null && company.LogoData.Length > 0,
+                PrimaryColor = settings?.PrimaryColor ?? "#667eea",
+                SecondaryColor = settings?.SecondaryColor ?? "#764ba2"
+            });
+        }
+
         // GET: api/settings
         [HttpGet]
         public async Task<IActionResult> GetSettings()
         {
             var user = await GetCurrentUserAsync(_userManager);
             if (user == null) return Unauthorized();
+
+            // If user has no company yet, return empty defaults for company-init page
+            if (user.CompanyId == 0)
+            {
+                return Ok(new {
+                    Id = 0,
+                    CompanyName = (string?)null,
+                    CompanyAddress = (string?)null,
+                    CompanyTaxId = (string?)null,
+                    CompanyPhone = (string?)null,
+                    CompanyEmail = (string?)null,
+                    HasLogoData = false,
+                    EmailTemplate = (string?)null,
+                    EmailSubjectTemplate = "Invoice #@invoiceNumber from @companyName",
+                    EmailSignature = "<p>Best regards,<br/>@companyName<br/>@companyPhone<br/>@companyEmail</p>",
+                    DefaultEmailBody = "<p>Dear @clientName,</p><p>Please find attached your invoice.</p>",
+                    LogoUrl = (string?)null,
+                    PrimaryColor = "#667eea",
+                    SecondaryColor = "#764ba2",
+                    Currency = "TND",
+                    CurrencySymbol = "TND",
+                    DefaultVatRate = 0.19m,
+                    AvailableVatRates = (string?)null,
+                    CustomTaxEnabled = true,
+                    CustomTaxName = "Timbre Fiscal",
+                    CustomTaxAmount = 1.000m,
+                    PdfFooterText = (string?)null,
+                    ShowCompanyLogo = true,
+                    PdfSignatureText = (string?)null,
+                    PdfSignerPosition = (string?)null,
+                    InvoiceLanguage = "fr",
+                    FileSystemLanguage = "fr",
+                    FileSystemLanguageLocked = false,
+                    BaseStoragePath = (string?)null,
+                    IsProfileComplete = false,
+                    HasSignatureImage = false,
+                    ShowSignatureOnPdf = false,
+                    BankName = (string?)null,
+                    BankBIC = (string?)null,
+                    BankRIB = (string?)null,
+                    BankIBAN = (string?)null,
+                    ShowBankName = false,
+                    ShowBankBIC = false,
+                    ShowBankRIB = false,
+                    ShowBankIBAN = false,
+                    ProInvoiceUseTokenSignature = false
+                });
+            }
 
             var settings = await _context.CompanySettings
                 .FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
@@ -97,7 +169,7 @@ namespace ResourceManager.Controllers
                 // Company info
                 CompanyName = company?.Name,
                 CompanyAddress = company?.Address,
-                CompanyMatriculeFiscal = company?.MatriculeFiscal,
+                CompanyTaxId = company?.TaxId,
                 CompanyPhone = company?.Phone,
                 CompanyEmail = company?.Email,
                 HasLogoData = company?.LogoData != null && company.LogoData.Length > 0,
@@ -254,11 +326,12 @@ namespace ResourceManager.Controllers
                 company.LogoData = finalBytes;
                 company.LogoContentType = contentType;
                 company.UpdatedAt = DateTime.UtcNow;
+                company.ModifiedBy = user.Id;
 
                 await _context.SaveChangesAsync();
 
-                _logger.LogInformation("Logo uploaded for company {CompanyId}, size: {Size} bytes", 
-                    company.Id, company.LogoData.Length);
+                _logger.LogInformation("Logo uploaded for company {CompanyId} by {UserId}, size: {Size} bytes", 
+                    company.Id, user.Id, company.LogoData.Length);
 
                 return Ok(new { 
                     message = "Logo uploaded successfully",
@@ -286,10 +359,11 @@ namespace ResourceManager.Controllers
             company.LogoData = null;
             company.LogoContentType = null;
             company.UpdatedAt = DateTime.UtcNow;
+            company.ModifiedBy = user.Id;
 
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Logo removed for company {CompanyId}", company.Id);
+            _logger.LogInformation("Logo removed for company {CompanyId} by {UserId}", company.Id, user.Id);
 
             return Ok(new { message = "Logo removed successfully" });
         }
@@ -387,7 +461,7 @@ namespace ResourceManager.Controllers
                 {
                     Name = lang switch { "fr" => "Client Exemple", "de" => "Beispielkunde", "ar" => "عميل مثال", _ => "Sample Client" },
                     Address = lang switch { "fr" => "456 Rue du Client, Tunis", "de" => "456 Kundenstr., Berlin", _ => "456 Client Street" },
-                    MatriculeFiscal = "999XYZ999",
+                    TaxId = "999XYZ999",
                     Phone = "+216 99 999 999"
                 },
                 Tfiscal = pdfSettings.CustomTaxEnabled ? pdfSettings.CustomTaxAmount : 0,
@@ -543,13 +617,17 @@ namespace ResourceManager.Controllers
 
             if (dto.Name != null) company.Name = dto.Name;
             if (dto.Address != null) company.Address = dto.Address;
-            if (dto.MatriculeFiscal != null) company.MatriculeFiscal = dto.MatriculeFiscal;
+            if (dto.TaxId != null) company.TaxId = dto.TaxId;
             if (dto.Phone != null) company.Phone = dto.Phone;
             if (dto.Email != null) company.Email = dto.Email;
+            
+            // Audit trail
+            company.UpdatedAt = DateTime.UtcNow;
+            company.ModifiedBy = user.Id;
 
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation("Company info updated for {CompanyId}", user.CompanyId);
+            _logger.LogInformation("Company info updated for {CompanyId} by {UserId}", user.CompanyId, user.Id);
 
             return Ok(new { message = "Company information updated successfully." });
         }
@@ -596,23 +674,23 @@ namespace ResourceManager.Controllers
                 config.ConfigurationError,
                 productionSetup = new
                 {
-                    gmailInstructions = new[]
+                    instructions = new[]
                     {
-                        "1. Enable 2FA on your Google account",
-                        "2. Go to https://myaccount.google.com/apppasswords",
-                        "3. Generate an App Password for 'Mail'",
-                        "4. Use that 16-character password as SmtpPassword",
-                        "5. Set SmtpUser to your full Gmail address"
+                        "1. Configure your domain's mail server (e.g., mail.rscmanager.com)",
+                        "2. Create SMTP credentials for your application",
+                        "3. Set environment variables for HOST, USER, PASSWORD",
+                        "4. Use port 587 with STARTTLS for secure delivery",
+                        "5. Configure SPF, DKIM, and DMARC DNS records"
                     },
                     appsettingsExample = @"{
   ""Email"": {
-    ""SmtpHost"": ""smtp.gmail.com"",
+    ""SmtpHost"": ""mail.rscmanager.com"",
     ""SmtpPort"": 587,
-    ""SmtpUser"": ""your-email@gmail.com"",
-    ""SmtpPassword"": ""your-16-char-app-password"",
-    ""FromEmail"": ""your-email@gmail.com"",
-    ""FromName"": ""Your Company Name"",
-    ""ReplyToEmail"": ""your-email@gmail.com"",
+    ""SmtpUser"": ""noreply@rscmanager.com"",
+    ""SmtpPassword"": ""your-smtp-password"",
+    ""FromEmail"": ""noreply@rscmanager.com"",
+    ""FromName"": ""Resource Manager"",
+    ""ReplyToEmail"": ""support@rscmanager.com"",
     ""EnableSsl"": true
   }
 }",
@@ -630,11 +708,9 @@ namespace ResourceManager.Controllers
             });
         }
 
-        // POST: api/settings/test-email - Send a test email (uses Gmail OAuth if connected, otherwise SMTP)
+        // POST: api/settings/test-email - Send a test email via SMTP
         [HttpPost("test-email")]
-        public async Task<IActionResult> SendTestEmail(
-            [FromBody] TestEmailDto dto,
-            [FromServices] IGmailOAuthService gmailService)
+        public async Task<IActionResult> SendTestEmail([FromBody] TestEmailDto dto)
         {
             if (string.IsNullOrEmpty(dto.ToEmail))
             {
@@ -644,50 +720,7 @@ namespace ResourceManager.Controllers
             var user = await GetCurrentUserAsync(_userManager);
             if (user == null) return Unauthorized();
 
-            // Check if Gmail OAuth is connected and verified
-            var gmailStatus = await gmailService.GetConnectionStatusAsync(user.CompanyId);
-            
-            if (gmailStatus.IsConnected)
-            {
-                // Use Gmail OAuth
-                _logger.LogInformation("Sending test email via Gmail OAuth to {To}", dto.ToEmail);
-                var gmailResult = await gmailService.SendEmailAsync(
-                    user.CompanyId,
-                    dto.ToEmail,
-                    dto.Subject ?? "Resource Manager Test Email - Gmail OAuth",
-                    dto.Body ?? @"<html><body>
-                        <h2>Test Email from Resource Manager</h2>
-                        <p>This is a test email sent via <strong>Gmail OAuth</strong>.</p>
-                        <p>If you received this email, your Gmail integration is working correctly!</p>
-                        <hr/>
-                        <p style='color: #666; font-size: 12px;'>Sent at: " + DateTime.Now.ToString("f") + @"</p>
-                    </body></html>"
-                );
-
-                if (gmailResult.Success)
-                {
-                    return Ok(new
-                    {
-                        success = true,
-                        message = gmailResult.Message,
-                        mode = "GmailOAuth",
-                        info = "Email sent via Gmail OAuth integration"
-                    });
-                }
-                else
-                {
-                    return BadRequest(new
-                    {
-                        success = false,
-                        message = gmailResult.Message,
-                        mode = "GmailOAuth",
-                        errorDetails = gmailResult.ErrorDetails
-                    });
-                }
-            }
-            
-            // Fall back to SMTP
-            _logger.LogInformation("Sending test email via SMTP to {To} (Gmail OAuth not connected)", dto.ToEmail);
+            _logger.LogInformation("Sending test email via SMTP to {To}", dto.ToEmail);
             var result = await _emailService.SendEmailAsync(
                 dto.ToEmail,
                 dto.Subject ?? "Resource Manager Test Email",
@@ -720,158 +753,6 @@ namespace ResourceManager.Controllers
                 });
             }
         }
-
-        // ============================================
-        // GMAIL OAUTH ENDPOINTS (NO APP PASSWORDS!)
-        // ============================================
-
-        // GET: api/settings/email/oauth/status - Get Gmail OAuth connection status
-        [HttpGet("email/oauth/status")]
-        public async Task<IActionResult> GetGmailOAuthStatus([FromServices] IGmailOAuthService gmailService)
-        {
-            var user = await GetCurrentUserAsync(_userManager);
-            if (user == null) return Unauthorized();
-
-            var status = await gmailService.GetConnectionStatusAsync(user.CompanyId);
-            
-            return Ok(new
-            {
-                status.IsConnected,
-                status.ConnectedEmail,
-                status.ConnectedAt,
-                status.NeedsReauth,
-                status.Provider,
-                message = status.IsConnected 
-                    ? $"Connected to {status.ConnectedEmail}" 
-                    : "Not connected. Click 'Connect Gmail' to authorize."
-            });
-        }
-
-        // GET: api/settings/email/oauth/connect - Get OAuth authorization URL
-        [HttpGet("email/oauth/connect")]
-        public async Task<IActionResult> GetGmailOAuthUrl([FromServices] IGmailOAuthService gmailService, [FromQuery] string? redirectUri)
-        {
-            var user = await GetCurrentUserAsync(_userManager);
-            if (user == null) return Unauthorized();
-
-            try
-            {
-                // Use provided redirect URI or default to frontend callback
-                var callbackUri = redirectUri ?? $"{Request.Scheme}://{Request.Host}/settings/email/callback";
-                
-                _logger.LogInformation(
-                    "OAuth connect requested. Frontend redirect URI: '{RedirectUri}', Final callback URI: '{CallbackUri}'",
-                    redirectUri, callbackUri);
-                
-                var authUrl = gmailService.GetAuthorizationUrl(user.CompanyId, callbackUri);
-                
-                _logger.LogInformation("Generated Google auth URL. Redirect URI registered: '{CallbackUri}'", callbackUri);
-                
-                return Ok(new
-                {
-                    authorizationUrl = authUrl,
-                    redirectUri = callbackUri,  // Return the URI so frontend can verify it matches
-                    message = "Redirect user to this URL to connect their Gmail account"
-                });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
-        }
-
-        // POST: api/settings/email/oauth/callback - Exchange authorization code for tokens
-        [HttpPost("email/oauth/callback")]
-        public async Task<IActionResult> HandleGmailOAuthCallback(
-            [FromServices] IGmailOAuthService gmailService,
-            [FromBody] OAuthCallbackDto dto)
-        {
-            _logger.LogInformation("OAuth callback received. Code length: {CodeLen}, RedirectUri: {RedirectUri}",
-                dto.Code?.Length ?? 0, dto.RedirectUri);
-            
-            // Validate required parameters
-            if (string.IsNullOrEmpty(dto.Code))
-            {
-                _logger.LogWarning("OAuth callback missing authorization code");
-                return BadRequest(new
-                {
-                    success = false,
-                    message = "Authorization code is missing. Please try connecting Gmail again.",
-                    errorDetails = "The 'code' parameter was not provided in the callback."
-                });
-            }
-            
-            if (string.IsNullOrEmpty(dto.RedirectUri))
-            {
-                _logger.LogWarning("OAuth callback missing redirectUri");
-                return BadRequest(new
-                {
-                    success = false,
-                    message = "Redirect URI is missing. Please try connecting Gmail again.",
-                    errorDetails = "The 'redirectUri' parameter was not provided in the callback."
-                });
-            }
-            
-            var user = await GetCurrentUserAsync(_userManager);
-            if (user == null) return Unauthorized();
-
-            var result = await gmailService.ExchangeCodeForTokenAsync(user.CompanyId, dto.Code, dto.RedirectUri);
-            
-            if (result.Success)
-            {
-                _logger.LogInformation("OAuth callback succeeded for company {CompanyId}", user.CompanyId);
-                return Ok(new
-                {
-                    success = true,
-                    message = result.Message
-                });
-            }
-            else
-            {
-                _logger.LogWarning("OAuth callback failed for company {CompanyId}: {Message} | {Details}",
-                    user.CompanyId, result.Message, result.ErrorDetails);
-                return BadRequest(new
-                {
-                    success = false,
-                    message = result.Message,
-                    errorDetails = result.ErrorDetails
-                });
-            }
-        }
-
-        // DELETE: api/settings/email/oauth/disconnect - Remove Gmail connection
-        [HttpDelete("email/oauth/disconnect")]
-        public async Task<IActionResult> DisconnectGmail([FromServices] IGmailOAuthService gmailService)
-        {
-            var user = await GetCurrentUserAsync(_userManager);
-            if (user == null) return Unauthorized();
-
-            await gmailService.DisconnectAsync(user.CompanyId);
-            
-            return Ok(new { message = "Gmail disconnected successfully" });
-        }
-
-        // POST: api/settings/email/oauth/test - Test Gmail OAuth connection
-        [HttpPost("email/oauth/test")]
-        public async Task<IActionResult> TestGmailOAuth([FromServices] IGmailOAuthService gmailService)
-        {
-            var user = await GetCurrentUserAsync(_userManager);
-            if (user == null) return Unauthorized();
-
-            var isConnected = await gmailService.TestConnectionAsync(user.CompanyId);
-            
-            return Ok(new
-            {
-                success = isConnected,
-                message = isConnected ? "Gmail connection is working!" : "Gmail connection test failed. Please reconnect."
-            });
-        }
-    }
-
-    public class OAuthCallbackDto
-    {
-        public string Code { get; set; } = string.Empty;
-        public string RedirectUri { get; set; } = string.Empty;
     }
 
     public class TestEmailDto
@@ -940,7 +821,7 @@ namespace ResourceManager.Controllers
     {
         public string? Name { get; set; }
         public string? Address { get; set; }
-        public string? MatriculeFiscal { get; set; }
+        public string? TaxId { get; set; }
         public string? Phone { get; set; }
         public string? Email { get; set; }
     }

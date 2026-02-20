@@ -220,7 +220,7 @@ public class PaymentApprovalWorkflowTests
     [Fact]
     public void SupplierInvoice_PendingPayments_DoNotAffectStatus()
     {
-        var fi = new FournisseurInvoice { TotalTTC = 2000m };
+        var fi = new SupplierInvoice { TotalTTC = 2000m };
         fi.Payments.Add(new SupplierPayment { Amount = 2000m, Status = "Pending" });
 
         Assert.Equal("Pending", fi.PaymentStatus);
@@ -231,7 +231,7 @@ public class PaymentApprovalWorkflowTests
     [Fact]
     public void SupplierInvoice_ManualApproval_TransitionsToPaid()
     {
-        var fi = new FournisseurInvoice { TotalTTC = 2000m };
+        var fi = new SupplierInvoice { TotalTTC = 2000m };
         var payment = new SupplierPayment { Amount = 2000m, Status = "Pending" };
         fi.Payments.Add(payment);
 

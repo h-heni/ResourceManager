@@ -136,7 +136,7 @@ NETWORK FLOW (Request Path)
     ┌─────────────┐
     │   Browser   │
     └──────┬──────┘
-           │ HTTP GET https://yourdomain.com/invoices
+           │ HTTP GET https://rscmanager.com/invoices
            │
            ▼
     ┌─────────────┐

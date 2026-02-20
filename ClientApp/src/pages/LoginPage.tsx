@@ -138,6 +138,14 @@ export default function LoginPage() {
                                 onChange={(e) => setPassword(e.target.value)}
                                 placeholder={t('auth.placeholders.password')}
                             />
+                            <div className="text-right">
+                                <span 
+                                    onClick={() => navigate('/forgot-password')} 
+                                    className="text-sm text-[#065F46] hover:underline cursor-pointer"
+                                >
+                                    {t('auth.forgotPassword')}
+                                </span>
+                            </div>
                         </div>
 
                         {/* Inline error / rate-limit banner */}

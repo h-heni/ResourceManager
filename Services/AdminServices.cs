@@ -3,6 +3,7 @@ using System.Diagnostics;
 using ResourceManager.Data;
 using ResourceManager.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace ResourceManager.Services;
 
@@ -572,4 +573,174 @@ public class UserCountryService
     }
 
     private record GeoLocationResult(string Country, string CountryCode);
+}
+
+/// <summary>
+/// Middleware that checks if the authenticated user's company account is locked out
+/// (expired subscription or suspended). SuperAdmin is exempt.
+/// Returns 403 with a JSON body indicating the lockout reason.
+/// Allows anonymous endpoints and auth endpoints to pass through.
+/// Uses a 5-minute per-company MemoryCache to avoid querying the DB on every request.
+/// </summary>
+public class SubscriptionLockoutMiddleware
+{
+    private readonly RequestDelegate _next;
+    private readonly ILogger<SubscriptionLockoutMiddleware> _logger;
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
+    private const string CacheKeyPrefix = "company_status_";
+
+    // Paths that should always be allowed (auth, health, invitations)
+    private static readonly string[] AllowedPaths = new[]
+    {
+        "/api/auth/",
+        "/api/health",
+        "/api/invitations/",
+        "/api/superadmin/",
+        "/api/admin/"
+    };
+
+    public SubscriptionLockoutMiddleware(RequestDelegate next, ILogger<SubscriptionLockoutMiddleware> logger)
+    {
+        _next = next;
+        _logger = logger;
+    }
+
+    /// <summary>
+    /// Evict a specific company's cached status (call after suspend/reactivate/extend).
+    /// </summary>
+    public static void InvalidateCompanyCache(IMemoryCache cache, int companyId)
+    {
+        cache.Remove($"{CacheKeyPrefix}{companyId}");
+    }
+
+    public async Task InvokeAsync(HttpContext context)
+    {
+        // Skip for non-authenticated requests
+        if (context.User?.Identity?.IsAuthenticated != true)
+        {
+            await _next(context);
+            return;
+        }
+
+        // Skip for SuperAdmin — they manage subscriptions
+        if (context.User.IsInRole("SuperAdmin"))
+        {
+            await _next(context);
+            return;
+        }
+
+        // Skip allowed paths (auth, health, invitations, admin)
+        var path = context.Request.Path.Value?.ToLowerInvariant() ?? "";
+        if (AllowedPaths.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
+        {
+            await _next(context);
+            return;
+        }
+
+        // Read CompanyId from JWT claims
+        var companyIdClaim = context.User.FindFirst("CompanyId")?.Value;
+        if (string.IsNullOrEmpty(companyIdClaim) || !int.TryParse(companyIdClaim, out int companyId) || companyId == 0)
+        {
+            await _next(context);
+            return;
+        }
+
+        // ── Cached company status lookup (5-minute TTL per company) ──
+        var cache = context.RequestServices.GetRequiredService<IMemoryCache>();
+        var cacheKey = $"{CacheKeyPrefix}{companyId}";
+
+        if (!cache.TryGetValue(cacheKey, out CompanyStatusSnapshot? snapshot))
+        {
+            var dbContext = context.RequestServices.GetRequiredService<Data.AppDbContext>();
+            var company = await dbContext.Companies
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(c => c.Id == companyId)
+                .Select(c => new CompanyStatusSnapshot
+                {
+                    AccountStatus = c.AccountStatus,
+                    SubscriptionExpiryDate = c.SubscriptionExpiryDate
+                })
+                .FirstOrDefaultAsync();
+
+            if (company == null)
+            {
+                await _next(context);
+                return;
+            }
+
+            snapshot = company;
+            cache.Set(cacheKey, snapshot, CacheDuration);
+        }
+
+        // Check 1: Explicitly suspended
+        if (snapshot!.AccountStatus == Models.AccountStatus.Suspended)
+        {
+            _logger.LogWarning("Blocked request — account suspended. CompanyId={CompanyId}, Path={Path}", companyId, path);
+            context.Response.StatusCode = 403;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsJsonAsync(new
+            {
+                error = "Account suspended",
+                reason = "suspended",
+                message = "Your account has been suspended. Please contact your administrator."
+            });
+            return;
+        }
+
+        // Check 2: Subscription expired (auto-check date)
+        if (snapshot.SubscriptionExpiryDate.HasValue && snapshot.SubscriptionExpiryDate.Value < DateTime.UtcNow)
+        {
+            // Auto-update status if not already marked expired
+            if (snapshot.AccountStatus != Models.AccountStatus.Expired)
+            {
+                var dbContext = context.RequestServices.GetRequiredService<Data.AppDbContext>();
+                var writableCompany = await dbContext.Companies.FindAsync(companyId);
+                if (writableCompany != null)
+                {
+                    writableCompany.AccountStatus = Models.AccountStatus.Expired;
+                    await dbContext.SaveChangesAsync();
+                    // Evict cache so next request picks up the new status
+                    InvalidateCompanyCache(cache, companyId);
+                }
+            }
+
+            _logger.LogWarning("Blocked request — subscription expired. CompanyId={CompanyId}, ExpiryDate={ExpiryDate}, Path={Path}",
+                companyId, snapshot.SubscriptionExpiryDate, path);
+            context.Response.StatusCode = 403;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsJsonAsync(new
+            {
+                error = "Subscription expired",
+                reason = "expired",
+                expiryDate = snapshot.SubscriptionExpiryDate?.ToString("o"),
+                message = "Your subscription has expired. Please contact your administrator to renew."
+            });
+            return;
+        }
+
+        // Check 3: Explicitly marked expired (manual override)
+        if (snapshot.AccountStatus == Models.AccountStatus.Expired)
+        {
+            _logger.LogWarning("Blocked request — account marked expired. CompanyId={CompanyId}, Path={Path}", companyId, path);
+            context.Response.StatusCode = 403;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsJsonAsync(new
+            {
+                error = "Subscription expired",
+                reason = "expired",
+                message = "Your subscription has expired. Please contact your administrator to renew."
+            });
+            return;
+        }
+
+        await _next(context);
+    }
+
+    /// <summary>Lightweight snapshot cached per company to avoid full entity tracking.</summary>
+    private sealed class CompanyStatusSnapshot
+    {
+        public AccountStatus AccountStatus { get; init; }
+        public DateTime? SubscriptionExpiryDate { get; init; }
+    }
 }

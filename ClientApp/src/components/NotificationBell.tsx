@@ -44,7 +44,7 @@ import { useTranslation } from 'react-i18next';
 
 export default function NotificationBell() {
     const { t } = useTranslation();
-    const { isSuperAdmin } = useAuth();
+    const { isSuperAdmin, isAuthenticated } = useAuth();
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [duePayments, setDuePayments] = useState<DuePayment[]>([]);
     const [dueSupplierPayments, setDueSupplierPayments] = useState<DueSupplierPayment[]>([]);
@@ -93,13 +93,15 @@ export default function NotificationBell() {
 
     // Trigger backend due payment processing on mount, then fetch counts
     useEffect(() => {
+        if (!isAuthenticated) return;
+        
         // Fire-and-forget: tell backend to transition Pending→Due for current user
         api.post('/Notifications/process-due').catch(() => { });
 
         fetchNotificationCount();
         const interval = setInterval(fetchNotificationCount, 60000); // Check every minute
         return () => clearInterval(interval);
-    }, []);
+    }, [isAuthenticated]);
 
     const fetchNotificationCount = async () => {
         try {

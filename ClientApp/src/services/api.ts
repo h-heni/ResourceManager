@@ -143,6 +143,17 @@ api.interceptors.response.use(
             return Promise.reject(error);
         }
 
+        // If 403 with lockout reason (subscription expired or suspended), notify app
+        if (error.response?.status === 403) {
+            const data = error.response.data as { reason?: string; expiryDate?: string } | undefined;
+            if (data?.reason === 'suspended' || data?.reason === 'expired') {
+                window.dispatchEvent(new CustomEvent('auth:account-locked', {
+                    detail: { reason: data.reason, expiryDate: data.expiryDate }
+                }));
+                return Promise.reject(error);
+            }
+        }
+
         // If 401 and we haven't retried yet, attempt silent refresh
         if (error.response?.status === 401 && !originalRequest._retry) {
             if (isRefreshing) {

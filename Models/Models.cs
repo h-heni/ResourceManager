@@ -36,18 +36,18 @@ namespace ResourceManager.Models
 
 
     }
-    public class Fournisseur : Shared
+    public class Supplier : Shared
     {
-        [Required(ErrorMessage = "Le nom est obligatoire.")]
+        [Required(ErrorMessage = "Name is required.")]
         public string Name { get; set; } = string.Empty;
-        [Required(ErrorMessage = "L'adresse est obligatoire.")]
+        [Required(ErrorMessage = "Address is required.")]
         public string Address { get; set; } = string.Empty;
-        [Required(ErrorMessage = "Le numéro d'identification fiscale est obligatoire.")]
-        public string MatriculeFiscal { get; set; } = string.Empty;
+        [Required(ErrorMessage = "Tax identification number is required.")]
+        public string TaxId { get; set; } = string.Empty;
         public string Phone { get; set; } = string.Empty;
-        public ICollection<FournisseurInvoice> FournisseurInvoices { get; set; } = new List<FournisseurInvoice>();
+        public ICollection<SupplierInvoice> SupplierInvoices { get; set; } = new List<SupplierInvoice>();
     }
-    public class FournisseurInvoice
+    public class SupplierInvoice
     {
         public int Id { get; set; }
         public string FileName { get; set; } = string.Empty;
@@ -71,8 +71,8 @@ namespace ResourceManager.Models
         public string? Currency { get; set; }
         public string? CurrencySymbol { get; set; }
         
-        public int? FournisseurId { get; set; }
-        public Fournisseur? Fournisseur { get; set; } = null!;
+        public int? SupplierId { get; set; }
+        public Supplier? Supplier { get; set; } = null!;
         public int? InvoiceId { get; set; }
         public Invoice? Invoice { get; set; } = null!;
         public DateTime CreatedAt { get; set; }
@@ -90,7 +90,7 @@ namespace ResourceManager.Models
         public ApplicationUser? CreatedByUser { get; set; }
         
         // Line items extracted from PDF
-        public ICollection<FournisseurInvoiceItem> Items { get; set; } = new List<FournisseurInvoiceItem>();
+        public ICollection<SupplierInvoiceItem> Items { get; set; } = new List<SupplierInvoiceItem>();
         
         // Payment tracking
         public ICollection<SupplierPayment> Payments { get; set; } = new List<SupplierPayment>();
@@ -116,8 +116,8 @@ namespace ResourceManager.Models
         public decimal Amount { get; set; }
         public DateTime PaymentDate { get; set; }
         public string? Notes { get; set; }
-        public int FournisseurInvoiceId { get; set; }
-        public FournisseurInvoice? FournisseurInvoice { get; set; }
+        public int SupplierInvoiceId { get; set; }
+        public SupplierInvoice? SupplierInvoice { get; set; }
         public string? CreatedByUserId { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
@@ -129,7 +129,7 @@ namespace ResourceManager.Models
         public bool IsScheduled => Status == "Pending" && PaymentDate > DateTime.UtcNow;
     }
     
-    public class FournisseurInvoiceItem
+    public class SupplierInvoiceItem
     {
         public int Id { get; set; }
         public string Description { get; set; } = string.Empty;
@@ -144,27 +144,27 @@ namespace ResourceManager.Models
         [NotMapped]
         public decimal TotalTTC => TotalHT + TaxAmount;
         
-        public int FournisseurInvoiceId { get; set; }
-        public FournisseurInvoice? FournisseurInvoice { get; set; }
+        public int SupplierInvoiceId { get; set; }
+        public SupplierInvoice? SupplierInvoice { get; set; }
     }
     public class Client : Shared, IClient
     {
-        [Required(ErrorMessage ="Le nom est obligatoire.")]
+        [Required(ErrorMessage ="Name is required.")]
         public string Name { get; set; } = string.Empty;
-        [Required(ErrorMessage = "L'adresse est obligatoire.")]
+        [Required(ErrorMessage = "Address is required.")]
         public string Address { get; set; } = string.Empty;
-        [Required(ErrorMessage = "Le numéro d'identification fiscale est obligatoire.")]
-        public string MatriculeFiscal { get; set; } = string.Empty;
+        [Required(ErrorMessage = "Tax identification number is required.")]
+        public string TaxId { get; set; } = string.Empty;
         public string Phone { get; set; } = string.Empty;
         public string? Email { get; set; }
         public ICollection<Invoice> Invoices { get; set; } = new List<Invoice>();
-        public ICollection<Devis> Devis { get; set; } = new List<Devis>();
+        public ICollection<Quote> Quotes { get; set; } = new List<Quote>();
         public ICollection<DeliveryNote> DeliveryNotes { get; set; } = new List<DeliveryNote>();
     }
 
     public class Invoice: Shared, IPdfDocumentData
     {
-        [Required(ErrorMessage = "Saisissez le numéro de facture")]
+        [Required(ErrorMessage = "Enter the invoice number")]
         public string Number { get; set; } = string.Empty; // e.g. INV-2023-001
         public DateTime Date { get; set; }
         public DateTime? DueDate { get; set; } // Payment due date - nullable for backwards compatibility
@@ -172,17 +172,17 @@ namespace ResourceManager.Models
         
         [ForeignKey("ClientId")]
         public virtual Client? Client { get; set; }
-        public int? DevisId { get; set; }
-        public Devis? Devis { get; set; } = null!;
+        public int? QuoteId { get; set; }
+        public Quote? Quote { get; set; } = null!;
 
         // Currency & Language inherited from linked Quote (backward compat: falls back to company settings)
         [NotMapped]
-        public string? EffectiveCurrency => Devis?.Currency;
+        public string? EffectiveCurrency => Quote?.Currency;
         [NotMapped]
-        public string? EffectiveCurrencySymbol => Devis?.CurrencySymbol;
+        public string? EffectiveCurrencySymbol => Quote?.CurrencySymbol;
         [NotMapped]
-        public string? EffectivePdfLanguage => Devis?.PdfLanguage;
-        public string? SourceDevisNumber { get; set; }
+        public string? EffectivePdfLanguage => Quote?.PdfLanguage;
+        public string? SourceQuoteNumber { get; set; }
         public ICollection<InvoiceItem> InvoiceItems { get; set; } = new List<InvoiceItem>();
         public ICollection<Payment> Payments { get; set; } = new List<Payment>();
 
@@ -296,16 +296,16 @@ namespace ResourceManager.Models
         public string Number { get; set; } = string.Empty; // e.g. DN-2023-001
         public DateTime Date { get; set; }
         
-        public int? DevisId { get; set; }
-        public Devis? Devis { get; set; } = null!;
+        public int? QuoteId { get; set; }
+        public Quote? Quote { get; set; } = null!;
 
         // Currency & Language inherited from linked Quote (backward compat: falls back to company settings)
         [NotMapped]
-        public string? EffectiveCurrency => Devis?.Currency;
+        public string? EffectiveCurrency => Quote?.Currency;
         [NotMapped]
-        public string? EffectiveCurrencySymbol => Devis?.CurrencySymbol;
+        public string? EffectiveCurrencySymbol => Quote?.CurrencySymbol;
         [NotMapped]
-        public string? EffectivePdfLanguage => Devis?.PdfLanguage;
+        public string? EffectivePdfLanguage => Quote?.PdfLanguage;
         public ICollection<DeliveryNoteItem> DeliveryNoteItems { get; set; } = new List<DeliveryNoteItem>();
         [NotMapped] // Tell EF Core NOT to try and map this to the database
         public List<IItem> Items 
@@ -348,7 +348,7 @@ namespace ResourceManager.Models
 
 
     }
-    public class Devis: Shared, IPdfDocumentData
+    public class Quote: Shared, IPdfDocumentData
     {
         public string Number { get; set; } = string.Empty; 
         public DateTime Date { get; set; }
@@ -361,13 +361,13 @@ namespace ResourceManager.Models
         public int? ClientId { get; set; }
         public Client? Client { get; set; } = null!;
         public Invoice? Invoice { get; set; } = null!;
-        public ICollection<DevisItem> DevisItems { get; set; } = new List<DevisItem>();
+        public ICollection<QuoteItem> QuoteItems { get; set; } = new List<QuoteItem>();
         public ICollection<DeliveryNote> DeliveryNotes { get; set; } = new List<DeliveryNote>();
         [NotMapped] // Tell EF Core NOT to try and map this to the database
         public List<IItem> Items
         {
-            get => DevisItems.Cast<IItem>().ToList();
-            set => DevisItems = value.Cast<DevisItem>().ToList();
+            get => QuoteItems.Cast<IItem>().ToList();
+            set => QuoteItems = value.Cast<QuoteItem>().ToList();
         }
 
         // Configurable tax - stored value from settings
@@ -381,23 +381,23 @@ namespace ResourceManager.Models
         public string Status { get; set; } = "Draft"; // 'Draft', 'Accepted', 'Rejected'
         public void CalculTotalAmount()
         {
-            SubTotal = DevisItems.Sum(i => i.TotalItemHT);
-            TaxAmount = DevisItems.Sum(i => i.ItemTaxAmount);
+            SubTotal = QuoteItems.Sum(i => i.TotalItemHT);
+            TaxAmount = QuoteItems.Sum(i => i.ItemTaxAmount);
             TotalAmount = SubTotal + TaxAmount + Tfiscal;
         }
-        public Devis()
+        public Quote()
         {
             
         }
-        public Devis(List<DevisItem> items)
+        public Quote(List<QuoteItem> items)
         {
-            DevisItems = items;
+            QuoteItems = items;
             CalculTotalAmount(); // Automatically calculate upon creation
         }
 
     }
 
-    public class DevisItem:IItem
+    public class QuoteItem:IItem
     {
         public int Id { get; set; }
         public string Description { get; set; } = string.Empty;
@@ -412,8 +412,8 @@ namespace ResourceManager.Models
         [NotMapped]
         public decimal? TaxRate => Tva ? (VatRate ?? 0.19m) : 0m;
         public decimal? Price { get; set; }
-        public int? DevisId { get; set; }
-        public Devis? Devis { get; set; } = null!;
+        public int? QuoteId { get; set; }
+        public Quote? Quote { get; set; } = null!;
         public decimal ItemTaxAmount => (Price ?? 0m) * (Quantity ?? 0) * (TaxRate ?? 0);
         public decimal TotalItemHT => (Price ?? 0m) * (Quantity ?? 0);
 
@@ -557,12 +557,12 @@ namespace ResourceManager.Models
         public DateTime DocumentDate { get; set; }
         
         // Related entity tracking
-        public string RelatedEntityType { get; set; } = string.Empty; // "Invoice", "DeliveryNote", "Devis", "FournisseurInvoice"
+        public string RelatedEntityType { get; set; } = string.Empty; // "Invoice", "DeliveryNote", "Quote", "SupplierInvoice"
         public int RelatedEntityId { get; set; }
         
-        // Client/Fournisseur names for folder organization
+        // Client/Supplier names for folder organization
         public string? ClientName { get; set; }
-        public string? FournisseurName { get; set; }
+        public string? SupplierName { get; set; }
         
         // Cloud backup URL (Supabase or other cloud storage)
         public string? CloudUrl { get; set; }
@@ -591,7 +591,7 @@ namespace ResourceManager.Models
         Invoice = 0,
         DeliveryNote = 1,
         Quote = 2,
-        FournisseurInvoice = 3
+        SupplierInvoice = 3
     }
 
     /// <summary>
@@ -811,10 +811,10 @@ namespace ResourceManager.Models
         public bool IsHistorical { get; set; } = true;
 
         /// <summary>Linked Supplier (get-or-create during import)</summary>
-        public int? FournisseurId { get; set; }
+        public int? SupplierId { get; set; }
 
-        [ForeignKey("FournisseurId")]
-        public Fournisseur? Fournisseur { get; set; }
+        [ForeignKey("SupplierId")]
+        public Supplier? Supplier { get; set; }
     }
 
     /// <summary>
@@ -847,11 +847,11 @@ namespace ResourceManager.Models
         /// <summary>True once synced to Manager's local disk</summary>
         public bool IsProcessed { get; set; } = false;
 
-        /// <summary>Optional: linked Supplier from fournisseur table</summary>
-        public int? FournisseurId { get; set; }
+        /// <summary>Optional: linked Supplier from supplier table</summary>
+        public int? SupplierId { get; set; }
 
-        [ForeignKey("FournisseurId")]
-        public Fournisseur? Fournisseur { get; set; }
+        [ForeignKey("SupplierId")]
+        public Supplier? Supplier { get; set; }
     }
     
 }

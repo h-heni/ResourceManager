@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace ResourceManager.DTOs
 {
-    public class CreateDevisDto
+    public class CreateQuoteDto
     {
         public string Number { get; set; } = string.Empty;
         
@@ -16,10 +16,10 @@ namespace ResourceManager.DTOs
         public string? CurrencySymbol { get; set; }
         public string? PdfLanguage { get; set; }
         
-        public List<CreateDevisItemDto> Items { get; set; } = new List<CreateDevisItemDto>();
+        public List<CreateQuoteItemDto> Items { get; set; } = new List<CreateQuoteItemDto>();
     }
 
-    public class CreateDevisItemDto
+    public class CreateQuoteItemDto
     {
         public string Description { get; set; } = string.Empty;
         public int Quantity { get; set; }
@@ -28,5 +28,5 @@ namespace ResourceManager.DTOs
         public decimal? VatRate { get; set; } // Rate as decimal, e.g. 0.19
     }
 
-    public class UpdateDevisDto : CreateDevisDto { }
+    public class UpdateQuoteDto : CreateQuoteDto { }
 }

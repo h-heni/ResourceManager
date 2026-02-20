@@ -259,10 +259,6 @@ namespace ResourceManager.API.Data.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("MatriculeFiscal")
-                        .IsRequired()
-                        .HasColumnType("text");
-
                     b.Property<string>("ModifiedBy")
                         .HasColumnType("text");
 
@@ -271,6 +267,10 @@ namespace ResourceManager.API.Data.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TaxId")
                         .IsRequired()
                         .HasColumnType("text");
 
@@ -304,12 +304,18 @@ namespace ResourceManager.API.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int>("AccountStatus")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Address")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
 
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp without time zone");
@@ -329,8 +335,7 @@ namespace ResourceManager.API.Data.Migrations
                     b.Property<byte[]>("LogoData")
                         .HasColumnType("bytea");
 
-                    b.Property<string>("MatriculeFiscal")
-                        .IsRequired()
+                    b.Property<string>("ModifiedBy")
                         .HasColumnType("text");
 
                     b.Property<string>("Name")
@@ -338,6 +343,13 @@ namespace ResourceManager.API.Data.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("SubscriptionExpiryDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("TaxId")
                         .IsRequired()
                         .HasColumnType("text");
 
@@ -532,9 +544,6 @@ namespace ResourceManager.API.Data.Migrations
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int?>("DevisId")
-                        .HasColumnType("integer");
-
                     b.Property<int?>("InvoiceId")
                         .HasColumnType("integer");
 
@@ -547,6 +556,9 @@ namespace ResourceManager.API.Data.Migrations
                     b.Property<string>("Number")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<int?>("QuoteId")
+                        .HasColumnType("integer");
 
                     b.Property<bool>("Treated")
                         .HasColumnType("boolean");
@@ -569,9 +581,9 @@ namespace ResourceManager.API.Data.Migrations
                     b.HasIndex("Date")
                         .HasDatabaseName("IX_DeliveryNotes_Date");
 
-                    b.HasIndex("DevisId");
-
                     b.HasIndex("InvoiceId");
+
+                    b.HasIndex("QuoteId");
 
                     b.HasIndex("CompanyId", "IsDeleted")
                         .HasDatabaseName("IX_DeliveryNotes_CompanyId_IsDeleted");
@@ -616,7 +628,7 @@ namespace ResourceManager.API.Data.Migrations
                     b.ToTable("DeliveryNoteItems");
                 });
 
-            modelBuilder.Entity("ResourceManager.Models.Devis", b =>
+            modelBuilder.Entity("ResourceManager.Models.EmailAuditLog", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -624,311 +636,55 @@ namespace ResourceManager.API.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<int?>("ClientId")
+                    b.Property<int?>("CompanyId")
                         .HasColumnType("integer");
 
-                    b.Property<int>("CompanyId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("text");
-
-                    b.Property<string>("CreatedByUserId")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Currency")
-                        .HasColumnType("text");
-
-                    b.Property<string>("CurrencySymbol")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("Date")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("ModifiedBy")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Number")
+                    b.Property<string>("EmailType")
                         .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ErrorMessage")
                         .HasColumnType("text");
 
-                    b.Property<string>("PdfLanguage")
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)");
+
+                    b.Property<string>("Metadata")
                         .HasColumnType("text");
+
+                    b.Property<string>("RecipientEmail")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<int>("RetryCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("SentAt")
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
-                    b.Property<decimal?>("SubTotal")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal?>("TaxAmount")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal?>("Tfiscal")
-                        .HasColumnType("numeric");
-
-                    b.Property<string>("TfiscalName")
-                        .HasColumnType("text");
-
-                    b.Property<decimal?>("TotalAmount")
-                        .HasColumnType("numeric");
-
-                    b.Property<bool>("Treated")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("TreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("TreatedByUserId")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClientId");
-
-                    b.HasIndex("CreatedByUserId");
-
-                    b.HasIndex("Date")
-                        .HasDatabaseName("IX_Devis_Date");
-
-                    b.HasIndex("CompanyId", "IsDeleted")
-                        .HasDatabaseName("IX_Devis_CompanyId_IsDeleted");
-
-                    b.HasIndex("CompanyId", "Number")
-                        .IsUnique();
-
-                    b.ToTable("Devis");
-                });
-
-            modelBuilder.Entity("ResourceManager.Models.DevisItem", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Description")
+                    b.Property<string>("Subject")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
-                    b.Property<int?>("DevisId")
-                        .HasColumnType("integer");
+                    b.Property<string>("TriggeredByName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
-                    b.Property<decimal?>("Price")
-                        .HasColumnType("numeric");
-
-                    b.Property<int?>("Quantity")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("Tva")
-                        .HasColumnType("boolean");
-
-                    b.Property<decimal?>("VatRate")
-                        .HasColumnType("numeric");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("DevisId");
-
-                    b.ToTable("DevisItems");
-                });
-
-            modelBuilder.Entity("ResourceManager.Models.Fournisseur", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Address")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("CompanyId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("text");
-
-                    b.Property<string>("CreatedByUserId")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("MatriculeFiscal")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ModifiedBy")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Phone")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<bool>("Treated")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime?>("TreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("TreatedByUserId")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreatedByUserId");
-
-                    b.HasIndex("CompanyId", "IsDeleted")
-                        .HasDatabaseName("IX_Fournisseurs_CompanyId_IsDeleted");
-
-                    b.ToTable("Fournisseurs");
-                });
-
-            modelBuilder.Entity("ResourceManager.Models.FournisseurInvoice", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("CompanyId")
-                        .HasColumnType("integer");
-
-                    b.Property<double?>("ConfidenceScore")
-                        .HasColumnType("double precision");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("Currency")
-                        .HasColumnType("text");
-
-                    b.Property<string>("CurrencySymbol")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("DueDate")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("ExtractionStatus")
-                        .HasColumnType("text");
-
-                    b.Property<string>("FileName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("FilePath")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("FileType")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int?>("FournisseurId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("InvoiceDate")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<int?>("InvoiceId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("InvoiceNumber")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("RawExtractedText")
-                        .HasColumnType("text");
-
-                    b.Property<decimal?>("TVA")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal?>("TotalHT")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal?>("TotalTTC")
-                        .HasColumnType("numeric");
-
-                    b.Property<string>("UserId")
+                    b.Property<string>("TriggeredByUserId")
                         .HasColumnType("text");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("FournisseurId");
-
-                    b.HasIndex("InvoiceId");
-
-                    b.HasIndex("UserId");
-
-                    b.HasIndex("CompanyId", "IsDeleted")
-                        .HasDatabaseName("IX_FournisseurInvoices_CompanyId_IsDeleted");
-
-                    b.ToTable("FournisseurInvoices");
-                });
-
-            modelBuilder.Entity("ResourceManager.Models.FournisseurInvoiceItem", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("FournisseurInvoiceId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("integer");
-
-                    b.Property<decimal?>("TaxRate")
-                        .HasColumnType("numeric");
-
-                    b.Property<decimal>("UnitPrice")
-                        .HasColumnType("numeric");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("FournisseurInvoiceId");
-
-                    b.ToTable("FournisseurInvoiceItems");
+                    b.ToTable("EmailAuditLogs");
                 });
 
             modelBuilder.Entity("ResourceManager.Models.HistoricalExpense", b =>
@@ -969,9 +725,6 @@ namespace ResourceManager.API.Data.Migrations
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int?>("FournisseurId")
-                        .HasColumnType("integer");
-
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
@@ -984,6 +737,9 @@ namespace ResourceManager.API.Data.Migrations
                     b.Property<string>("Reference")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<int?>("SupplierId")
+                        .HasColumnType("integer");
 
                     b.Property<string>("SupplierName")
                         .IsRequired()
@@ -1008,7 +764,7 @@ namespace ResourceManager.API.Data.Migrations
                     b.HasIndex("Date")
                         .HasDatabaseName("IX_HistoricalExpenses_Date");
 
-                    b.HasIndex("FournisseurId");
+                    b.HasIndex("SupplierId");
 
                     b.HasIndex("CompanyId", "IsDeleted")
                         .HasDatabaseName("IX_HistoricalExpenses_CompanyId_IsDeleted");
@@ -1139,9 +895,6 @@ namespace ResourceManager.API.Data.Migrations
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<int?>("DevisId")
-                        .HasColumnType("integer");
-
                     b.Property<DateTime?>("DueDate")
                         .HasColumnType("timestamp without time zone");
 
@@ -1158,7 +911,10 @@ namespace ResourceManager.API.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("SourceDevisNumber")
+                    b.Property<int?>("QuoteId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SourceQuoteNumber")
                         .HasColumnType("text");
 
                     b.Property<string>("Status")
@@ -1207,7 +963,7 @@ namespace ResourceManager.API.Data.Migrations
                     b.HasIndex("Date")
                         .HasDatabaseName("IX_Invoices_Date");
 
-                    b.HasIndex("DevisId")
+                    b.HasIndex("QuoteId")
                         .IsUnique();
 
                     b.HasIndex("Status")
@@ -1316,11 +1072,19 @@ namespace ResourceManager.API.Data.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<int>("EmployeeCapacity")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("ExpirationDate")
                         .HasColumnType("timestamp without time zone");
 
                     b.Property<bool>("IsUsed")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("PreferredLanguage")
+                        .IsRequired()
+                        .HasMaxLength(5)
+                        .HasColumnType("character varying(5)");
 
                     b.Property<string>("Token")
                         .IsRequired()
@@ -1418,6 +1182,50 @@ namespace ResourceManager.API.Data.Migrations
                     b.ToTable("OtherExpenses");
                 });
 
+            modelBuilder.Entity("ResourceManager.Models.PasswordResetToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("IsUsed")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("RequestIpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTime?>("UsedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UsedIpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("PasswordResetTokens");
+                });
+
             modelBuilder.Entity("ResourceManager.Models.Payment", b =>
                 {
                     b.Property<int>("Id")
@@ -1505,9 +1313,6 @@ namespace ResourceManager.API.Data.Migrations
                     b.Property<long>("FileSizeBytes")
                         .HasColumnType("bigint");
 
-                    b.Property<string>("FournisseurName")
-                        .HasColumnType("text");
-
                     b.Property<string>("FullPath")
                         .IsRequired()
                         .HasColumnType("text");
@@ -1524,6 +1329,9 @@ namespace ResourceManager.API.Data.Migrations
 
                     b.Property<string>("RelativePath")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SupplierName")
                         .HasColumnType("text");
 
                     b.HasKey("Id");
@@ -1574,9 +1382,6 @@ namespace ResourceManager.API.Data.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
-                    b.Property<int?>("FournisseurId")
-                        .HasColumnType("integer");
-
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
@@ -1588,6 +1393,9 @@ namespace ResourceManager.API.Data.Migrations
 
                     b.Property<long>("OriginalSize")
                         .HasColumnType("bigint");
+
+                    b.Property<int?>("SupplierId")
+                        .HasColumnType("integer");
 
                     b.Property<string>("SupplierName")
                         .IsRequired()
@@ -1610,7 +1418,7 @@ namespace ResourceManager.API.Data.Migrations
 
                     b.HasIndex("CreatedByUserId");
 
-                    b.HasIndex("FournisseurId");
+                    b.HasIndex("SupplierId");
 
                     b.HasIndex("CompanyId", "IsDeleted")
                         .HasDatabaseName("IX_PendingInvoices_CompanyId_IsDeleted");
@@ -1692,6 +1500,137 @@ namespace ResourceManager.API.Data.Migrations
                     b.ToTable("ProductServices");
                 });
 
+            modelBuilder.Entity("ResourceManager.Models.Quote", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("ClientId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Currency")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CurrencySymbol")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("PdfLanguage")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("SubTotal")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("TaxAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("Tfiscal")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("TfiscalName")
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("TotalAmount")
+                        .HasColumnType("numeric");
+
+                    b.Property<bool>("Treated")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("TreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("TreatedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("Date")
+                        .HasDatabaseName("IX_Quotes_Date");
+
+                    b.HasIndex("CompanyId", "IsDeleted")
+                        .HasDatabaseName("IX_Quotes_CompanyId_IsDeleted");
+
+                    b.HasIndex("CompanyId", "Number")
+                        .IsUnique();
+
+                    b.ToTable("Quotes");
+                });
+
+            modelBuilder.Entity("ResourceManager.Models.QuoteItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal?>("Price")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("QuoteId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("Tva")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal?>("VatRate")
+                        .HasColumnType("numeric");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("QuoteId");
+
+                    b.ToTable("QuoteItems");
+                });
+
             modelBuilder.Entity("ResourceManager.Models.RefreshToken", b =>
                 {
                     b.Property<int>("Id")
@@ -1737,6 +1676,190 @@ namespace ResourceManager.API.Data.Migrations
                     b.ToTable("RefreshTokens");
                 });
 
+            modelBuilder.Entity("ResourceManager.Models.Supplier", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Address")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TaxId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Treated")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("TreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("TreatedByUserId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("CompanyId", "IsDeleted")
+                        .HasDatabaseName("IX_Suppliers_CompanyId_IsDeleted");
+
+                    b.ToTable("Suppliers");
+                });
+
+            modelBuilder.Entity("ResourceManager.Models.SupplierInvoice", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CompanyId")
+                        .HasColumnType("integer");
+
+                    b.Property<double?>("ConfidenceScore")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Currency")
+                        .HasColumnType("text");
+
+                    b.Property<string>("CurrencySymbol")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("DueDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ExtractionStatus")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("FilePath")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("FileType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("InvoiceDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<int?>("InvoiceId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("InvoiceNumber")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("RawExtractedText")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("SupplierId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("TVA")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("TotalHT")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal?>("TotalTTC")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("UserId")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InvoiceId");
+
+                    b.HasIndex("SupplierId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("CompanyId", "IsDeleted")
+                        .HasDatabaseName("IX_SupplierInvoices_CompanyId_IsDeleted");
+
+                    b.ToTable("SupplierInvoices");
+                });
+
+            modelBuilder.Entity("ResourceManager.Models.SupplierInvoiceItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SupplierInvoiceId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("TaxRate")
+                        .HasColumnType("numeric");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasColumnType("numeric");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SupplierInvoiceId");
+
+                    b.ToTable("SupplierInvoiceItems");
+                });
+
             modelBuilder.Entity("ResourceManager.Models.SupplierPayment", b =>
                 {
                     b.Property<int>("Id")
@@ -1760,9 +1883,6 @@ namespace ResourceManager.API.Data.Migrations
                     b.Property<string>("CreatedByUserId")
                         .HasColumnType("text");
 
-                    b.Property<int>("FournisseurInvoiceId")
-                        .HasColumnType("integer");
-
                     b.Property<string>("Notes")
                         .HasColumnType("text");
 
@@ -1773,10 +1893,13 @@ namespace ResourceManager.API.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("SupplierInvoiceId")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("FournisseurInvoiceId", "Status")
-                        .HasDatabaseName("IX_SupplierPayments_FournisseurInvoiceId_Status");
+                    b.HasIndex("SupplierInvoiceId", "Status")
+                        .HasDatabaseName("IX_SupplierPayments_SupplierInvoiceId_Status");
 
                     b.ToTable("SupplierPayments");
                 });
@@ -2008,13 +2131,13 @@ namespace ResourceManager.API.Data.Migrations
                         .WithMany()
                         .HasForeignKey("CreatedByUserId");
 
-                    b.HasOne("ResourceManager.Models.Devis", "Devis")
-                        .WithMany("DeliveryNotes")
-                        .HasForeignKey("DevisId");
-
                     b.HasOne("ResourceManager.Models.Invoice", "Invoice")
                         .WithMany()
                         .HasForeignKey("InvoiceId");
+
+                    b.HasOne("ResourceManager.Models.Quote", "Quote")
+                        .WithMany("DeliveryNotes")
+                        .HasForeignKey("QuoteId");
 
                     b.Navigation("Client");
 
@@ -2022,9 +2145,9 @@ namespace ResourceManager.API.Data.Migrations
 
                     b.Navigation("CreatedByUser");
 
-                    b.Navigation("Devis");
-
                     b.Navigation("Invoice");
+
+                    b.Navigation("Quote");
                 });
 
             modelBuilder.Entity("ResourceManager.Models.DeliveryNoteItem", b =>
@@ -2034,95 +2157,6 @@ namespace ResourceManager.API.Data.Migrations
                         .HasForeignKey("DeliveryNoteId");
 
                     b.Navigation("DeliveryNote");
-                });
-
-            modelBuilder.Entity("ResourceManager.Models.Devis", b =>
-                {
-                    b.HasOne("ResourceManager.Models.Client", "Client")
-                        .WithMany("Devis")
-                        .HasForeignKey("ClientId");
-
-                    b.HasOne("ResourceManager.Models.Company", "Company")
-                        .WithMany()
-                        .HasForeignKey("CompanyId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("ResourceManager.Models.ApplicationUser", "CreatedByUser")
-                        .WithMany()
-                        .HasForeignKey("CreatedByUserId");
-
-                    b.Navigation("Client");
-
-                    b.Navigation("Company");
-
-                    b.Navigation("CreatedByUser");
-                });
-
-            modelBuilder.Entity("ResourceManager.Models.DevisItem", b =>
-                {
-                    b.HasOne("ResourceManager.Models.Devis", "Devis")
-                        .WithMany("DevisItems")
-                        .HasForeignKey("DevisId");
-
-                    b.Navigation("Devis");
-                });
-
-            modelBuilder.Entity("ResourceManager.Models.Fournisseur", b =>
-                {
-                    b.HasOne("ResourceManager.Models.Company", "Company")
-                        .WithMany("Fournisseurs")
-                        .HasForeignKey("CompanyId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("ResourceManager.Models.ApplicationUser", "CreatedByUser")
-                        .WithMany()
-                        .HasForeignKey("CreatedByUserId");
-
-                    b.Navigation("Company");
-
-                    b.Navigation("CreatedByUser");
-                });
-
-            modelBuilder.Entity("ResourceManager.Models.FournisseurInvoice", b =>
-                {
-                    b.HasOne("ResourceManager.Models.Company", "Company")
-                        .WithMany()
-                        .HasForeignKey("CompanyId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("ResourceManager.Models.Fournisseur", "Fournisseur")
-                        .WithMany("FournisseurInvoices")
-                        .HasForeignKey("FournisseurId");
-
-                    b.HasOne("ResourceManager.Models.Invoice", "Invoice")
-                        .WithMany()
-                        .HasForeignKey("InvoiceId");
-
-                    b.HasOne("ResourceManager.Models.ApplicationUser", "CreatedByUser")
-                        .WithMany()
-                        .HasForeignKey("UserId");
-
-                    b.Navigation("Company");
-
-                    b.Navigation("CreatedByUser");
-
-                    b.Navigation("Fournisseur");
-
-                    b.Navigation("Invoice");
-                });
-
-            modelBuilder.Entity("ResourceManager.Models.FournisseurInvoiceItem", b =>
-                {
-                    b.HasOne("ResourceManager.Models.FournisseurInvoice", "FournisseurInvoice")
-                        .WithMany("Items")
-                        .HasForeignKey("FournisseurInvoiceId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("FournisseurInvoice");
                 });
 
             modelBuilder.Entity("ResourceManager.Models.HistoricalExpense", b =>
@@ -2137,15 +2171,15 @@ namespace ResourceManager.API.Data.Migrations
                         .WithMany()
                         .HasForeignKey("CreatedByUserId");
 
-                    b.HasOne("ResourceManager.Models.Fournisseur", "Fournisseur")
+                    b.HasOne("ResourceManager.Models.Supplier", "Supplier")
                         .WithMany()
-                        .HasForeignKey("FournisseurId");
+                        .HasForeignKey("SupplierId");
 
                     b.Navigation("Company");
 
                     b.Navigation("CreatedByUser");
 
-                    b.Navigation("Fournisseur");
+                    b.Navigation("Supplier");
                 });
 
             modelBuilder.Entity("ResourceManager.Models.HistoricalRevenue", b =>
@@ -2194,9 +2228,9 @@ namespace ResourceManager.API.Data.Migrations
                         .WithMany()
                         .HasForeignKey("CreatedByUserId");
 
-                    b.HasOne("ResourceManager.Models.Devis", "Devis")
+                    b.HasOne("ResourceManager.Models.Quote", "Quote")
                         .WithOne("Invoice")
-                        .HasForeignKey("ResourceManager.Models.Invoice", "DevisId");
+                        .HasForeignKey("ResourceManager.Models.Invoice", "QuoteId");
 
                     b.Navigation("Client");
 
@@ -2204,7 +2238,7 @@ namespace ResourceManager.API.Data.Migrations
 
                     b.Navigation("CreatedByUser");
 
-                    b.Navigation("Devis");
+                    b.Navigation("Quote");
                 });
 
             modelBuilder.Entity("ResourceManager.Models.InvoiceEmail", b =>
@@ -2253,6 +2287,17 @@ namespace ResourceManager.API.Data.Migrations
                     b.Navigation("CreatedByUser");
                 });
 
+            modelBuilder.Entity("ResourceManager.Models.PasswordResetToken", b =>
+                {
+                    b.HasOne("ResourceManager.Models.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("ResourceManager.Models.Payment", b =>
                 {
                     b.HasOne("ResourceManager.Models.Invoice", "Invoice")
@@ -2293,15 +2338,15 @@ namespace ResourceManager.API.Data.Migrations
                         .WithMany()
                         .HasForeignKey("CreatedByUserId");
 
-                    b.HasOne("ResourceManager.Models.Fournisseur", "Fournisseur")
+                    b.HasOne("ResourceManager.Models.Supplier", "Supplier")
                         .WithMany()
-                        .HasForeignKey("FournisseurId");
+                        .HasForeignKey("SupplierId");
 
                     b.Navigation("Company");
 
                     b.Navigation("CreatedByUser");
 
-                    b.Navigation("Fournisseur");
+                    b.Navigation("Supplier");
                 });
 
             modelBuilder.Entity("ResourceManager.Models.ProductService", b =>
@@ -2321,6 +2366,38 @@ namespace ResourceManager.API.Data.Migrations
                     b.Navigation("CreatedByUser");
                 });
 
+            modelBuilder.Entity("ResourceManager.Models.Quote", b =>
+                {
+                    b.HasOne("ResourceManager.Models.Client", "Client")
+                        .WithMany("Quotes")
+                        .HasForeignKey("ClientId");
+
+                    b.HasOne("ResourceManager.Models.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ResourceManager.Models.ApplicationUser", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId");
+
+                    b.Navigation("Client");
+
+                    b.Navigation("Company");
+
+                    b.Navigation("CreatedByUser");
+                });
+
+            modelBuilder.Entity("ResourceManager.Models.QuoteItem", b =>
+                {
+                    b.HasOne("ResourceManager.Models.Quote", "Quote")
+                        .WithMany("QuoteItems")
+                        .HasForeignKey("QuoteId");
+
+                    b.Navigation("Quote");
+                });
+
             modelBuilder.Entity("ResourceManager.Models.RefreshToken", b =>
                 {
                     b.HasOne("ResourceManager.Models.ApplicationUser", "User")
@@ -2332,15 +2409,72 @@ namespace ResourceManager.API.Data.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("ResourceManager.Models.SupplierPayment", b =>
+            modelBuilder.Entity("ResourceManager.Models.Supplier", b =>
                 {
-                    b.HasOne("ResourceManager.Models.FournisseurInvoice", "FournisseurInvoice")
-                        .WithMany("Payments")
-                        .HasForeignKey("FournisseurInvoiceId")
+                    b.HasOne("ResourceManager.Models.Company", "Company")
+                        .WithMany("Suppliers")
+                        .HasForeignKey("CompanyId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("FournisseurInvoice");
+                    b.HasOne("ResourceManager.Models.ApplicationUser", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId");
+
+                    b.Navigation("Company");
+
+                    b.Navigation("CreatedByUser");
+                });
+
+            modelBuilder.Entity("ResourceManager.Models.SupplierInvoice", b =>
+                {
+                    b.HasOne("ResourceManager.Models.Company", "Company")
+                        .WithMany()
+                        .HasForeignKey("CompanyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ResourceManager.Models.Invoice", "Invoice")
+                        .WithMany()
+                        .HasForeignKey("InvoiceId");
+
+                    b.HasOne("ResourceManager.Models.Supplier", "Supplier")
+                        .WithMany("SupplierInvoices")
+                        .HasForeignKey("SupplierId");
+
+                    b.HasOne("ResourceManager.Models.ApplicationUser", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UserId");
+
+                    b.Navigation("Company");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("Invoice");
+
+                    b.Navigation("Supplier");
+                });
+
+            modelBuilder.Entity("ResourceManager.Models.SupplierInvoiceItem", b =>
+                {
+                    b.HasOne("ResourceManager.Models.SupplierInvoice", "SupplierInvoice")
+                        .WithMany("Items")
+                        .HasForeignKey("SupplierInvoiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SupplierInvoice");
+                });
+
+            modelBuilder.Entity("ResourceManager.Models.SupplierPayment", b =>
+                {
+                    b.HasOne("ResourceManager.Models.SupplierInvoice", "SupplierInvoice")
+                        .WithMany("Payments")
+                        .HasForeignKey("SupplierInvoiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SupplierInvoice");
                 });
 
             modelBuilder.Entity("ResourceManager.Models.UserProfile", b =>
@@ -2363,16 +2497,16 @@ namespace ResourceManager.API.Data.Migrations
                 {
                     b.Navigation("DeliveryNotes");
 
-                    b.Navigation("Devis");
-
                     b.Navigation("Invoices");
+
+                    b.Navigation("Quotes");
                 });
 
             modelBuilder.Entity("ResourceManager.Models.Company", b =>
                 {
                     b.Navigation("Clients");
 
-                    b.Navigation("Fournisseurs");
+                    b.Navigation("Suppliers");
 
                     b.Navigation("Users");
                 });
@@ -2382,30 +2516,30 @@ namespace ResourceManager.API.Data.Migrations
                     b.Navigation("DeliveryNoteItems");
                 });
 
-            modelBuilder.Entity("ResourceManager.Models.Devis", b =>
+            modelBuilder.Entity("ResourceManager.Models.Invoice", b =>
                 {
-                    b.Navigation("DeliveryNotes");
-
-                    b.Navigation("DevisItems");
-
-                    b.Navigation("Invoice");
-                });
-
-            modelBuilder.Entity("ResourceManager.Models.Fournisseur", b =>
-                {
-                    b.Navigation("FournisseurInvoices");
-                });
-
-            modelBuilder.Entity("ResourceManager.Models.FournisseurInvoice", b =>
-                {
-                    b.Navigation("Items");
+                    b.Navigation("InvoiceItems");
 
                     b.Navigation("Payments");
                 });
 
-            modelBuilder.Entity("ResourceManager.Models.Invoice", b =>
+            modelBuilder.Entity("ResourceManager.Models.Quote", b =>
                 {
-                    b.Navigation("InvoiceItems");
+                    b.Navigation("DeliveryNotes");
+
+                    b.Navigation("Invoice");
+
+                    b.Navigation("QuoteItems");
+                });
+
+            modelBuilder.Entity("ResourceManager.Models.Supplier", b =>
+                {
+                    b.Navigation("SupplierInvoices");
+                });
+
+            modelBuilder.Entity("ResourceManager.Models.SupplierInvoice", b =>
+                {
+                    b.Navigation("Items");
 
                     b.Navigation("Payments");
                 });

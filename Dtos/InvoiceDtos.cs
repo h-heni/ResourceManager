@@ -13,7 +13,7 @@ namespace ResourceManager.DTOs
         
         public int? ClientId { get; set; }
         
-        public int? DevisId { get; set; } // Optional: link to a quote
+        public int? QuoteId { get; set; } // Optional: link to a quote
         public List<int>? DeliveryNoteIds { get; set; } // Link Delivery Notes
         
         public List<CreateInvoiceItemDto> Items { get; set; } = new List<CreateInvoiceItemDto>();

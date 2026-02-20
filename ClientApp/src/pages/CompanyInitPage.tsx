@@ -1,8 +1,9 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Building2, MapPin, Phone, Mail, Hash, DollarSign, Upload,
-    Loader2, CheckCircle, PenTool, FolderOpen, Image, AlertCircle
+    Loader2, CheckCircle, PenTool, FolderOpen, Image, AlertCircle,
+    FolderCheck, FolderSearch, Palette, Globe, Landmark
 } from 'lucide-react';
 import { useNotify } from '../hooks/useNotify';
 import { useTranslation } from 'react-i18next';
@@ -37,7 +38,7 @@ export default function CompanyInitPage() {
     const [companyAddress, setCompanyAddress] = useState('');
     const [companyPhone, setCompanyPhone] = useState('');
     const [companyEmail, setCompanyEmail] = useState('');
-    const [matriculeFiscal, setMatriculeFiscal] = useState('');
+    const [taxId, setTaxId] = useState('');
 
     // Financial
     const [currency, setCurrency] = useState('TND');
@@ -46,23 +47,192 @@ export default function CompanyInitPage() {
     const [customTaxName, setCustomTaxName] = useState('Timbre Fiscal');
     const [customTaxAmount, setCustomTaxAmount] = useState(1.0);
 
+    // Bank Info
+    const [bankName, setBankName] = useState('');
+    const [bankBIC, setBankBIC] = useState('');
+    const [bankIBAN, setBankIBAN] = useState('');
+    const [showBankName, setShowBankName] = useState(true);
+    const [showBankBIC, setShowBankBIC] = useState(true);
+    const [showBankIBAN, setShowBankIBAN] = useState(true);
+
     // Branding
     const [logoFile, setLogoFile] = useState<File | null>(null);
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
     const [signatureFile, setSignatureFile] = useState<File | null>(null);
     const [signaturePreview, setSignaturePreview] = useState<string | null>(null);
+    const [primaryColor, setPrimaryColor] = useState('#065F46');
+    const [secondaryColor, setSecondaryColor] = useState('#14B8A6');
+
+    // PDF Settings
+    const [pdfFooterText, setPdfFooterText] = useState('');
+    const [showCompanyLogo, setShowCompanyLogo] = useState(true);
+    const [pdfSignatureText, setPdfSignatureText] = useState('');
+    const [pdfSignerPosition, setPdfSignerPosition] = useState('');
+    const [showSignatureOnPdf, setShowSignatureOnPdf] = useState(false);
+    const [invoiceLanguage, setInvoiceLanguage] = useState('fr');
+    const [fileSystemLanguage, setFileSystemLanguage] = useState('fr');
+    const [fileSystemLanguageLocked, setFileSystemLanguageLocked] = useState(false);
 
     // Storage
     const [baseStoragePath, setBaseStoragePath] = useState('');
+    const [testingPath, setTestingPath] = useState(false);
+    const [pathTestResult, setPathTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
-    const totalSteps = 3;
+    // Loading state for data hydration
+    const [loading, setLoading] = useState(true);
+
+    const totalSteps = 4;
+
+    // ═══════════════════════════════════════════════════════════════
+    // DATA HYDRATION - Fetch existing company data on mount
+    // ═══════════════════════════════════════════════════════════════
+    useEffect(() => {
+        const fetchExistingData = async () => {
+            try {
+                const res = await api.get('/settings');
+                const data = res.data;
+                
+                // Pre-fill company info
+                if (data.companyName) setCompanyName(data.companyName);
+                if (data.companyAddress) setCompanyAddress(data.companyAddress);
+                if (data.companyPhone) setCompanyPhone(data.companyPhone);
+                if (data.companyEmail) setCompanyEmail(data.companyEmail);
+                if (data.companyTaxId) setTaxId(data.companyTaxId);
+                
+                // Pre-fill financial settings
+                if (data.currency) setCurrency(data.currency);
+                if (data.defaultVatRate != null) setDefaultVatRate(data.defaultVatRate);
+                if (data.customTaxEnabled != null) setCustomTaxEnabled(data.customTaxEnabled);
+                if (data.customTaxName) setCustomTaxName(data.customTaxName);
+                if (data.customTaxAmount != null) setCustomTaxAmount(data.customTaxAmount);
+
+                // Pre-fill bank info
+                if (data.bankName) setBankName(data.bankName);
+                if (data.bankBIC) setBankBIC(data.bankBIC);
+                if (data.bankIBAN) setBankIBAN(data.bankIBAN);
+                if (data.showBankName != null) setShowBankName(data.showBankName);
+                if (data.showBankBIC != null) setShowBankBIC(data.showBankBIC);
+                if (data.showBankIBAN != null) setShowBankIBAN(data.showBankIBAN);
+
+                // Pre-fill branding
+                if (data.primaryColor) setPrimaryColor(data.primaryColor);
+                if (data.secondaryColor) setSecondaryColor(data.secondaryColor);
+
+                // Pre-fill PDF settings
+                if (data.pdfFooterText) setPdfFooterText(data.pdfFooterText);
+                if (data.showCompanyLogo != null) setShowCompanyLogo(data.showCompanyLogo);
+                if (data.pdfSignatureText) setPdfSignatureText(data.pdfSignatureText);
+                if (data.pdfSignerPosition) setPdfSignerPosition(data.pdfSignerPosition);
+                if (data.showSignatureOnPdf != null) setShowSignatureOnPdf(data.showSignatureOnPdf);
+                if (data.invoiceLanguage) setInvoiceLanguage(data.invoiceLanguage);
+                if (data.fileSystemLanguage) setFileSystemLanguage(data.fileSystemLanguage);
+                if (data.fileSystemLanguageLocked != null) setFileSystemLanguageLocked(data.fileSystemLanguageLocked);
+                
+                // Pre-fill storage path
+                if (data.baseStoragePath) setBaseStoragePath(data.baseStoragePath);
+                
+                // Fetch logo as blob if exists (img tags can't send JWT headers)
+                if (data.hasLogoData) {
+                    try {
+                        const logoRes = await api.get('/settings/logo', { responseType: 'blob' });
+                        if (logoRes.data.size > 0) setLogoPreview(URL.createObjectURL(logoRes.data));
+                    } catch { /* no logo */ }
+                }
+                
+                // Fetch signature as blob if exists
+                if (data.hasSignatureImage) {
+                    try {
+                        const sigRes = await api.get('/settings/signature', { responseType: 'blob' });
+                        if (sigRes.data.size > 0) setSignaturePreview(URL.createObjectURL(sigRes.data));
+                    } catch { /* no signature */ }
+                }
+                
+                logger.info('[CompanyInit] Loaded existing data');
+            } catch {
+                // If 404 or no data, that's fine - user is setting up fresh
+                logger.info('[CompanyInit] No existing data found, starting fresh');
+            } finally {
+                setLoading(false);
+            }
+        };
+        
+        fetchExistingData();
+    }, []);
+
+    // ═══════════════════════════════════════════════════════════════
+    // BROWSE FOLDER - Native OS folder picker
+    // ═══════════════════════════════════════════════════════════════
+    const handleBrowseFolder = async () => {
+        try {
+            // Use the native OS folder picker dialog (same look as file browse)
+            const dirHandle = await (window as unknown as { showDirectoryPicker: (opts?: object) => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker({
+                mode: 'readwrite',
+            });
+            const folderName = dirHandle.name;
+
+            // Collect entry names (files + subfolders) as a fingerprint to identify the exact folder
+            const entries: string[] = [];
+            try {
+                for await (const [name] of (dirHandle as unknown as AsyncIterable<[string, unknown]>)) {
+                    entries.push(name);
+                    if (entries.length >= 15) break;
+                }
+            } catch { /* empty folder or permission issue */ }
+
+            // Ask the server to find the full path using name + fingerprint
+            try {
+                const res = await api.post('/pdf-storage/resolve-folder', { name: folderName, entries });
+                if (res.data.fullPath) {
+                    setBaseStoragePath(res.data.fullPath);
+                    setPathTestResult(null);
+                    return;
+                }
+            } catch { /* resolve failed */ }
+
+            // Fallback: just set the folder name
+            setBaseStoragePath(folderName);
+            setPathTestResult(null);
+        } catch (err: unknown) {
+            // User cancelled the dialog - ignore
+            if (err instanceof DOMException && err.name === 'AbortError') return;
+            logger.error('Folder picker error:', err);
+        }
+    };
+
+    // ═══════════════════════════════════════════════════════════════
+    // TEST PATH - Validate storage path is writable
+    // ═══════════════════════════════════════════════════════════════
+    const handleTestPath = async () => {
+        if (!baseStoragePath.trim()) {
+            setPathTestResult({ success: false, message: t('companyInit.validation.storagePathRequired') });
+            return;
+        }
+        
+        setTestingPath(true);
+        setPathTestResult(null);
+        
+        try {
+            const res = await api.post('/pdf-storage/test-path', { path: baseStoragePath.trim() });
+            setPathTestResult({ 
+                success: true, 
+                message: res.data.message || t('companyInit.pathTestSuccess')
+            });
+        } catch (err: unknown) {
+            setPathTestResult({ 
+                success: false, 
+                message: getErrorMessage(err, t('companyInit.pathTestFailed'))
+            });
+        } finally {
+            setTestingPath(false);
+        }
+    };
 
     const validateStep = (step: number): string | null => {
         if (step === 1) {
             if (!companyName.trim()) return t('companyInit.validation.companyNameRequired');
             if (!companyAddress.trim()) return t('companyInit.validation.companyAddressRequired');
         }
-        if (step === 3) {
+        if (step === 4) {
             if (!baseStoragePath.trim()) return t('companyInit.validation.storagePathRequired');
         }
         return null;
@@ -100,18 +270,6 @@ export default function CompanyInitPage() {
         setError('');
     };
 
-    const handleBrowseFolder = async () => {
-        try {
-            const res = await api.get('/pdf-storage/browse-folders');
-            if (res.data?.drives?.length > 0) {
-                const firstDrive = res.data.drives[0];
-                setBaseStoragePath(firstDrive.endsWith('\\') ? firstDrive : firstDrive + '\\');
-            }
-        } catch {
-            // Folder browsing not available — user must type manually
-        }
-    };
-
     const handleSubmit = async () => {
         const err = validateStep(currentStep);
         if (err) { setError(err); return; }
@@ -126,17 +284,38 @@ export default function CompanyInitPage() {
                 address: companyAddress,
                 phone: companyPhone,
                 email: companyEmail,
-                matriculeFiscal: matriculeFiscal,
+                taxId: taxId,
             });
 
-            // Step 2: Save financial settings + storage path (triggers isProfileComplete = true)
+            // Step 2: Save ALL settings (triggers isProfileComplete = true via baseStoragePath)
             await api.put('/Settings', {
+                // Financial
                 currency,
                 currencySymbol: currency,
                 defaultVatRate,
                 customTaxEnabled,
                 customTaxName,
                 customTaxAmount,
+                // Bank
+                bankName,
+                bankBIC,
+                bankIBAN,
+                showBankName,
+                showBankBIC,
+                showBankIBAN,
+                // Branding
+                primaryColor,
+                secondaryColor,
+                // PDF Settings
+                pdfFooterText,
+                showCompanyLogo,
+                pdfSignatureText: pdfSignatureText?.trim() ?? '',
+                pdfSignerPosition: pdfSignerPosition?.trim() ?? '',
+                showSignatureOnPdf,
+                invoiceLanguage,
+                // File system language
+                fileSystemLanguage: fileSystemLanguage || undefined,
+                // Storage
                 baseStoragePath,
             });
 
@@ -176,9 +355,22 @@ export default function CompanyInitPage() {
 
     const stepLabels = [
         t('companyInit.steps.companyInfo'),
-        t('companyInit.steps.financialBranding'),
+        t('companyInit.steps.financial'),
+        t('companyInit.steps.brandingPdf'),
         t('companyInit.steps.storageFinish')
     ];
+
+    // Show loading state while fetching existing data
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-gradient-to-b from-[#F0FDF4] to-[#F9FAFB] flex items-center justify-center p-4">
+                <div className="flex flex-col items-center gap-4">
+                    <Loader2 className="h-8 w-8 animate-spin text-[#065F46]" />
+                    <p className="text-gray-600">{t('common.loading')}</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-gradient-to-b from-[#F0FDF4] to-[#F9FAFB] flex items-center justify-center p-4">
@@ -236,7 +428,7 @@ export default function CompanyInitPage() {
                                     <label className="text-sm font-medium text-gray-700">{t('settings.fiscalId')}</label>
                                     <div className="relative">
                                         <Hash className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-                                        <input value={matriculeFiscal} onChange={e => setMatriculeFiscal(e.target.value)}
+                                        <input value={taxId} onChange={e => setTaxId(e.target.value)}
                                             className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent outline-none bg-gray-50/50 focus:bg-white"
                                             placeholder={t('companyInit.placeholders.fiscalId')} />
                                     </div>
@@ -263,7 +455,7 @@ export default function CompanyInitPage() {
                         </div>
                     )}
 
-                    {/* Step 2: Financial & Branding */}
+                    {/* Step 2: Financial & Banking */}
                     {currentStep === 2 && (
                         <div className="space-y-6 animate-fade-in">
                             {/* Currency */}
@@ -322,6 +514,58 @@ export default function CompanyInitPage() {
                             {/* Divider */}
                             <hr className="border-gray-100" />
 
+                            {/* Bank Info */}
+                            <div className="p-5 bg-blue-50 border border-blue-200 rounded-xl">
+                                <h4 className="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                                    <Landmark className="h-4 w-4 text-blue-600" />
+                                    {t('settings.pdfBankDetails')}
+                                </h4>
+                                <p className="text-xs text-gray-500 mb-4">{t('companyInit.bankInfoDesc')}</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <div className="flex items-center justify-between mb-1">
+                                            <label className="text-sm font-medium text-gray-700">{t('companyInit.bankName')}</label>
+                                            <label className="flex items-center space-x-1 cursor-pointer">
+                                                <input type="checkbox" checked={showBankName} onChange={e => setShowBankName(e.target.checked)}
+                                                    className="w-4 h-4 text-blue-600 rounded" />
+                                                <span className="text-xs text-gray-500">{t('companyInit.showOnPdf')}</span>
+                                            </label>
+                                        </div>
+                                        <input type="text" value={bankName} onChange={e => setBankName(e.target.value)} placeholder={t('settings.bankNamePlaceholder')}
+                                            className="w-full px-3 py-2.5 bg-white border border-blue-300 rounded-lg text-sm" />
+                                    </div>
+                                    <div>
+                                        <div className="flex items-center justify-between mb-1">
+                                            <label className="text-sm font-medium text-gray-700">{t('settings.bankBICLabel')}</label>
+                                            <label className="flex items-center space-x-1 cursor-pointer">
+                                                <input type="checkbox" checked={showBankBIC} onChange={e => setShowBankBIC(e.target.checked)}
+                                                    className="w-4 h-4 text-blue-600 rounded" />
+                                                <span className="text-xs text-gray-500">{t('companyInit.showOnPdf')}</span>
+                                            </label>
+                                        </div>
+                                        <input type="text" value={bankBIC} onChange={e => setBankBIC(e.target.value)} placeholder={t('settings.bankBICPlaceholder')}
+                                            className="w-full px-3 py-2.5 bg-white border border-blue-300 rounded-lg text-sm font-mono" />
+                                    </div>
+                                    <div className="sm:col-span-2">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <label className="text-sm font-medium text-gray-700">{t('settings.bankIBANLabel')}</label>
+                                            <label className="flex items-center space-x-1 cursor-pointer">
+                                                <input type="checkbox" checked={showBankIBAN} onChange={e => setShowBankIBAN(e.target.checked)}
+                                                    className="w-4 h-4 text-blue-600 rounded" />
+                                                <span className="text-xs text-gray-500">{t('companyInit.showOnPdf')}</span>
+                                            </label>
+                                        </div>
+                                        <input type="text" value={bankIBAN} onChange={e => setBankIBAN(e.target.value)} placeholder={t('settings.bankIBANPlaceholder')}
+                                            className="w-full px-3 py-2.5 bg-white border border-blue-300 rounded-lg text-sm font-mono" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Step 3: Branding & PDF Settings */}
+                    {currentStep === 3 && (
+                        <div className="space-y-6 animate-fade-in max-h-[60vh] overflow-y-auto pr-1">
                             {/* Logo Upload */}
                             <div className="space-y-2">
                                 <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
@@ -349,6 +593,12 @@ export default function CompanyInitPage() {
                                         <Upload className="h-4 w-4" /> {logoFile ? t('companyInit.changeLogo') : t('companyInit.uploadLogo')}
                                     </button>
                                 </div>
+                                <label className="flex items-center gap-2 cursor-pointer mt-2">
+                                    <input type="checkbox" checked={showCompanyLogo}
+                                        onChange={e => setShowCompanyLogo(e.target.checked)}
+                                        className="rounded border-gray-300 text-[#065F46] focus:ring-[#065F46]" />
+                                    <span className="text-sm text-gray-600">{t('settings.showLogoOnPdf')}</span>
+                                </label>
                             </div>
 
                             {/* Signature Upload */}
@@ -378,12 +628,129 @@ export default function CompanyInitPage() {
                                         <Upload className="h-4 w-4" /> {signatureFile ? t('common.edit') : t('settings.uploadSignature')}
                                     </button>
                                 </div>
+                                <label className="flex items-center gap-2 cursor-pointer mt-1">
+                                    <input type="checkbox" checked={showSignatureOnPdf}
+                                        onChange={e => setShowSignatureOnPdf(e.target.checked)}
+                                        disabled={!signaturePreview}
+                                        className="rounded border-gray-300 text-[#065F46] focus:ring-[#065F46]" />
+                                    <span className={cn("text-sm", signaturePreview ? "text-gray-600" : "text-gray-400")}>
+                                        {t('settings.showSignatureOnPdf')}
+                                    </span>
+                                </label>
+                            </div>
+
+                            {/* Signature Text & Position */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-sm font-medium text-gray-700">{t('settings.pdfSignature')}</label>
+                                    <input type="text" value={pdfSignatureText} onChange={e => setPdfSignatureText(e.target.value)}
+                                        maxLength={100}
+                                        className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#065F46] outline-none"
+                                        placeholder={t('settings.signaturePlaceholder')} />
+                                    <p className="text-xs text-gray-400">{t('settings.signatureTextHelp')}</p>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-sm font-medium text-gray-700">{t('settings.pdfSignerPosition')}</label>
+                                    <input type="text" value={pdfSignerPosition} onChange={e => setPdfSignerPosition(e.target.value)}
+                                        maxLength={100}
+                                        className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#065F46] outline-none"
+                                        placeholder={t('settings.signerPositionPlaceholder')} />
+                                    <p className="text-xs text-gray-400">{t('settings.signerPositionHelp')}</p>
+                                </div>
+                            </div>
+
+                            {/* Divider */}
+                            <hr className="border-gray-100" />
+
+                            {/* Colors */}
+                            <div className="space-y-3">
+                                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                                    <Palette className="h-4 w-4" /> {t('settings.branding')}
+                                </label>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <label className="text-xs text-gray-500">{t('settings.primaryColor')}</label>
+                                        <div className="flex items-center gap-2">
+                                            <input type="color" value={primaryColor} onChange={e => setPrimaryColor(e.target.value)}
+                                                className="w-10 h-10 rounded-lg cursor-pointer border border-gray-200" />
+                                            <input type="text" value={primaryColor} onChange={e => setPrimaryColor(e.target.value)}
+                                                className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono" />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-xs text-gray-500">{t('settings.secondaryColor')}</label>
+                                        <div className="flex items-center gap-2">
+                                            <input type="color" value={secondaryColor} onChange={e => setSecondaryColor(e.target.value)}
+                                                className="w-10 h-10 rounded-lg cursor-pointer border border-gray-200" />
+                                            <input type="text" value={secondaryColor} onChange={e => setSecondaryColor(e.target.value)}
+                                                className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono" />
+                                        </div>
+                                    </div>
+                                </div>
+                                {/* Color Preview */}
+                                <div className="flex items-center gap-3">
+                                    <div className="w-16 h-8 rounded-md" style={{ backgroundColor: primaryColor }} />
+                                    <div className="flex-1 h-8 rounded-md" style={{ background: `linear-gradient(to right, ${primaryColor}, ${secondaryColor})` }} />
+                                    <div className="w-16 h-8 rounded-md" style={{ backgroundColor: secondaryColor }} />
+                                </div>
+                            </div>
+
+                            {/* PDF Footer */}
+                            <div className="space-y-1">
+                                <label className="text-sm font-medium text-gray-700">{t('settings.pdfFooter')}</label>
+                                <textarea value={pdfFooterText} onChange={e => setPdfFooterText(e.target.value)} rows={2}
+                                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#065F46] outline-none"
+                                    placeholder={t('companyInit.pdfFooterPlaceholder')} />
+                            </div>
+
+                            {/* Divider */}
+                            <hr className="border-gray-100" />
+
+                            {/* Language Settings */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                                        <Globe className="h-4 w-4" /> {t('settings.language')}
+                                    </label>
+                                    <select value={invoiceLanguage} onChange={e => setInvoiceLanguage(e.target.value)}
+                                        className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#065F46] outline-none">
+                                        <option value="fr">Français</option>
+                                        <option value="en">English</option>
+                                        <option value="de">Deutsch</option>
+                                        <option value="ar">العربية</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-sm font-medium text-gray-700">{t('companyInit.fileSystemLanguage')}</label>
+                                    <select value={fileSystemLanguage} onChange={e => setFileSystemLanguage(e.target.value)}
+                                        disabled={fileSystemLanguageLocked}
+                                        className={cn(
+                                            "w-full px-3 py-2.5 border rounded-lg text-sm",
+                                            fileSystemLanguageLocked
+                                                ? "bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed"
+                                                : "border-gray-200 focus:ring-2 focus:ring-[#065F46] outline-none"
+                                        )}>
+                                        <option value="fr">Français (Factures, Devis)</option>
+                                        <option value="en">English (Invoices, Quotes)</option>
+                                        <option value="de">Deutsch (Rechnungen, Angebote)</option>
+                                        <option value="ar">العربية (فواتير, عروض أسعار)</option>
+                                    </select>
+                                    {!fileSystemLanguageLocked && (
+                                        <p className="text-xs text-amber-600 flex items-center gap-1">
+                                            <AlertCircle className="h-3 w-3" />
+                                            {t('companyInit.fileSystemLanguageWarning')}
+                                        </p>
+                                    )}
+                                    {fileSystemLanguageLocked && (
+                                        <p className="text-xs text-gray-400">{t('companyInit.fileSystemLanguageLocked')}</p>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     )}
 
-                    {/* Step 3: Storage */}
-                    {currentStep === 3 && (
+                    {/* Step 4: Storage */}
+                    {currentStep === 4 && (
                         <div className="space-y-5 animate-fade-in">
                             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
                                 <div className="flex items-start gap-2">
@@ -400,15 +767,49 @@ export default function CompanyInitPage() {
                                     <FolderOpen className="h-4 w-4" /> {t('settings.baseStoragePath')} *
                                 </label>
                                 <div className="flex gap-2">
-                                    <input value={baseStoragePath} onChange={e => setBaseStoragePath(e.target.value)}
+                                    <input value={baseStoragePath} onChange={e => { setBaseStoragePath(e.target.value); setPathTestResult(null); }}
                                         className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent outline-none bg-gray-50/50 focus:bg-white font-mono text-sm"
                                         placeholder={t('companyInit.placeholders.baseStoragePath')} />
                                     <button type="button" onClick={handleBrowseFolder}
-                                        className="px-4 py-3 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors">
-                                        <FolderOpen className="h-5 w-5" />
+                                        className="px-4 py-3 rounded-xl font-medium transition-colors flex items-center gap-2 border border-gray-200 text-gray-600 hover:bg-gray-50">
+                                        <FolderSearch className="h-5 w-5" />
+                                        <span className="hidden sm:inline">{t('companyInit.browse')}</span>
+                                    </button>
+                                    <button type="button" onClick={handleTestPath} disabled={testingPath}
+                                        className={cn(
+                                            "px-4 py-3 rounded-xl font-medium transition-colors flex items-center gap-2",
+                                            pathTestResult?.success 
+                                                ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
+                                                : "border border-gray-200 text-gray-600 hover:bg-gray-50"
+                                        )}>
+                                        {testingPath ? (
+                                            <Loader2 className="h-5 w-5 animate-spin" />
+                                        ) : pathTestResult?.success ? (
+                                            <FolderCheck className="h-5 w-5" />
+                                        ) : (
+                                            <FolderOpen className="h-5 w-5" />
+                                        )}
+                                        <span className="hidden sm:inline">{t('companyInit.testPath')}</span>
                                     </button>
                                 </div>
                                 <p className="text-xs text-gray-500">{t('companyInit.storagePathExample')}</p>
+                                
+                                {/* Path test result */}
+                                {pathTestResult && (
+                                    <div className={cn(
+                                        "mt-2 p-3 rounded-lg text-sm flex items-center gap-2",
+                                        pathTestResult.success 
+                                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                            : "bg-red-50 text-red-700 border border-red-200"
+                                    )}>
+                                        {pathTestResult.success ? (
+                                            <CheckCircle className="h-4 w-4 shrink-0" />
+                                        ) : (
+                                            <AlertCircle className="h-4 w-4 shrink-0" />
+                                        )}
+                                        <span>{pathTestResult.message}</span>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Summary */}
@@ -423,10 +824,14 @@ export default function CompanyInitPage() {
                                     <div className="font-medium">{currency}</div>
                                     <div className="text-gray-500">{t('companyInit.defaultVatRate')}</div>
                                     <div className="font-medium">{(defaultVatRate * 100).toFixed(0)}%</div>
+                                    <div className="text-gray-500">{t('settings.pdfBankDetails')}</div>
+                                    <div className="font-medium">{bankName || t('companyInit.notSet')}</div>
                                     <div className="text-gray-500">{t('settings.logo')}</div>
-                                    <div className="font-medium">{logoFile ? t('companyInit.selected') : t('companyInit.none')}</div>
+                                    <div className="font-medium">{logoPreview ? (logoFile ? t('companyInit.selected') : t('companyInit.existing')) : t('companyInit.none')}</div>
                                     <div className="text-gray-500">{t('settings.signature')}</div>
-                                    <div className="font-medium">{signatureFile ? t('companyInit.selected') : t('companyInit.none')}</div>
+                                    <div className="font-medium">{signaturePreview ? (signatureFile ? t('companyInit.selected') : t('companyInit.existing')) : t('companyInit.none')}</div>
+                                    <div className="text-gray-500">{t('settings.language')}</div>
+                                    <div className="font-medium">{invoiceLanguage === 'fr' ? 'Français' : invoiceLanguage === 'en' ? 'English' : invoiceLanguage === 'de' ? 'Deutsch' : 'العربية'}</div>
                                     <div className="text-gray-500">{t('settings.baseStoragePath')}</div>
                                     <div className="font-medium font-mono text-xs break-all">{baseStoragePath || t('companyInit.notSet')}</div>
                                 </div>
@@ -474,6 +879,7 @@ export default function CompanyInitPage() {
                     </div>
                 </div>
             </div>
+
         </div>
     );
 }

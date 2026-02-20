@@ -71,7 +71,7 @@ namespace ResourceManager.Controllers
             var invoicePayments = await _context.Invoices
                 .Include(i => i.Client)
                 .Include(i => i.Payments)
-                .Include(i => i.Devis)
+                .Include(i => i.Quote)
                 .Where(i => i.Payments!.Any(p => p.Status == "Completed"))
                 .ToListAsync();
 
@@ -83,7 +83,7 @@ namespace ResourceManager.Controllers
                         Date = p.PaymentDate,
                         ClientName = i.Client?.Name ?? "Unknown",
                         AmountPaid = p.Amount,
-                        Currency = i.Devis?.Currency ?? defaultCurrency,
+                        Currency = i.Quote?.Currency ?? defaultCurrency,
                         PaymentMethod = "Payment",
                         InvoiceNumber = i.Number
                     }))
@@ -171,8 +171,8 @@ namespace ResourceManager.Controllers
             }
 
             // Supplier invoice paid payments
-            var supplierInvoices = await _context.FournisseurInvoices
-                .Include(si => si.Fournisseur)
+            var supplierInvoices = await _context.SupplierInvoices
+                .Include(si => si.Supplier)
                 .Include(si => si.Payments)
                 .Where(si => si.Payments!.Any(p => p.Status == "Completed"))
                 .ToListAsync();
@@ -183,7 +183,7 @@ namespace ResourceManager.Controllers
                     .Select(p => new
                     {
                         Date = p.PaymentDate,
-                        Supplier = si.Fournisseur?.Name ?? "Unknown",
+                        Supplier = si.Supplier?.Name ?? "Unknown",
                         AmountPaid = p.Amount,
                         Currency = si.Currency ?? defaultCurrency,
                         Category = "Supplier Invoice",
@@ -259,7 +259,7 @@ namespace ResourceManager.Controllers
 
             var headers = new[] { "Name", "Matricule Fiscal", "Phone Number", "Address", "Email" };
             var dataRows = clients.Select(c => new object[] {
-                c.Name, c.MatriculeFiscal ?? "", c.Phone ?? "", c.Address ?? "", c.Email ?? ""
+                c.Name, c.TaxId ?? "", c.Phone ?? "", c.Address ?? "", c.Email ?? ""
             }).ToList();
 
             if (format?.Equals("xlsx", StringComparison.OrdinalIgnoreCase) == true)
@@ -457,7 +457,7 @@ namespace ResourceManager.Controllers
                                 {
                                     Name = clientName,
                                     Address = "",
-                                    MatriculeFiscal = "",
+                                    TaxId = "",
                                     Phone = "",
                                     CompanyId = companyId,
                                     CreatedByUserId = userId,
@@ -524,7 +524,7 @@ namespace ResourceManager.Controllers
                     case "expenses":
                     {
                         // 1. Pre-load Suppliers
-                        var existingSuppliers = await _context.Fournisseurs
+                        var existingSuppliers = await _context.Suppliers
                             .Where(f => f.CompanyId == companyId)
                             .ToListAsync();
 
@@ -545,9 +545,9 @@ namespace ResourceManager.Controllers
                             .Where(e => e.CompanyId == companyId && e.Date >= minDate && e.Date <= maxDate)
                             .ToListAsync();
 
-                        // Lookup Key: Date + FournisseurId + Amount
+                        // Lookup Key: SupplierId + Date + Amount
                         var expenseLookup = existingExpenses
-                            .GroupBy(e => new { Date = e.Date.Date, e.FournisseurId, e.AmountPaid })
+                            .GroupBy(e => new { Date = e.Date.Date, e.SupplierId, e.AmountPaid })
                             .ToDictionary(g => g.Key, g => g.ToList());
 
                         foreach (var row in validation.ValidRows)
@@ -571,23 +571,23 @@ namespace ResourceManager.Controllers
                             // Get-or-Create Supplier
                             if (!supplierLookup.TryGetValue(supplierName, out var supplier))
                             {
-                                supplier = new Fournisseur
+                                supplier = new Supplier
                                 {
                                     Name = supplierName,
                                     Address = "",
-                                    MatriculeFiscal = "",
+                                    TaxId = "",
                                     Phone = "",
                                     CompanyId = companyId,
                                     CreatedByUserId = userId,
                                     CreatedAt = DateTime.UtcNow
                                 };
-                                _context.Fournisseurs.Add(supplier);
+                                _context.Suppliers.Add(supplier);
                                 await _context.SaveChangesAsync();
                                 supplierLookup[supplierName] = supplier;
                             }
 
                             // Deduplication / Upsert Check
-                            var lookupKey = new { Date = utcDate.Date, FournisseurId = (int?)supplier.Id, AmountPaid = parsedAmount };
+                            var lookupKey = new { Date = utcDate.Date, SupplierId = (int?)supplier.Id, AmountPaid = parsedAmount };
 
                             if (expenseLookup.TryGetValue(lookupKey, out var candidates) && candidates.Count > 0)
                             {
@@ -611,7 +611,7 @@ namespace ResourceManager.Controllers
                                 {
                                     Date = utcDate,
                                     SupplierName = supplierName,
-                                    FournisseurId = supplier.Id,
+                                    SupplierId = supplier.Id,
                                     AmountPaid = parsedAmount,
                                     Currency = currency,
                                     Category = category,
@@ -651,7 +651,7 @@ namespace ResourceManager.Controllers
                                 var addr = SafeGet(row, "Address");
                                 var email = SafeGet(row, "Email") is { Length: > 0 } em ? em : null;
                                 bool changed = false;
-                                if (!string.IsNullOrWhiteSpace(mf) && mf != existing.MatriculeFiscal) { existing.MatriculeFiscal = mf; changed = true; }
+                                if (!string.IsNullOrWhiteSpace(mf) && mf != existing.TaxId) { existing.TaxId = mf; changed = true; }
                                 if (!string.IsNullOrWhiteSpace(phone) && phone != existing.Phone) { existing.Phone = phone; changed = true; }
                                 if (!string.IsNullOrWhiteSpace(addr) && addr != existing.Address) { existing.Address = addr; changed = true; }
                                 if (email != null && email != existing.Email) { existing.Email = email; changed = true; }
@@ -663,7 +663,7 @@ namespace ResourceManager.Controllers
                                 var client = new Client
                                 {
                                     Name = name,
-                                    MatriculeFiscal = SafeGet(row, "Matricule Fiscal"),
+                                    TaxId = SafeGet(row, "Matricule Fiscal"),
                                     Phone = SafeGet(row, "Phone Number"),
                                     Address = SafeGet(row, "Address"),
                                     Email = SafeGet(row, "Email") is { Length: > 0 } email ? email : null,
@@ -681,7 +681,7 @@ namespace ResourceManager.Controllers
 
                     case "suppliers":
                     {
-                        var existingSuppliers = await _context.Fournisseurs
+                        var existingSuppliers = await _context.Suppliers
                             .Where(f => f.CompanyId == companyId)
                             .ToListAsync();
                         var supplierLookup = existingSuppliers
@@ -702,7 +702,7 @@ namespace ResourceManager.Controllers
                                 var phone = SafeGet(row, "Phone Number");
                                 var addr = SafeGet(row, "Address");
                                 bool changed = false;
-                                if (!string.IsNullOrWhiteSpace(mf) && mf != existing.MatriculeFiscal) { existing.MatriculeFiscal = mf; changed = true; }
+                                if (!string.IsNullOrWhiteSpace(mf) && mf != existing.TaxId) { existing.TaxId = mf; changed = true; }
                                 if (!string.IsNullOrWhiteSpace(phone) && phone != existing.Phone) { existing.Phone = phone; changed = true; }
                                 if (!string.IsNullOrWhiteSpace(addr) && addr != existing.Address) { existing.Address = addr; changed = true; }
                                 if (changed) { existing.UpdatedAt = DateTime.UtcNow; imported++; }
@@ -710,17 +710,17 @@ namespace ResourceManager.Controllers
                             }
                             else
                             {
-                                var supplier = new Fournisseur
+                                var supplier = new Supplier
                                 {
                                     Name = name,
-                                    MatriculeFiscal = SafeGet(row, "Matricule Fiscal"),
+                                    TaxId = SafeGet(row, "Matricule Fiscal"),
                                     Phone = SafeGet(row, "Phone Number"),
                                     Address = SafeGet(row, "Address"),
                                     CompanyId = companyId,
                                     CreatedByUserId = userId,
                                     CreatedAt = DateTime.UtcNow
                                 };
-                                _context.Fournisseurs.Add(supplier);
+                                _context.Suppliers.Add(supplier);
                                 supplierLookup[key] = supplier;
                                 imported++;
                             }
@@ -1510,7 +1510,7 @@ namespace ResourceManager.Controllers
                         {
                             Name = clientName,
                             Address = "",
-                            MatriculeFiscal = "",
+                            TaxId = "",
                             Phone = "",
                             CompanyId = companyId,
                             CreatedByUserId = userId,

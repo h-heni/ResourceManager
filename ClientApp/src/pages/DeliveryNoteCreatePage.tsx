@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Plus, Trash2, Save, Package, FileText, History, User, Calendar, AlertCircle, CheckCircle, PackagePlus, X, Check } from 'lucide-react';
 import api from '../services/api';
@@ -7,14 +7,14 @@ import { logger } from '../lib/logger';
 import { useNotify } from '../hooks/useNotify';
 import { DEFAULT_CURRENCY, CURRENCY_OPTIONS, getCurrencySymbol } from '../lib/currencyUtils';
 
-interface DevisItem {
+interface QuoteItem {
     description: string;
     quantity: number;
     price: number;
     tva?: boolean;
 }
 
-interface Devis {
+interface QuoteData {
     id: number;
     number: string;
     clientId: number;
@@ -24,7 +24,7 @@ interface Devis {
     currency?: string;
     currencySymbol?: string;
     pdfLanguage?: string;
-    devisItems?: DevisItem[];
+    quoteItems?: QuoteItem[];
     createdByUser?: { email?: string; userName?: string; firstName?: string; lastName?: string };
     createdByUserId?: string;
 }
@@ -62,7 +62,7 @@ interface DeliveryItem {
 
 // Validation errors interface
 interface ValidationErrors {
-    devisId?: string;
+    quoteId?: string;
     date?: string;
     items?: string;
 }
@@ -71,9 +71,12 @@ export default function DeliveryNoteCreatePage() {
     const navigate = useNavigate();
     const { t } = useTranslation();
     const { notify, NotifyBanner } = useNotify();
+    const { id: editId } = useParams<{ id: string }>();
+    const isEditMode = !!editId;
     const [loading, setLoading] = useState(false);
-    const [pendingDevis, setPendingDevis] = useState<Devis[]>([]);
-    const [selectedDevis, setSelectedDevis] = useState<Devis | null>(null);
+    const [loadingNote, setLoadingNote] = useState(false);
+    const [pendingQuotes, setPendingQuotes] = useState<QuoteData[]>([]);
+    const [selectedQuote, setSelectedQuote] = useState<QuoteData | null>(null);
     const [existingDeliveryNotes, setExistingDeliveryNotes] = useState<ExistingDeliveryNote[]>([]);
     const [errors, setErrors] = useState<ValidationErrors>({});
     const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -97,7 +100,7 @@ export default function DeliveryNoteCreatePage() {
     const [pdfLanguage, setPdfLanguage] = useState('');
 
     // Form State
-    const [selectedDevisId, setSelectedDevisId] = useState('');
+    const [selectedQuoteId, setSelectedQuoteId] = useState('');
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [items, setItems] = useState<DeliveryItem[]>([
         { description: '', quantity: 1, quotedQuantity: 0, remainingQuantity: 0, fromCatalog: false }
@@ -118,7 +121,7 @@ export default function DeliveryNoteCreatePage() {
     }, [existingDeliveryNotes]);
 
     useEffect(() => {
-        fetchPendingDevis();
+        fetchPendingQuotes();
         const fetchCurrencySettings = async () => {
             try {
                 const res = await api.get('/Settings');
@@ -137,12 +140,53 @@ export default function DeliveryNoteCreatePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // Fetch delivery note data for edit mode
+    useEffect(() => {
+        const fetchNoteForEdit = async (noteId: number) => {
+            setLoadingNote(true);
+            try {
+                const res = await api.get(`/DeliveryNotes/${noteId}`);
+                const dn = res.data;
+                setDate(dn.date ? new Date(dn.date).toISOString().split('T')[0] : '');
+                if (dn.quoteId) {
+                    setSelectedQuoteId(dn.quoteId.toString());
+                    // Fetch the quote for context
+                    try {
+                        const quoteRes = await api.get(`/Quotes/${dn.quoteId}`);
+                        setSelectedQuote(quoteRes.data);
+                    } catch { /* ignore */ }
+                }
+                setItems(
+                    dn.deliveryNoteItems && dn.deliveryNoteItems.length > 0
+                        ? dn.deliveryNoteItems.map((item: { description?: string; quantity?: number }) => ({
+                            description: item.description || '',
+                            quantity: item.quantity || 1,
+                            quotedQuantity: 0,
+                            remainingQuantity: 9999,
+                            fromCatalog: true
+                        }))
+                        : [{ description: '', quantity: 1, quotedQuantity: 0, remainingQuantity: 0, fromCatalog: false }]
+                );
+            } catch (error) {
+                logger.error('Error fetching delivery note for edit', error);
+                notify('error', t('deliveryNote.editLoadFailed', 'Failed to load delivery note'));
+                navigate('/delivery-notes');
+            } finally {
+                setLoadingNote(false);
+            }
+        };
+        if (isEditMode && editId) {
+            fetchNoteForEdit(parseInt(editId));
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isEditMode, editId]);
+
     // Validate form
     const validateForm = (): boolean => {
         const newErrors: ValidationErrors = {};
 
-        if (!selectedDevisId) {
-            newErrors.devisId = t('createPage.linkQuote');
+        if (!selectedQuoteId) {
+            newErrors.quoteId = t('createPage.linkQuote');
         }
 
         if (!date) {
@@ -188,29 +232,29 @@ export default function DeliveryNoteCreatePage() {
         setTouched(prev => ({ ...prev, [field]: true }));
     };
 
-    // Fetch only Draft/Accepted (untreated) Devis
-    const fetchPendingDevis = async () => {
+    // Fetch only Draft/Accepted (untreated) Quotes
+    const fetchPendingQuotes = async () => {
         try {
-            const res = await api.get('/Devis');
-            const allDevis = Array.isArray(res.data) ? res.data : (res.data.data || []);
-            const draftDevis = allDevis.filter((d: { status: string; isDeleted?: boolean; treated?: boolean }) =>
+            const res = await api.get('/Quotes');
+            const allQuotes = Array.isArray(res.data) ? res.data : (res.data.data || []);
+            const draftQuotes = allQuotes.filter((d: { status: string; isDeleted?: boolean; treated?: boolean }) =>
                 (d.status === 'Draft' || d.status === 'Accepted') && !d.isDeleted && !d.treated
             );
-            setPendingDevis(draftDevis);
+            setPendingQuotes(draftQuotes);
         } catch (error) {
-            logger.error("Error fetching devis", error);
+            logger.error("Error fetching quotes", error);
         }
     };
 
-    // Fetch existing delivery notes for the selected devis
-    const fetchExistingDeliveryNotes = async (devisId: string) => {
-        if (!devisId) {
+    // Fetch existing delivery notes for the selected quote
+    const fetchExistingDeliveryNotes = async (quoteId: string) => {
+        if (!quoteId) {
             setExistingDeliveryNotes([]);
             return;
         }
         try {
             const res = await api.get('/DeliveryNotes');
-            let allNotes: Array<{ id: number; devisId?: number; number?: string; date?: string }> = [];
+            let allNotes: Array<{ id: number; quoteId?: number; number?: string; date?: string }> = [];
             if (Array.isArray(res.data)) {
                 allNotes = res.data;
             } else if (res.data?.Data) {
@@ -219,10 +263,10 @@ export default function DeliveryNoteCreatePage() {
                 allNotes = res.data.data;
             }
 
-            // Filter delivery notes linked to this devis
+            // Filter delivery notes linked to this quote
             const linkedNoteIds = allNotes
-                .filter((dn: { id: number; devisId?: number }) => dn.devisId === parseInt(devisId))
-                .map((dn: { id: number; devisId?: number }) => dn.id);
+                .filter((dn: { id: number; quoteId?: number }) => dn.quoteId === parseInt(quoteId))
+                .map((dn: { id: number; quoteId?: number }) => dn.id);
 
             // Fetch full details for each delivery note
             const detailedNotes = await Promise.all(
@@ -242,40 +286,40 @@ export default function DeliveryNoteCreatePage() {
         }
     };
 
-    const handleDevisSelection = async (devisId: string) => {
-        setSelectedDevisId(devisId);
-        setTouched(prev => ({ ...prev, devisId: true }));
+    const handleQuoteSelection = async (quoteId: string) => {
+        setSelectedQuoteId(quoteId);
+        setTouched(prev => ({ ...prev, quoteId: true }));
 
-        if (!devisId) {
-            setSelectedDevis(null);
+        if (!quoteId) {
+            setSelectedQuote(null);
             setExistingDeliveryNotes([]);
             setItems([{ description: '', quantity: 1, quotedQuantity: 0, remainingQuantity: 0, fromCatalog: false }]);
             return;
         }
 
         try {
-            // Fetch devis details
-            const res = await api.get(`/Devis/${devisId}`);
-            const devis = res.data;
-            setSelectedDevis(devis);
+            // Fetch quote details
+            const res = await api.get(`/Quotes/${quoteId}`);
+            const quote = res.data;
+            setSelectedQuote(quote);
 
             // Inherit currency & language from the quote
-            if (devis.currency) setPdfCurrency(devis.currency);
-            if (devis.currencySymbol) setPdfCurrencySymbol(devis.currencySymbol);
-            if (devis.pdfLanguage) setPdfLanguage(devis.pdfLanguage);
+            if (quote.currency) setPdfCurrency(quote.currency);
+            if (quote.currencySymbol) setPdfCurrencySymbol(quote.currencySymbol);
+            if (quote.pdfLanguage) setPdfLanguage(quote.pdfLanguage);
 
-            // Fetch existing delivery notes for this devis
-            await fetchExistingDeliveryNotes(devisId);
+            // Fetch existing delivery notes for this quote
+            await fetchExistingDeliveryNotes(quoteId);
 
         } catch (error) {
-            logger.error("Error fetching devis details", error);
+            logger.error("Error fetching quote details", error);
         }
     };
 
-    // Update items when selectedDevis or existingDeliveryNotes change
+    // Update items when selectedQuote or existingDeliveryNotes change
     useEffect(() => {
-        if (selectedDevis?.devisItems) {
-            const newItems: DeliveryItem[] = selectedDevis.devisItems.map((item: DevisItem) => {
+        if (selectedQuote?.quoteItems) {
+            const newItems: DeliveryItem[] = selectedQuote.quoteItems.map((item: QuoteItem) => {
                 const key = item.description.toLowerCase().trim();
                 const alreadyDelivered = deliveredQuantitiesByDescription[key] || 0;
                 const remaining = Math.max(0, (item.quantity || 0) - alreadyDelivered);
@@ -293,7 +337,7 @@ export default function DeliveryNoteCreatePage() {
             const itemsToDeliver = newItems.filter(item => item.remainingQuantity > 0);
             setItems(itemsToDeliver.length > 0 ? itemsToDeliver : [{ description: '', quantity: 1, quotedQuantity: 0, remainingQuantity: 0, fromCatalog: false }]);
         }
-    }, [selectedDevis, deliveredQuantitiesByDescription]);
+    }, [selectedQuote, deliveredQuantitiesByDescription]);
 
     const addItem = () => {
         setItems([...items, { description: '', quantity: 1, quotedQuantity: 0, remainingQuantity: 0, fromCatalog: false }]);
@@ -405,10 +449,10 @@ export default function DeliveryNoteCreatePage() {
         setLoading(true);
         try {
             const payload = {
-                number: "BL-" + Date.now().toString().slice(-6),
+                number: isEditMode ? undefined : ("BL-" + Date.now().toString().slice(-6)),
                 date: new Date(date).toISOString(),
-                devisId: parseInt(selectedDevisId),
-                clientId: selectedDevis?.clientId || null,
+                quoteId: parseInt(selectedQuoteId),
+                clientId: selectedQuote?.clientId || null,
                 deliveryNoteItems: items
                     .filter(item => item.description.trim() !== '')
                     .map(item => ({
@@ -417,7 +461,11 @@ export default function DeliveryNoteCreatePage() {
                     }))
             };
 
-            await api.post('/DeliveryNotes', payload);
+            if (isEditMode && editId) {
+                await api.put(`/DeliveryNotes/${editId}`, payload);
+            } else {
+                await api.post('/DeliveryNotes', payload);
+            }
             navigate('/delivery-notes');
         } catch (error: unknown) {
             logger.error("Error creating BL", error);
@@ -433,7 +481,7 @@ export default function DeliveryNoteCreatePage() {
     };
 
     // Check if all items are fully delivered
-    const allFullyDelivered = selectedDevis?.devisItems?.every(item => {
+    const allFullyDelivered = selectedQuote?.quoteItems?.every(item => {
         const key = item.description.toLowerCase().trim();
         const alreadyDelivered = deliveredQuantitiesByDescription[key] || 0;
         return alreadyDelivered >= (item.quantity || 0);
@@ -448,17 +496,17 @@ export default function DeliveryNoteCreatePage() {
                         <ArrowLeft size={24} />
                     </button>
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900">{t('deliveryNote.newDeliveryNote')}</h1>
+                        <h1 className="text-2xl font-bold text-gray-900">{isEditMode ? t('deliveryNote.editDeliveryNote', 'Edit Delivery Note') : t('deliveryNote.newDeliveryNote')}</h1>
                         <p className="text-gray-500 text-sm">{t('deliveryNote.pageDescription')}</p>
                     </div>
                 </div>
                 <button
                     onClick={handleSubmit}
-                    disabled={loading || allFullyDelivered}
+                    disabled={loading || loadingNote || (!isEditMode && allFullyDelivered)}
                     className="w-full sm:w-auto flex items-center justify-center px-6 py-3 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <Save size={20} className="mr-2" />
-                    {loading ? t('common.saving') : t('deliveryNote.create')}
+                    {loading ? t('common.saving') : isEditMode ? t('common.save') : t('deliveryNote.create')}
                 </button>
             </div>
 
@@ -496,7 +544,7 @@ export default function DeliveryNoteCreatePage() {
                 )}
 
                 {/* Currency & Language (inherited from Quote - read-only) */}
-                {selectedDevisId && (
+                {selectedQuoteId && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-[#065F46]/5 border border-emerald-100 rounded-xl">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">{t('createPage.documentCurrency')}</label>
@@ -519,54 +567,54 @@ export default function DeliveryNoteCreatePage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Select Quote (Devis) <span className="text-red-500">*</span>
+                            Select Quote <span className="text-red-500">*</span>
                         </label>
                         <select
-                            value={selectedDevisId}
-                            onChange={e => handleDevisSelection(e.target.value)}
-                            onBlur={() => handleBlur('devisId')}
-                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none ${errors.devisId && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                            value={selectedQuoteId}
+                            onChange={e => handleQuoteSelection(e.target.value)}
+                            onBlur={() => handleBlur('quoteId')}
+                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none ${errors.quoteId && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
                                 }`}
                             required
                         >
                             <option value="">{t('createPage.noQuoteSelected')}</option>
-                            {pendingDevis.map(devis => (
-                                <option key={devis.id} value={devis.id}>
-                                    {devis.number} - {devis.clientName} ({(devis.totalAmount || 0).toLocaleString()} {pdfCurrencySymbol || DEFAULT_CURRENCY})
+                            {pendingQuotes.map(quote => (
+                                <option key={quote.id} value={quote.id}>
+                                    {quote.number} - {quote.clientName} ({(quote.totalAmount || 0).toLocaleString()} {pdfCurrencySymbol || DEFAULT_CURRENCY})
                                 </option>
                             ))}
                         </select>
-                        {errors.devisId && submitted && (
-                            <p className="text-xs text-red-600 mt-1">{errors.devisId}</p>
+                        {errors.quoteId && submitted && (
+                            <p className="text-xs text-red-600 mt-1">{errors.quoteId}</p>
                         )}
-                        {pendingDevis.length === 0 && (
+                        {pendingQuotes.length === 0 && (
                             <p className="text-sm text-amber-600 mt-2">{t('deliveryNote.messages.noQuotes')}</p>
                         )}
                     </div>
 
                     {/* Show selected quote info - Enhanced compact format */}
-                    {selectedDevis && (
+                    {selectedQuote && (
                         <div className="md:col-span-2 p-4 bg-[#065F46]/5 border border-[#065F46]/20 rounded-xl">
                             <div className="flex items-start space-x-3">
                                 <FileText className="text-[#065F46] mt-1 flex-shrink-0" size={20} />
                                 <div className="flex-1">
                                     <div className="flex items-center justify-between mb-2">
-                                        <h4 className="font-semibold text-[#065F46]">Quote: {selectedDevis.number}</h4>
-                                        {selectedDevis.createdByUser && (
+                                        <h4 className="font-semibold text-[#065F46]">Quote: {selectedQuote.number}</h4>
+                                        {selectedQuote.createdByUser && (
                                             <span className="text-xs text-[#065F46] flex items-center">
                                                 <User size={12} className="mr-1" />
-                                                {(selectedDevis.createdByUser.firstName || selectedDevis.createdByUser.lastName)
-                                                    ? `${selectedDevis.createdByUser.firstName || ''} ${selectedDevis.createdByUser.lastName || ''}`.trim()
-                                                    : selectedDevis.createdByUser.email}
+                                                {(selectedQuote.createdByUser.firstName || selectedQuote.createdByUser.lastName)
+                                                    ? `${selectedQuote.createdByUser.firstName || ''} ${selectedQuote.createdByUser.lastName || ''}`.trim()
+                                                    : selectedQuote.createdByUser.email}
                                             </span>
                                         )}
                                     </div>
                                     {/* Quote items list */}
-                                    {selectedDevis.devisItems && selectedDevis.devisItems.length > 0 && (
+                                    {selectedQuote.quoteItems && selectedQuote.quoteItems.length > 0 && (
                                         <div className="mt-2 space-y-1">
                                             <p className="text-xs font-semibold text-[#065F46] uppercase">{t('deliveryNote.items')}:</p>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
-                                                {selectedDevis.devisItems.map((item, idx) => {
+                                                {selectedQuote.quoteItems.map((item, idx) => {
                                                     const key = item.description.toLowerCase().trim();
                                                     const delivered = deliveredQuantitiesByDescription[key] || 0;
                                                     const remaining = Math.max(0, (item.quantity || 0) - delivered);
@@ -601,7 +649,7 @@ export default function DeliveryNoteCreatePage() {
                     )}
 
                     {/* All Fully Delivered Warning */}
-                    {allFullyDelivered && selectedDevis && (
+                    {allFullyDelivered && selectedQuote && (
                         <div className="md:col-span-2 p-4 bg-green-50 border border-green-200 rounded-xl">
                             <div className="flex items-center space-x-3">
                                 <CheckCircle className="text-green-600" size={20} />
@@ -632,7 +680,7 @@ export default function DeliveryNoteCreatePage() {
                 </div>
 
                 {/* Previous Delivery Notes History */}
-                {selectedDevisId && existingDeliveryNotes.length > 0 && (
+                {selectedQuoteId && existingDeliveryNotes.length > 0 && (
                     <div className="border-t border-gray-100 pt-6">
                         <h3 className="text-lg font-bold text-gray-900 flex items-center mb-4">
                             <History className="mr-2 text-amber-500" size={20} />
@@ -721,7 +769,7 @@ export default function DeliveryNoteCreatePage() {
                                                         ? 'border-amber-400'
                                                         : 'border-gray-200'
                                             }`}
-                                            placeholder={t('devis.descriptionPlaceholder', 'Type to search products...')}
+                                            placeholder={t('quote.descriptionPlaceholder', 'Type to search products...')}
                                             autoComplete="off"
                                         />
                                         {/* Product suggestions dropdown */}

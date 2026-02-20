@@ -20,7 +20,7 @@ import { getErrorMessage } from '../utils/errorUtils';
 interface CompanySettings {
     companyName: string;
     companyAddress: string;
-    companyMatriculeFiscal: string;
+    companyTaxId: string;
     companyPhone: string;
     companyEmail: string;
     emailTemplate: string;
@@ -71,7 +71,6 @@ const EMAIL_PLACEHOLDERS = [
 
 type SidebarSection = 'personal' | 'email' | 'pdf';
 type PersonalTab = 'company' | 'password' | 'userinfo';
-type EmailTab = 'connection' | 'template';
 type PdfTab = 'signature' | 'branding' | 'financial' | 'storage';
 
 // ═══════════════════════════════════════════════════════════════
@@ -90,20 +89,18 @@ export default function SettingsPage() {
     // Section & Tab state
     const [activeSection, setActiveSection] = useState<SidebarSection>('personal');
     const [personalTab, setPersonalTab] = useState<PersonalTab>('company');
-    const [emailTab, setEmailTab] = useState<EmailTab>('connection');
     const [pdfTab, setPdfTab] = useState<PdfTab>('signature');
 
-    // Email/OAuth
-    const [oauthStatus, setOauthStatus] = useState<{
-        isConnected: boolean;
-        connectedEmail: string | null;
-        connectedAt: string | null;
-        needsReauth: boolean;
-        provider: string;
+    // Email/SMTP Status
+    const [smtpStatus, setSmtpStatus] = useState<{
+        smtpHost: string | null;
+        smtpPort: number;
+        fromEmail: string | null;
+        fromName: string | null;
+        isConfigured: boolean;
+        configurationError: string | null;
     } | null>(null);
-    const [connectingGmail, setConnectingGmail] = useState(false);
-    const [disconnectingGmail, setDisconnectingGmail] = useState(false);
-    const [testingOAuth, setTestingOAuth] = useState(false);
+    const [testingEmail, setTestingEmail] = useState(false);
 
     // Signature
     const [uploadingSignature, setUploadingSignature] = useState(false);
@@ -135,7 +132,7 @@ export default function SettingsPage() {
 
     // Settings data
     const [settings, setSettings] = useState<CompanySettings>({
-        companyName: '', companyAddress: '', companyMatriculeFiscal: '',
+        companyName: '', companyAddress: '', companyTaxId: '',
         companyPhone: '', companyEmail: '',
         emailTemplate: '',
         emailSubjectTemplate: 'Invoice #@InvoiceNumber from @CompanyName',
@@ -166,47 +163,20 @@ Best regards,
         baseStoragePath: '', isProfileComplete: false,
     });
     const [status, setStatus] = useState<{ type: 'success' | 'error' | 'warning'; message: string } | null>(null);
-    const oauthCallbackProcessedRef = useRef(false);
 
     // ═══════════════════════════════════════════════════════════════
     // DATA FETCHING
     // ═══════════════════════════════════════════════════════════════
 
     useEffect(() => {
-        const init = async () => {
-            const urlParams = new URLSearchParams(window.location.search);
-            const code = urlParams.get('code');
-            const state = urlParams.get('state');
-            const oauthError = urlParams.get('error');
-
-            if (oauthError && !oauthCallbackProcessedRef.current) {
-                oauthCallbackProcessedRef.current = true;
-                window.history.replaceState({}, document.title, window.location.pathname);
-                setActiveSection('email');
-                setEmailTab('connection');
-                setStatus({ type: 'error', message: `Google OAuth error: ${oauthError}` });
-                setConnectingGmail(false);
-                await loadAll();
-                return;
-            }
-
-            if (code && state && !oauthCallbackProcessedRef.current) {
-                oauthCallbackProcessedRef.current = true;
-                window.history.replaceState({}, document.title, window.location.pathname);
-                await handleOAuthCallback(code);
-                return;
-            }
-
-            await loadAll();
-        };
-        init();
+        loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const loadAll = async () => {
         // Fetch settings first to check hasLogoData/hasSignatureImage flags
         const [settingsData] = await Promise.allSettled([
-            fetchSettings(), fetchOAuthStatus()
+            fetchSettings(), fetchSmtpStatus()
         ]);
 
         // Only fetch logo/signature blobs if the backend confirms they exist (avoids 404s)
@@ -220,12 +190,12 @@ Best regards,
         }
     };
 
-    const fetchOAuthStatus = async () => {
+    const fetchSmtpStatus = async () => {
         try {
-            const res = await api.get('/Settings/email/oauth/status');
-            setOauthStatus(res.data);
+            const res = await api.get('/Settings/email-status');
+            setSmtpStatus(res.data);
         } catch {
-            setOauthStatus({ isConnected: false, connectedEmail: null, connectedAt: null, needsReauth: false, provider: 'Gmail' });
+            setSmtpStatus({ smtpHost: null, smtpPort: 587, fromEmail: null, fromName: null, isConfigured: false, configurationError: 'Failed to load SMTP status' });
         }
     };
 
@@ -237,7 +207,7 @@ Best regards,
             setSettings({
                 companyName: res.data.companyName || '',
                 companyAddress: res.data.companyAddress || '',
-                companyMatriculeFiscal: res.data.companyMatriculeFiscal || '',
+                companyTaxId: res.data.companyTaxId || '',
                 companyPhone: res.data.companyPhone || '',
                 companyEmail: res.data.companyEmail || '',
                 emailTemplate: res.data.emailTemplate || '',
@@ -317,7 +287,7 @@ Best regards,
         try {
             await api.put('/Settings/company', {
                 name: settings.companyName, address: settings.companyAddress,
-                matriculeFiscal: settings.companyMatriculeFiscal,
+                taxId: settings.companyTaxId,
                 phone: settings.companyPhone, email: settings.companyEmail
             });
             await api.put('/Settings', {
@@ -419,55 +389,17 @@ Best regards,
         } catch { setStatus({ type: 'error', message: 'Failed to delete signature' }); }
     };
 
-    // OAuth
-    const handleConnectGmail = async () => {
-        setConnectingGmail(true);
-        setStatus(null);
+    // Email Test
+    const handleTestEmail = async () => {
+        const testEmail = prompt('Enter email address to send test email:');
+        if (!testEmail) return;
+        setTestingEmail(true);
         try {
-            const currentUrl = window.location.origin + '/settings';
-            const res = await api.get(`/Settings/email/oauth/connect?redirectUri=${encodeURIComponent(currentUrl)}`);
-            if (res.data.authorizationUrl) window.location.href = res.data.authorizationUrl;
+            const res = await api.post('/Settings/test-email', { toEmail: testEmail });
+            setStatus({ type: res.data.success ? 'success' : 'error', message: res.data.message || 'Test email sent!' });
         } catch (error: unknown) {
-            setStatus({ type: 'error', message: getErrorMessage(error, 'Failed to initiate Gmail connection') });
-            setConnectingGmail(false);
-        }
-    };
-
-    const handleOAuthCallback = async (code: string) => {
-        setConnectingGmail(true);
-        try {
-            const currentUrl = window.location.origin + '/settings';
-            const res = await api.post('/Settings/email/oauth/callback', { code, redirectUri: currentUrl });
-            setStatus({ type: res.data.success ? 'success' : 'error', message: res.data.message || (res.data.success ? 'Gmail connected!' : 'Failed') });
-        } catch (error: unknown) {
-            setStatus({ type: 'error', message: getErrorMessage(error, 'Failed to complete Gmail connection') });
-        } finally {
-            setConnectingGmail(false);
-            await loadAll();
-        }
-    };
-
-    const handleDisconnectGmail = async () => {
-        if (!confirm('Disconnect Gmail? You will need to reconnect to send emails.')) return;
-        setDisconnectingGmail(true);
-        try {
-            await api.delete('/Settings/email/oauth/disconnect');
-            setStatus({ type: 'success', message: 'Gmail disconnected' });
-            await fetchOAuthStatus();
-        } catch { setStatus({ type: 'error', message: 'Failed to disconnect' }); }
-        finally { setDisconnectingGmail(false); }
-    };
-
-    const handleTestOAuth = async () => {
-        setTestingOAuth(true);
-        try {
-            const res = await api.post('/Settings/email/oauth/test');
-            setStatus({ type: res.data.success ? 'success' : 'error', message: res.data.message });
-            if (!res.data.success) await fetchOAuthStatus();
-        } catch (error: unknown) {
-            setStatus({ type: 'error', message: getErrorMessage(error, 'Gmail test failed') });
-            await fetchOAuthStatus();
-        } finally { setTestingOAuth(false); }
+            setStatus({ type: 'error', message: getErrorMessage(error, 'Failed to send test email') });
+        } finally { setTestingEmail(false); }
     };
 
     // Password change
@@ -545,14 +477,14 @@ Best regards,
             // Step 3: For each type, fetch entity list and regenerate PDFs
             const typeConfig: Record<string, { listEndpoint: string; pdfEndpoint: (id: number) => string; label: string }> = {
                 'Invoice': { listEndpoint: '/Invoices?page=1&size=9999', pdfEndpoint: (id) => `/Invoices/${id}/pdf`, label: 'Invoice' },
-                'Quote': { listEndpoint: '/Devis?page=1&size=9999', pdfEndpoint: (id) => `/Devis/${id}/pdf`, label: 'Quote' },
+                'Quote': { listEndpoint: '/Quotes?page=1&size=9999', pdfEndpoint: (id) => `/Quotes/${id}/pdf`, label: 'Quote' },
                 'DeliveryNote': { listEndpoint: '/DeliveryNotes?page=1&size=9999', pdfEndpoint: (id) => `/DeliveryNotes/${id}/pdf`, label: 'Delivery Note' },
             };
 
             for (const [docType, files] of Object.entries(byType)) {
                 const config = typeConfig[docType];
                 if (!config) {
-                    // FournisseurInvoice or unknown - uploaded files cannot be regenerated
+                    // SupplierInvoice or unknown - uploaded files cannot be regenerated
                     for (const f of files) {
                         skippedUploaded++;
                         errors.push(`${f.documentNumber || f.fileName}: Uploaded file (${docType}) — cannot be regenerated, must be re-uploaded manually`);
@@ -581,7 +513,7 @@ Best regards,
 
                     // Match by document number (try multiple field names for robustness)
                     const entity = entities.find((e: Record<string, unknown>) => {
-                        const num = e.number || e.Number || e.invoiceNumber || e.devisNumber || '';
+                        const num = e.number || e.Number || e.invoiceNumber || e.quoteNumber || '';
                         return num === missing.documentNumber;
                     });
 
@@ -655,7 +587,7 @@ Best regards,
             <div className="max-w-4xl mx-auto">
                 <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
                     <h2 className="text-xl font-bold text-red-800">{t('common.error', 'Access Denied')}</h2>
-                    <p className="text-red-600 mt-2">You don't have permission to access settings.</p>
+                    <p className="text-red-600 mt-2">{t('settings.noPermission')}</p>
                 </div>
             </div>
         );
@@ -718,25 +650,27 @@ Best regards,
                 </div>
             )}
 
-            {/* Main layout: Sidebar + Content */}
-            <div className="flex flex-col gap-6 lg:flex-row">
-                {/* ═══════════ LEFT SIDEBAR ═══════════ */}
-                <div className="w-full lg:w-56 lg:flex-shrink-0 flex lg:block gap-1.5 overflow-x-auto pb-1 lg:overflow-visible lg:pb-0">
+            {/* Main layout: Top Tabs Grid + Content below */}
+            <div className="space-y-6">
+                {/* ═══════════ SECTION TABS (3-column grid) ═══════════ */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {sections.map(sec => (
                         <button key={sec.key} onClick={() => setActiveSection(sec.key)}
-                            className={`w-auto lg:w-full flex-shrink-0 flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all text-sm font-medium ${
+                            className={`flex items-center gap-3 p-5 rounded-2xl text-left transition-all text-sm font-semibold border-2 ${
                                 activeSection === sec.key
-                                    ? 'bg-[#065F46] text-white shadow-md'
-                                    : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-100'
+                                    ? 'bg-[#065F46] text-white shadow-lg border-[#065F46]'
+                                    : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-100 shadow-sm'
                             }`}>
-                            <sec.icon size={18} />
+                            <div className={`p-2.5 rounded-xl ${activeSection === sec.key ? 'bg-white/20' : 'bg-[#065F46]/5'}`}>
+                                <sec.icon size={20} className={activeSection === sec.key ? 'text-white' : 'text-[#065F46]'} />
+                            </div>
                             {sec.label}
                         </button>
                     ))}
                 </div>
 
                 {/* ═══════════ CONTENT AREA ═══════════ */}
-                <div className="flex-1 min-w-0">
+                <div>
                     {/* ──── SECTION 1: Personal & Company ──── */}
                     {activeSection === 'personal' && (
                         <div className="space-y-6">
@@ -771,7 +705,7 @@ Best regards,
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.fiscalId', 'Tax ID (Matricule Fiscal)')}</label>
-                                                <input type="text" value={settings.companyMatriculeFiscal} onChange={e => updateSetting('companyMatriculeFiscal', e.target.value)}
+                                                <input type="text" value={settings.companyTaxId} onChange={e => updateSetting('companyTaxId', e.target.value)}
                                                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none" />
                                             </div>
                                             <div className="md:col-span-2">
@@ -819,7 +753,7 @@ Best regards,
                                                         className="flex items-center gap-2 px-4 py-2 bg-[#065F46]/5 text-[#065F46] rounded-xl hover:bg-[#065F46]/10 transition-colors disabled:opacity-50">
                                                         {uploadingLogo ? <><Loader2 size={18} className="animate-spin" />Uploading...</> : <><Upload size={18} />{t('common.upload', 'Upload Logo')}</>}
                                                     </button>
-                                                    <p className="text-xs text-gray-500 mt-2">PNG or JPG, max 2MB. Appears on PDFs and emails.</p>
+                                                    <p className="text-xs text-gray-500 mt-2">{t('settings.logoHint', 'PNG or JPG, max 2MB. Appears on PDFs and emails.')}</p>
                                                 </div>
                                             </div>
                                             <div className="flex items-center mt-4 pt-4 border-t border-gray-100">
@@ -899,159 +833,104 @@ Best regards,
                     {/* ──── SECTION 2: Email Settings ──── */}
                     {activeSection === 'email' && (
                         <div className="space-y-6">
-                            <div className="flex gap-2 bg-gray-100 p-1 rounded-xl overflow-x-auto">
-                                {([
-                                    { key: 'connection' as EmailTab, label: t('settings.emailConnection', 'Email Connection'), icon: Mail },
-                                    { key: 'template' as EmailTab, label: t('settings.emailTemplate', 'Email Template'), icon: FileText },
-                                ]).map(tab => (
-                                    <button key={tab.key} onClick={() => setEmailTab(tab.key)}
-                                        className={`flex-shrink-0 sm:flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
-                                            emailTab === tab.key ? 'bg-white text-[#065F46] shadow-sm' : 'text-gray-600 hover:text-gray-900'
-                                        }`}>
-                                        <tab.icon size={16} />{tab.label}
-                                    </button>
-                                ))}
+                            {/* Email Status + Send Test */}
+                            <div className={`p-5 rounded-2xl border-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${smtpStatus?.isConfigured ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-200'}`}>
+                                <div className="flex items-center gap-3">
+                                    {smtpStatus?.isConfigured ? (
+                                        <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                                            <CheckCircle className="text-emerald-600" size={22} />
+                                        </div>
+                                    ) : (
+                                        <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                            <Mail className="text-gray-500" size={22} />
+                                        </div>
+                                    )}
+                                    <div>
+                                        <p className={`text-sm font-semibold ${smtpStatus?.isConfigured ? 'text-emerald-800' : 'text-gray-700'}`}>
+                                            {smtpStatus?.isConfigured ? t('settings.emailReady', 'Email service is active') : t('settings.emailNotReady', 'Email service not configured')}
+                                        </p>
+                                        <p className="text-xs text-gray-500">{t('settings.smtpInfoText', 'Email is sent via your domain SMTP server (mail.rscmanager.com). Configuration is managed through environment variables on the server.')}</p>
+                                    </div>
+                                </div>
+                                <button onClick={handleTestEmail} disabled={testingEmail || !smtpStatus?.isConfigured}
+                                    className="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-50 font-medium text-sm">
+                                    {testingEmail ? <><Loader2 size={16} className="animate-spin" />{t('common.sending')}</> : <><Mail size={16} />{t('settings.sendTestEmail', 'Send Test Email')}</>}
+                                </button>
                             </div>
 
-                            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 lg:p-8">
-                                {emailTab === 'connection' && (
-                                    <div className="space-y-6">
-                                        <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                                            <Mail className="mr-2 text-[#065F46]" size={20} />
-                                            {t('settings.emailConnection', 'Email Connection')}
-                                        </h3>
-                                        {/* Gmail OAuth Status */}
-                                        <div className={`p-6 rounded-xl border-2 ${oauthStatus?.isConnected ? 'bg-emerald-50 border-emerald-300' : oauthStatus?.needsReauth ? 'bg-amber-50 border-amber-300' : 'bg-gray-50 border-gray-300'}`}>
-                                            <div className="flex items-center justify-between mb-4">
-                                                <div className="flex items-center gap-3">
-                                                    {oauthStatus?.isConnected ? (
-                                                        <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center">
-                                                            <CheckCircle className="text-emerald-600" size={28} />
-                                                        </div>
-                                                    ) : (
-                                                        <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center">
-                                                            <Mail className="text-gray-500" size={28} />
-                                                        </div>
-                                                    )}
-                                                    <div>
-                                                        <h4 className={`text-lg font-semibold ${oauthStatus?.isConnected ? 'text-emerald-800' : 'text-gray-800'}`}>
-                                                            {oauthStatus?.isConnected ? 'Gmail Connected' : oauthStatus?.needsReauth ? 'Re-authorization Required' : 'Gmail Not Connected'}
-                                                        </h4>
-                                                        <p className={`text-sm ${oauthStatus?.isConnected ? 'text-emerald-600' : 'text-gray-500'}`}>
-                                                            {oauthStatus?.isConnected ? `Connected as ${oauthStatus.connectedEmail}` : 'Connect your Gmail to send invoices via email'}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            </div>
+                            {/* Email Template Editor */}
+                            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 lg:p-8 space-y-6">
+                                <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                                    <FileText className="mr-2 text-[#065F46]" size={20} />
+                                    {t('settings.emailTemplate', 'Email Template')}
+                                </h3>
 
-                                            {oauthStatus?.isConnected && oauthStatus.connectedAt && (
-                                                <div className="mt-4 pt-4 border-t border-emerald-200 text-sm text-emerald-700">
-                                                    Connected on: {new Date(oauthStatus.connectedAt).toLocaleDateString()}
-                                                </div>
-                                            )}
-
-                                            <div className="mt-6 flex flex-wrap gap-3">
-                                                {!oauthStatus?.isConnected || oauthStatus?.needsReauth ? (
-                                                    <button onClick={handleConnectGmail} disabled={connectingGmail}
-                                                        className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all disabled:opacity-50 font-medium shadow-md">
-                                                        {connectingGmail ? <><Loader2 size={20} className="animate-spin" />Connecting...</> : <><Mail size={20} />{oauthStatus?.needsReauth ? 'Reconnect Gmail' : 'Connect Gmail'}</>}
-                                                    </button>
-                                                ) : (
-                                                    <>
-                                                        <button onClick={handleTestOAuth} disabled={testingOAuth}
-                                                            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 disabled:opacity-50 font-medium">
-                                                            {testingOAuth ? <><Loader2 size={18} className="animate-spin" />Testing...</> : <><CheckCircle size={18} />Test Connection</>}
-                                                        </button>
-                                                        <button onClick={handleDisconnectGmail} disabled={disconnectingGmail}
-                                                            className="flex items-center gap-2 px-5 py-2.5 bg-white text-red-600 border border-red-300 rounded-xl hover:bg-red-50 disabled:opacity-50 font-medium">
-                                                            {disconnectingGmail ? <><Loader2 size={18} className="animate-spin" />Disconnecting...</> : <><X size={18} />Disconnect</>}
-                                                        </button>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
-                                            <h4 className="font-semibold text-blue-800 mb-2 flex items-center"><Info size={18} className="mr-2" />How Gmail OAuth Works</h4>
-                                            <p className="text-sm text-blue-700">Click "Connect Gmail" to securely authorize this app via Google. No passwords stored, limited access, revocable anytime.</p>
+                                {/* Placeholder Reference */}
+                                <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                                    <div className="flex items-start gap-2 mb-3">
+                                        <Info size={18} className="text-blue-600 mt-0.5" />
+                                        <div>
+                                            <h4 className="font-medium text-blue-800">{t('settings.availablePlaceholders', 'Available Placeholders')}</h4>
+                                            <p className="text-xs text-blue-600">{t('settings.placeholderHelp', 'Click any placeholder below to copy it. Paste it into your email template where you want dynamic content to appear.')}</p>
                                         </div>
                                     </div>
-                                )}
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                        {EMAIL_PLACEHOLDERS.map(p => (
+                                            <button key={p.key} type="button"
+                                                onClick={() => { navigator.clipboard.writeText(p.key); setStatus({ type: 'success', message: `Copied ${p.key}` }); setTimeout(() => setStatus(null), 2000); }}
+                                                className="px-2 py-2 bg-white border border-blue-300 rounded-lg text-sm text-blue-700 hover:bg-blue-100 transition-colors text-left min-w-0 overflow-hidden"
+                                                title={p.description}>
+                                                <div className="font-mono font-bold text-xs whitespace-nowrap overflow-hidden text-ellipsis">{p.key}</div>
+                                                <div className="text-[10px] text-blue-500 mt-0.5 whitespace-nowrap overflow-hidden text-ellipsis">{p.description}</div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
 
-                                {emailTab === 'template' && (
-                                    <div className="space-y-6">
-                                        <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                                            <FileText className="mr-2 text-[#065F46]" size={20} />
-                                            {t('settings.emailTemplate', 'Email Template')}
-                                        </h3>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.emailSubject', 'Email Subject')}</label>
+                                    <input type="text" value={settings.emailSubjectTemplate} onChange={e => updateSetting('emailSubjectTemplate', e.target.value)}
+                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                                        placeholder={t('settings.emailSubjectPlaceholder')} />
+                                    <p className="text-xs text-gray-500 mt-1">{t('settings.subjectHelp', 'Use @ placeholders for dynamic content. Example: Invoice #@InvoiceNumber from @CompanyName')}</p>
+                                </div>
 
-                                        {/* Placeholder Reference */}
-                                        <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
-                                            <div className="flex items-start gap-2 mb-3">
-                                                <Info size={18} className="text-blue-600 mt-0.5" />
-                                                <div>
-                                                    <h4 className="font-medium text-blue-800">{t('settings.availablePlaceholders', 'Available Placeholders')}</h4>
-                                                    <p className="text-xs text-blue-600">{t('settings.placeholderHelp', 'Click any placeholder below to copy it. Paste it into your email template where you want dynamic content to appear.')}</p>
-                                                </div>
-                                            </div>
-                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                                                {EMAIL_PLACEHOLDERS.map(p => (
-                                                    <button key={p.key} type="button"
-                                                        onClick={() => { navigator.clipboard.writeText(p.key); setStatus({ type: 'success', message: `Copied ${p.key}` }); setTimeout(() => setStatus(null), 2000); }}
-                                                        className="px-3 py-2 bg-white border border-blue-300 rounded-lg text-sm text-blue-700 hover:bg-blue-100 transition-colors text-left"
-                                                        title={p.description}>
-                                                        <div className="font-mono font-bold text-xs">{p.key}</div>
-                                                        <div className="text-[10px] text-blue-500 mt-0.5">{p.description}</div>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.emailSubject', 'Email Subject')}</label>
-                                            <input type="text" value={settings.emailSubjectTemplate} onChange={e => updateSetting('emailSubjectTemplate', e.target.value)}
-                                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
-                                                placeholder="Invoice #@InvoiceNumber from @CompanyName" />
-                                            <p className="text-xs text-gray-500 mt-1">{t('settings.subjectHelp', 'Use @ placeholders for dynamic content. Example: Invoice #@InvoiceNumber from @CompanyName')}</p>
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.emailBody', 'Email Body')}</label>
-                                            <textarea value={settings.defaultEmailBody} onChange={e => updateSetting('defaultEmailBody', e.target.value)} rows={10}
-                                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none font-mono text-sm"
-                                                placeholder="Enter your email template with @ placeholders..." />
-                                            <div className="flex justify-between items-center mt-1">
-                                                <p className="text-xs text-gray-500">{t('settings.bodyHelp', 'This is the default message when sending invoices by email. Use the placeholders above for dynamic content.')}</p>
-                                                <div className="flex gap-1">
-                                                    {EMAIL_PLACEHOLDERS.slice(0, 4).map(p => (
-                                                        <button key={p.key} type="button" onClick={() => insertPlaceholder(p.key, 'defaultEmailBody')}
-                                                            className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200">+ {p.key}</button>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.emailSignature', 'Email Signature')}</label>
-                                            <textarea value={settings.emailSignature} onChange={e => updateSetting('emailSignature', e.target.value)} rows={4}
-                                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
-                                                placeholder="Best regards,&#10;John Doe&#10;Finance Manager" />
-                                            <p className="text-xs text-gray-500 mt-1">{t('settings.signatureHelp', 'This text is appended at the end of every email you send.')}</p>
-                                        </div>
-
-                                        {/* Include logo in email signature */}
-                                        <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-xl">
-                                            <label className="flex items-center space-x-2 cursor-pointer">
-                                                <input type="checkbox" checked={settings.includeLogoInEmailSignature}
-                                                    onChange={e => updateSetting('includeLogoInEmailSignature', e.target.checked)}
-                                                    className="w-5 h-5 text-[#065F46] border-gray-300 rounded focus:ring-[#065F46]" />
-                                                <span className="text-sm font-medium text-gray-700">{t('settings.includeLogoInSignature', 'Include company logo in email signature')}</span>
-                                            </label>
-                                            {!settings.hasLogoData && (
-                                                <span className="text-xs text-gray-400">({t('settings.uploadLogoFirst', 'Upload a logo first in Personal & Company')})</span>
-                                            )}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.emailBody', 'Email Body')}</label>
+                                    <textarea value={settings.defaultEmailBody} onChange={e => updateSetting('defaultEmailBody', e.target.value)} rows={10}
+                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none font-mono text-sm"
+                                        placeholder={t('settings.emailBodyPlaceholder')} />
+                                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mt-1">
+                                        <p className="text-xs text-gray-500">{t('settings.bodyHelp', 'This is the default message when sending invoices by email. Use the placeholders above for dynamic content.')}</p>
+                                        <div className="flex flex-wrap gap-1">
+                                            {EMAIL_PLACEHOLDERS.slice(0, 4).map(p => (
+                                                <button key={p.key} type="button" onClick={() => insertPlaceholder(p.key, 'defaultEmailBody')}
+                                                    className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200 whitespace-nowrap">+ {p.key}</button>
+                                            ))}
                                         </div>
                                     </div>
-                                )}
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.emailSignature', 'Email Signature')}</label>
+                                    <textarea value={settings.emailSignature} onChange={e => updateSetting('emailSignature', e.target.value)} rows={4}
+                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                                        placeholder={t('settings.emailSignaturePlaceholder')} />
+                                    <p className="text-xs text-gray-500 mt-1">{t('settings.signatureHelp', 'This text is appended at the end of every email you send.')}</p>
+                                </div>
+
+                                {/* Include logo in email signature */}
+                                <div className="flex flex-wrap items-center gap-3 p-4 bg-gray-50 rounded-xl">
+                                    <label className="flex items-center space-x-2 cursor-pointer">
+                                        <input type="checkbox" checked={settings.includeLogoInEmailSignature}
+                                            onChange={e => updateSetting('includeLogoInEmailSignature', e.target.checked)}
+                                            className="w-5 h-5 text-[#065F46] border-gray-300 rounded focus:ring-[#065F46]" />
+                                        <span className="text-sm font-medium text-gray-700">{t('settings.includeLogoInSignature', 'Include company logo in email signature')}</span>
+                                    </label>
+                                    {!settings.hasLogoData && (
+                                        <span className="text-xs text-gray-400">({t('settings.uploadLogoFirst', 'Upload a logo first in Personal & Company')})</span>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     )}
@@ -1108,7 +987,7 @@ Best regards,
                                                         className="flex items-center gap-2 px-4 py-2 bg-[#065F46]/5 text-[#065F46] rounded-xl hover:bg-[#065F46]/10 transition-colors disabled:opacity-50">
                                                         {uploadingSignature ? <><Loader2 size={18} className="animate-spin" />Uploading...</> : <><Upload size={18} />{t('settings.uploadSignature', 'Upload Signature / Cachet')}</>}
                                                     </button>
-                                                    <p className="text-xs text-gray-500 mt-2">PNG with transparent background recommended. Max 2MB.</p>
+                                                    <p className="text-xs text-gray-500 mt-2">{t('settings.signatureHint', 'PNG with transparent background recommended. Max 2MB.')}</p>
                                                 </div>
                                             </div>
 
@@ -1122,7 +1001,7 @@ Best regards,
                                                         {t('settings.showSignatureOnPdf', 'Show signature on PDFs')}
                                                     </span>
                                                 </label>
-                                                {!settings.hasSignatureImage && <span className="text-xs text-gray-400 ml-3">Upload a signature first</span>}
+                                                {!settings.hasSignatureImage && <span className="text-xs text-gray-400 ml-3">{t('settings.uploadSignatureFirst', 'Upload a signature first')}</span>}
                                             </div>
                                         </div>
 
@@ -1144,7 +1023,7 @@ Best regards,
                                             <p className="text-xs text-gray-500 mt-1">{t('settings.signerPositionHelp', 'Appears below the signature name on PDFs (e.g. job title or role)')}</p>
                                         </div>
 
-                                        <div className="flex items-center mt-4 pt-4 border-t border-gray-100">
+                                        <div className="flex flex-col sm:flex-row items-start sm:items-center mt-4 pt-4 border-t border-gray-100 gap-2">
                                             <label className="flex items-center space-x-2 cursor-pointer">
                                                 <input type="checkbox" checked={settings.proInvoiceUseTokenSignature}
                                                     onChange={e => updateSetting('proInvoiceUseTokenSignature', e.target.checked)}
@@ -1153,7 +1032,7 @@ Best regards,
                                                     {t('settings.proInvoiceTokenSignature', 'Enable verification token on invoices (Pro)')}
                                                 </span>
                                             </label>
-                                            <p className="text-xs text-gray-500 ml-3">{t('settings.proInvoiceTokenHelp', 'Adds a QR code & verification token to invoice PDFs for authenticity verification')}</p>
+                                            <p className="text-xs text-gray-500 sm:ml-3">{t('settings.proInvoiceTokenHelp', 'Adds a QR code & verification token to invoice PDFs for authenticity verification')}</p>
                                         </div>
                                     </div>
                                 )}
@@ -1197,28 +1076,28 @@ Best regards,
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.pdfFooter', 'PDF Footer Text')}</label>
                                                 <textarea value={settings.pdfFooterText} onChange={e => updateSetting('pdfFooterText', e.target.value)} rows={2}
                                                     className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
-                                                    placeholder="Thank you for your business!" />
+                                                    placeholder={t('settings.pdfFooterPlaceholder')} />
                                             </div>
                                         </div>
                                         {/* Color Preview */}
                                         <div className="p-4 rounded-xl border-2 border-dashed border-gray-200">
-                                            <h4 className="text-sm font-semibold text-gray-700 mb-3">Color Preview</h4>
-                                            <div className="flex items-center space-x-4">
-                                                <div className="w-24 h-12 rounded-lg flex items-center justify-center text-white text-sm font-medium" style={{ backgroundColor: settings.primaryColor }}>Primary</div>
-                                                <div className="w-24 h-12 rounded-lg flex items-center justify-center text-white text-sm font-medium" style={{ backgroundColor: settings.secondaryColor }}>Secondary</div>
-                                                <div className="flex-1 h-12 rounded-lg" style={{ background: `linear-gradient(to right, ${settings.primaryColor}, ${settings.secondaryColor})` }} />
+                                            <h4 className="text-sm font-semibold text-gray-700 mb-3">{t('settings.colorPreview')}</h4>
+                                            <div className="flex flex-wrap items-center gap-4">
+                                                <div className="w-24 h-12 rounded-lg flex items-center justify-center text-white text-sm font-medium" style={{ backgroundColor: settings.primaryColor }}>{t('settings.primaryColor')}</div>
+                                                <div className="w-24 h-12 rounded-lg flex items-center justify-center text-white text-sm font-medium" style={{ backgroundColor: settings.secondaryColor }}>{t('settings.secondaryColor')}</div>
+                                                <div className="flex-1 min-w-[120px] h-12 rounded-lg" style={{ background: `linear-gradient(to right, ${settings.primaryColor}, ${settings.secondaryColor})` }} />
                                             </div>
                                         </div>
                                         {/* Live PDF Preview */}
                                         <div className="p-6 rounded-xl border-2 border-gray-200 bg-gray-50">
-                                            <div className="flex items-center justify-between mb-4">
-                                                <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2"><Eye size={18} className="text-[#065F46]" />Live PDF Preview</h4>
+                                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                                                <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2"><Eye size={18} className="text-[#065F46]" />{t('settings.livePdfPreview', 'Live PDF Preview')}</h4>
                                                 <button onClick={handleGeneratePreview} disabled={generatingPreview}
-                                                    className="flex items-center gap-2 px-4 py-2 bg-[#065F46] text-white rounded-xl hover:bg-[#047857] disabled:opacity-50">
-                                                    {generatingPreview ? <><Loader2 size={16} className="animate-spin" />Generating...</> : <><Eye size={16} />Generate Preview</>}
+                                                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-[#065F46] text-white rounded-xl hover:bg-[#047857] disabled:opacity-50">
+                                                    {generatingPreview ? <><Loader2 size={16} className="animate-spin" />{t('settings.generating')}</> : <><Eye size={16} />{t('settings.generatePreview')}</>}
                                                 </button>
                                             </div>
-                                            <p className="text-xs text-gray-500 mb-4">Preview your invoice with current colors, logo, signature, and language.</p>
+                                            <p className="text-xs text-gray-500 mb-4">{t('settings.previewDesc', 'Preview your invoice with current colors, logo, signature, and language.')}</p>
                                             {pdfPreviewUrl ? (
                                                 <iframe src={pdfPreviewUrl} className="w-full bg-white rounded-xl border border-gray-200" style={{ height: '600px' }} title="PDF Preview" />
                                             ) : (
@@ -1240,7 +1119,7 @@ Best regards,
                                         {settings.isProfileComplete && (
                                             <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl flex items-center gap-2">
                                                 <Lock size={16} className="text-gray-500" />
-                                                <span className="text-sm text-gray-600">Currency and tax settings are locked after initial setup. Bank information remains editable.</span>
+                                                <span className="text-sm text-gray-600">{t('settings.lockedSettingsHint', 'Currency and tax settings are locked after initial setup. Bank information remains editable.')}</span>
                                             </div>
                                         )}
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1263,7 +1142,7 @@ Best regards,
                                                     className={`w-full px-4 py-3 border border-gray-200 rounded-xl ${settings.isProfileComplete ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : 'bg-gray-50'}`} />
                                             </div>
                                             <div>
-                                                <label className="block text-sm font-medium text-gray-700 mb-1">Default VAT Rate (%)</label>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.defaultVatRate', 'Default VAT Rate (%)')}</label>
                                                 <div className="flex items-center">
                                                     <input type="number" step="0.01" min="0" max="1" value={settings.defaultVatRate}
                                                         onChange={e => updateSetting('defaultVatRate', parseFloat(e.target.value) || 0)}
@@ -1278,7 +1157,7 @@ Best regards,
                                             <div className="flex items-center justify-between mb-4">
                                                 <div>
                                                     <h4 className="text-sm font-semibold text-gray-700">{t('settings.customTax', 'Additional Tax / Stamp Duty')}</h4>
-                                                    <p className="text-xs text-gray-500 mt-1">Configure a custom tax like Timbre Fiscal</p>
+                                                    <p className="text-xs text-gray-500 mt-1">{t('settings.customTaxHint', 'Configure a custom tax like Timbre Fiscal')}</p>
                                                 </div>
                                                 <label className="relative inline-flex items-center cursor-pointer">
                                                     <input type="checkbox" checked={settings.customTaxEnabled} onChange={e => updateSetting('customTaxEnabled', e.target.checked)} disabled={settings.isProfileComplete} className="sr-only peer" />
@@ -1286,7 +1165,7 @@ Best regards,
                                                 </label>
                                             </div>
                                             {settings.customTaxEnabled && (
-                                                <div className="grid grid-cols-2 gap-4">
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                                     <div>
                                                         <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.taxName', 'Tax Name')}</label>
                                                         <input type="text" value={settings.customTaxName} onChange={e => updateSetting('customTaxName', e.target.value)}
@@ -1312,52 +1191,52 @@ Best regards,
                                                 <DollarSign size={18} className="text-blue-600" />
                                                 {t('settings.pdfBankDetails', 'Bank Information')}
                                             </h4>
-                                            <p className="text-xs text-gray-500 mb-4">Displayed on invoice PDFs for payment. Toggle each field's visibility.</p>
+                                            <p className="text-xs text-gray-500 mb-4">{t('settings.bankInfoHint', "Displayed on invoice PDFs for payment. Toggle each field's visibility.")}</p>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 <div>
                                                     <div className="flex items-center justify-between mb-1">
-                                                        <label className="text-sm font-medium text-gray-700">Bank Name</label>
+                                                        <label className="text-sm font-medium text-gray-700">{t('settings.bankNameLabel')}</label>
                                                         <label className="flex items-center space-x-1 cursor-pointer">
                                                             <input type="checkbox" checked={settings.showBankName} onChange={e => updateSetting('showBankName', e.target.checked)}
-                                                                className="w-4 h-4 text-blue-600 rounded" /><span className="text-xs text-gray-500">Show</span>
+                                                                className="w-4 h-4 text-blue-600 rounded" /><span className="text-xs text-gray-500">{t('settings.showField')}</span>
                                                         </label>
                                                     </div>
-                                                    <input type="text" value={settings.bankName} onChange={e => updateSetting('bankName', e.target.value)} placeholder="e.g., BIAT"
+                                                    <input type="text" value={settings.bankName} onChange={e => updateSetting('bankName', e.target.value)} placeholder={t('settings.bankNamePlaceholder')}
                                                         className="w-full px-4 py-3 bg-white border border-blue-300 rounded-xl" />
                                                 </div>
                                                 <div>
                                                     <div className="flex items-center justify-between mb-1">
-                                                        <label className="text-sm font-medium text-gray-700">BIC / SWIFT</label>
+                                                        <label className="text-sm font-medium text-gray-700">{t('settings.bankBICLabel')}</label>
                                                         <label className="flex items-center space-x-1 cursor-pointer">
                                                             <input type="checkbox" checked={settings.showBankBIC} onChange={e => updateSetting('showBankBIC', e.target.checked)}
-                                                                className="w-4 h-4 text-blue-600 rounded" /><span className="text-xs text-gray-500">Show</span>
+                                                                className="w-4 h-4 text-blue-600 rounded" /><span className="text-xs text-gray-500">{t('settings.showField')}</span>
                                                         </label>
                                                     </div>
-                                                    <input type="text" value={settings.bankBIC} onChange={e => updateSetting('bankBIC', e.target.value)} placeholder="e.g., BIATTNTT"
+                                                    <input type="text" value={settings.bankBIC} onChange={e => updateSetting('bankBIC', e.target.value)} placeholder={t('settings.bankBICPlaceholder')}
                                                         className="w-full px-4 py-3 bg-white border border-blue-300 rounded-xl font-mono" />
                                                 </div>
                                                 <div className="md:col-span-2">
                                                     <div className="flex items-center justify-between mb-1">
-                                                        <label className="text-sm font-medium text-gray-700">IBAN</label>
+                                                        <label className="text-sm font-medium text-gray-700">{t('settings.bankIBANLabel')}</label>
                                                         <label className="flex items-center space-x-1 cursor-pointer">
                                                             <input type="checkbox" checked={settings.showBankIBAN} onChange={e => updateSetting('showBankIBAN', e.target.checked)}
-                                                                className="w-4 h-4 text-blue-600 rounded" /><span className="text-xs text-gray-500">Show</span>
+                                                                className="w-4 h-4 text-blue-600 rounded" /><span className="text-xs text-gray-500">{t('settings.showField')}</span>
                                                         </label>
                                                     </div>
-                                                    <input type="text" value={settings.bankIBAN} onChange={e => updateSetting('bankIBAN', e.target.value)} placeholder="e.g., TN59 0800 6012 0108 0187 5250"
+                                                    <input type="text" value={settings.bankIBAN} onChange={e => updateSetting('bankIBAN', e.target.value)} placeholder={t('settings.bankIBANPlaceholder')}
                                                         className="w-full px-4 py-3 bg-white border border-blue-300 rounded-xl font-mono" />
                                                 </div>
                                             </div>
                                         </div>
                                         {/* Invoice calc example */}
                                         <div className="p-6 bg-gray-50 rounded-xl">
-                                            <h4 className="text-sm font-semibold text-gray-700 mb-4">Example Invoice Calculation</h4>
+                                            <h4 className="text-sm font-semibold text-gray-700 mb-4">{t('settings.exampleCalculation', 'Example Invoice Calculation')}</h4>
                                             <div className="space-y-2 text-sm">
-                                                <div className="flex justify-between"><span className="text-gray-600">Subtotal</span><span>1000.000 {settings.currencySymbol}</span></div>
-                                                <div className="flex justify-between"><span className="text-gray-600">VAT ({(settings.defaultVatRate * 100).toFixed(0)}%)</span><span>{(1000 * settings.defaultVatRate).toFixed(3)} {settings.currencySymbol}</span></div>
+                                                <div className="flex justify-between"><span className="text-gray-600">{t('settings.subtotal')}</span><span>1000.000 {settings.currencySymbol}</span></div>
+                                                <div className="flex justify-between"><span className="text-gray-600">{t('invoice.vat', 'VAT')} ({(settings.defaultVatRate * 100).toFixed(0)}%)</span><span>{(1000 * settings.defaultVatRate).toFixed(3)} {settings.currencySymbol}</span></div>
                                                 {settings.customTaxEnabled && <div className="flex justify-between"><span className="text-gray-600">{settings.customTaxName}</span><span>{settings.customTaxAmount.toFixed(3)} {settings.currencySymbol}</span></div>}
                                                 <div className="flex justify-between pt-2 border-t border-gray-200">
-                                                    <span className="font-semibold">Total</span>
+                                                    <span className="font-semibold">{t('common.total')}</span>
                                                     <span className="text-[#065F46] font-bold">{(1000 + 1000 * settings.defaultVatRate + (settings.customTaxEnabled ? settings.customTaxAmount : 0)).toFixed(3)} {settings.currencySymbol}</span>
                                                 </div>
                                             </div>
@@ -1535,7 +1414,7 @@ Best regards,
 
                                         {/* File Consistency Check */}
                                         <div className="bg-white border border-gray-200 rounded-xl p-5">
-                                            <div className="flex items-start justify-between mb-3">
+                                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
                                                 <div>
                                                     <h4 className="font-semibold text-gray-800 flex items-center gap-2">
                                                         <CheckCircle size={18} className="text-[#065F46]" />
@@ -1544,7 +1423,7 @@ Best regards,
                                                     <p className="text-sm text-gray-500 mt-1">{t('settings.fileConsistencyDesc', 'Verify all registered PDF files exist on disk. Missing files can be regenerated from your data.')}</p>
                                                 </div>
                                                 <button onClick={handleCheckConsistency} disabled={checkingConsistency || recovering}
-                                                    className="px-5 py-2.5 bg-[#065F46] text-white rounded-xl hover:bg-[#047857] disabled:opacity-50 flex items-center gap-2 text-sm whitespace-nowrap transition-colors">
+                                                    className="w-full sm:w-auto px-5 py-2.5 bg-[#065F46] text-white rounded-xl hover:bg-[#047857] disabled:opacity-50 flex items-center justify-center gap-2 text-sm whitespace-nowrap transition-colors">
                                                     {checkingConsistency ? <><Loader2 size={16} className="animate-spin" />{t('settings.checking', 'Checking...')}</> : <><CheckCircle size={16} />{t('settings.checkNow', 'Check Now')}</>}
                                                 </button>
                                             </div>
@@ -1652,7 +1531,7 @@ Best regards,
                             <div className="p-2.5 bg-amber-100 rounded-xl">
                                 <AlertTriangle size={24} className="text-amber-600" />
                             </div>
-                            <h3 className="text-lg font-semibold text-gray-900">Confirm Storage Path</h3>
+                            <h3 className="text-lg font-semibold text-gray-900">{t('settings.confirmStoragePath', 'Confirm Storage Path')}</h3>
                         </div>
                         <p className="text-sm text-gray-600 mb-2">
                             You are about to set the base storage path to:
@@ -1663,16 +1542,16 @@ Best regards,
                         <div className="p-3 bg-red-50 border border-red-200 rounded-lg mb-4">
                             <p className="text-sm text-red-700 font-medium flex items-center gap-2">
                                 <Lock size={14} />
-                                This location cannot be modified later.
+                                {t('settings.cannotModifyLater')}
                             </p>
-                            <p className="text-xs text-red-600 mt-1">Financial settings (currency, VAT rate, custom tax) will also be locked after this save.</p>
+                            <p className="text-xs text-red-600 mt-1">{t('settings.financialLockWarning')}</p>
                         </div>
                         <div className="flex gap-3 justify-end">
                             <button
                                 onClick={() => setShowBasePathLockConfirm(false)}
                                 className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                             >
-                                Cancel
+                                {t('common.cancel')}
                             </button>
                             <button
                                 onClick={() => {

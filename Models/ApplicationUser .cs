@@ -6,6 +6,16 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace ResourceManager.Models
 {
+    /// <summary>
+    /// Account status for a company/tenant.
+    /// </summary>
+    public enum AccountStatus
+    {
+        Active = 0,
+        Suspended = 1,
+        Expired = 2
+    }
+
     public class ApplicationUser : IdentityUser
     {
         public int CompanyId { get; set; }
@@ -39,12 +49,12 @@ namespace ResourceManager.Models
         [Key]
         public int Id { get; set; }
 
-        [Required(ErrorMessage = "Le nom est obligatoire.")]
+        [Required(ErrorMessage = "Company name is required.")]
         public string Name { get; set; } = string.Empty;
-        [Required(ErrorMessage = "L'adresse est obligatoire.")]
+        [Required(ErrorMessage = "Address is required.")]
         public string Address { get; set; } = string.Empty;
-        [Required(ErrorMessage = "Le numéro d'identification fiscale est obligatoire.")]
-        public string MatriculeFiscal { get; set; } = string.Empty;
+        [Required(ErrorMessage = "Tax identification number is required.")]
+        public string TaxId { get; set; } = string.Empty;
         public string Phone { get; set; } = string.Empty;
         public string? Email { get; set; }
         
@@ -54,14 +64,29 @@ namespace ResourceManager.Models
         
         // Employee limit — 0 means unlimited
         public int EmployeeLimit { get; set; } = 0;
+
+        // ── Subscription & Lockout ──
+        /// <summary>
+        /// When the subscription expires. Null = no expiry (unlimited).
+        /// </summary>
+        public DateTime? SubscriptionExpiryDate { get; set; }
+
+        /// <summary>
+        /// Current account status: Active, Suspended, Expired.
+        /// </summary>
+        public AccountStatus AccountStatus { get; set; } = AccountStatus.Active;
         
+        // Audit trail
         public DateTime CreatedAt { get; set; }
+        public string? CreatedBy { get; set; } // User ID who created the company
         public DateTime? UpdatedAt { get; set; } = default;
+        public string? ModifiedBy { get; set; } // User ID who last modified
+        
         public DateTime? DeletedAt { get; set; } = default;
         public bool IsDeleted { get; set; } = false;
         public ICollection<ApplicationUser> Users { get; set; } = new List<ApplicationUser>();
         public ICollection<Client> Clients { get; set; } = new List<Client>();
-        public ICollection<Fournisseur> Fournisseurs { get; set; } = new List<Fournisseur>();
+        public ICollection<Supplier> Suppliers { get; set; } = new List<Supplier>();
 
         [NotMapped]
         public List<string> PaymentMethods { get; set; } = new();

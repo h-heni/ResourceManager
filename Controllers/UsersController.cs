@@ -62,15 +62,39 @@ namespace ResourceManager.Controllers
                         LastName = u.Profile?.LastName ?? "",
                         Company = u.Company?.Name ?? "N/A",
                         CompanyId = u.CompanyId,
-                        Role = roles.FirstOrDefault() ?? "Employee"
+                        Role = roles.FirstOrDefault() ?? "Employee",
+                        EmployeeLimit = u.Company?.EmployeeLimit ?? 0,
+                        SubscriptionExpiryDate = u.Company?.SubscriptionExpiryDate,
+                        AccountStatus = u.Company?.AccountStatus.ToString() ?? "Active"
                     });
                 }
-               return Ok(new { Data = result });
+
+                // Build per-company capacity summary
+                var companies = await _context.Companies
+                    .Where(c => !c.IsDeleted)
+                    .Select(c => new
+                    {
+                        c.Id,
+                        c.Name,
+                        c.EmployeeLimit,
+                        EmployeeCount = _context.Users.Count(u => u.CompanyId == c.Id),
+                        c.SubscriptionExpiryDate,
+                        AccountStatus = c.AccountStatus.ToString()
+                    })
+                    .OrderBy(c => c.Name)
+                    .ToListAsync();
+
+               return Ok(new { Data = result, Companies = companies });
             }
             else
             {
                 // Manager/FreeUser sees ONLY their company's employees (excluding soft-deleted)
                 var companyId = currentUser.CompanyId;
+
+                // Fetch company capacity info
+                var company = await _context.Companies.FindAsync(companyId);
+                var employeeLimit = company?.EmployeeLimit ?? 0;
+
                 var query = _userManager.Users
                     .Where(u => u.CompanyId == companyId)
                     .Where(u => u.Profile == null || !u.Profile.IsDeleted)
@@ -93,7 +117,11 @@ namespace ResourceManager.Controllers
                         Role = roles.FirstOrDefault() ?? "Employee"
                     });
                 }
-                return Ok(new { Data = result });
+                return Ok(new { 
+                    Data = result,
+                    EmployeeLimit = employeeLimit,
+                    EmployeeCount = result.Count
+                });
             }
         }
 
@@ -185,37 +213,37 @@ namespace ResourceManager.Controllers
                         await _context.DeliveryNotes.IgnoreQueryFilters()
                             .Where(d => d.CompanyId == companyId).ToListAsync());
 
-                    // 3. Delete devis items → devis
-                    var devisIds = await _context.Devis.IgnoreQueryFilters()
+                    // 3. Delete quote items → quotes
+                    var quoteIds = await _context.Quotes.IgnoreQueryFilters()
                         .Where(d => d.CompanyId == companyId).Select(d => d.Id).ToListAsync();
-                    _context.DevisItems.RemoveRange(
-                        await _context.DevisItems.IgnoreQueryFilters()
-                            .Where(di => di.DevisId.HasValue && devisIds.Contains(di.DevisId.Value)).ToListAsync());
-                    _context.Devis.RemoveRange(
-                        await _context.Devis.IgnoreQueryFilters()
+                    _context.QuoteItems.RemoveRange(
+                        await _context.QuoteItems.IgnoreQueryFilters()
+                            .Where(di => di.QuoteId.HasValue && quoteIds.Contains(di.QuoteId.Value)).ToListAsync());
+                    _context.Quotes.RemoveRange(
+                        await _context.Quotes.IgnoreQueryFilters()
                             .Where(d => d.CompanyId == companyId).ToListAsync());
 
                     // 4. Delete supplier invoice items → payments → supplier invoices
-                    var siIds = await _context.FournisseurInvoices.IgnoreQueryFilters()
+                    var siIds = await _context.SupplierInvoices.IgnoreQueryFilters()
                         .Where(si => si.CompanyId == companyId).Select(si => si.Id).ToListAsync();
-                    _context.FournisseurInvoiceItems.RemoveRange(
-                        await _context.FournisseurInvoiceItems.IgnoreQueryFilters()
-                            .Where(sii => siIds.Contains(sii.FournisseurInvoiceId)).ToListAsync());
+                    _context.SupplierInvoiceItems.RemoveRange(
+                        await _context.SupplierInvoiceItems.IgnoreQueryFilters()
+                            .Where(sii => siIds.Contains(sii.SupplierInvoiceId)).ToListAsync());
                     _context.SupplierPayments.RemoveRange(
-                        await _context.SupplierPayments.Where(sp => siIds.Contains(sp.FournisseurInvoiceId)).ToListAsync());
-                    _context.FournisseurInvoices.RemoveRange(
-                        await _context.FournisseurInvoices.IgnoreQueryFilters()
+                        await _context.SupplierPayments.Where(sp => siIds.Contains(sp.SupplierInvoiceId)).ToListAsync());
+                    _context.SupplierInvoices.RemoveRange(
+                        await _context.SupplierInvoices.IgnoreQueryFilters()
                             .Where(si => si.CompanyId == companyId).ToListAsync());
 
-                    // 5. Delete other expenses, clients, fournisseurs, products, PDF records
+                    // 5. Delete other expenses, clients, suppliers, products, PDF records
                     _context.OtherExpenses.RemoveRange(
                         await _context.OtherExpenses.IgnoreQueryFilters()
                             .Where(e => e.CompanyId == companyId).ToListAsync());
                     _context.Clients.RemoveRange(
                         await _context.Clients.IgnoreQueryFilters()
                             .Where(c => c.CompanyId == companyId).ToListAsync());
-                    _context.Fournisseurs.RemoveRange(
-                        await _context.Fournisseurs.IgnoreQueryFilters()
+                    _context.Suppliers.RemoveRange(
+                        await _context.Suppliers.IgnoreQueryFilters()
                             .Where(f => f.CompanyId == companyId).ToListAsync());
                     _context.ProductServices.RemoveRange(
                         await _context.ProductServices.IgnoreQueryFilters()

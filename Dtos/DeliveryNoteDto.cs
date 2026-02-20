@@ -11,7 +11,7 @@ namespace ResourceManager.DTOs // Namespace consistency
         public string? Number { get; set; }
         public DateTime Date { get; set; } = DateTime.UtcNow;
         public int? ClientId { get; set; }
-        public int? DevisId { get; set; } // Link to Quote
+        public int? QuoteId { get; set; } // Link to Quote
         public int? InvoiceId { get; set; } // For linking
         
         public List<DeliveryNoteItemDto> DeliveryNoteItems { get; set; } = new List<DeliveryNoteItemDto>();

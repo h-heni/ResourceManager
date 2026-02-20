@@ -14,7 +14,7 @@ namespace ResourceManager.Data.Configurations
             builder.HasMany(up => up.Clients)
                 .WithOne(up => up.Company)
                 .HasForeignKey(up=>up.CompanyId);
-            builder.HasMany(up => up.Fournisseurs)
+            builder.HasMany(up => up.Suppliers)
                 .WithOne(up => up.Company)
                 .HasForeignKey(up=>up.CompanyId);
 

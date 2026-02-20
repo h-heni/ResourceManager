@@ -127,9 +127,9 @@ public class InvoiceStatusLifecycleTests
     }
 
     [Fact]
-    public void FournisseurInvoice_FullLifecycle()
+    public void SupplierInvoice_FullLifecycle()
     {
-        var fi = new FournisseurInvoice { TotalTTC = 5000m };
+        var fi = new SupplierInvoice { TotalTTC = 5000m };
 
         // Initial: Pending
         Assert.Equal("Pending", fi.PaymentStatus);

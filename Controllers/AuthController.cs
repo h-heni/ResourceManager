@@ -148,12 +148,20 @@ namespace ResourceManager.Controllers
                 using var transaction = await _context.Database.BeginTransactionAsync();
                 try
                 {
+                    // 0. Unique email check (before creating anything)
+                    var emailConflict = await CheckEmailUniqueness(createManagerDto.UserEmail);
+                    if (emailConflict != null)
+                    {
+                        await transaction.RollbackAsync();
+                        return Conflict(new { error = emailConflict });
+                    }
+
                     // 1. Create the Company FIRST
                     var company = new Company
                     {
                         Name = createManagerDto.CompanyName,
                         Address = createManagerDto.Address,
-                        MatriculeFiscal = createManagerDto.MatriculeFiscal,
+                        TaxId = createManagerDto.TaxId,
                         Phone = createManagerDto.Phone,
                         CreatedAt = DateTime.UtcNow
                     };
@@ -202,6 +210,178 @@ namespace ResourceManager.Controllers
                 }
             });
         }
+
+        // ==========================================
+        // PASSWORD RESET ENDPOINTS
+        // ==========================================
+
+        /// <summary>
+        /// POST: api/auth/forgot-password — Request password reset email
+        /// Always returns success message to prevent email enumeration attacks
+        /// </summary>
+        [HttpPost("forgot-password")]
+        [AllowAnonymous]
+        [EnableRateLimiting("AuthStrict")]
+        public async Task<IActionResult> ForgotPassword([FromBody] Dtos.ForgotPasswordRequestDto request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var ip = GetClientIp();
+            _logger.LogInformation("Password reset requested for {Email} from IP {IP}", request.Email, ip);
+
+            try
+            {
+                var user = await _userManager.FindByEmailAsync(request.Email);
+                
+                // Always return success to prevent email enumeration
+                if (user == null)
+                {
+                    _logger.LogWarning("Password reset requested for non-existent email: {Email}", request.Email);
+                    return Ok(new Dtos.ForgotPasswordResponseDto { EmailSent = false });
+                }
+
+                // Generate ASP.NET Identity password reset token
+                var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+
+                // Store token hash for auditing (optional - Identity handles token validation)
+                var resetToken = new PasswordResetToken
+                {
+                    UserId = user.Id,
+                    TokenHash = ComputeTokenHash(token),
+                    ExpiresAt = DateTime.UtcNow.AddHours(1),
+                    RequestIpAddress = ip
+                };
+                _context.PasswordResetTokens.Add(resetToken);
+                await _context.SaveChangesAsync();
+
+                // Send email using MailKit service
+                using var scope = HttpContext.RequestServices.CreateScope();
+                var emailService = scope.ServiceProvider.GetService<IMailKitEmailService>();
+                
+                if (emailService != null)
+                {
+                    var result = await emailService.SendPasswordResetEmailAsync(user, token, ip);
+                    
+                    if (!result.Success)
+                    {
+                        _logger.LogError("Failed to send password reset email to {Email}: {Error}", request.Email, result.ErrorDetails);
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("MailKitEmailService not registered - password reset email not sent");
+                }
+
+                return Ok(new Dtos.ForgotPasswordResponseDto { EmailSent = true });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing password reset for {Email}", request.Email);
+                return Ok(new Dtos.ForgotPasswordResponseDto { EmailSent = false });
+            }
+        }
+
+        /// <summary>
+        /// POST: api/auth/reset-password — Complete password reset with token
+        /// </summary>
+        [HttpPost("reset-password")]
+        [AllowAnonymous]
+        [EnableRateLimiting("AuthStrict")]
+        public async Task<IActionResult> ResetPassword([FromBody] Dtos.ResetPasswordRequestDto request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var ip = GetClientIp();
+            _logger.LogInformation("Password reset attempt for {Email} from IP {IP}", request.Email, ip);
+
+            try
+            {
+                var user = await _userManager.FindByEmailAsync(request.Email);
+                if (user == null)
+                {
+                    _logger.LogWarning("Password reset attempt for non-existent email: {Email}", request.Email);
+                    return BadRequest(new Dtos.ResetPasswordResponseDto
+                    {
+                        Success = false,
+                        Message = "Invalid or expired reset token."
+                    });
+                }
+
+                // Validate and reset password using ASP.NET Identity
+                var result = await _userManager.ResetPasswordAsync(user, request.Token, request.NewPassword);
+
+                if (result.Succeeded)
+                {
+                    // Mark token as used in our audit table
+                    var tokenHash = ComputeTokenHash(request.Token);
+                    var storedToken = await _context.PasswordResetTokens
+                        .FirstOrDefaultAsync(t => t.UserId == user.Id && t.TokenHash == tokenHash && !t.IsUsed);
+                    
+                    if (storedToken != null)
+                    {
+                        storedToken.IsUsed = true;
+                        storedToken.UsedAt = DateTime.UtcNow;
+                        storedToken.UsedIpAddress = ip;
+                        await _context.SaveChangesAsync();
+                    }
+
+                    // Revoke all existing refresh tokens for security
+                    var activeTokens = await _context.RefreshTokens
+                        .Where(t => t.UserId == user.Id && t.RevokedAt == null && t.ExpiresAt > DateTime.UtcNow)
+                        .ToListAsync();
+
+                    foreach (var token in activeTokens)
+                    {
+                        token.RevokedAt = DateTime.UtcNow;
+                        token.RevokedReason = "Password reset";
+                    }
+                    await _context.SaveChangesAsync();
+
+                    _logger.LogInformation("Password reset successful for {Email}", request.Email);
+
+                    return Ok(new Dtos.ResetPasswordResponseDto
+                    {
+                        Success = true,
+                        Message = "Password has been reset successfully. Please log in with your new password."
+                    });
+                }
+                else
+                {
+                    var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+                    _logger.LogWarning("Password reset failed for {Email}: {Errors}", request.Email, errors);
+
+                    return BadRequest(new Dtos.ResetPasswordResponseDto
+                    {
+                        Success = false,
+                        Message = result.Errors.Any(e => e.Code == "InvalidToken")
+                            ? "Invalid or expired reset token."
+                            : errors
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error resetting password for {Email}", request.Email);
+                return StatusCode(500, new Dtos.ResetPasswordResponseDto
+                {
+                    Success = false,
+                    Message = "An error occurred while resetting your password."
+                });
+            }
+        }
+
+        /// <summary>
+        /// Compute SHA256 hash of token for storage
+        /// </summary>
+        private static string ComputeTokenHash(string token)
+        {
+            using var sha256 = System.Security.Cryptography.SHA256.Create();
+            var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(token));
+            return Convert.ToBase64String(bytes);
+        }
+
         [HttpPost("create-tenant")]
         [Authorize(Roles = "SuperAdmin")]
         public async Task<IActionResult> CreateTenant([FromBody] CreateManagerDto createManagerDto)
@@ -213,11 +393,30 @@ namespace ResourceManager.Controllers
 
                 try
                 {
+                    // 0. Unique email check — Company email and User email may match (Manager/Company pair exception)
+                    var userEmailConflict = await CheckEmailUniqueness(createManagerDto.UserEmail);
+                    if (userEmailConflict != null)
+                    {
+                        await transaction.RollbackAsync();
+                        return Conflict(new { error = userEmailConflict });
+                    }
+                    // If company email differs from user email, validate it too
+                    if (!string.IsNullOrWhiteSpace(createManagerDto.Email)
+                        && !string.Equals(createManagerDto.Email.Trim(), createManagerDto.UserEmail.Trim(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        var companyEmailConflict = await CheckEmailUniqueness(createManagerDto.Email);
+                        if (companyEmailConflict != null)
+                        {
+                            await transaction.RollbackAsync();
+                            return Conflict(new { error = companyEmailConflict });
+                        }
+                    }
+
                     var company = new Company
                     {
                         Name = createManagerDto.CompanyName,
                         Address = createManagerDto.Address,
-                        MatriculeFiscal = createManagerDto.MatriculeFiscal,
+                        TaxId = createManagerDto.TaxId,
                         Phone = createManagerDto.Phone,
                         Email = createManagerDto.Email,
                         EmployeeLimit = createManagerDto.EmployeeLimit
@@ -299,6 +498,12 @@ namespace ResourceManager.Controllers
                         return Unauthorized(new { error = "User not found." });
 
                     var companyId = currentUser.CompanyId;
+
+                    // Unique email check — employee email must not conflict with any existing user/company
+                    // Exception: allowed to match the company they're being added to
+                    var emailConflict = await CheckEmailUniqueness(employee.Email, companyId);
+                    if (emailConflict != null)
+                        return Conflict(new { error = emailConflict });
 
                     // Employee limit enforcement
                     var company = await _context.Companies.FindAsync(companyId);
@@ -540,6 +745,46 @@ namespace ResourceManager.Controllers
                 ?? HttpContext.Request.Headers["X-Real-IP"].FirstOrDefault()
                 ?? HttpContext.Connection.RemoteIpAddress?.ToString()
                 ?? "unknown";
+        }
+
+        /// <summary>
+        /// Check if an email is already in use by another user or company.
+        /// Returns null if the email is available, or an error message if it conflicts.
+        /// Exception: A Company and its Manager are allowed to share the same email.
+        /// </summary>
+        private async Task<string?> CheckEmailUniqueness(string email, int? allowedCompanyId = null)
+        {
+            var normalizedEmail = email.Trim().ToLowerInvariant();
+
+            // 1. Check AspNetUsers table (Identity)
+            var existingUser = await _userManager.FindByEmailAsync(normalizedEmail);
+            if (existingUser != null)
+            {
+                // If the existing user belongs to the same company we're creating/updating, allow it
+                // (Manager + Company share the same email is the permitted exception)
+                if (allowedCompanyId.HasValue && existingUser.CompanyId == allowedCompanyId.Value)
+                    return null;
+
+                return $"The email '{normalizedEmail}' is already registered by another user.";
+            }
+
+            // 2. Check Companies table (company contact email)
+            var existingCompany = await _context.Companies
+                .IgnoreQueryFilters()
+                .Where(c => !c.IsDeleted && c.Email != null && c.Email.ToLower() == normalizedEmail)
+                .Select(c => new { c.Id })
+                .FirstOrDefaultAsync();
+
+            if (existingCompany != null)
+            {
+                // If we're creating a user FOR this company, allow it (Manager/Company pair exception)
+                if (allowedCompanyId.HasValue && existingCompany.Id == allowedCompanyId.Value)
+                    return null;
+
+                return $"The email '{normalizedEmail}' is already associated with another company.";
+            }
+
+            return null; // Email is available
         }
 
         private string GenerateAccessToken(string userId, string email, string role, int companyId, string? firstName = null)

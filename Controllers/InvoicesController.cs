@@ -48,8 +48,14 @@ namespace ResourceManager.Controllers
                     .AsNoTracking()
                     .Include(i => i.Client)
                     .Include(i => i.Payments)
-                    .Include(i => i.Devis)
+                    .Include(i => i.Quote)
                     .AsQueryable();
+
+                // Employee role: hide archived (Treated) records
+                if (User.IsInRole("Employee"))
+                {
+                    query = query.Where(i => !i.Treated);
+                }
 
                 if (!includePaid)
                 {
@@ -84,11 +90,11 @@ namespace ResourceManager.Controllers
                         Status = i.Treated ? "Archived" : i.Status,
                         i.IsLocked,
                         i.Treated,
-                        i.DevisId,
-                        i.SourceDevisNumber,
-                        Currency = i.Devis?.Currency,
-                        CurrencySymbol = i.Devis?.CurrencySymbol,
-                        PdfLanguage = i.Devis?.PdfLanguage,
+                        i.QuoteId,
+                        i.SourceQuoteNumber,
+                        Currency = i.Quote?.Currency,
+                        CurrencySymbol = i.Quote?.CurrencySymbol,
+                        PdfLanguage = i.Quote?.PdfLanguage,
                         AmountPaid = amountPaid,
                         PendingAmount = pendingAmount,
                         RemainingAmount = Math.Max(0, (i.TotalAmount ?? 0) - (amountPaid + pendingAmount)),
@@ -146,27 +152,31 @@ namespace ResourceManager.Controllers
                 if (user == null)
                     return Unauthorized();
 
-                var selectedYear = year ?? DateTime.UtcNow.Year;
+                var isAllYears = !year.HasValue;
+                var selectedYear = isAllYears ? DateTime.UtcNow.Year : year.GetValueOrDefault(DateTime.UtcNow.Year);
 
                 // Count archived invoices (Treated == true)
-                var archivedInvoiceCount = await _context.Invoices
+                var archivedQuery = _context.Invoices
                     .IgnoreQueryFilters()
                     .AsNoTracking()
-                    .Where(i => i.Treated == true && i.CompanyId == user.CompanyId)
-                    .Where(i => i.Date.Year == selectedYear)
-                    .CountAsync();
+                    .Where(i => i.Treated == true && i.CompanyId == user.CompanyId);
+                if (!isAllYears)
+                    archivedQuery = archivedQuery.Where(i => i.Date.Year == selectedYear);
+                var archivedInvoiceCount = await archivedQuery.CountAsync();
 
-                // Count historical (imported) revenues for the same year
-                var historicalRevenueCount = await _context.HistoricalRevenues
+                // Count historical (imported) revenues
+                var historicalQuery = _context.HistoricalRevenues
                     .IgnoreQueryFilters()
                     .AsNoTracking()
-                    .Where(h => h.CompanyId == user.CompanyId && h.Date.Year == selectedYear)
-                    .CountAsync();
+                    .Where(h => h.CompanyId == user.CompanyId);
+                if (!isAllYears)
+                    historicalQuery = historicalQuery.Where(h => h.Date.Year == selectedYear);
+                var historicalRevenueCount = await historicalQuery.CountAsync();
 
                 return Ok(new
                 {
                     count = archivedInvoiceCount + historicalRevenueCount,
-                    year = selectedYear
+                    year = isAllYears ? (int?)null : selectedYear
                 });
             }
             catch (Exception ex)
@@ -289,10 +299,16 @@ namespace ResourceManager.Controllers
                 .Include(i => i.Client)
                 .Include(i => i.InvoiceItems)
                 .Include(i => i.Payments)
-                .Include(i => i.Devis)
+                .Include(i => i.Quote)
                 .FirstOrDefaultAsync(i => i.Id == id);
 
             if (invoice == null) return NotFound();
+
+            // Employee role cannot access archived (Treated) invoices
+            if (User.IsInRole("Employee") && invoice.Treated)
+            {
+                return NotFound(new { message = "Invoice not found or access denied" });
+            }
 
             return Ok(invoice);
         }
@@ -306,27 +322,35 @@ namespace ResourceManager.Controllers
                 .Include(i => i.InvoiceItems)
                 .Include(i => i.Payments)
                 .Include(i => i.CreatedByUser)
-                .Include(i => i.Devis)
+                .Include(i => i.Quote)
                 .FirstOrDefaultAsync(i => i.Id == id);
 
             if (invoice == null) return NotFound();
 
-            // Get related devis if exists
-            object? relatedDevis = null;
-            if (invoice.DevisId.HasValue)
+            // Employee role cannot access archived (Treated) invoices
+            if (User.IsInRole("Employee") && invoice.Treated)
             {
-                var devis = await _context.Devis
+                return NotFound(new { message = "Invoice not found or access denied" });
+            }
+
+            // Get related quote if exists
+            object? relatedQuote = null;
+            if (invoice.QuoteId.HasValue)
+            {
+                var devis = await _context.Quotes
                     .Include(d => d.Client)
-                    .FirstOrDefaultAsync(d => d.Id == invoice.DevisId.Value);
+                    .FirstOrDefaultAsync(d => d.Id == invoice.QuoteId.Value);
                 if (devis != null)
                 {
-                    relatedDevis = new
+                    relatedQuote = new
                     {
                         devis.Id,
                         devis.Number,
                         devis.Date,
                         totalAmount = devis.TotalAmount,
-                        status = devis.Status ?? "Draft"
+                        status = devis.Status ?? "Draft",
+                        createdBy = devis.CreatedBy,
+                        modifiedBy = devis.ModifiedBy
                     };
                 }
             }
@@ -339,7 +363,9 @@ namespace ResourceManager.Controllers
                     d.Id,
                     d.Number,
                     d.Date,
-                    status = "Delivered"
+                    status = "Delivered",
+                    createdBy = d.CreatedBy,
+                    modifiedBy = d.ModifiedBy
                 })
                 .ToListAsync();
 
@@ -399,9 +425,9 @@ namespace ResourceManager.Controllers
                 invoice.Treated,
                 TreatedBy = (!string.IsNullOrEmpty(invoice.TreatedByUserId) && userMap.ContainsKey(invoice.TreatedByUserId)) ? userMap[invoice.TreatedByUserId] : null,
                 TreatedAt = invoice.TreatedAt,
-                Currency = invoice.Devis?.Currency,
-                CurrencySymbol = invoice.Devis?.CurrencySymbol,
-                PdfLanguage = invoice.Devis?.PdfLanguage,
+                Currency = invoice.Quote?.Currency,
+                CurrencySymbol = invoice.Quote?.CurrencySymbol,
+                PdfLanguage = invoice.Quote?.PdfLanguage,
                 amountPaid,
                 pendingAmount,
                 remainingAmount = Math.Max(0, (invoice.TotalAmount ?? 0) - (amountPaid + pendingAmount)),
@@ -431,9 +457,9 @@ namespace ResourceManager.Controllers
                     totalPrice = i.TotalItemHT,
                     vat = i.TaxRate
                 }).ToList(),
-                devisId = invoice.DevisId,
-                sourceDevisNumber = invoice.SourceDevisNumber,
-                relatedDevis,
+                quoteId = invoice.QuoteId,
+                sourceQuoteNumber = invoice.SourceQuoteNumber,
+                relatedQuote,
                 relatedDeliveryNotes,
                 invoice.CreatedAt,
                 invoice.UpdatedAt,
@@ -465,19 +491,19 @@ namespace ResourceManager.Controllers
             var userProvidedNumber = dto.Number?.Trim() ?? string.Empty;
             var isAutoNumber = string.IsNullOrWhiteSpace(userProvidedNumber);
 
-            string? sourceDevisNumber = null;
-            if (dto.DevisId.HasValue && dto.DevisId.Value > 0)
+            string? sourceQuoteNumber = null;
+            if (dto.QuoteId.HasValue && dto.QuoteId.Value > 0)
             {
-                var linkedDevis = await _context.Devis
+                var linkedQuote = await _context.Quotes
                     .AsNoTracking()
-                    .FirstOrDefaultAsync(d => d.Id == dto.DevisId.Value);
+                    .FirstOrDefaultAsync(d => d.Id == dto.QuoteId.Value);
 
-                if (linkedDevis == null)
+                if (linkedQuote == null)
                 {
                     return BadRequest(new { message = "Linked quote was not found." });
                 }
 
-                sourceDevisNumber = linkedDevis.Number;
+                sourceQuoteNumber = linkedQuote.Number;
             }
 
             // Retry loop for auto-numbered invoices (handles concurrent number collisions)
@@ -507,8 +533,8 @@ namespace ResourceManager.Controllers
                     Date = dto.Date.ToUniversalTime(),
                     DueDate = dto.DueDate?.ToUniversalTime(),
                     ClientId = dto.ClientId,
-                    DevisId = dto.DevisId,
-                    SourceDevisNumber = sourceDevisNumber,
+                    QuoteId = dto.QuoteId,
+                    SourceQuoteNumber = sourceQuoteNumber,
                     Tfiscal = companySettings?.CustomTaxEnabled == true ? companySettings.CustomTaxAmount : 0,
                     TfiscalName = companySettings?.CustomTaxName ?? "Timbre Fiscal",
                     CreatedByUserId = userId,
@@ -557,16 +583,16 @@ namespace ResourceManager.Controllers
                             await _context.SaveChangesAsync();
                         }
 
-                        // Update Devis status to Completed when invoice is created
-                        if (dto.DevisId.HasValue && dto.DevisId.Value > 0)
+                        // Update Quote status to Completed when invoice is created
+                        if (dto.QuoteId.HasValue && dto.QuoteId.Value > 0)
                         {
-                            var devis = await _context.Devis.FindAsync(dto.DevisId.Value);
+                            var devis = await _context.Quotes.FindAsync(dto.QuoteId.Value);
                             if (devis != null)
                             {
                                 devis.Status = "Completed";
                                 devis.Treated = true;
                                 await _context.SaveChangesAsync();
-                                _logger.LogInformation("Devis {DevisId} status updated to Completed after invoice creation.", dto.DevisId.Value);
+                                _logger.LogInformation("Quote {QuoteId} status updated to Completed after invoice creation.", dto.QuoteId.Value);
                             }
                         }
 
@@ -614,8 +640,8 @@ namespace ResourceManager.Controllers
                 invoice.Date,
                 invoice.DueDate,
                 invoice.ClientId,
-                invoice.DevisId,
-                invoice.SourceDevisNumber,
+                invoice.QuoteId,
+                invoice.SourceQuoteNumber,
                 invoice.Status,
                 invoice.SubTotal,
                 invoice.TaxAmount,
@@ -626,9 +652,9 @@ namespace ResourceManager.Controllers
                 invoice.RemainingAmount,
                 invoice.IsOverdue,
                 invoice.DaysUntilDue,
-                Currency = invoice.Devis?.Currency,
-                CurrencySymbol = invoice.Devis?.CurrencySymbol,
-                PdfLanguage = invoice.Devis?.PdfLanguage,
+                Currency = invoice.Quote?.Currency,
+                CurrencySymbol = invoice.Quote?.CurrencySymbol,
+                PdfLanguage = invoice.Quote?.PdfLanguage,
                 InvoiceItems = invoice.InvoiceItems.Select(i => new {
                     i.Id,
                     i.Description,
@@ -706,7 +732,7 @@ namespace ResourceManager.Controllers
         {
             var invoice = await _context.Invoices
                 .Include(i => i.Payments)
-                .Include(i => i.Devis)
+                .Include(i => i.Quote)
                 .FirstOrDefaultAsync(i => i.Id == id);
 
             if (invoice == null) return NotFound();
@@ -758,11 +784,11 @@ namespace ResourceManager.Controllers
                 invoice.TreatedByUserId = _userManager.GetUserId(User);
                 invoice.TreatedAt = DateTime.UtcNow;
                 
-                // Update linked Devis to Completed
-                if (invoice.Devis != null)
+                // Update linked Quote to Completed
+                if (invoice.Quote != null)
                 {
-                    invoice.Devis.Status = "Completed";
-                    invoice.Devis.Treated = true;
+                    invoice.Quote.Status = "Completed";
+                    invoice.Quote.Treated = true;
                 }
 
                 // Update linked Delivery Notes to Completed
@@ -803,7 +829,7 @@ namespace ResourceManager.Controllers
         {
             var invoice = await _context.Invoices
                 .Include(i => i.Payments)
-                .Include(i => i.Devis)
+                .Include(i => i.Quote)
                 .FirstOrDefaultAsync(i => i.Id == id);
 
             if (invoice == null) return NotFound();
@@ -833,17 +859,17 @@ namespace ResourceManager.Controllers
                 invoice.IsLocked = false;
             }
 
-            // If invoice was Paid and now isn't, revert Treated flag + linked Devis/DeliveryNotes
+            // If invoice was Paid and now isn't, revert Treated flag + linked Quote/DeliveryNotes
             if (invoice.Status != "Paid")
             {
                 invoice.Treated = false;
                 invoice.TreatedByUserId = null;
                 invoice.TreatedAt = null;
 
-                if (invoice.Devis != null)
+                if (invoice.Quote != null)
                 {
-                    invoice.Devis.Status = "Accepted";
-                    invoice.Devis.Treated = false;
+                    invoice.Quote.Status = "Accepted";
+                    invoice.Quote.Treated = false;
                 }
 
                 var deliveryNotes = await _context.DeliveryNotes
@@ -897,9 +923,15 @@ namespace ResourceManager.Controllers
             var invoice = await _context.Invoices
                                 .Include(i => i.Client)
                                 .Include(i => i.InvoiceItems)
-                                .Include(i => i.Devis)
+                                .Include(i => i.Quote)
                                 .FirstOrDefaultAsync(i => i.Id == id);
             if (invoice == null) return NotFound();
+
+            // Employee role cannot access archived (Treated) invoices
+            if (User.IsInRole("Employee") && invoice.Treated)
+            {
+                return NotFound(new { message = "Invoice not found or access denied" });
+            }
 
             // Get company settings for PDF customization
             var userId = _userManager.GetUserId(User);
@@ -921,8 +953,8 @@ namespace ResourceManager.Controllers
             // Build PDF settings from company config
             var pdfSettings = PdfSettings.FromCompanySettings(
                 companySettings, company, creatorName,
-                currencyOverride: invoice.Devis?.CurrencySymbol,
-                languageOverride: invoice.Devis?.PdfLanguage);
+                currencyOverride: invoice.Quote?.CurrencySymbol,
+                languageOverride: invoice.Quote?.PdfLanguage);
             
             // Apply custom tax settings to invoice if not already set
             if (invoice.Tfiscal == null || invoice.TfiscalName == null)
@@ -988,10 +1020,16 @@ namespace ResourceManager.Controllers
                 .Include(i => i.Client)
                 .Include(i => i.InvoiceItems)
                 .Include(i => i.Payments)
-                .Include(i => i.Devis)
+                .Include(i => i.Quote)
                 .FirstOrDefaultAsync(i => i.Id == id);
 
             if (invoice == null) return NotFound();
+
+            // Employee role cannot access archived (Treated) invoices
+            if (User.IsInRole("Employee") && invoice.Treated)
+            {
+                return NotFound(new { message = "Invoice not found or access denied" });
+            }
 
             var userId = _userManager.GetUserId(User);
             if (string.IsNullOrEmpty(userId)) return Unauthorized();
@@ -1048,7 +1086,7 @@ namespace ResourceManager.Controllers
             var invoice = await _context.Invoices
                 .IgnoreQueryFilters()
                 .Include(i => i.Client)
-                .Include(i => i.Devis)
+                .Include(i => i.Quote)
                 .FirstOrDefaultAsync(i => i.VerificationToken == token && !i.IsDeleted);
 
             if (invoice == null)
@@ -1065,7 +1103,7 @@ namespace ResourceManager.Controllers
                 date = invoice.Date,
                 dueDate = invoice.DueDate,
                 totalAmount = invoice.TotalAmount,
-                currency = invoice.Devis?.CurrencySymbol ?? "DT",
+                currency = invoice.Quote?.CurrencySymbol ?? "DT",
                 clientName = invoice.Client?.Name,
                 companyName = company?.Name,
                 status = invoice.Status,
@@ -1080,7 +1118,7 @@ namespace ResourceManager.Controllers
             var invoice = await _context.Invoices
                 .Include(i => i.Client)
                 .Include(i => i.InvoiceItems)
-                .Include(i => i.Devis)
+                .Include(i => i.Quote)
                 .FirstOrDefaultAsync(i => i.Id == id);
 
             if (invoice == null) return NotFound();
@@ -1212,6 +1250,15 @@ namespace ResourceManager.Controllers
         [HttpGet("{id}/emails")]
         public async Task<IActionResult> GetInvoiceEmails(int id)
         {
+            // Check if invoice exists and Employee archive filter
+            var invoice = await _context.Invoices.AsNoTracking().FirstOrDefaultAsync(i => i.Id == id);
+            if (invoice == null) return NotFound();
+            
+            if (User.IsInRole("Employee") && invoice.Treated)
+            {
+                return NotFound(new { message = "Invoice not found or access denied" });
+            }
+
             var emails = await _context.InvoiceEmails
                 .Where(e => e.InvoiceId == id)
                 .OrderByDescending(e => e.SentAt)

@@ -203,7 +203,8 @@ body > .container {
   }
 
   .rm-table {
-    @apply w-full table-auto border-separate border-spacing-0;
+    @apply w-full border-separate border-spacing-0;
+    table-layout: fixed;
   }
 
   .rm-table thead th {
@@ -211,7 +212,7 @@ body > .container {
   }
 
   .rm-table tbody td {
-    @apply px-2.5 lg:px-3 py-3.5 text-sm text-slate-700 align-middle border-b border-slate-100;
+    @apply px-2.5 lg:px-3 py-3.5 text-sm text-slate-700 align-middle border-b border-slate-100 overflow-hidden text-ellipsis;
   }
 
   .rm-table tbody tr {
@@ -226,50 +227,60 @@ body > .container {
     @apply px-2.5 lg:px-3 py-3.5 text-sm text-slate-700 border-t border-slate-200 bg-slate-50/70;
   }
 
-  .rm-cell-text {
+  /* Cell utility classes — scoped under .rm-table for specificity (0-2-0 beats 0-1-2) */
+  .rm-table .rm-cell-text {
     @apply text-left text-slate-700;
   }
 
-  .rm-cell-date {
+  .rm-table .rm-cell-date {
     @apply text-left text-slate-600 whitespace-nowrap;
   }
 
-  .rm-cell-status {
-    @apply whitespace-nowrap align-middle;
+  .rm-table .rm-cell-status {
+    @apply whitespace-nowrap align-middle text-center;
     width: 1%;
   }
 
-  .rm-cell-number {
+  .rm-table .rm-cell-number {
     @apply text-right tabular-nums whitespace-nowrap font-medium text-slate-900;
   }
 
-  .rm-cell-currency {
+  .rm-table .rm-cell-currency {
     @apply text-right tabular-nums whitespace-nowrap font-semibold text-slate-900;
   }
 
-  .rm-cell-actions {
+  .rm-table .rm-cell-actions {
     @apply text-right whitespace-nowrap align-middle;
     width: 1%;
   }
 
-  .rm-th-id {
+  /* Header utility classes — scoped under .rm-table for specificity (0-2-0 beats 0-1-2) */
+  .rm-table .rm-th-id {
     @apply whitespace-nowrap;
   }
 
-  .rm-th-number {
+  .rm-table .rm-th-text {
+    @apply text-left;
+  }
+
+  .rm-table .rm-th-number {
     @apply text-right whitespace-nowrap;
   }
 
-  .rm-th-date {
-    @apply whitespace-nowrap;
+  .rm-table .rm-th-currency {
+    @apply text-right whitespace-nowrap;
   }
 
-  .rm-th-status {
+  .rm-table .rm-th-date {
+    @apply text-left whitespace-nowrap;
+  }
+
+  .rm-table .rm-th-status {
     @apply whitespace-nowrap text-center;
     width: 1%;
   }
 
-  .rm-th-actions {
+  .rm-table .rm-th-actions {
     @apply text-right whitespace-nowrap;
     width: 1%;
   }

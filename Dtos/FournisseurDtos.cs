@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace ResourceManager.DTOs
 {
-    public class CreateFournisseurDto
+    public class CreateSupplierDto
     {
         [Required]
         public string Name { get; set; } = string.Empty;
@@ -11,10 +11,10 @@ namespace ResourceManager.DTOs
         public string Address { get; set; } = string.Empty;
         
         [Required]
-        public string MatriculeFiscal { get; set; } = string.Empty;
+        public string TaxId { get; set; } = string.Empty;
         
         public string Phone { get; set; } = string.Empty;
     }
     
-    public class UpdateFournisseurDto : CreateFournisseurDto { }
+    public class UpdateSupplierDto : CreateSupplierDto { }
 }

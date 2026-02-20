@@ -12,7 +12,7 @@ interface Client {
     id: number;
     name: string;
     address: string;
-    matriculeFiscal: string;
+    taxId: string;
     phone: string;
     email: string;
 }
@@ -34,7 +34,7 @@ export default function ClientsPage() {
     const [formData, setFormData] = useState({
         name: '',
         address: '',
-        matriculeFiscal: '',
+        taxId: '',
         phone: '',
         email: ''
     });
@@ -67,13 +67,13 @@ export default function ClientsPage() {
             setFormData({
                 name: client.name,
                 address: client.address,
-                matriculeFiscal: client.matriculeFiscal,
+                taxId: client.taxId,
                 phone: client.phone,
                 email: client.email || ''
             });
         } else {
             setEditingClient(null);
-            setFormData({ name: '', address: '', matriculeFiscal: '', phone: '', email: '' });
+            setFormData({ name: '', address: '', taxId: '', phone: '', email: '' });
         }
         setIsModalOpen(true);
     };
@@ -111,7 +111,7 @@ export default function ClientsPage() {
 
     const filteredClients = clients.filter(c =>
         c.name.toLowerCase().includes(search.toLowerCase()) ||
-        c.matriculeFiscal.includes(search)
+        c.taxId.includes(search)
     );
 
     return (
@@ -150,6 +150,14 @@ export default function ClientsPage() {
                 <>
                     <div className="rm-table-card">
                         <table className="rm-table">
+                            <colgroup>
+                                <col style={{ width: '20%' }} />{/* Company Name */}
+                                <col style={{ width: '15%' }} />{/* Fiscal ID */}
+                                <col style={{ width: '15%' }} />{/* Phone */}
+                                <col style={{ width: '18%' }} />{/* Email */}
+                                <col style={{ width: '24%' }} />{/* Address */}
+                                <col style={{ width: '8%' }} />{/* Actions */}
+                            </colgroup>
                             <thead>
                                 <tr>
                                     <th>{t('client.companyName')}</th>
@@ -166,7 +174,7 @@ export default function ClientsPage() {
                                         <td className="rm-cell-text">
                                             <span className="font-semibold text-gray-900">{client.name}</span>
                                         </td>
-                                        <td className="rm-cell-text whitespace-nowrap text-gray-600">{client.matriculeFiscal || '-'}</td>
+                                        <td className="rm-cell-text whitespace-nowrap text-gray-600">{client.taxId || '-'}</td>
                                         <td className="rm-cell-text whitespace-nowrap text-gray-600">{client.phone || '-'}</td>
                                         <td className="rm-cell-text whitespace-nowrap text-gray-600">{client.email || '-'}</td>
                                         <td className="rm-cell-text text-gray-600">{client.address || '-'}</td>
@@ -230,8 +238,8 @@ export default function ClientsPage() {
                         <input
                             type="text"
                             required
-                            value={formData.matriculeFiscal}
-                            onChange={e => setFormData({ ...formData, matriculeFiscal: e.target.value })}
+                            value={formData.taxId}
+                            onChange={e => setFormData({ ...formData, taxId: e.target.value })}
                             className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] outline-none"
                             placeholder={t('client.messages.placeholders.fiscalId')}
                         />

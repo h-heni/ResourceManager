@@ -33,12 +33,14 @@ interface InvoiceItem {
     vat?: number;
 }
 
-interface RelatedDevis {
+interface RelatedQuote {
     id: number;
     number: string;
     date: string;
     totalAmount: number;
     status: string;
+    createdBy?: string;
+    modifiedBy?: string;
 }
 
 interface RelatedDeliveryNote {
@@ -46,6 +48,8 @@ interface RelatedDeliveryNote {
     number: string;
     date: string;
     status: string;
+    createdBy?: string;
+    modifiedBy?: string;
 }
 
 interface InvoiceDetails {
@@ -74,8 +78,8 @@ interface InvoiceDetails {
     remainingAmount: number;
     payments: Payment[];
     items: InvoiceItem[];
-    devisId?: number;
-    relatedDevis?: RelatedDevis;
+    quoteId?: number;
+    relatedQuote?: RelatedQuote;
     relatedDeliveryNotes?: RelatedDeliveryNote[];
     createdAt: string;
     updatedAt?: string;
@@ -201,7 +205,7 @@ export default function InvoiceDetailView({
             const total = Number(invoice?.totalAmount || 0);
             const paid = Number(invoice?.amountPaid || 0);
             const percentage = total > 0 ? Number(Math.min(100, (paid / total) * 100) ): 0;
-            const percentageDisplay = Number(percentage.toFixed(1)) * 100 ;
+            const percentageDisplay = Number(percentage.toFixed(1)) ;
     const formatDate = (date: string) => {
         return new Date(date).toLocaleDateString('fr-FR', {
             year: 'numeric',
@@ -497,10 +501,10 @@ export default function InvoiceDetailView({
                                         <p className="text-sm text-gray-500">{t('invoice.paymentProgress')}</p>
                                         <div className="mt-2">
                                             {/* Progress = (AmountPaid / TotalAmount) * 100, guarded against zero */}
-                                            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                                            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                                                 <div
                                                     className="h-full bg-emerald-500 rounded-full transition-all"
-                                                    style={{ width: percentageDisplay }}
+                                                    style={{ width: `${percentageDisplay}%` }}
                                                     />
                                             </div>
                                             <p className="text-sm text-gray-600 mt-1">
@@ -538,8 +542,8 @@ export default function InvoiceDetailView({
                                     {invoice.items && invoice.items.length > 0 ? (
                                         invoice.items.map((item, index) => (
                                             <tr key={item.id || index} className="hover:bg-gray-50">
-                                                <td className="px-4 py-3 text-gray-500">{index + 1}</td>
-                                                <td className="px-4 py-3 text-gray-900 font-medium">{item.description}</td>
+                                                <td className="px-4 py-3 text-start text-gray-500">{index + 1}</td>
+                                                <td className="px-4 py-3 text-start text-gray-900 font-medium">{item.description}</td>
                                                 <td className="px-4 py-3 text-end text-gray-700">{item.quantity}</td>
                                                 <td className="px-4 py-3 text-end text-gray-700">{formatCurrency(item.unitPrice)}</td>
                                                 <td className="px-4 py-3 text-end text-gray-700">{item.vat ? `${(item.vat * 100).toFixed(0)}%` : '0%'}</td>
@@ -617,11 +621,11 @@ export default function InvoiceDetailView({
                                                             </div>
                                                             {payment.notes && <p className="text-xs text-gray-400 mt-0.5 ml-8">{payment.notes}</p>}
                                                         </td>
-                                                        <td className="px-4 py-3 text-sm text-gray-600">
+                                                        <td className="px-4 py-3 text-start text-sm text-gray-600 whitespace-nowrap">
                                                             {formatDate(payment.paymentDate)}
                                                             {payment.isScheduled && <span className="ms-1 text-amber-600 text-xs">({t('payment.scheduled')})</span>}
                                                         </td>
-                                                        <td className="px-4 py-3 text-sm text-gray-600">
+                                                        <td className="px-4 py-3 text-start text-sm text-gray-600">
                                                             {payment.handledByName ? (
                                                                 <span className="inline-flex items-center gap-1">
                                                                     <User size={14} className="text-gray-400" />
@@ -631,7 +635,7 @@ export default function InvoiceDetailView({
                                                                 <span className="text-gray-400 italic">-</span>
                                                             )}
                                                         </td>
-                                                        <td className="px-4 py-3">
+                                                        <td className="px-4 py-3 text-start">
                                                             <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${payment.status === 'Completed'
                                                                 ? 'bg-emerald-100 text-emerald-800'
                                                                 : 'bg-amber-100 text-amber-800'
@@ -673,26 +677,34 @@ export default function InvoiceDetailView({
                                     <ClipboardList size={18} className="me-2 text-blue-600" />
                                     <h3 className="font-semibold text-blue-900">{t('invoice.relatedQuote')}</h3>
                                 </div>
-                                {invoice.relatedDevis ? (
+                                {invoice.relatedQuote ? (
                                     <div className="p-4 flex items-center justify-between">
                                         <div>
                                             <p className="font-medium text-gray-900">
-                                                {t('quote.title')} #{invoice.relatedDevis.number}
+                                                {t('quote.title')} #{invoice.relatedQuote.number}
                                             </p>
                                             <p className="text-sm text-gray-500">
-                                                {formatDate(invoice.relatedDevis.date)} • {formatCurrency(invoice.relatedDevis.totalAmount)}
+                                                {formatDate(invoice.relatedQuote.date)} • {formatCurrency(invoice.relatedQuote.totalAmount)}
                                             </p>
+                                            <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
+                                                {invoice.relatedQuote.createdBy && (
+                                                    <span className="text-[11px] text-gray-400">{t('common.createdBy')}{invoice.relatedQuote.createdBy}</span>
+                                                )}
+                                                {invoice.relatedQuote.modifiedBy && (
+                                                    <span className="text-[11px] text-gray-400">{t('common.updatedBy')}{invoice.relatedQuote.modifiedBy}</span>
+                                                )}
+                                            </div>
                                         </div>
-                                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${invoice.relatedDevis.status === 'Accepted'
+                                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${invoice.relatedQuote.status === 'Accepted'
                                             ? 'bg-emerald-100 text-emerald-800'
                                             : 'bg-gray-100 text-gray-800'
                                             }`}>
-                                            {invoice.relatedDevis.status}
+                                            {invoice.relatedQuote.status}
                                         </span>
                                     </div>
-                                ) : invoice.devisId ? (
+                                ) : invoice.quoteId ? (
                                     <div className="p-4 text-gray-600">
-                                        <p>{t('invoice.linkedQuote', 'Linked Quote')}: #{invoice.devisId}</p>
+                                        <p>{t('invoice.linkedQuote', 'Linked Quote')}: #{invoice.quoteId}</p>
                                     </div>
                                 ) : (
                                     <div className="p-8 text-center text-gray-500">
@@ -717,6 +729,14 @@ export default function InvoiceDetailView({
                                                         {t('deliveryNote.title')} #{note.number}
                                                     </p>
                                                     <p className="text-sm text-gray-500">{formatDate(note.date)}</p>
+                                                    <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
+                                                        {note.createdBy && (
+                                                            <span className="text-[11px] text-gray-400">{t('common.createdBy')}{note.createdBy}</span>
+                                                        )}
+                                                        {note.modifiedBy && (
+                                                            <span className="text-[11px] text-gray-400">{t('common.updatedBy')}{note.modifiedBy}</span>
+                                                        )}
+                                                    </div>
                                                 </div>
                                                 <span className="px-3 py-1 rounded-full text-sm font-medium bg-[#065F46]/10 text-[#065F46]">
                                                     {note.status || 'Delivered'}
