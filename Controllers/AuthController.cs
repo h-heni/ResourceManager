@@ -249,7 +249,7 @@ namespace ResourceManager.Controllers
                 {
                     UserId = user.Id,
                     TokenHash = ComputeTokenHash(token),
-                    ExpiresAt = DateTime.UtcNow.AddHours(1),
+                    ExpiresAt = DateTime.UtcNow.AddHours(_configuration.GetValue<int>("PasswordReset:TokenExpirationHours", 1)),
                     RequestIpAddress = ip
                 };
                 _context.PasswordResetTokens.Add(resetToken);
