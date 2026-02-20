@@ -163,17 +163,18 @@ builder.Services.AddCors(options =>
 // Your Custom Services
 builder.Services.AddScoped<SupabaseStorageService>();
 
-// Email Service
+// Email Service (legacy System.Net.Mail - fallback)
 builder.Services.AddScoped<ResourceManager.Services.IEmailService, ResourceManager.Services.EmailService>();
 
-// Gmail OAuth Service (NO App Passwords - uses OAuth 2.0)
-builder.Services.AddScoped<ResourceManager.Services.IGmailOAuthService, ResourceManager.Services.GmailOAuthService>();
+// MailKit Email Service (production-grade SMTP with templates, audit logging)
+// Uses local domain SMTP - no third-party dependencies
+builder.Services.AddScoped<ResourceManager.Services.IMailKitEmailService, ResourceManager.Services.MailKitEmailService>();
 
 // Local PDF Storage Service
 builder.Services.AddScoped<ResourceManager.Services.ILocalPdfStorageService, ResourceManager.Services.LocalPdfStorageService>();
 
-// Fournisseur PDF Scanner Service (Part 4: PDF Upload + Data Extraction)
-builder.Services.AddScoped<ResourceManager.Services.IFournisseurPdfScannerService, ResourceManager.Services.FournisseurPdfScannerService>();
+// Supplier PDF Scanner Service (Part 4: PDF Upload + Data Extraction)
+builder.Services.AddScoped<ResourceManager.Services.ISupplierPdfScannerService, ResourceManager.Services.SupplierPdfScannerService>();
 
 // Due Payment Processor — DISABLED: payments stay Pending until manually approved
 // builder.Services.AddScoped<ResourceManager.Services.IDuePaymentProcessor, ResourceManager.Services.DuePaymentProcessorService>();
@@ -203,7 +204,7 @@ builder.Services.AddRateLimiter(options =>
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 100,
+                PermitLimit = 300,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));
@@ -220,13 +221,13 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0
             }));
 
-    // Moderate limiter for search/list endpoints
+    // Moderate limiter for search/list endpoints (SPA fires 10+ concurrent calls per page load)
     options.AddPolicy("Moderate", context =>
         RateLimitPartition.GetFixedWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 60,
+                PermitLimit = 200,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));
@@ -237,7 +238,7 @@ builder.Services.AddRateLimiter(options =>
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
             _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 200,
+                PermitLimit = 400,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));
@@ -392,6 +393,9 @@ app.UseAuthorization();
 
 // Session tracking middleware (tracks active authenticated users)
 app.UseMiddleware<SessionTrackingMiddleware>();
+
+// Subscription lockout middleware (blocks expired/suspended accounts)
+app.UseMiddleware<SubscriptionLockoutMiddleware>();
 
 // Health check handled by HealthController (includes DB connectivity check)
 

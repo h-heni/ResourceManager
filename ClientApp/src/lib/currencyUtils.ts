@@ -114,3 +114,60 @@ export function hasMixedCurrencies<T>(
     const first = getCurrency(items[0]);
     return items.some(item => getCurrency(item) !== first);
 }
+
+/**
+ * Returns the number of decimal places for a given ISO 4217 currency code.
+ * TND/BHD/OMR/KWD use 3 decimals; JPY/KRW/VND/CLP use 0; all others use 2.
+ */
+export function getDecimalPlaces(currencyCode: string): number {
+    const code = currencyCode.trim().toUpperCase();
+    switch (code) {
+        case 'TND': case 'BHD': case 'OMR': case 'KWD':
+            return 3;
+        case 'JPY': case 'KRW': case 'VND': case 'CLP':
+            return 0;
+        default:
+            return 2;
+    }
+}
+
+/**
+ * Intl locale tags for Tunisian-standard number formatting.
+ * All locales use space-thousands / comma-decimal (Tunisian standard: 2 026,700).
+ */
+const CURRENCY_INTL_LOCALE_MAP: Record<string, string> = {
+    en: 'fr-FR', // Tunisian standard even for English
+    fr: 'fr-FR',
+    ar: 'ar-TN',
+    de: 'fr-FR', // Tunisian standard
+};
+
+function resolveCurrencyIntlLocale(locale: string): string {
+    const lang = locale.split('-')[0].toLowerCase();
+    return CURRENCY_INTL_LOCALE_MAP[lang] || 'fr-FR';
+}
+
+/**
+ * Format a monetary amount with currency-aware decimal precision and locale symbol.
+ * Uses the **Tunisian standard**: space as thousands separator, comma as decimal
+ * separator, 3 decimal places for TND (e.g. "2 026,700 DT").
+ *
+ * @param amount  Numeric amount
+ * @param currencyCode  ISO 4217 code (e.g. 'TND')
+ * @param locale  Active UI locale (e.g. 'fr', 'en')
+ * @returns Formatted string like "2 026,700 DT" or "2 026,700 TND"
+ */
+export function formatCurrencyAmount(
+    amount: number,
+    currencyCode: string = DEFAULT_CURRENCY,
+    locale: string = 'en'
+): string {
+    const decimals = getDecimalPlaces(currencyCode);
+    const symbol = getLocaleCurrencySymbol(currencyCode, locale);
+    const intlLocale = resolveCurrencyIntlLocale(locale);
+    const formatted = amount.toLocaleString(intlLocale, {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+    });
+    return `${formatted}\u00A0${symbol}`;
+}

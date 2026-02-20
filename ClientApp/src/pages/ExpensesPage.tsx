@@ -349,6 +349,13 @@ export default function ExpensesPage() {
             ) : (
                 <div className="rm-table-card">
                     <table className="rm-table">
+                        <colgroup>
+                            <col style={{ width: '32%' }} />{/* Description */}
+                            <col style={{ width: '18%' }} />{/* Category */}
+                            <col style={{ width: '15%' }} />{/* Date */}
+                            <col style={{ width: '20%' }} />{/* Amount */}
+                            <col style={{ width: '15%' }} />{/* Actions */}
+                        </colgroup>
                         <thead>
                             <tr>
                                 <th>{t('expense.description')}</th>

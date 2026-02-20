@@ -154,7 +154,7 @@ namespace ResourceManager.Controllers
                 .Include(p => p.Invoice)
                     .ThenInclude(i => i!.Payments)
                 .Include(p => p.Invoice)
-                    .ThenInclude(i => i!.Devis)
+                    .ThenInclude(i => i!.Quote)
                 .FirstOrDefaultAsync(p => p.Id == notification.PaymentId);
 
             if (payment == null) return NotFound(new { message = "Payment not found" });
@@ -183,11 +183,11 @@ namespace ResourceManager.Controllers
                 {
                     payment.Invoice.Status = "Paid";
                     
-                    // Mark related devis as treated
-                    if (payment.Invoice.Devis != null)
+                    // Mark related quote as treated
+                    if (payment.Invoice.Quote != null)
                     {
-                        payment.Invoice.Devis.Status = "Completed";
-                        payment.Invoice.Devis.Treated = true;
+                        payment.Invoice.Quote.Status = "Completed";
+                        payment.Invoice.Quote.Treated = true;
                     }
                     
                     // Mark related delivery notes as treated  
@@ -272,7 +272,7 @@ namespace ResourceManager.Controllers
                     .Include(p => p.Invoice)
                         .ThenInclude(i => i!.Client)
                     .Include(p => p.Invoice)
-                        .ThenInclude(i => i!.Devis)
+                        .ThenInclude(i => i!.Quote)
                     .Where(p => p.CreatedByUserId == userId && p.Status == "Pending" && p.PaymentDate <= DateTime.UtcNow)
                     .Select(p => new
                     {
@@ -284,7 +284,7 @@ namespace ResourceManager.Controllers
                         ClientName = p.Invoice != null && p.Invoice.Client != null ? p.Invoice.Client.Name : "Unknown",
                         InvoiceTotal = p.Invoice != null ? p.Invoice.TotalAmount : 0m,
                         p.Notes,
-                        InvoiceCurrencySymbol = p.Invoice != null && p.Invoice.Devis != null ? p.Invoice.Devis.CurrencySymbol : "TND"
+                        InvoiceCurrencySymbol = p.Invoice != null && p.Invoice.Quote != null ? p.Invoice.Quote.CurrencySymbol : "TND"
                     })
                     .ToListAsync();
 
@@ -307,7 +307,7 @@ namespace ResourceManager.Controllers
                 .Include(p => p.Invoice)
                     .ThenInclude(i => i!.Payments)
                 .Include(p => p.Invoice)
-                    .ThenInclude(i => i!.Devis)
+                    .ThenInclude(i => i!.Quote)
                 .FirstOrDefaultAsync(p => p.Id == paymentId && p.CreatedByUserId == userId);
 
             if (payment == null) return NotFound(new { message = "Payment not found" });
@@ -343,10 +343,10 @@ namespace ResourceManager.Controllers
                     payment.Invoice.Treated = true;
                     payment.Invoice.TreatedByUserId = userId;
                     payment.Invoice.TreatedAt = DateTime.UtcNow;
-                    if (payment.Invoice.Devis != null)
+                    if (payment.Invoice.Quote != null)
                     {
-                        payment.Invoice.Devis.Status = "Completed";
-                        payment.Invoice.Devis.Treated = true;
+                        payment.Invoice.Quote.Status = "Completed";
+                        payment.Invoice.Quote.Treated = true;
                     }
                     var deliveryNotes = await _context.DeliveryNotes
                         .Where(dn => dn.InvoiceId == payment.InvoiceId)
@@ -420,20 +420,20 @@ namespace ResourceManager.Controllers
 
                 // List pending supplier payments that need manual approval (Status == Pending AND due date <= today)
                 var dueSupplierPayments = await _context.SupplierPayments
-                    .Include(p => p.FournisseurInvoice)
-                        .ThenInclude(fi => fi!.Fournisseur)
+                    .Include(p => p.SupplierInvoice)
+                        .ThenInclude(fi => fi!.Supplier)
                     .Where(p => p.CreatedByUserId == userId && p.Status == "Pending" && p.PaymentDate <= DateTime.UtcNow)
                     .Select(p => new
                     {
                         p.Id,
                         p.Amount,
                         p.PaymentDate,
-                        SupplierInvoiceId = p.FournisseurInvoiceId,
-                        InvoiceNumber = p.FournisseurInvoice != null ? (p.FournisseurInvoice.InvoiceNumber ?? "Unknown") : "Unknown",
-                        SupplierName = p.FournisseurInvoice != null && p.FournisseurInvoice.Fournisseur != null ? p.FournisseurInvoice.Fournisseur.Name : "Unknown",
-                        InvoiceTotal = p.FournisseurInvoice != null ? p.FournisseurInvoice.TotalTTC : 0m,
+                        SupplierInvoiceId = p.SupplierInvoiceId,
+                        InvoiceNumber = p.SupplierInvoice != null ? (p.SupplierInvoice.InvoiceNumber ?? "Unknown") : "Unknown",
+                        SupplierName = p.SupplierInvoice != null && p.SupplierInvoice.Supplier != null ? p.SupplierInvoice.Supplier.Name : "Unknown",
+                        InvoiceTotal = p.SupplierInvoice != null ? p.SupplierInvoice.TotalTTC : 0m,
                         p.Notes,
-                        InvoiceCurrencySymbol = p.FournisseurInvoice != null ? p.FournisseurInvoice.CurrencySymbol : "TND"
+                        InvoiceCurrencySymbol = p.SupplierInvoice != null ? p.SupplierInvoice.CurrencySymbol : "TND"
                     })
                     .ToListAsync();
 
@@ -453,7 +453,7 @@ namespace ResourceManager.Controllers
             var userId = _userManager.GetUserId(User);
 
             var payment = await _context.SupplierPayments
-                .Include(p => p.FournisseurInvoice)
+                .Include(p => p.SupplierInvoice)
                     .ThenInclude(fi => fi!.Payments)
                 .FirstOrDefaultAsync(p => p.Id == paymentId && p.CreatedByUserId == userId);
 
@@ -475,7 +475,7 @@ namespace ResourceManager.Controllers
             await _context.SaveChangesAsync();
 
             // Get updated payment status
-            var paymentStatus = payment.FournisseurInvoice?.PaymentStatus ?? "Unknown";
+            var paymentStatus = payment.SupplierInvoice?.PaymentStatus ?? "Unknown";
 
             return Ok(new { 
                 message = "Supplier payment confirmed successfully",

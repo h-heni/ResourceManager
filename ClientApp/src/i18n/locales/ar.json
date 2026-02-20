@@ -58,6 +58,8 @@
     "apply": "تطبيق",
     "creating": "جاري الإنشاء",
     "downloading": "جاري التحميل",
+    "sending": "جاري الإرسال...",
+    "processing": "جاري المعالجة...",
     "from": "من",
     "hide": "إخفاء",
     "select": "اختيار",
@@ -67,7 +69,16 @@
     "imported": "مستورد",
     "viewOnly": "عرض فقط",
     "year": "السنة",
-    "new": "جديد"
+    "new": "جديد",
+    "discard": "تجاهل",
+    "quantity": "الكمية",
+    "refresh": "تحديث",
+    "retry": "إعادة المحاولة",
+    "archivedBy": "أرشف بواسطة",
+    "confirmedBy": "تم التأكيد بواسطة"
+  },
+  "detail": {
+    "taxId": "المعرف الجبائي"
   },
   "pagination": {
     "previous": "السابق",
@@ -90,6 +101,30 @@
     "loginError": "فشل تسجيل الدخول",
     "signupSuccess": "تم إنشاء الحساب بنجاح",
     "signupError": "فشل التسجيل",
+    "forgotPasswordTitle": "نسيت كلمة المرور",
+    "forgotPasswordSubtitle": "أدخل بريدك الإلكتروني وسنرسل لك رابط إعادة التعيين",
+    "emailPlaceholder": "أدخل عنوان بريدك الإلكتروني",
+    "sendResetLink": "إرسال رابط إعادة التعيين",
+    "backToLogin": "العودة إلى تسجيل الدخول",
+    "checkEmail": "تحقق من بريدك الإلكتروني",
+    "resetEmailSent": "إذا كان هناك حساب مرتبط بهذا البريد الإلكتروني، ستتلقى رابط إعادة تعيين كلمة المرور قريباً. يرجى التحقق من صندوق الوارد ومجلد البريد العشوائي.",
+    "resetPasswordTitle": "إعادة تعيين كلمة المرور",
+    "resetPasswordSubtitle": "أدخل كلمة المرور الجديدة أدناه",
+    "newPassword": "كلمة المرور الجديدة",
+    "newPasswordPlaceholder": "أدخل كلمة المرور الجديدة",
+    "confirmPassword": "تأكيد كلمة المرور",
+    "confirmPasswordPlaceholder": "تأكيد كلمة المرور الجديدة",
+    "resetPassword": "إعادة تعيين كلمة المرور",
+    "passwordRequirements": "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل",
+    "passwordMismatch": "كلمات المرور غير متطابقة",
+    "passwordTooShort": "يجب أن تتكون كلمة المرور من 8 أحرف على الأقل",
+    "resetFailed": "فشلت إعادة تعيين كلمة المرور. يرجى المحاولة مرة أخرى.",
+    "passwordResetSuccess": "تم إعادة تعيين كلمة المرور بنجاح",
+    "redirectingToLogin": "جاري التوجيه إلى صفحة تسجيل الدخول...",
+    "loginNow": "تسجيل الدخول الآن",
+    "invalidResetLink": "رابط غير صالح",
+    "resetLinkExpiredOrInvalid": "رابط إعادة تعيين كلمة المرور هذا غير صالح أو منتهي الصلاحية. يرجى طلب رابط جديد.",
+    "requestNewLink": "طلب رابط جديد",
     "placeholders": {
       "companyName": "أدخل الاسم القانوني الكامل لشركتك",
       "firstName": "الاسم الأول",
@@ -100,6 +135,7 @@
     },
     "messages": {
       "accountCreated": "تم إنشاء الحساب",
+      "accountCreatedDetail": "تم إنشاء حسابك بنجاح. يمكنك الآن تسجيل الدخول.",
       "backToLogin": "العودة إلى تسجيل الدخول",
       "createAccount": "إنشاء حساب",
       "createAccountSubtitle": "العنوان الفرعي لإنشاء الحساب",
@@ -116,7 +152,9 @@
       "retryIn": "أعد المحاولة بعد",
       "signInPrompt": "يرجى تسجيل الدخول",
       "signingIn": "جارٍ تسجيل الدخول",
-      "welcomeBack": "مرحباً بعودتك"
+      "welcomeBack": "مرحباً بعودتك",
+      "wrongPassword": "البريد الإلكتروني أو كلمة المرور غير صحيحة. يرجى المحاولة مرة أخرى.",
+      "accountNotFound": "لم يتم العثور على حساب بهذا البريد الإلكتروني."
     },
     "checklist": {
       "length": "6 أحرف على الأقل",
@@ -143,7 +181,8 @@
     "salesSection": "المبيعات",
     "purchasesSection": "المشتريات",
     "dataManagement": "إدارة البيانات",
-    "selectLanguage": "اختر اللغة"
+    "selectLanguage": "اختر اللغة",
+    "subscriptions": "الاشتراكات"
   },
   "invoice": {
     "title": "الفواتير",
@@ -169,6 +208,7 @@
     "unitPrice": "سعر الوحدة",
     "tax": "ضريبة",
     "subtotal": "المجموع الفرعي",
+    "vat": "ض.ق.م",
     "taxAmount": "مبلغ الضريبة",
     "fiscalStamp": "الطابع الجبائي",
     "totalAmount": "المبلغ الإجمالي",
@@ -272,6 +312,7 @@
       "formattingHint": "تلميح التنسيق"
     },
     "noTax": "بدون ضريبة",
+    "draft": "مسودة",
     "viewDetails": "عرض التفاصيل",
     "price": "السعر",
     "save": "حفظ"
@@ -294,11 +335,15 @@
     "archived": "مؤرشف",
     "searchPlaceholder": "البحث بالرقم أو العميل...",
     "save": "حفظ عرض السعر",
+    "editQuote": "تعديل عرض السعر",
+    "editLoadFailed": "فشل تحميل عرض السعر",
+    "onlyDraftEditable": "يمكن تعديل عروض الأسعار المسودة فقط",
     "qtyLabel": "الكمية",
     "items": "العناصر",
     "quoteNumberLabel": "رقم العرض",
     "taxRateLabel": "نسبة الضريبة %",
     "unitPriceLabel": "السعر لكل وحدة",
+    "descriptionPlaceholder": "وصف العنصر",
     "status": {
       "Draft": "مسودة",
       "Accepted": "مقبول",
@@ -329,6 +374,8 @@
     "linkedDoc": "المستند المرتبط",
     "noData": "لا توجد سندات تسليم",
     "confirmDelete": "هل أنت متأكد أنك تريد حذف سند التسليم هذا؟",
+    "editDeliveryNote": "تعديل سند التسليم",
+    "editLoadFailed": "فشل تحميل سند التسليم",
     "deleteFailed": "فشل حذف سند التسليم",
     "messages": {
       "allDeliveredHelp": "تم تسليم جميع الكميات من عرض السعر هذا بالفعل.",
@@ -340,6 +387,7 @@
       "overDeliveryTitle": "تم اكتشاف تسليم زائد",
       "previousDeliveryNotes": "أذون التسليم السابقة",
       "previousDeliveryNotesHelp": "الكميات التي تم تسليمها بالفعل في أذون التسليم السابقة.",
+      "productNotInCatalog": "يجب اختيار كل عنصر من كتالوج المنتجات أو إنشاؤه كمنتج جديد",
       "totalDelivered": "إجمالي المسلم"
     }
   },
@@ -374,6 +422,7 @@
   "supplier": {
     "title": "الموردون",
     "newSupplier": "مورد جديد",
+    "addressPlaceholder": "عنوان المورد...",
     "messages": {
       "addTitle": "إضافة عنوان",
       "address": "العنوان",
@@ -457,6 +506,12 @@
     "emailSignature": "توقيع البريد الإلكتروني",
     "emailSettings": "إعدادات البريد الإلكتروني",
     "emailConnection": "اتصال البريد الإلكتروني",
+    "sendTestEmail": "إرسال بريد اختباري",
+    "reloadConfig": "إعادة تحميل الإعدادات",
+    "smtpInfo": "إعدادات SMTP",
+    "smtpInfoText": "يتم إرسال البريد عبر خادم SMTP الخاص بنطاقك (mail.rscmanager.com). تتم إدارة الإعدادات عبر متغيرات البيئة على الخادم.",
+    "emailReady": "خدمة البريد الإلكتروني نشطة",
+    "emailNotReady": "خدمة البريد الإلكتروني غير مُهيأة",
     "colors": "الألوان",
     "primaryColor": "اللون الرئيسي",
     "secondaryColor": "اللون الثانوي",
@@ -499,7 +554,7 @@
     "noSubfolders": "لا توجد مجلدات فرعية",
     "onDisk": "على القرص",
     "parentFolder": "المجلد الرئيسي",
-    "pdfSignerPosition": "موضع موقع PDF",
+    "pdfSignerPosition": "منصب الموقع في ملف",
     "pdfStorageFolder": "مجلد تخزين PDF",
     "pdfStorageFolderDesc": "وصف مجلد تخزين PDF",
     "recoveryComplete": "اكتمل الاسترداد",
@@ -507,12 +562,44 @@
     "regenerateMissing": "إعادة إنشاء المفقود",
     "regeneratingPdfs": "جارٍ إعادة إنشاء ملفات PDF",
     "selectFolder": "اختر مجلد",
-    "signerPositionHelp": "مساعدة موضع الموقع",
-    "signerPositionPlaceholder": "عنصر نائب لموضع الموقع",
+    "signerPositionHelp": "مساعدة موقع أو لقب الموقع في ملف PDF",
+    "signerPositionPlaceholder": "عنصر نائب لموضع أو لقب الموقع",
     "totalRegistered": "إجمالي المسجلين",
     "useThisFolder": "استخدم هذا المجلد",
     "proInvoiceTokenHelp": "الرمز المميز الظاهر في مستندات الفاتورة الشكلية الرسمية.",
-    "proInvoiceTokenSignature": "توقيع رمز الفاتورة الشكلية"
+    "proInvoiceTokenSignature": "توقيع رمز الفاتورة الشكلية",
+    "logoHint": "PNG أو JPG، بحد أقصى 2 ميجابايت. يظهر على ملفات PDF والبريد الإلكتروني.",
+    "signatureHint": "PNG بخلفية شفافة موصى به. بحد أقصى 2 ميجابايت.",
+    "signatureNameHelp": "الاسم الذي يظهر بخط عريض على توقيع PDF",
+    "uploadSignatureFirst": "قم بتحميل توقيع أولاً",
+    "livePdfPreview": "معاينة PDF مباشرة",
+    "previewDesc": "معاينة فاتورتك بالألوان والشعار والتوقيع واللغة الحالية.",
+    "lockedSettingsHint": "إعدادات العملة والضريبة مقفلة بعد الإعداد الأولي. المعلومات البنكية تبقى قابلة للتعديل.",
+    "defaultVatRate": "معدل ضريبة القيمة المضافة الافتراضي (%)",
+    "customTaxHint": "قم بتكوين ضريبة مخصصة مثل الطابع الجبائي",
+    "bankInfoHint": "يظهر على فواتير PDF للدفع. قم بتبديل إظهار كل حقل.",
+    "exampleCalculation": "مثال على حساب الفاتورة",
+    "confirmStoragePath": "تأكيد مسار التخزين",
+    "noPermission": "ليس لديك صلاحية الوصول إلى الإعدادات.",
+    "colorPreview": "معاينة الألوان",
+    "generating": "جاري الإنشاء...",
+    "generatePreview": "إنشاء معاينة",
+    "bankNameLabel": "اسم البنك",
+    "bankBICLabel": "BIC / SWIFT",
+    "bankIBANLabel": "IBAN",
+    "showField": "إظهار",
+    "cannotModifyLater": "لا يمكن تعديل هذا الموقع لاحقًا.",
+    "financialLockWarning": "سيتم أيضًا قفل الإعدادات المالية (العملة، معدل الضريبة، الضريبة المخصصة) بعد هذا الحفظ.",
+    "subtotal": "المجموع الفرعي",
+    "thankYouPlaceholder": "شكرًا لتعاملكم!",
+    "emailSubjectPlaceholder": "فاتورة #@InvoiceNumber من @CompanyName",
+    "emailBodyPlaceholder": "أدخل قالب البريد الإلكتروني مع العناصر النائبة @...",
+    "emailSignaturePlaceholder": "مع أطيب التحيات،\nمحمد أحمد\nمدير مالي",
+    "exchangeRatePlaceholder": "مثلاً 3.3",
+    "bankNamePlaceholder": "مثلاً BIAT",
+    "bankBICPlaceholder": "مثلاً BIATTNTT",
+    "bankIBANPlaceholder": "مثلاً TN59 0800 6012 0108 0187 5250",
+    "pdfFooterPlaceholder": "شكراً لتعاملكم معنا!"
   },
   "dashboard": {
     "title": "لوحة التحكم",
@@ -582,7 +669,13 @@
     "pending": "معلّقة",
     "users": "المستخدمون",
     "revenueByYear": "الإيرادات السنوية",
+    "expensesByYear": "المصاريف السنوية",
+    "topSoldProducts": "المنتجات الأكثر مبيعاً",
+    "topPurchasedProducts": "المنتجات الأكثر شراءً",
+    "fetchError": "فشل تحميل بيانات لوحة التحكم. يرجى المحاولة مرة أخرى.",
+    "share": "الحصة",
     "allTime": "جميع الأوقات",
+    "allYears": "جميع السنوات",
     "lastYear": "السنة الماضية"
   },
   "email": {
@@ -720,7 +813,14 @@
     "issues": "مشكلة/مشاكل",
     "fixNow": "إصلاح الآن ←",
     "consistencyFailed": "فشل فحص التناسق",
-    "pendingPayments": "Pending Payments"
+    "pendingPayments": "مدفوعات معلقة",
+    "totalPaid": "إجمالي المدفوع",
+    "noPaymentsRecorded": "لا توجد مدفوعات مسجلة حتى الآن.",
+    "verifyExtracted": "تحقق من المعلومات المستخرجة وصححها قبل الحفظ",
+    "documentCurrency": "عملة المستند",
+    "currencyOfInvoice": "عملة فاتورة المورد هذه",
+    "invoiceNumberPlaceholder": "مثلاً FACT-2025-001",
+    "morePayments": "+{{count}} إضافي"
   },
   "expense": {
     "title": "مصاريف أخرى",
@@ -864,7 +964,10 @@
     "suggested": "مقترح",
     "titleEdit": "تعديل الفاتورة",
     "titleNew": "إنشاء فاتورة جديدة",
-    "updateButton": "تحديث الفاتورة"
+    "updateButton": "تحديث الفاتورة",
+    "currencyFromQuote": "العملة موروثة من عرض السعر المرتبط",
+    "inheritedFromQuote": "موروث من عرض السعر",
+    "languageFromQuote": "اللغة موروثة من عرض السعر المرتبط"
   },
   "dataManagement": {
     "dropOrSelect": "اسحب أو اختر",
@@ -879,7 +982,10 @@
     "importDesc": "وصف الاستيراد",
     "selectFile": "اختر ملف",
     "subtitle": "العنوان الفرعي",
-    "title": "العنوان"
+    "title": "العنوان",
+    "requiredColumns": "الأعمدة المطلوبة:",
+    "optionalColumns": "الأعمدة الاختيارية:",
+    "downloadTemplateCsv": "تحميل قالب CSV"
   },
   "devis": {
     "descriptionPlaceholder": "وصف الاقتباس"
@@ -911,6 +1017,10 @@
     "uploading": "جارٍ التحميل"
   },
   "users": {
+    "capacity": {
+      "label": "السعة",
+      "full": "ممتلئ"
+    },
     "actions": {
       "addEmployee": "إضافة موظف",
       "addTenant": "إضافة مستأجر",
@@ -943,7 +1053,12 @@
       "newPasswordPlaceholder": "عنصر نائب كلمة المرور الجديدة",
       "passwordRequired": "كلمة المرور مطلوبة",
       "emailPlaceholder": "manager@company.com",
-      "phone": "الهاتف"
+      "phone": "الهاتف",
+      "employeeCapacity": "سعة الموظفين",
+      "employeeCapacityHint": "الحد الأقصى لعدد الموظفين لهذا المستأجر",
+      "employeeCapacityPlaceholder": "مثلاً 10",
+      "preferredLanguage": "اللغة المفضلة",
+      "preferredLanguageHint": "اللغة الافتراضية لهذا المستخدم"
     },
     "messages": {
       "authRequired": "المصادقة مطلوبة",
@@ -1002,6 +1117,10 @@
     "changeLogo": "تغيير الشعار",
     "completeSetup": "إكمال الإعداد",
     "continue": "متابعة",
+    "testPath": "اختبار المسار",
+    "browse": "تصفح",
+    "pathTestSuccess": "المسار صالح وقابل للكتابة",
+    "pathTestFailed": "فشل اختبار المسار. تحقق من الصلاحيات.",
     "customTaxEnable": "تفعيل ضريبة/ختم مخصص",
     "defaultVatRate": "نسبة ضريبة القيمة المضافة الافتراضية",
     "messages": {
@@ -1010,6 +1129,7 @@
     },
     "none": "لا شيء",
     "notSet": "غير محدد",
+    "existing": "موجود",
     "placeholders": {
       "baseStoragePath": "C:\\MyCompany\\ResourceManager\\PDFs",
       "companyAddress": "عنوان الشارع المدينة الرمز البريدي",
@@ -1023,6 +1143,8 @@
     "steps": {
       "companyInfo": "معلومات الشركة",
       "financialBranding": "المالية والهوية",
+      "financial": "المالية والبنك",
+      "brandingPdf": "الهوية وPDF",
       "storageFinish": "التخزين والإنهاء"
     },
     "storagePathExample": "مثال: C:\\MyCompany\\Invoices",
@@ -1035,6 +1157,13 @@
       "success": "اكتمل إعداد الشركة! أهلا بك."
     },
     "uploadLogo": "رفع الشعار",
+    "bankInfoDesc": "يظهر على فواتير PDF للدفع. بدّل رؤية كل حقل.",
+    "bankName": "اسم البنك",
+    "showOnPdf": "عرض",
+    "fileSystemLanguage": "لغة نظام الملفات",
+    "fileSystemLanguageWarning": "دائم — لا يمكن تغييره بعد الحفظ. يحدد أسماء المجلدات.",
+    "fileSystemLanguageLocked": "هذه اللغة مقفلة ولا يمكن تغييرها.",
+    "pdfFooterPlaceholder": "شكرا لثقتكم!",
     "validation": {
       "companyAddressRequired": "عنوان الشركة مطلوب",
       "companyNameRequired": "اسم الشركة مطلوب",
@@ -1089,6 +1218,86 @@
     "passwordMismatch": "كلمات المرور غير متطابقة.",
     "passwordMinLength": "يجب أن تتكون كلمة المرور من 6 أحرف على الأقل.",
     "defaultCurrency": "العملة الافتراضية",
-    "defaultLanguage": "اللغة الافتراضية"
+    "defaultLanguage": "اللغة الافتراضية",
+    "language": "لغة التطبيق",
+    "languageHint": "سيتم استخدام هذه اللغة في جميع أنحاء التطبيق",
+    "languageSection": "اختر لغتك",
+    "languageSectionDesc": "اختر لغتك المفضلة. سيتم تبديل النموذج والتطبيق فوراً."
+  },
+  "document": {
+    "lockedInvoiceGenerated": "المستند مقفل: تم إنشاء الفاتورة بالفعل."
+  },
+  "directoryBrowser": {
+    "title": "اختيار مجلد التخزين",
+    "selectDrive": "اختر محرك أقراص",
+    "goUp": "للأعلى",
+    "newFolder": "مجلد جديد",
+    "newFolderPlaceholder": "أدخل اسم المجلد...",
+    "create": "إنشاء",
+    "createFolderError": "فشل إنشاء المجلد",
+    "browseError": "فشل تصفح المجلدات",
+    "emptyFolder": "هذا المجلد فارغ",
+    "accessDenied": "تم رفض الوصول",
+    "selectFolder": "اختيار هذا المجلد"
+  },
+  "subscription": {
+    "title": "إدارة الاشتراكات",
+    "subtitle": "إدارة اشتراكات الشركات والسعة والوصول.",
+    "fetchError": "فشل تحميل الشركات.",
+    "actionError": "فشل الإجراء.",
+    "saved": "تم الحفظ بنجاح.",
+    "saveFailed": "فشل الحفظ.",
+    "search": "البحث بالاسم أو البريد أو المعرف...",
+    "noResults": "لم يتم العثور على شركات.",
+    "daysLeft": "يوم متبقي",
+    "expired": "منتهي",
+    "capacityFull": "ممتلئ",
+    "unlimited": "0 = غير محدود",
+    "maxEmployees": "الحد الأقصى",
+    "capacityWarning": "الموظفون الحاليون ({{count}}) يتجاوزون هذا الحد. لن يتمكن المدير من إضافة موظفين جدد حتى يتم حذف بعضهم.",
+    "extend1m": "+1 شهر",
+    "extend1y": "+1 سنة",
+    "reactivate": "إعادة التفعيل",
+    "suspend": "تعليق",
+    "edit": "تعديل",
+    "stats": {
+      "total": "إجمالي الشركات",
+      "active": "نشطة",
+      "expiring": "قريبة الانتهاء",
+      "suspended": "معلقة / منتهية"
+    },
+    "filter": {
+      "all": "الكل",
+      "active": "نشط",
+      "expired": "منتهي",
+      "suspended": "معلق"
+    },
+    "col": {
+      "company": "الشركة",
+      "status": "الحالة",
+      "expiry": "تاريخ الانتهاء",
+      "capacity": "الموظفون",
+      "actions": "الإجراءات"
+    },
+    "status": {
+      "active": "نشط",
+      "suspended": "معلق",
+      "expired": "منتهي",
+      "expiring": "قريب الانتهاء"
+    },
+    "field": {
+      "status": "حالة الحساب",
+      "expiry": "تاريخ انتهاء الاشتراك",
+      "capacity": "سعة الموظفين"
+    }
+  },
+  "accountLocked": {
+    "suspendedTitle": "الحساب معلق",
+    "suspendedMessage": "تم تعليق حساب شركتك من قبل المسؤول. تم حظر الوصول إلى التطبيق مؤقتاً.",
+    "expiredTitle": "انتهى الاشتراك",
+    "expiredMessage": "انتهى اشتراك شركتك. يرجى التواصل مع المسؤول لتجديد الاشتراك واستعادة الوصول.",
+    "expiredOn": "انتهى في",
+    "contactAdmin": "يرجى التواصل مع مسؤول شركتك للمساعدة.",
+    "logout": "تسجيل الخروج"
   }
 }

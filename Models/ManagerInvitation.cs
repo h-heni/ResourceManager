@@ -9,12 +9,12 @@ namespace ResourceManager.Models
         [Key]
         public Guid Id { get; set; }
 
-        [Required(ErrorMessage = "L'email est obligatoire.")]
+        [Required(ErrorMessage = "Email is required.")]
         [StringLength(256)]
-        [EmailAddress(ErrorMessage = "Le format de l'email est invalide.")]
+        [EmailAddress(ErrorMessage = "Invalid email format.")]
         public string Email { get; set; } = string.Empty;
 
-        [Required(ErrorMessage = "Le token est obligatoire.")]
+        [Required(ErrorMessage = "Token is required.")]
         public string Token { get; set; } = string.Empty;
 
         public DateTime ExpirationDate { get; set; }
@@ -22,6 +22,19 @@ namespace ResourceManager.Models
         public bool IsUsed { get; set; } = false;
 
         public DateTime CreatedAt { get; set; }
+
+        /// <summary>
+        /// Max employees this tenant is allowed (0 = unlimited).
+        /// SuperAdmin sets this when sending the invitation.
+        /// </summary>
+        public int EmployeeCapacity { get; set; } = 0;
+
+        /// <summary>
+        /// Preferred UI language for the invited manager (en, fr, ar, de).
+        /// Applied when the invitation link is opened.
+        /// </summary>
+        [StringLength(5)]
+        public string PreferredLanguage { get; set; } = "fr";
 
         [ForeignKey("CreatedByUser")]
         public string? CreatedByUserId { get; set; }

@@ -8,14 +8,14 @@ using Microsoft.AspNetCore.Identity;
 
 namespace ResourceManager.Controllers
 {
-    public class FournisseursController : BaseApiController
+    public class SuppliersController : BaseApiController
     {
         private readonly AppDbContext _context;
         private readonly SupabaseStorageService _storageService;
         private readonly UserManager<ApplicationUser> _userManager;
-        private readonly ILogger<FournisseursController> _logger;
+        private readonly ILogger<SuppliersController> _logger;
 
-        public FournisseursController(AppDbContext context, SupabaseStorageService storageService, UserManager<ApplicationUser> userManager, ILogger<FournisseursController> logger)
+        public SuppliersController(AppDbContext context, SupabaseStorageService storageService, UserManager<ApplicationUser> userManager, ILogger<SuppliersController> logger)
         {
             _context = context;
             _storageService = storageService;
@@ -23,16 +23,16 @@ namespace ResourceManager.Controllers
             _logger = logger;
         }
 
-        // GET: api/fournisseurs
+        // GET: api/suppliers
         [HttpGet]
-        public async Task<IActionResult> GetFournisseurs([FromQuery] int page = 1, [FromQuery] int size = 20)
+        public async Task<IActionResult> GetSuppliers([FromQuery] int page = 1, [FromQuery] int size = 20)
         {
             try
             {
                 if (page < 1) page = 1;
                 if (size < 1) size = 20;
 
-                var query = _context.Fournisseurs.AsNoTracking().OrderBy(f => f.Name);
+                var query = _context.Suppliers.AsNoTracking().OrderBy(f => f.Name);
 
                 var totalCount = await query.CountAsync();
                 
@@ -50,7 +50,7 @@ namespace ResourceManager.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error fetching suppliers (fournisseurs)");
+                _logger.LogError(ex, "Error fetching suppliers");
                 return Ok(new {
                     Data = Array.Empty<object>(),
                     Page = page,
@@ -60,52 +60,52 @@ namespace ResourceManager.Controllers
             }
         }
 
-        // GET: api/fournisseurs/{id}
+        // GET: api/suppliers/{id}
         [HttpGet("{id}")]
-        public async Task<IActionResult> GetFournisseur(int id)
+        public async Task<IActionResult> GetSupplier(int id)
         {
-            var f = await _context.Fournisseurs.FindAsync(id);
+            var f = await _context.Suppliers.FindAsync(id);
             if (f == null) return NotFound();
             return Ok(f);
         }
 
-        // POST: api/fournisseurs
+        // POST: api/suppliers
         [HttpPost]
-        public async Task<IActionResult> CreateFournisseur([FromBody] CreateFournisseurDto dto)
+        public async Task<IActionResult> CreateSupplier([FromBody] CreateSupplierDto dto)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
             
             var userId = _userManager.GetUserId(User);
 
-            var f = new Fournisseur
+            var f = new Supplier
             {
                 Name = dto.Name,
                 Address = dto.Address,
-                MatriculeFiscal = dto.MatriculeFiscal,
+                TaxId = dto.TaxId,
                 Phone = dto.Phone,
                 CreatedByUserId = userId,
                 CreatedAt = DateTime.UtcNow
             };
 
-            _context.Fournisseurs.Add(f);
+            _context.Suppliers.Add(f);
             
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction(nameof(GetFournisseur), new { id = f.Id }, f);
+            return CreatedAtAction(nameof(GetSupplier), new { id = f.Id }, f);
         }
 
-        // PUT: api/fournisseurs/{id}
+        // PUT: api/suppliers/{id}
         [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateFournisseur(int id, [FromBody] UpdateFournisseurDto dto)
+        public async Task<IActionResult> UpdateSupplier(int id, [FromBody] UpdateSupplierDto dto)
         {
              if (!ModelState.IsValid) return BadRequest(ModelState);
              
-             var f = await _context.Fournisseurs.FindAsync(id);
+             var f = await _context.Suppliers.FindAsync(id);
              if (f == null) return NotFound();
              
              f.Name = dto.Name;
              f.Address = dto.Address;
-             f.MatriculeFiscal = dto.MatriculeFiscal;
+             f.TaxId = dto.TaxId;
              f.Phone = dto.Phone;
              f.UpdatedAt = DateTime.UtcNow;
              
@@ -113,11 +113,11 @@ namespace ResourceManager.Controllers
              return Ok(f);
         }
 
-        // DELETE: api/fournisseurs/{id}
+        // DELETE: api/suppliers/{id}
         [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteFournisseur(int id)
+        public async Task<IActionResult> DeleteSupplier(int id)
         {
-            var f = await _context.Fournisseurs.FindAsync(id);
+            var f = await _context.Suppliers.FindAsync(id);
             if (f == null) return NotFound();
             
             f.IsDeleted = true;
@@ -126,12 +126,12 @@ namespace ResourceManager.Controllers
             return NoContent();
         }
 
-        // POST: api/fournisseurs/{id}/upload-invoice
+        // POST: api/suppliers/{id}/upload-invoice
         [HttpPost("{id}/upload-invoice")]
         public async Task<IActionResult> UploadInvoice(int id, IFormFile file)
         {
-            var f = await _context.Fournisseurs.FindAsync(id);
-            if (f == null) return NotFound("Fournisseur not found");
+            var f = await _context.Suppliers.FindAsync(id);
+            if (f == null) return NotFound("Supplier not found");
 
             if (file == null || file.Length == 0) return BadRequest("No file uploaded.");
 
@@ -139,16 +139,16 @@ namespace ResourceManager.Controllers
             await file.CopyToAsync(memoryStream);
             var fileBytes = memoryStream.ToArray();
 
-            // Folder structure: Fournisseurs/{id}/{filename}
-            string folder = $"Fournisseurs/{id}";
+            // Folder structure: Suppliers/{id}/{filename}
+            string folder = $"Suppliers/{id}";
             var publicUrl = await _storageService.UploadPdfAsync(fileBytes, folder, file.FileName);
 
             var userId = _userManager.GetUserId(User);
 
-            // Create FournisseurInvoice record
-            var invoice = new FournisseurInvoice
+            // Create SupplierInvoice record
+            var invoice = new SupplierInvoice
             {
-                FournisseurId = id,
+                SupplierId = id,
                 FileName = file.FileName,
                 FilePath = publicUrl,
                 FileType = Path.GetExtension(file.FileName).Replace(".", ""),
@@ -157,7 +157,7 @@ namespace ResourceManager.Controllers
                 UserId = userId,
             };
             
-            _context.Set<FournisseurInvoice>().Add(invoice);
+            _context.Set<SupplierInvoice>().Add(invoice);
 
             await _context.SaveChangesAsync();
 
@@ -169,14 +169,14 @@ namespace ResourceManager.Controllers
         // ═══════════════════════════════════════════════════════════════
 
         /// <summary>
-        /// POST: api/fournisseurs/scan-pdf
-        /// Upload a fournisseur PDF and extract invoice data
+        /// POST: api/suppliers/scan-pdf
+        /// Upload a supplier PDF and extract invoice data
         /// Returns extracted data for review/correction before saving
         /// </summary>
         [HttpPost("scan-pdf")]
-        public async Task<IActionResult> ScanFournisseurPdf(
+        public async Task<IActionResult> ScanSupplierPdf(
             IFormFile file,
-            [FromServices] IFournisseurPdfScannerService scannerService)
+            [FromServices] ISupplierPdfScannerService scannerService)
         {
             if (file == null || file.Length == 0)
                 return BadRequest(new { message = "No file uploaded" });
@@ -212,13 +212,13 @@ namespace ResourceManager.Controllers
         }
 
         /// <summary>
-        /// POST: api/fournisseurs/save-scanned
-        /// Save the scanned/corrected fournisseur data and invoice PDF
+        /// POST: api/suppliers/save-scanned
+        /// Save the scanned/corrected supplier data and invoice PDF
         /// </summary>
         [HttpPost("save-scanned")]
-        public async Task<IActionResult> SaveScannedFournisseur(
+        public async Task<IActionResult> SaveScannedSupplier(
             [FromForm] SaveScannedFournisseurDto dto,
-            [FromServices] IFournisseurPdfScannerService scannerService,
+            [FromServices] ISupplierPdfScannerService scannerService,
             [FromServices] ILocalPdfStorageService? pdfStorageService = null)
         {
             var userId = _userManager.GetUserId(User);
@@ -227,43 +227,43 @@ namespace ResourceManager.Controllers
             var user = await _userManager.FindByIdAsync(userId);
             if (user == null) return Unauthorized();
 
-            // Check if fournisseur with this name already exists
-            var existingFournisseur = await _context.Fournisseurs
+            // Check if supplier with this name already exists
+            var existingSupplier = await _context.Suppliers
                 .FirstOrDefaultAsync(f => f.Name == dto.FournisseurName && !f.IsDeleted);
 
-            Fournisseur fournisseur;
+            Supplier supplier;
 
-            if (existingFournisseur != null)
+            if (existingSupplier != null)
             {
-                // Update existing fournisseur
-                fournisseur = existingFournisseur;
+                // Update existing supplier
+                supplier = existingSupplier;
                 if (!string.IsNullOrWhiteSpace(dto.Phone))
-                    fournisseur.Phone = dto.Phone;
+                    supplier.Phone = dto.Phone;
                 if (!string.IsNullOrWhiteSpace(dto.Address))
-                    fournisseur.Address = dto.Address;
-                fournisseur.UpdatedAt = DateTime.UtcNow;
+                    supplier.Address = dto.Address;
+                supplier.UpdatedAt = DateTime.UtcNow;
             }
             else
             {
-                // Create new fournisseur
-                fournisseur = new Fournisseur
+                // Create new supplier
+                supplier = new Supplier
                 {
                     CompanyId = user.CompanyId,
                     Name = dto.FournisseurName ?? "Unknown Supplier",
                     Phone = dto.Phone ?? string.Empty,
                     Address = dto.Address ?? string.Empty,
-                    MatriculeFiscal = string.Empty, // Can be updated later
+                    TaxId = string.Empty, // Can be updated later
                     CreatedByUserId = userId,
                     CreatedAt = DateTime.UtcNow
                 };
-                _context.Fournisseurs.Add(fournisseur);
+                _context.Suppliers.Add(supplier);
                 await _context.SaveChangesAsync();
             }
 
             // Handle the PDF file
             string? pdfUrl = null;
             string? localPath = null;
-            int? fournisseurInvoiceId = null;
+            int? supplierInvoiceId = null;
 
             if (dto.PdfFile != null && dto.PdfFile.Length > 0)
             {
@@ -272,13 +272,13 @@ namespace ResourceManager.Controllers
                 var fileBytes = memoryStream.ToArray();
 
                 // Upload to cloud storage
-                string folder = $"Fournisseurs/{fournisseur.Id}";
+                string folder = $"Suppliers/{supplier.Id}";
                 pdfUrl = await _storageService.UploadPdfAsync(fileBytes, folder, dto.PdfFile.FileName);
 
-                // Create FournisseurInvoice record first to get the ID
-                var invoice = new FournisseurInvoice
+                // Create SupplierInvoice record first to get the ID
+                var invoice = new SupplierInvoice
                 {
-                    FournisseurId = fournisseur.Id,
+                    SupplierId = supplier.Id,
                     FileName = dto.PdfFile.FileName,
                     FilePath = pdfUrl,
                     FileType = "pdf",
@@ -290,9 +290,9 @@ namespace ResourceManager.Controllers
                     CreatedAt = DateTime.UtcNow,
                     UserId = userId
                 };
-                _context.Set<FournisseurInvoice>().Add(invoice);
+                _context.Set<SupplierInvoice>().Add(invoice);
                 await _context.SaveChangesAsync();
-                fournisseurInvoiceId = invoice.Id;
+                supplierInvoiceId = invoice.Id;
 
                 // Also save locally if local storage service is available
                 if (pdfStorageService != null)
@@ -300,10 +300,10 @@ namespace ResourceManager.Controllers
                     var company = await _context.Companies.FindAsync(user.CompanyId);
                     if (company != null)
                     {
-                        var saveResult = await pdfStorageService.SaveFournisseurPdfAsync(
+                        var saveResult = await pdfStorageService.SaveSupplierPdfAsync(
                             fileBytes,
                             dto.PdfFile.FileName,
-                            fournisseur.Name,
+                            supplier.Name,
                             company.Name ?? "Default",
                             dto.InvoiceDate ?? DateTime.UtcNow,
                             invoice.Id);
@@ -315,22 +315,22 @@ namespace ResourceManager.Controllers
 
             return Ok(new
             {
-                message = existingFournisseur != null
-                    ? "Fournisseur updated and invoice saved"
-                    : "Fournisseur created and invoice saved",
-                fournisseurId = fournisseur.Id,
-                fournisseurName = fournisseur.Name,
-                fournisseurInvoiceId,
+                message = existingSupplier != null
+                    ? "Supplier updated and invoice saved"
+                    : "Supplier created and invoice saved",
+                supplierId = supplier.Id,
+                supplierName = supplier.Name,
+                supplierInvoiceId,
                 pdfUrl,
                 localPath,
-                isNewFournisseur = existingFournisseur == null
+                isNewSupplier = existingSupplier == null
             });
         }
     }
 }
 
 // ═══════════════════════════════════════════════════════════════
-// DTO for saving scanned fournisseur data
+// DTO for saving scanned supplier data
 // ═══════════════════════════════════════════════════════════════
 
 namespace ResourceManager.DTOs
@@ -338,7 +338,7 @@ namespace ResourceManager.DTOs
     public class SaveScannedFournisseurDto
     {
         public IFormFile? PdfFile { get; set; }
-        public string? FournisseurName { get; set; }
+        public string? FournisseurName { get; set; } // kept for backward compat with frontend form field
         public string? Email { get; set; }
         public string? Phone { get; set; }
         public string? Address { get; set; }

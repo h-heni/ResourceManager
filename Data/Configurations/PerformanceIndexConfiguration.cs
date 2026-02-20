@@ -35,15 +35,15 @@ public class InvoiceIndexConfiguration : IEntityTypeConfiguration<Invoice>
     }
 }
 
-public class DevisIndexConfiguration : IEntityTypeConfiguration<Devis>
+public class QuoteIndexConfiguration : IEntityTypeConfiguration<Quote>
 {
-    public void Configure(EntityTypeBuilder<Devis> builder)
+    public void Configure(EntityTypeBuilder<Quote> builder)
     {
         builder.HasIndex(e => new { e.CompanyId, e.IsDeleted })
-            .HasDatabaseName("IX_Devis_CompanyId_IsDeleted");
+            .HasDatabaseName("IX_Quotes_CompanyId_IsDeleted");
 
         builder.HasIndex(e => e.Date)
-            .HasDatabaseName("IX_Devis_Date");
+            .HasDatabaseName("IX_Quotes_Date");
     }
 }
 
@@ -59,21 +59,21 @@ public class DeliveryNoteIndexConfiguration : IEntityTypeConfiguration<DeliveryN
     }
 }
 
-public class FournisseurIndexConfiguration : IEntityTypeConfiguration<Fournisseur>
+public class SupplierIndexConfiguration : IEntityTypeConfiguration<Supplier>
 {
-    public void Configure(EntityTypeBuilder<Fournisseur> builder)
+    public void Configure(EntityTypeBuilder<Supplier> builder)
     {
         builder.HasIndex(e => new { e.CompanyId, e.IsDeleted })
-            .HasDatabaseName("IX_Fournisseurs_CompanyId_IsDeleted");
+            .HasDatabaseName("IX_Suppliers_CompanyId_IsDeleted");
     }
 }
 
-public class FournisseurInvoiceIndexConfiguration : IEntityTypeConfiguration<FournisseurInvoice>
+public class SupplierInvoiceIndexConfiguration : IEntityTypeConfiguration<SupplierInvoice>
 {
-    public void Configure(EntityTypeBuilder<FournisseurInvoice> builder)
+    public void Configure(EntityTypeBuilder<SupplierInvoice> builder)
     {
         builder.HasIndex(e => new { e.CompanyId, e.IsDeleted })
-            .HasDatabaseName("IX_FournisseurInvoices_CompanyId_IsDeleted");
+            .HasDatabaseName("IX_SupplierInvoices_CompanyId_IsDeleted");
     }
 }
 
@@ -146,8 +146,8 @@ public class SupplierPaymentIndexConfiguration : IEntityTypeConfiguration<Suppli
 {
     public void Configure(EntityTypeBuilder<SupplierPayment> builder)
     {
-        builder.HasIndex(e => new { e.FournisseurInvoiceId, e.Status })
-            .HasDatabaseName("IX_SupplierPayments_FournisseurInvoiceId_Status");
+        builder.HasIndex(e => new { e.SupplierInvoiceId, e.Status })
+            .HasDatabaseName("IX_SupplierPayments_SupplierInvoiceId_Status");
     }
 }
 

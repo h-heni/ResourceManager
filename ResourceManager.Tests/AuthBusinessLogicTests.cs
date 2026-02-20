@@ -205,7 +205,7 @@ public class AuthBusinessLogicTests
         {
             Name = "Test Company",
             Address = "123 Street",
-            MatriculeFiscal = "MF123456",
+            TaxId = "MF123456",
             Phone = "+216 71 123 456",
             CreatedAt = DateTime.UtcNow
         };

@@ -9,7 +9,7 @@ namespace ResourceManager.Services
     /// <summary>
     /// Manages local PDF storage with organized folder structure:
     /// CompanyName/Year/Clients/ClientName/Month/DocumentType/files
-    /// CompanyName/Year/Fournisseurs/FournisseurName/Month/Invoices/files
+    /// CompanyName/Year/Suppliers/SupplierName/Month/Invoices/files
     /// </summary>
     public interface ILocalPdfStorageService
     {
@@ -26,15 +26,15 @@ namespace ResourceManager.Services
             int relatedEntityId);
 
         /// <summary>
-        /// Saves a PDF file for a fournisseur invoice
+        /// Saves a PDF file for a supplier invoice
         /// </summary>
-        Task<PdfFileInfo> SaveFournisseurPdfAsync(
+        Task<PdfFileInfo> SaveSupplierPdfAsync(
             byte[] pdfBytes,
             string fileName,
-            string fournisseurName,
+            string supplierName,
             string companyName,
             DateTime documentDate,
-            int fournisseurInvoiceId);
+            int supplierInvoiceId);
 
         /// <summary>
         /// Gets the configured base folder path
@@ -244,7 +244,7 @@ namespace ResourceManager.Services
                 {
                     PdfDocumentType.Invoice => "Invoice",
                     PdfDocumentType.DeliveryNote => "DeliveryNote",
-                    PdfDocumentType.Quote => "Devis",
+                    PdfDocumentType.Quote => "Quote",
                     _ => "Unknown"
                 },
                 RelatedEntityId = relatedEntityId,
@@ -272,29 +272,29 @@ namespace ResourceManager.Services
         }
 
         /// <summary>
-        /// Saves a fournisseur invoice PDF with proper folder structure
+        /// Saves a supplier invoice PDF with proper folder structure
         /// </summary>
-        public async Task<PdfFileInfo> SaveFournisseurPdfAsync(
+        public async Task<PdfFileInfo> SaveSupplierPdfAsync(
             byte[] pdfBytes,
             string fileName,
-            string fournisseurName,
+            string supplierName,
             string companyName,
             DateTime documentDate,
-            int fournisseurInvoiceId)
+            int supplierInvoiceId)
         {
             var basePath = GetBaseFolderPath();
             var sanitizedCompanyName = SanitizeFolderName(companyName);
-            var sanitizedFournisseurName = SanitizeFolderName(fournisseurName);
+            var sanitizedSupplierName = SanitizeFolderName(supplierName);
             var year = documentDate.Year.ToString();
             var month = GetFrenchMonth(documentDate.Month);
 
-            // Build folder path: CompanyName/Year/Fournisseurs/FournisseurName/Month/Invoices
+            // Build folder path: CompanyName/Year/Suppliers/SupplierName/Month/Invoices
             var folderPath = Path.Combine(
                 basePath,
                 sanitizedCompanyName,
                 year,
-                "Fournisseurs",
-                sanitizedFournisseurName,
+                "Suppliers",
+                sanitizedSupplierName,
                 month,
                 "Invoices"
             );
@@ -326,11 +326,11 @@ namespace ResourceManager.Services
                 FileName = Path.GetFileName(fullPath),
                 RelativePath = relativePath,
                 FullPath = fullPath,
-                DocumentType = PdfDocumentType.FournisseurInvoice,
+                DocumentType = PdfDocumentType.SupplierInvoice,
                 DocumentNumber = Path.GetFileNameWithoutExtension(fileName),
-                RelatedEntityType = "FournisseurInvoice",
-                RelatedEntityId = fournisseurInvoiceId,
-                FournisseurName = fournisseurName,
+                RelatedEntityType = "SupplierInvoice",
+                RelatedEntityId = supplierInvoiceId,
+                SupplierName = supplierName,
                 DocumentDate = documentDate,
                 FileSizeBytes = pdfBytes.Length,
                 CreatedAt = DateTime.UtcNow
@@ -341,7 +341,7 @@ namespace ResourceManager.Services
             context.PdfFileRecords.Add(record);
             await context.SaveChangesAsync();
 
-            _logger.LogInformation("Fournisseur PDF saved: {Path} ({Size} bytes)", relativePath, pdfBytes.Length);
+            _logger.LogInformation("Supplier PDF saved: {Path} ({Size} bytes)", relativePath, pdfBytes.Length);
 
             return new PdfFileInfo
             {
@@ -556,8 +556,8 @@ namespace ResourceManager.Services
             {
                 PdfDocumentType.Invoice => "Factures",
                 PdfDocumentType.DeliveryNote => "BonsLivraison",
-                PdfDocumentType.Quote => "Devis",
-                PdfDocumentType.FournisseurInvoice => "FacturesFournisseur",
+                PdfDocumentType.Quote => "Quotes",
+                PdfDocumentType.SupplierInvoice => "SupplierInvoices",
                 _ => "Autres"
             };
         }

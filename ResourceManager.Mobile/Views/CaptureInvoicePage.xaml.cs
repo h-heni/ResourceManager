@@ -267,7 +267,7 @@ public partial class CaptureInvoicePage : ContentPage
 
     private void ShowExtractionResults(SupplierExtractionResult result)
     {
-        ExtSupplierLabel.Text = result.FournisseurName ?? "Unknown";
+        ExtSupplierLabel.Text = result.SupplierName ?? "Unknown";
         ExtInvoiceNumLabel.Text = result.InvoiceNumber ?? "—";
         ExtTotalLabel.Text = result.TotalTTC > 0 ? $"{result.TotalTTC:N2}" : "—";
         ExtTotalHTLabel.Text = result.TotalHT > 0 ? $"{result.TotalHT:N2}" : "—";

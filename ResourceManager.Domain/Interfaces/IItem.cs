@@ -1,7 +1,7 @@
 namespace ResourceManager.Domain.Interfaces;
 
 /// <summary>
-/// Contract for line items (InvoiceItem, DevisItem, DeliveryNoteItem).
+/// Contract for line items (InvoiceItem, QuoteItem, DeliveryNoteItem).
 /// Used for polymorphic PDF generation.
 /// </summary>
 public interface IItem

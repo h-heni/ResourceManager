@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Plus, Trash2, Save, FileText, AlertCircle, PackagePlus, X, Check } from 'lucide-react';
 import api from '../services/api';
@@ -12,7 +12,7 @@ interface Client {
     name: string;
 }
 
-interface DevisItem {
+interface QuoteItem {
     description: string;
     quantity: number;
     price: number;
@@ -46,11 +46,14 @@ interface ProductSuggestion {
     tvaRate?: number;
 }
 
-export default function DevisCreatePage() {
+export default function QuoteCreatePage() {
     const navigate = useNavigate();
     const { t } = useTranslation();
     const { notify, NotifyBanner } = useNotify();
+    const { id: editId } = useParams<{ id: string }>();
+    const isEditMode = !!editId;
     const [loading, setLoading] = useState(false);
+    const [loadingQuote, setLoadingQuote] = useState(false);
     const [clients, setClients] = useState<Client[]>([]);
     const [errors, setErrors] = useState<ValidationErrors>({});
     const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -80,13 +83,15 @@ export default function DevisCreatePage() {
     const [quoteNumber, setQuoteNumber] = useState('');
     const [lastQuoteNumber, setLastQuoteNumber] = useState('');
     const [suggestedQuoteNumber, setSuggestedQuoteNumber] = useState('');
-    const [items, setItems] = useState<DevisItem[]>([
+    const [items, setItems] = useState<QuoteItem[]>([
         { description: '', quantity: 1, price: 0, tva: true, vatRate: 19, fromCatalog: false }
     ]);
 
     useEffect(() => {
         fetchClients();
-        fetchLastQuoteNumber();
+        if (!isEditMode) {
+            fetchLastQuoteNumber();
+        }
         const fetchTaxSettings = async () => {
             try {
                 const res = await api.get('/Settings');
@@ -134,6 +139,45 @@ export default function DevisCreatePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // Fetch quote data for edit mode
+    useEffect(() => {
+        const fetchQuoteForEdit = async (quoteId: number) => {
+            setLoadingQuote(true);
+            try {
+                const res = await api.get(`/Quotes/${quoteId}`);
+                const q = res.data;
+                setQuoteNumber(q.number || '');
+                setDate(q.date ? new Date(q.date).toISOString().split('T')[0] : '');
+                setClientId(q.clientId?.toString() || '');
+                if (q.currency) setPdfCurrency(q.currency);
+                if (q.currencySymbol) setPdfCurrencySymbol(q.currencySymbol);
+                if (q.pdfLanguage) setPdfLanguage(q.pdfLanguage);
+                setItems(
+                    q.quoteItems && q.quoteItems.length > 0
+                        ? q.quoteItems.map((item: { description?: string; quantity?: number; price?: number; tva?: boolean; vatRate?: number }) => ({
+                            description: item.description || '',
+                            quantity: item.quantity || 1,
+                            price: item.price || 0,
+                            tva: item.tva ?? true,
+                            vatRate: item.vatRate != null ? Math.round(item.vatRate * 100) : 19,
+                            fromCatalog: true
+                        }))
+                        : [{ description: '', quantity: 1, price: 0, tva: true, vatRate: 19, fromCatalog: false }]
+                );
+            } catch (error) {
+                logger.error('Error fetching quote for edit', error);
+                notify('error', t('quote.editLoadFailed', 'Failed to load quote'));
+                navigate('/quotes');
+            } finally {
+                setLoadingQuote(false);
+            }
+        };
+        if (isEditMode && editId) {
+            fetchQuoteForEdit(parseInt(editId));
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isEditMode, editId]);
+
     const fetchClients = async () => {
         try {
             const res = await api.get('/Clients?size=9999');
@@ -146,7 +190,7 @@ export default function DevisCreatePage() {
 
     const fetchLastQuoteNumber = async () => {
         try {
-            const res = await api.get('/Devis/last-number');
+            const res = await api.get('/Quotes/last-number');
             setLastQuoteNumber(res.data.lastNumber || '');
             setSuggestedQuoteNumber(res.data.suggestedNumber || '');
             setQuoteNumber(res.data.suggestedNumber || '');
@@ -288,7 +332,7 @@ export default function DevisCreatePage() {
         setItems(items.filter((_, i) => i !== index));
     };
 
-    const updateItem = (index: number, field: keyof DevisItem, value: string | number | boolean) => {
+    const updateItem = (index: number, field: keyof QuoteItem, value: string | number | boolean) => {
         const newItems = [...items];
         const current = newItems[index];
         if (!current) return;
@@ -378,7 +422,11 @@ export default function DevisCreatePage() {
                     }))
             };
 
-            await api.post('/Devis', payload);
+            if (isEditMode && editId) {
+                await api.put(`/Quotes/${editId}`, payload);
+            } else {
+                await api.post('/Quotes', payload);
+            }
             navigate('/quotes');
         } catch (error: unknown) {
             logger.error("Error creating quote", error);
@@ -402,17 +450,17 @@ export default function DevisCreatePage() {
                         <ArrowLeft size={24} />
                     </button>
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900">{t('quote.newQuote')}</h1>
-                        <p className="text-gray-500 text-sm">{t('quote.title')}</p>
+                        <h1 className="text-2xl font-bold text-gray-900">{isEditMode ? t('quote.editQuote', 'Edit Quote') : t('quote.newQuote')}</h1>
+                        <p className="text-gray-500 text-sm">{isEditMode ? `${t('quote.title')} #${quoteNumber}` : t('quote.title')}</p>
                     </div>
                 </div>
                 <button
                     onClick={handleSubmit}
-                    disabled={loading}
+                    disabled={loading || loadingQuote}
                     className="w-full sm:w-auto flex items-center justify-center px-6 py-3 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <Save size={20} className="mr-2" />
-                    {loading ? t('common.saving') : t('invoice.save')}
+                    {loading ? t('common.saving') : isEditMode ? t('common.save') : t('invoice.save')}
                 </button>
             </div>
 
@@ -557,7 +605,7 @@ export default function DevisCreatePage() {
                                         onBlur={() => { handleBlur('items'); dismissSuggestions(); }}
                                         className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#065F46] outline-none ${item.description.trim() === '' && touched.items ? 'border-amber-400' : 'border-gray-200'
                                             }`}
-                                        placeholder={t('devis.descriptionPlaceholder', 'Type to search products...')}
+                                        placeholder={t('quote.descriptionPlaceholder', 'Type to search products...')}
                                         autoComplete="off"
                                     />
                                     {/* Product suggestions dropdown */}

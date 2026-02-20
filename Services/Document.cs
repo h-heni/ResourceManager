@@ -83,14 +83,14 @@ namespace ResourceManager.Services
             {
                 PrimaryColor = settings?.PrimaryColor ?? (previewDefaults ? "#667eea" : "#00AEEF"),
                 SecondaryColor = settings?.SecondaryColor ?? "#764ba2",
-                CurrencySymbol = currencyOverride ?? settings?.CurrencySymbol ?? (previewDefaults ? "TND" : "DT"),
+                CurrencySymbol = currencyOverride ?? settings?.CurrencySymbol ?? "TND",
                 ShowLogo = settings?.ShowCompanyLogo ?? true,
                 LogoData = company?.LogoData,
                 FooterText = settings?.PdfFooterText,
                 PaymentMethods = company?.PaymentMethods ?? new List<string>(),
                 CompanyName = company?.Name ?? (previewDefaults ? "Your Company" : ""),
                 CompanyAddress = company?.Address ?? (previewDefaults ? "123 Business St" : ""),
-                CompanyTaxId = company?.MatriculeFiscal ?? (previewDefaults ? "000ABC000" : ""),
+                CompanyTaxId = company?.TaxId ?? (previewDefaults ? "000ABC000" : ""),
                 CompanyPhone = company?.Phone ?? (previewDefaults ? "+216 00 000 000" : ""),
                 CustomTaxEnabled = settings?.CustomTaxEnabled ?? true,
                 CustomTaxName = settings?.CustomTaxName ?? "Timbre Fiscal",
@@ -119,6 +119,38 @@ namespace ResourceManager.Services
     {
         public static string NormalizeCurrency(string? currencyCode)
             => string.IsNullOrWhiteSpace(currencyCode) ? string.Empty : currencyCode.Trim().ToUpperInvariant();
+
+        /// <summary>
+        /// Returns the number of decimal places for a given ISO 4217 currency code.
+        /// TND/BHD/OMR/KWD use 3 decimals; JPY/KRW use 0; all others use 2.
+        /// </summary>
+        public static int GetDecimalPlaces(string? currencyCode)
+        {
+            var code = NormalizeCurrency(currencyCode);
+            return code switch
+            {
+                "TND" or "BHD" or "OMR" or "KWD" => 3,
+                "JPY" or "KRW" or "VND" or "CLP" => 0,
+                _ => 2
+            };
+        }
+
+        /// <summary>
+        /// Returns a locale-aware display symbol for a currency code.
+        /// FR/AR: TND → "DT", SAR → "SAR"
+        /// EN/DE: TND → "TND", SAR → "SAR"
+        /// </summary>
+        public static string GetDisplayCurrencySymbol(string? currencyCode, string? language)
+        {
+            var code = NormalizeCurrency(currencyCode);
+            var lang = (language ?? "fr").ToLowerInvariant().Split('-')[0];
+
+            if (code == "TND")
+                return lang is "fr" or "ar" ? "DT" : "TND";
+
+            // All other currencies use their ISO code
+            return string.IsNullOrEmpty(code) ? "EUR" : code;
+        }
 
         public static string BuildZatcaQrBase64(string sellerName, string vatNumber, DateTime timestampUtc, decimal invoiceTotal, decimal vatTotal)
         {
@@ -216,7 +248,7 @@ namespace ResourceManager.Services
 
         /// <summary>
         /// Build TND QR payload as a short pipe-delimited electronic seal string.
-        /// Format: MatriculeFiscal|InvoiceNumber|Date|TotalTTC(3dec)|SHA256Digest
+        /// Format: TaxId|InvoiceNumber|Date|TotalTTC(3dec)|SHA256Digest
         /// This is scannable and human-readable — NOT the full TEIF XML.
         /// </summary>
         public static string BuildTndQrPayload(Invoice invoice, PdfSettings settings, string uniqueReferenceId)
@@ -261,7 +293,7 @@ namespace ResourceManager.Services
         private static readonly string HeaderDark = "#232323";
         private static readonly string TextGrey = "#666666";
         private static readonly string ZebraGrey = "#F0F0F0";
-        private static readonly CultureInfo MoneyCulture = CultureInfo.GetCultureInfo("en-US");
+        private static readonly CultureInfo MoneyCulture = CultureInfo.GetCultureInfo("fr-FR");
 
         private string CurrencyCode => Settings.CurrencySymbol;
 
@@ -296,13 +328,31 @@ namespace ResourceManager.Services
         
         private string FormatAmount(decimal value)
         {
-            var currency = string.IsNullOrWhiteSpace(CurrencyCode) ? "EUR" : CurrencyCode.Trim();
-            return $"{value.ToString("N2", MoneyCulture)}\u00A0{currency}";
+            var rawCode = string.IsNullOrWhiteSpace(CurrencyCode) ? "EUR" : CurrencyCode.Trim();
+            var decimals = FiscalComplianceHelper.GetDecimalPlaces(rawCode);
+            var symbol = FiscalComplianceHelper.GetDisplayCurrencySymbol(rawCode, Settings.InvoiceLanguage);
+            var format = $"N{decimals}";
+            return $"{value.ToString(format, MoneyCulture)}\u00A0{symbol}";
         }
 
-        private static string FormatAmountWithoutCurrency(decimal value)
+        private string FormatAmountWithoutCurrency(decimal value)
         {
-            return value.ToString("N2", MoneyCulture);
+            var rawCode = string.IsNullOrWhiteSpace(CurrencyCode) ? "EUR" : CurrencyCode.Trim();
+            var decimals = FiscalComplianceHelper.GetDecimalPlaces(rawCode);
+            return value.ToString($"N{decimals}", MoneyCulture);
+        }
+
+        /// <summary>
+        /// Format quantity with space-thousands, no decimals for whole numbers.
+        /// e.g. 1000 → "1 000", 2.5 → "2,5"
+        /// </summary>
+        private static string FormatQuantity(decimal? quantity)
+        {
+            if (quantity is null) return "";
+            var frCulture = CultureInfo.GetCultureInfo("fr-FR");
+            return quantity.Value == Math.Floor(quantity.Value)
+                ? quantity.Value.ToString("#,##0", frCulture).Replace('\u202F', ' ').Replace('\u00A0', ' ')
+                : quantity.Value.ToString("#,##0.###", frCulture).Replace('\u202F', ' ').Replace('\u00A0', ' ');
         }
 
         private static float ResolveAmountFontSize(string formattedAmount, float baseFontSize = 10)
@@ -344,10 +394,10 @@ namespace ResourceManager.Services
                 (Invoice, "de") => "Rechnung",
                 (Invoice, "ar") => "فاتورة",
                 (Invoice, _)    => "Invoice",
-                (Devis, "fr") => "Devis",
-                (Devis, "de") => "Angebot",
-                (Devis, "ar") => "عرض سعر",
-                (Devis, _)    => "Quote",
+                (Quote, "fr") => "Devis",
+                (Quote, "de") => "Angebot",
+                (Quote, "ar") => "عرض سعر",
+                (Quote, _)    => "Quote",
                 (DeliveryNote, "fr") => "Bon de livraison",
                 (DeliveryNote, "de") => "Lieferschein",
                 (DeliveryNote, "ar") => "وصل التسليم",
@@ -367,6 +417,7 @@ namespace ResourceManager.Services
 
             container.Row(row =>
             {
+                // Title & Info on the LEFT
                 row.RelativeItem().Column(column =>
                 {
                     column.Item().PaddingTop(20)
@@ -383,12 +434,12 @@ namespace ResourceManager.Services
                     });
 
                     // Show linked quote reference for invoices
-                    if (Model is Invoice invoice && (invoice.DevisId.HasValue || !string.IsNullOrWhiteSpace(invoice.SourceDevisNumber)))
+                    if (Model is Invoice invoice && (invoice.QuoteId.HasValue || !string.IsNullOrWhiteSpace(invoice.SourceQuoteNumber)))
                     {
                         var refLabel = lang switch { "fr" => "Réf. Devis", "de" => "Angebot-Ref.", "ar" => "مرجع عرض السعر", _ => "Quote Ref." };
-                        var quoteReference = !string.IsNullOrWhiteSpace(invoice.SourceDevisNumber)
-                            ? invoice.SourceDevisNumber
-                            : invoice.Devis?.Number;
+                        var quoteReference = !string.IsNullOrWhiteSpace(invoice.SourceQuoteNumber)
+                            ? invoice.SourceQuoteNumber
+                            : invoice.Quote?.Number;
 
                         if (!string.IsNullOrWhiteSpace(quoteReference))
                         {
@@ -401,21 +452,23 @@ namespace ResourceManager.Services
                     }
 
                     // Show linked quote reference for delivery notes
-                    if (Model is DeliveryNote dn && dn.DevisId.HasValue && dn.Devis != null)
+                    if (Model is DeliveryNote dn && dn.QuoteId.HasValue && dn.Quote != null)
                     {
                         var refLabel = lang switch { "fr" => "Réf. Devis", "de" => "Angebot-Ref.", "ar" => "مرجع عرض السعر", _ => "Quote Ref." };
                         column.Item().Text(text =>
                         {
                             text.Span($"{refLabel}: ").SemiBold();
-                            text.Span(dn.Devis.Number);
+                            text.Span(dn.Quote.Number);
                         });
                     }
 
                 });
 
+                // Logo on the RIGHT
                 if (Settings.ShowLogo && LogoBytes.Length > 0)
                 {
-                    row.ConstantItem(120).MaxHeight(50).Image(LogoBytes).FitArea();
+                    row.ConstantItem(20); // Spacer
+                    row.ConstantItem(150).Height(80).AlignRight().AlignMiddle().Image(LogoBytes).FitArea();
                 }
             });
         }
@@ -429,8 +482,6 @@ namespace ResourceManager.Services
             var taxLabel = lang switch { "fr" => "TVA", "de" => "MwSt", "ar" => "ضريبة", _ => "Tax" };
             var upLabel = lang switch { "fr" => "Prix Unit.", "de" => "Einzelpreis", "ar" => "سعر الوحدة", _ => "Unit Price" };
             var totalLabel = lang switch { "fr" => "Total", "de" => "Gesamt", "ar" => "المجموع", _ => "Total" };
-
-            var qtyFormat = lang switch { "fr" => new CultureInfo("fr-FR"), "de" => new CultureInfo("de-DE"), _ => CultureInfo.InvariantCulture };
 
             container.PaddingVertical(20).Table(table =>
             {
@@ -461,7 +512,7 @@ namespace ResourceManager.Services
 
                         table.Cell().Element(e => CellStyle(e, isEven)).Text($"{i + 1}");
                         table.Cell().Element(e => CellStyle(e, isEven)).Text($"{item.Description}");
-                        table.Cell().Element(e => CellStyle(e, isEven)).AlignRight().Text(item.Quantity?.ToString("N0", qtyFormat).Replace("\u0020", "\u00A0"));
+                        table.Cell().Element(e => CellStyle(e, isEven)).AlignRight().Text(FormatQuantity(item.Quantity));
 
                          static IContainer CellStyle(IContainer container, bool isEven)
                         {
@@ -508,7 +559,7 @@ namespace ResourceManager.Services
 
                         table.Cell().Element(e => CellStyle(e, isEven)).AlignCenter().Text($"{i+ 1}");
                         table.Cell().Element(e => CellStyle(e, isEven)).Text(item.Description);
-                        table.Cell().Element(e => CellStyle(e, isEven)).AlignRight().Text(item.Quantity?.ToString("N0", qtyFormat).Replace("\u0020", "\u00A0"));
+                        table.Cell().Element(e => CellStyle(e, isEven)).AlignRight().Text(FormatQuantity(item.Quantity));
                         table.Cell().Element(e => CellStyle(e, isEven)).AlignCenter().Text($"{item.TaxRate:P0}");
                         table.Cell().Element(e => CellStyle(e, isEven)).AlignRight().Text(text =>
                         {
@@ -539,14 +590,14 @@ namespace ResourceManager.Services
             {
                 Name = Settings.CompanyName,
                 Address = Settings.CompanyAddress,
-                MatriculeFiscal = Settings.CompanyTaxId,
+                TaxId = Settings.CompanyTaxId,
                 Phone = Settings.CompanyPhone
             };
             var client = Model.Client ?? new Client
             {
                 Name = unknownClientName,
                 Address = string.Empty,
-                MatriculeFiscal = string.Empty,
+                TaxId = string.Empty,
                 Phone = string.Empty
             };
             container.PaddingVertical(20).Column(column =>
@@ -668,7 +719,7 @@ namespace ResourceManager.Services
                 new XElement("Client",
                     new XElement("Name", invoice.Client?.Name ?? ""),
                     new XElement("Address", invoice.Client?.Address ?? ""),
-                    new XElement("TaxId", invoice.Client?.MatriculeFiscal ?? ""),
+                    new XElement("TaxId", invoice.Client?.TaxId ?? ""),
                     new XElement("Phone", invoice.Client?.Phone ?? "")
                 ),
                 new XElement("Items",
@@ -794,7 +845,7 @@ namespace ResourceManager.Services
             {
                 if (Model is not DeliveryNote)
                 {
-                    if (Model is not Devis)
+                    if (Model is not Quote)
                     {
                         row.RelativeItem(2).Column(c =>
                         {
@@ -933,15 +984,18 @@ namespace ResourceManager.Services
                 sigCol.Item().AlignRight().Column(innerCol =>
                 {
                     if (!string.IsNullOrWhiteSpace(Settings.PdfSignatureText))
-                        innerCol.Item().AlignCenter().Text(Settings.PdfSignatureText).FontSize(16).Italic().Bold().FontColor("#1A202C");
-
-                    innerCol.Item().PaddingTop(4).AlignCenter().Width(220).LineHorizontal(2).LineColor("#E2E8F0");
+                    {
+                        innerCol.Item().PaddingTop(4).AlignCenter().Text(Settings.PdfSignatureText).FontSize(16).Italic().Bold().FontColor("#1A202C");
+                    }
 
                     if (!string.IsNullOrWhiteSpace(Settings.PdfSignerPosition))
+                    {   
+                        innerCol.Item().PaddingVertical(10).LineHorizontal(2).LineColor(Colors.BlueGrey.Medium);
                         innerCol.Item().PaddingTop(4).AlignCenter().Text(Settings.PdfSignerPosition).FontSize(10).FontColor(Colors.Grey.Medium);
-
+                    }
                     if (Settings.ShowSignatureOnPdf && Settings.SignatureImageData?.Length > 0)
-                        innerCol.Item().PaddingTop(6).AlignCenter().Width(120).MaxHeight(40).Image(Settings.SignatureImageData).FitArea();
+                        innerCol.Item().PaddingTop(4).AlignCenter()
+                            .MaxWidth(230).MaxHeight(130).Image(Settings.SignatureImageData).FitArea();
                 });
             });
         }
@@ -961,7 +1015,7 @@ namespace ResourceManager.Services
         private string BrandBlue => Settings.PrimaryColor;
         private static readonly string HeaderDark = "#232323";
         private static readonly string TextGrey = "#666666";
-        private static readonly CultureInfo MoneyCulture = CultureInfo.GetCultureInfo("en-US");
+        private static readonly CultureInfo MoneyCulture = CultureInfo.GetCultureInfo("fr-FR");
         private string CurrencyCode => Settings.CurrencySymbol;
         private readonly byte[] LogoBytes;
 
@@ -987,8 +1041,11 @@ namespace ResourceManager.Services
 
         private string FormatAmount(decimal value)
         {
-            var currency = string.IsNullOrWhiteSpace(CurrencyCode) ? "EUR" : CurrencyCode.Trim();
-            return $"{value.ToString("N2", MoneyCulture)}\u00A0{currency}";
+            var rawCode = string.IsNullOrWhiteSpace(CurrencyCode) ? "EUR" : CurrencyCode.Trim();
+            var decimals = FiscalComplianceHelper.GetDecimalPlaces(rawCode);
+            var symbol = FiscalComplianceHelper.GetDisplayCurrencySymbol(rawCode, Settings.InvoiceLanguage);
+            var format = $"N{decimals}";
+            return $"{value.ToString(format, MoneyCulture)}\u00A0{symbol}";
         }
 
         private static float ResolveAmountFontSize(string formatted, float baseFontSize = 10)
@@ -1085,7 +1142,8 @@ namespace ResourceManager.Services
 
                 if (Settings.ShowLogo && LogoBytes.Length > 0)
                 {
-                    row.ConstantItem(96).MaxHeight(50).Image(LogoBytes).FitArea();
+                    row.ConstantItem(150).AlignCenter().AlignMiddle()
+                        .Width(150).Height(80).Image(LogoBytes).FitArea();
                 }
             });
         }
@@ -1102,14 +1160,14 @@ namespace ResourceManager.Services
             {
                 Name = Settings.CompanyName,
                 Address = Settings.CompanyAddress,
-                MatriculeFiscal = Settings.CompanyTaxId,
+                TaxId = Settings.CompanyTaxId,
                 Phone = Settings.CompanyPhone
             };
             var client = Invoice.Client ?? new Client
             {
                 Name = unknownClient,
                 Address = string.Empty,
-                MatriculeFiscal = string.Empty,
+                TaxId = string.Empty,
                 Phone = string.Empty
             };
 
@@ -1390,19 +1448,19 @@ namespace ResourceManager.Services
                 {
                     if (!string.IsNullOrWhiteSpace(Settings.PdfSignatureText))
                     {
-                        innerCol.Item().AlignCenter().Text(Settings.PdfSignatureText).FontSize(16).Italic().Bold().FontColor("#1A202C");
+                        innerCol.Item().PaddingTop(4).AlignCenter().Text(Settings.PdfSignatureText).FontSize(16).Italic().Bold().FontColor("#1A202C");
                     }
-
-                    innerCol.Item().PaddingTop(4).AlignCenter().Width(220).LineHorizontal(2).LineColor("#E2E8F0");
 
                     if (!string.IsNullOrWhiteSpace(Settings.PdfSignerPosition))
                     {
+                        innerCol.Item().PaddingVertical(10).LineHorizontal(2).LineColor(Colors.Blue.Medium);
                         innerCol.Item().PaddingTop(4).AlignCenter().Text(Settings.PdfSignerPosition).FontSize(10).FontColor(Colors.Grey.Medium);
                     }
 
                     if (Settings.ShowSignatureOnPdf && Settings.SignatureImageData?.Length > 0)
                     {
-                        innerCol.Item().PaddingTop(6).AlignCenter().Width(120).MaxHeight(40).Image(Settings.SignatureImageData).FitArea();
+                        innerCol.Item().PaddingTop(4).AlignCenter()
+                            .MaxWidth(230).MaxHeight(130).Image(Settings.SignatureImageData).FitArea();
                     }
                 });
             });

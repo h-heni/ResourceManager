@@ -37,10 +37,18 @@ namespace ResourceManager.Controllers
                 var query = _context.DeliveryNotes
                     .AsNoTracking()
                     .Include(dn => dn.Client)
-                    .Include(dn => dn.Devis)
+                    .Include(dn => dn.Quote)
                     .Include(dn => dn.Invoice)
                     .Include(dn => dn.DeliveryNoteItems)
-                    .OrderByDescending(dn => dn.Date);
+                    .AsQueryable();
+
+                // Employee role: hide archived (Treated) records
+                if (User.IsInRole("Employee"))
+                {
+                    query = query.Where(dn => !dn.Treated);
+                }
+
+                query = query.OrderByDescending(dn => dn.Date);
 
                 var totalCount = await query.CountAsync();
                 var totalPages = (int)Math.Ceiling(totalCount / (double)size);
@@ -48,6 +56,8 @@ namespace ResourceManager.Controllers
                 var notes = await query
                     .Skip((page - 1) * size)
                     .Take(size)
+                    .Include(dn => dn.CreatedByUser!)
+                        .ThenInclude(u => u.Profile)
                     .Select(dn => new {
                         dn.Id,
                         dn.Number,
@@ -55,11 +65,15 @@ namespace ResourceManager.Controllers
                         ClientName = dn.Client != null ? dn.Client.Name : "Unknown",
                         dn.TotalAmount,
                         dn.Treated,
-                        dn.DevisId,
+                        dn.QuoteId,
                         dn.InvoiceId,
-                        DevisNumber = dn.Devis != null ? dn.Devis.Number : null,
+                        QuoteNumber = dn.Quote != null ? dn.Quote.Number : null,
                         InvoiceNumber = dn.Invoice != null ? dn.Invoice.Number : null,
-                        ItemsCount = dn.DeliveryNoteItems != null ? dn.DeliveryNoteItems.Count : 0
+                        ItemsCount = dn.DeliveryNoteItems != null ? dn.DeliveryNoteItems.Count : 0,
+                        DeliveryNoteItems = dn.DeliveryNoteItems != null ? dn.DeliveryNoteItems.Select(i => new { i.Description, i.Quantity }).ToList() : null,
+                        CreatedBy = dn.CreatedByUser != null && dn.CreatedByUser.Profile != null
+                            ? (dn.CreatedByUser.Profile.FirstName + " " + dn.CreatedByUser.Profile.LastName).Trim()
+                            : (dn.CreatedByUser != null ? dn.CreatedByUser.Email : null)
                     })
                     .ToListAsync();
 
@@ -92,12 +106,18 @@ namespace ResourceManager.Controllers
             var note = await _context.DeliveryNotes
                 .Include(dn => dn.Client)
                 .Include(dn => dn.DeliveryNoteItems)
-                .Include(dn => dn.Devis)
+                .Include(dn => dn.Quote)
                 .Include(dn => dn.CreatedByUser)
                     .ThenInclude(u => u!.Profile)
                 .FirstOrDefaultAsync(dn => dn.Id == id);
 
             if (note == null) return NotFound();
+
+            // Employee role cannot access archived (Treated) delivery notes
+            if (User.IsInRole("Employee") && note.Treated)
+            {
+                return NotFound(new { message = "Delivery note not found or access denied" });
+            }
 
             // Return with createdByUser info for display (firstName + lastName for display name)
             return Ok(new {
@@ -106,9 +126,15 @@ namespace ResourceManager.Controllers
                 note.Date,
                 note.ClientId,
                 ClientName = note.Client?.Name,
-                note.DevisId,
+                ClientAddress = note.Client?.Address,
+                ClientTaxId = note.Client?.TaxId,
+                ClientPhone = note.Client?.Phone,
+                note.QuoteId,
+                QuoteNumber = note.Quote?.Number,
                 note.InvoiceId,
                 note.Treated,
+                note.CreatedBy,
+                note.ModifiedBy,
                 DeliveryNoteItems = note.DeliveryNoteItems.Select(i => new {
                     i.Id,
                     i.Description,
@@ -170,17 +196,17 @@ namespace ResourceManager.Controllers
                     }
                 }
 
-                // Link to Devis if provided (REQUIRED for proper flow)
-                if (dto.DevisId.HasValue)
+                // Link to Quote if provided (REQUIRED for proper flow)
+                if (dto.QuoteId.HasValue)
                 {
-                    var devis = await _context.Devis.FindAsync(dto.DevisId.Value);
-                    if (devis != null)
+                    var quote = await _context.Quotes.FindAsync(dto.QuoteId.Value);
+                    if (quote != null)
                     {
-                        note.DevisId = devis.Id;
-                        note.ClientId = devis.ClientId;
-                        devis.Status = "Accepted";
-                        devis.Treated = false;
-                        devis.UpdatedAt = DateTime.UtcNow;
+                        note.QuoteId = quote.Id;
+                        note.ClientId = quote.ClientId;
+                        quote.Status = "Accepted";
+                        quote.Treated = false;
+                        quote.UpdatedAt = DateTime.UtcNow;
                     }
                 }
 
@@ -230,16 +256,10 @@ namespace ResourceManager.Controllers
 
             if (note == null) return NotFound();
 
-            // Block update if already linked to a paid invoice
-            if (note.InvoiceId.HasValue)
+            // Block editing only if the document is archived
+            if (note.Treated)
             {
-                var linkedInvoice = await _context.Invoices
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(i => i.Id == note.InvoiceId.Value);
-                if (linkedInvoice?.Status == "Paid")
-                {
-                    return BadRequest(new { message = "Cannot modify a delivery note linked to a paid invoice." });
-                }
+                return BadRequest(new { message = "Archived documents cannot be modified." });
             }
 
             note.Number = dto.Number ?? note.Number;
@@ -304,10 +324,16 @@ namespace ResourceManager.Controllers
             var note = await _context.DeliveryNotes
                 .Include(dn => dn.Client)
                 .Include(dn => dn.DeliveryNoteItems)
-                .Include(dn => dn.Devis)
+                .Include(dn => dn.Quote)
                 .FirstOrDefaultAsync(dn => dn.Id == id);
 
-             if (note == null) return NotFound();
+            if (note == null) return NotFound();
+
+            // Employee role cannot access archived (Treated) delivery notes
+            if (User.IsInRole("Employee") && note.Treated)
+            {
+                return NotFound(new { message = "Delivery note not found or access denied" });
+            }
 
             // Get current user and company settings for PDF
             var userId = _userManager.GetUserId(User);
@@ -329,8 +355,8 @@ namespace ResourceManager.Controllers
             // Build PDF settings from company config
             var pdfSettings = PdfSettings.FromCompanySettings(
                 companySettings, company, creatorName,
-                currencyOverride: note.Devis?.CurrencySymbol,
-                languageOverride: note.Devis?.PdfLanguage);
+                currencyOverride: note.Quote?.CurrencySymbol,
+                languageOverride: note.Quote?.PdfLanguage);
 
             var document = new Document<DeliveryNote>(note, pdfSettings);
             byte[] pdfData;

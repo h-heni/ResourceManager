@@ -4,8 +4,8 @@ namespace ResourceManager.Tests;
 
 /// <summary>
 /// Full CRUD model-level audit tests for ALL major entities:
-/// Clients, Quotes (Devis), Delivery Notes, Invoices, Products, 
-/// Suppliers (Fournisseurs), Supplier Invoices, Expenses, Users.
+/// Clients, Quotes, Delivery Notes, Invoices, Products, 
+/// Suppliers, Supplier Invoices, Expenses, Users.
 /// 
 /// These tests validate entity creation, property defaults, relationships,
 /// and business rules at the model layer.
@@ -53,20 +53,20 @@ public class EntityCrudAuditTests
     }
 
     // ═══════════════════════════════════════════════════════════
-    // 2. Devis (Quote) Entity
+    // 2. Quote Entity
     // ═══════════════════════════════════════════════════════════
 
     [Fact]
-    public void Devis_DefaultStatus_IsDraft()
+    public void Quote_DefaultStatus_IsDraft()
     {
-        var devis = new Devis();
-        Assert.Equal("Draft", devis.Status);
+        var quote = new Quote();
+        Assert.Equal("Draft", quote.Status);
     }
 
     [Fact]
-    public void Devis_Creation_HasCorrectProperties()
+    public void Quote_Creation_HasCorrectProperties()
     {
-        var devis = new Devis
+        var quote = new Quote
         {
             Number = "DEV-001",
             Date = DateTime.UtcNow,
@@ -75,20 +75,20 @@ public class EntityCrudAuditTests
             Status = "Draft"
         };
 
-        Assert.Equal("DEV-001", devis.Number);
-        Assert.Equal(1, devis.ClientId);
-        Assert.False(devis.Treated);
-        Assert.False(devis.IsDeleted);
+        Assert.Equal("DEV-001", quote.Number);
+        Assert.Equal(1, quote.ClientId);
+        Assert.False(quote.Treated);
+        Assert.False(quote.IsDeleted);
     }
 
     [Fact]
-    public void Devis_TotalCalculation_IncludesItems()
+    public void Quote_TotalCalculation_IncludesItems()
     {
-        var devis = new Devis();
-        devis.DevisItems.Add(new DevisItem { Description = "Service", Quantity = 2, Price = 100m, Tva = false });
-        devis.DevisItems.Add(new DevisItem { Description = "Parts", Quantity = 5, Price = 50m, Tva = false });
+        var quote = new Quote();
+        quote.QuoteItems.Add(new QuoteItem { Description = "Service", Quantity = 2, Price = 100m, Tva = false });
+        quote.QuoteItems.Add(new QuoteItem { Description = "Parts", Quantity = 5, Price = 50m, Tva = false });
 
-        var total = devis.DevisItems.Sum(i => (i.Quantity ?? 0) * (i.Price ?? 0));
+        var total = quote.QuoteItems.Sum(i => (i.Quantity ?? 0) * (i.Price ?? 0));
         Assert.Equal(450m, total);
     }
 
@@ -214,13 +214,13 @@ public class EntityCrudAuditTests
     }
 
     // ═══════════════════════════════════════════════════════════
-    // 6. Fournisseur (Supplier) Entity
+    // 6. Supplier Entity
     // ═══════════════════════════════════════════════════════════
 
     [Fact]
-    public void Fournisseur_Creation_HasDefaults()
+    public void Supplier_Creation_HasDefaults()
     {
-        var supplier = new Fournisseur
+        var supplier = new Supplier
         {
             Name = "Supplier Co",
             Address = "456 Supplier St",
@@ -232,43 +232,43 @@ public class EntityCrudAuditTests
     }
 
     [Fact]
-    public void Fournisseur_HasInvoiceCollection()
+    public void Supplier_HasInvoiceCollection()
     {
-        var supplier = new Fournisseur { Name = "Test Supplier", CompanyId = 1 };
-        Assert.NotNull(supplier.FournisseurInvoices);
+        var supplier = new Supplier { Name = "Test Supplier", CompanyId = 1 };
+        Assert.NotNull(supplier.SupplierInvoices);
     }
 
     // ═══════════════════════════════════════════════════════════
-    // 7. Supplier Invoice (FournisseurInvoice) Entity
+    // 7. Supplier Invoice Entity
     // ═══════════════════════════════════════════════════════════
 
     [Fact]
-    public void FournisseurInvoice_ComputedPaymentStatus_Pending()
+    public void SupplierInvoice_ComputedPaymentStatus_Pending()
     {
-        var fi = new FournisseurInvoice { TotalTTC = 1000m };
+        var fi = new SupplierInvoice { TotalTTC = 1000m };
         Assert.Equal("Pending", fi.PaymentStatus);
     }
 
     [Fact]
-    public void FournisseurInvoice_ComputedPaymentStatus_PartiallyPaid()
+    public void SupplierInvoice_ComputedPaymentStatus_PartiallyPaid()
     {
-        var fi = new FournisseurInvoice { TotalTTC = 1000m };
+        var fi = new SupplierInvoice { TotalTTC = 1000m };
         fi.Payments.Add(new SupplierPayment { Amount = 500m, Status = "Completed" });
         Assert.Equal("PartiallyPaid", fi.PaymentStatus);
     }
 
     [Fact]
-    public void FournisseurInvoice_ComputedPaymentStatus_Paid()
+    public void SupplierInvoice_ComputedPaymentStatus_Paid()
     {
-        var fi = new FournisseurInvoice { TotalTTC = 1000m };
+        var fi = new SupplierInvoice { TotalTTC = 1000m };
         fi.Payments.Add(new SupplierPayment { Amount = 1000m, Status = "Completed" });
         Assert.Equal("Paid", fi.PaymentStatus);
     }
 
     [Fact]
-    public void FournisseurInvoice_PendingPayments_ExcludedFromAmountPaid()
+    public void SupplierInvoice_PendingPayments_ExcludedFromAmountPaid()
     {
-        var fi = new FournisseurInvoice { TotalTTC = 1000m };
+        var fi = new SupplierInvoice { TotalTTC = 1000m };
         fi.Payments.Add(new SupplierPayment { Amount = 300m, Status = "Completed" });
         fi.Payments.Add(new SupplierPayment { Amount = 400m, Status = "Pending" });
 
@@ -390,10 +390,10 @@ public class EntityCrudAuditTests
     {
         var client = new Client { CompanyId = companyId };
         var invoice = new Invoice { CompanyId = companyId };
-        var devis = new Devis { CompanyId = companyId };
+        var devis = new Quote { CompanyId = companyId };
         var dn = new DeliveryNote { CompanyId = companyId };
-        var supplier = new Fournisseur { CompanyId = companyId };
-        var fi = new FournisseurInvoice { CompanyId = companyId };
+        var supplier = new Supplier { CompanyId = companyId };
+        var fi = new SupplierInvoice { CompanyId = companyId };
         var expense = new OtherExpense { CompanyId = companyId };
         var product = new ProductService { CompanyId = companyId };
 
@@ -416,10 +416,10 @@ public class EntityCrudAuditTests
     {
         Assert.False(new Client().IsDeleted);
         Assert.False(new Invoice().IsDeleted);
-        Assert.False(new Devis().IsDeleted);
+        Assert.False(new Quote().IsDeleted);
         Assert.False(new DeliveryNote().IsDeleted);
-        Assert.False(new Fournisseur().IsDeleted);
-        Assert.False(new FournisseurInvoice().IsDeleted);
+        Assert.False(new Supplier().IsDeleted);
+        Assert.False(new SupplierInvoice().IsDeleted);
         Assert.False(new OtherExpense().IsDeleted);
         Assert.False(new ProductService().IsDeleted);
     }

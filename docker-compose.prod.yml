@@ -182,10 +182,14 @@ services:
       - Jwt__Audience=${JWT_AUDIENCE:-ResourceManager-Users}
       - Jwt__TokenExpirationInMinutes=${JWT_EXPIRATION:-60}
       
-      # Google Integration (Gmail API for email sending)
-      - GoogleOptions__ClientId=${GOOGLE_CLIENT_ID:-}
-      - GoogleOptions__ClientSecret=${GOOGLE_CLIENT_SECRET:-}
-      - GoogleOptions__RefreshToken=${GOOGLE_REFRESH_TOKEN:-}
+      # Email Configuration (Local SMTP)
+      - EMAIL_SMTP_HOST=${EMAIL_SMTP_HOST:-mail.rscmanager.com}
+      - EMAIL_SMTP_PORT=${EMAIL_SMTP_PORT:-587}
+      - EMAIL_SMTP_USER=${EMAIL_SMTP_USER:-}
+      - EMAIL_SMTP_PASSWORD=${EMAIL_SMTP_PASSWORD:-}
+      - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-noreply@rscmanager.com}
+      - EMAIL_FROM_NAME=${EMAIL_FROM_NAME:-Resource Manager}
+      - EMAIL_USE_TLS=${EMAIL_USE_TLS:-true}
       
       # Supabase (if used for file storage)
       - Supabase__Url=${SUPABASE_URL:-}

@@ -27,6 +27,10 @@ namespace ResourceManager.Services
         public string Message { get; set; } = string.Empty;
         public string? ErrorDetails { get; set; }
         public int RetryCount { get; set; } = 0;
+        /// <summary>
+        /// True if this is a preview/dev mode result (email not actually sent)
+        /// </summary>
+        public bool IsPreview { get; set; } = false;
     }
 
     /// <summary>
@@ -45,7 +49,7 @@ namespace ResourceManager.Services
 
     /// <summary>
     /// Production email service using real SMTP.
-    /// NO FAKE/PREVIEW MODE - emails are sent or an exception is thrown.
+    /// In Development mode, emails are logged but not sent (unless SMTP is properly configured).
     /// </summary>
     public class EmailService : IEmailService
     {
@@ -53,6 +57,7 @@ namespace ResourceManager.Services
         private readonly ILogger<EmailService> _logger;
         private readonly IServiceProvider _serviceProvider;
         private readonly AsyncRetryPolicy _retryPolicy;
+        private readonly IWebHostEnvironment _environment;
 
         // SMTP settings loaded from configuration
         private readonly string _smtpHost;
@@ -63,24 +68,29 @@ namespace ResourceManager.Services
         private readonly string _fromName;
         private readonly string _replyToEmail;
         private readonly bool _enableSsl;
+        private readonly bool _isDevMode;
 
         public EmailService(
             IConfiguration configuration,
             ILogger<EmailService> logger,
-            IServiceProvider serviceProvider)
+            IServiceProvider serviceProvider,
+            IWebHostEnvironment environment)
         {
             _configuration = configuration;
             _logger = logger;
             _serviceProvider = serviceProvider;
+            _environment = environment;
+            _isDevMode = environment.IsDevelopment();
 
             // Load SMTP configuration from appsettings or environment variables
+            // In Development, allow missing config (will use preview mode)
             _smtpHost = configuration["Email:SmtpHost"]
                 ?? Environment.GetEnvironmentVariable("EMAIL_SMTP_HOST")
-                ?? throw new InvalidOperationException("Email:SmtpHost is not configured. Set it in appsettings.json or EMAIL_SMTP_HOST environment variable.");
+                ?? (_isDevMode ? "localhost" : throw new InvalidOperationException("Email:SmtpHost is not configured. Set it in appsettings.json or EMAIL_SMTP_HOST environment variable."));
 
             _smtpPort = int.TryParse(configuration["Email:SmtpPort"] ?? Environment.GetEnvironmentVariable("EMAIL_SMTP_PORT"), out var port)
                 ? port
-                : 587;
+                : (_isDevMode ? 1025 : 587); // MailHog default port for dev
 
             _smtpUser = configuration["Email:SmtpUser"]
                 ?? Environment.GetEnvironmentVariable("EMAIL_SMTP_USER");
@@ -91,7 +101,7 @@ namespace ResourceManager.Services
             _fromEmail = configuration["Email:FromEmail"]
                 ?? Environment.GetEnvironmentVariable("EMAIL_FROM_ADDRESS")
                 ?? _smtpUser
-                ?? throw new InvalidOperationException("Email:FromEmail is not configured.");
+                ?? (_isDevMode ? "noreply@localhost" : throw new InvalidOperationException("Email:FromEmail is not configured."));
 
             _fromName = configuration["Email:FromName"]
                 ?? Environment.GetEnvironmentVariable("EMAIL_FROM_NAME")
@@ -103,7 +113,7 @@ namespace ResourceManager.Services
 
             _enableSsl = bool.TryParse(configuration["Email:EnableSsl"] ?? Environment.GetEnvironmentVariable("EMAIL_ENABLE_SSL"), out var ssl)
                 ? ssl
-                : true;
+                : !_isDevMode; // Disable SSL in dev (MailHog doesn't need it)
 
             // Configure retry policy for transient SMTP errors
             _retryPolicy = Policy
@@ -149,7 +159,7 @@ namespace ResourceManager.Services
         }
 
         /// <summary>
-        /// Send email via SMTP. Throws exception if sending fails.
+        /// Send email via SMTP. In Development, returns preview success if SMTP fails.
         /// </summary>
         public async Task<EmailSendResult> SendEmailAsync(
             string to,
@@ -186,6 +196,21 @@ namespace ResourceManager.Services
                     RetryCount = retryCount - 1
                 };
             }
+            catch (Exception ex) when (_isDevMode)
+            {
+                // In Development mode, log the email details and return success (preview mode)
+                _logger.LogWarning(
+                    "DEV MODE: Email not sent (SMTP unavailable). Would have sent to {To}. Subject: {Subject}. Error: {Error}",
+                    to, subject, ex.Message);
+
+                return new EmailSendResult
+                {
+                    Success = true,
+                    Message = $"[DEV MODE] Email preview - would send to {to}. SMTP not configured.",
+                    RetryCount = 0,
+                    IsPreview = true
+                };
+            }
             catch (SmtpException smtpEx)
             {
                 _logger.LogError(smtpEx, "SMTP error sending email to {To}. Status: {Status}", to, smtpEx.StatusCode);
@@ -203,7 +228,7 @@ namespace ResourceManager.Services
         }
 
         /// <summary>
-        /// Send email for a specific company - uses Gmail OAuth if connected, otherwise falls back to SMTP
+        /// Send email for a specific company using SMTP
         /// </summary>
         public async Task<EmailSendResult> SendEmailForCompanyAsync(
             int companyId,
@@ -213,34 +238,8 @@ namespace ResourceManager.Services
             byte[]? pdfAttachment = null,
             string? attachmentName = null)
         {
-            using var scope = _serviceProvider.CreateScope();
-
-            // Check if Gmail OAuth is connected for this company
-            var gmailService = scope.ServiceProvider.GetService<IGmailOAuthService>();
-            if (gmailService != null)
-            {
-                var gmailStatus = await gmailService.GetConnectionStatusAsync(companyId);
-                if (gmailStatus.IsConnected)
-                {
-                    _logger.LogInformation("Sending email via Gmail OAuth for company {CompanyId} to {To}", companyId, to);
-                    var gmailResult = await gmailService.SendEmailAsync(companyId, to, subject, htmlBody, pdfAttachment, attachmentName);
-
-                    if (!gmailResult.Success)
-                    {
-                        throw new InvalidOperationException(
-                            $"Gmail OAuth send failed: {gmailResult.Message}. Details: {gmailResult.ErrorDetails}");
-                    }
-
-                    return new EmailSendResult
-                    {
-                        Success = true,
-                        Message = gmailResult.Message
-                    };
-                }
-            }
-
-            // Fall back to regular SMTP
-            _logger.LogInformation("Gmail OAuth not connected for company {CompanyId}, using SMTP", companyId);
+            // Use direct SMTP - no third-party OAuth dependencies
+            _logger.LogInformation("Sending email via SMTP for company {CompanyId} to {To}", companyId, to);
             return await SendEmailAsync(to, subject, htmlBody, pdfAttachment, attachmentName);
         }
 
@@ -449,7 +448,7 @@ namespace ResourceManager.Services
     /// </summary>
     public class EmailSettings
     {
-        public string SmtpHost { get; set; } = "smtp.gmail.com";
+        public string SmtpHost { get; set; } = "mail.rscmanager.com";
         public int SmtpPort { get; set; } = 587;
         public string? SmtpUser { get; set; }
         public string? SmtpPassword { get; set; }

@@ -1,8 +1,9 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import LoginPage from './pages/LoginPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import SettingsGuard from './components/SettingsGuard';
+import EmployeeGuard, { RoleBasedHome } from './components/EmployeeGuard';
 import { AuthProvider } from './context/AuthContext';
 
 // OPTIMIZATION: Lazy load all authenticated pages for faster initial load
@@ -15,7 +16,7 @@ const InvoicesPage = lazy(() => import('./pages/InvoicesPage'));
 const InvoiceCreatePage = lazy(() => import('./pages/InvoiceCreatePage'));
 const QuotesPage = lazy(() => import('./pages/QuotesPage'));
 const DeliveryNotesPage = lazy(() => import('./pages/DeliveryNotesPage'));
-const DevisCreatePage = lazy(() => import('./pages/DevisCreatePage'));
+const QuoteCreatePage = lazy(() => import('./pages/QuoteCreatePage'));
 const DeliveryNoteCreatePage = lazy(() => import('./pages/DeliveryNoteCreatePage'));
 const UsersPage = lazy(() => import('./pages/UsersPage'));
 const SignUpPage = lazy(() => import('./pages/SignUpPage'));
@@ -27,6 +28,9 @@ const ProductServicesPage = lazy(() => import('./pages/ProductServicesPage'));
 const DataManagementPage = lazy(() => import('./pages/DataManagementPage'));
 const SupplierInvoiceUploadPage = lazy(() => import('./pages/SupplierInvoiceUploadPage'));
 const SetupAccountPage = lazy(() => import('./pages/SetupAccountPage'));
+const SubscriptionManagementPage = lazy(() => import('./pages/SubscriptionManagementPage'));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 
 // Loading fallback for lazy-loaded pages
 const PageLoader = () => (
@@ -41,6 +45,8 @@ function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<Suspense fallback={<PageLoader />}><SignUpPage /></Suspense>} />
+        <Route path="/forgot-password" element={<Suspense fallback={<PageLoader />}><ForgotPasswordPage /></Suspense>} />
+        <Route path="/reset-password" element={<Suspense fallback={<PageLoader />}><ResetPasswordPage /></Suspense>} />
         <Route path="/company-setup" element={<Suspense fallback={<PageLoader />}><CompanySetupPage /></Suspense>} />
         <Route path="/setup-account" element={<Suspense fallback={<PageLoader />}><SetupAccountPage /></Suspense>} />
 
@@ -51,8 +57,11 @@ function App() {
             <Route path="settings" element={<Suspense fallback={<PageLoader />}><SettingsPage /></Suspense>} />
 
             <Route element={<SettingsGuard />}>
-              <Route index element={<Navigate to="/dashboard" replace />} />
-              <Route path="dashboard" element={<Suspense fallback={<PageLoader />}><DashboardPage /></Suspense>} />
+              <Route index element={<RoleBasedHome />} />
+              {/* Dashboard is wrapped in EmployeeGuard - redirects Employee to /invoices */}
+              <Route element={<EmployeeGuard />}>
+                <Route path="dashboard" element={<Suspense fallback={<PageLoader />}><DashboardPage /></Suspense>} />
+              </Route>
               <Route path="clients" element={<Suspense fallback={<PageLoader />}><ClientsPage /></Suspense>} />
               <Route path="suppliers" element={<Suspense fallback={<PageLoader />}><SuppliersPage /></Suspense>} />
               <Route path="supplier-invoices" element={<Suspense fallback={<PageLoader />}><SupplierInvoicesPage /></Suspense>} />
@@ -60,19 +69,22 @@ function App() {
               <Route path="invoices/create" element={<Suspense fallback={<PageLoader />}><InvoiceCreatePage /></Suspense>} />
               <Route path="invoices/edit/:id" element={<Suspense fallback={<PageLoader />}><InvoiceCreatePage /></Suspense>} />
               <Route path="quotes" element={<Suspense fallback={<PageLoader />}><QuotesPage /></Suspense>} />
-              <Route path="quotes/create" element={<Suspense fallback={<PageLoader />}><DevisCreatePage /></Suspense>} />
+              <Route path="quotes/create" element={<Suspense fallback={<PageLoader />}><QuoteCreatePage /></Suspense>} />
+              <Route path="quotes/edit/:id" element={<Suspense fallback={<PageLoader />}><QuoteCreatePage /></Suspense>} />
               <Route path="delivery-notes" element={<Suspense fallback={<PageLoader />}><DeliveryNotesPage /></Suspense>} />
               <Route path="delivery-notes/create" element={<Suspense fallback={<PageLoader />}><DeliveryNoteCreatePage /></Suspense>} />
+              <Route path="delivery-notes/edit/:id" element={<Suspense fallback={<PageLoader />}><DeliveryNoteCreatePage /></Suspense>} />
               <Route path="expenses" element={<Suspense fallback={<PageLoader />}><ExpensesPage /></Suspense>} />
               <Route path="products" element={<Suspense fallback={<PageLoader />}><ProductServicesPage /></Suspense>} />
               <Route path="data-management" element={<Suspense fallback={<PageLoader />}><DataManagementPage /></Suspense>} />
               <Route path="upload-supplier" element={<Suspense fallback={<PageLoader />}><SupplierInvoiceUploadPage /></Suspense>} />
               <Route path="users" element={<Suspense fallback={<PageLoader />}><UsersPage /></Suspense>} />
+              <Route path="subscriptions" element={<Suspense fallback={<PageLoader />}><SubscriptionManagementPage /></Suspense>} />
             </Route>
           </Route>
         </Route>
 
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<RoleBasedHome />} />
       </Routes>
     </AuthProvider>
   );

@@ -53,6 +53,7 @@ env:
   REGISTRY: ghcr.io
   API_IMAGE: ghcr.io/${{ github.repository_owner }}/resourcemanager-api
   WEB_IMAGE: ghcr.io/${{ github.repository_owner }}/resourcemanager-web
+  DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/resourcemanager' }}
 
 jobs:
   # ============================================
@@ -217,6 +218,7 @@ jobs:
           sparse-checkout: |
             docker-compose.blue-green.yml
             nginx/blue-green.conf
+            nginx/rscmanager.conf
             scripts/deploy-blue-green.sh
             scripts/rollback-blue-green.sh
 
@@ -226,8 +228,30 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "docker-compose.blue-green.yml,nginx/blue-green.conf,scripts/deploy-blue-green.sh,scripts/rollback-blue-green.sh"
-          target: ${{ vars.DEPLOY_PATH || '/opt/resourcemanager' }}
+          source: "docker-compose.blue-green.yml,nginx/blue-green.conf,nginx/rscmanager.conf,scripts/deploy-blue-green.sh,scripts/rollback-blue-green.sh"
+          target: ${{ env.DEPLOY_PATH }}
+
+      - name: Deploy Nginx site config
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            DEPLOY_DIR="${{ env.DEPLOY_PATH }}"
+            NGINX_SRC="$DEPLOY_DIR/nginx/rscmanager.conf"
+
+            if [ -f "$NGINX_SRC" ]; then
+              echo "━━━ Deploying Nginx site config ━━━"
+              sudo cp "$NGINX_SRC" /etc/nginx/sites-available/rscmanager.conf
+              sudo ln -sf /etc/nginx/sites-available/rscmanager.conf /etc/nginx/sites-enabled/rscmanager.conf
+              sudo rm -f /etc/nginx/sites-enabled/default
+              sudo nginx -t && sudo systemctl reload nginx
+              echo "Nginx config deployed and reloaded"
+            else
+              echo "No rscmanager.conf found — skipping Nginx update"
+            fi
 
       - name: Deploy via SSH (blue-green sequential swap)
         uses: appleboy/ssh-action@v1.0.3
@@ -241,7 +265,7 @@ jobs:
           envs: API_IMG,WEB_IMG
           script: |
             set -e
-            DEPLOY_DIR="${{ vars.DEPLOY_PATH || '/opt/resourcemanager' }}"
+            DEPLOY_DIR="${{ env.DEPLOY_PATH }}"
             cd "$DEPLOY_DIR"
 
             echo "━━━ Deployment starting ━━━"
@@ -306,7 +330,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -e
-            cd "${{ vars.DEPLOY_PATH || '/opt/resourcemanager' }}"
+            cd "${{ env.DEPLOY_PATH }}"
             echo "Deployment failed — rolling back..."
             if [ -f scripts/rollback-blue-green.sh ]; then
               chmod +x scripts/rollback-blue-green.sh

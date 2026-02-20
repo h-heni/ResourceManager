@@ -16,7 +16,7 @@ export default function CompanySetupPage() {
     const [formData, setFormData] = useState({
         companyName: '',
         address: '',
-        matriculeFiscal: '',
+        taxId: '',
         phone: ''
     });
 
@@ -94,8 +94,8 @@ export default function CompanySetupPage() {
                                 <div className="relative">
                                     <Hash className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                                     <input
-                                        name="matriculeFiscal"
-                                        value={formData.matriculeFiscal}
+                                        name="taxId"
+                                        value={formData.taxId}
                                         onChange={handleChange}
                                         required
                                         className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"

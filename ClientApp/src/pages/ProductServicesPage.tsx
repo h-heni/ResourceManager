@@ -270,7 +270,7 @@ export default function ProductServicesPage() {
                 />
             )}
 
-            {/* Create/Edit Modal - matches DevisCreatePage "Create New Product" modal */}
+            {/* Create/Edit Modal - matches QuoteCreatePage "Create New Product" modal */}
             {showModal && (
                 <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowModal(false)}>
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-md" onClick={e => e.stopPropagation()}>

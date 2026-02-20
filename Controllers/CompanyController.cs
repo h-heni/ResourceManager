@@ -50,9 +50,10 @@ namespace ResourceManager.Controllers
                 {
                     Name = dto.CompanyName,
                     Address = dto.Address,
-                    MatriculeFiscal = dto.MatriculeFiscal,
+                    TaxId = dto.TaxId,
                     Phone = dto.Phone,
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = userId // Audit trail
                 };
 
                 _context.Companies.Add(company);
@@ -112,7 +113,7 @@ namespace ResourceManager.Controllers
     {
         public string CompanyName { get; set; } = string.Empty;
         public string Address { get; set; } = string.Empty;
-        public string MatriculeFiscal { get; set; } = string.Empty;
+        public string TaxId { get; set; } = string.Empty;
         public string Phone { get; set; } = string.Empty;
     }
 }

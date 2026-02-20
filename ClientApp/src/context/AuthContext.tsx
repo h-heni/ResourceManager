@@ -29,6 +29,7 @@ interface AuthContextType {
     canManageSettings: boolean;
     canCreateInvoices: boolean;
     canDeleteInvoices: boolean;
+    accountLocked: { reason: 'suspended' | 'expired'; expiryDate?: string } | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -53,6 +54,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // If we have cached user data, skip the loading gate so UI renders immediately.
     // The async refresh below will silently update the token in the background.
     const [loading, setLoading] = useState(() => !localStorage.getItem('user_email'));
+    const [accountLocked, setAccountLocked] = useState<{ reason: 'suspended' | 'expired'; expiryDate?: string } | null>(null);
     const navigate = useNavigate();
     const isRestoringRef = useRef(false); // Guard against concurrent restoreSession calls
 
@@ -159,6 +161,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return () => window.removeEventListener('auth:session-expired', handleSessionExpired);
     }, [navigate]);
 
+    // Listen for account-locked events from the api interceptor
+    useEffect(() => {
+        const handleAccountLocked = (e: Event) => {
+            const detail = (e as CustomEvent).detail;
+            setAccountLocked({ reason: detail.reason, expiryDate: detail.expiryDate });
+        };
+        window.addEventListener('auth:account-locked', handleAccountLocked);
+        return () => window.removeEventListener('auth:account-locked', handleAccountLocked);
+    }, []);
+
     const login = useCallback((email: string, token: string, roles: string[], firstName?: string, lastName?: string, isProfileComplete?: boolean, baseStoragePath?: string) => {
         // Store access token in memory only (XSS-safe)
         // Only update if a non-empty token is provided (avoids overwriting during profile-complete updates)
@@ -180,6 +192,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             isProfileComplete: !!isProfileComplete,
             baseStoragePath
         });
+
+        // Clear any stale account-locked state from a previous session
+        setAccountLocked(null);
 
         // Sync language from company settings after login
         syncLanguageFromSettings();
@@ -210,6 +225,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.removeItem('user_isProfileComplete');
         localStorage.removeItem('user_baseStoragePath');
         setUser(null);
+
+        // Clear account-locked state so the next user isn't affected
+        setAccountLocked(null);
 
         // Notify other tabs about logout
         broadcastLogout();
@@ -262,7 +280,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             canManageUsers,
             canManageSettings,
             canCreateInvoices,
-            canDeleteInvoices
+            canDeleteInvoices,
+            accountLocked
         }}>
             {children}
         </AuthContext.Provider>

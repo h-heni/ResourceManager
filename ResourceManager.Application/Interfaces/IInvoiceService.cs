@@ -35,7 +35,7 @@ public record InvoiceDto(
     DateTime Date,
     int? ClientId,
     string? ClientName,
-    int? DevisId,
+    int? QuoteId,
     decimal? SubTotal,
     decimal? TaxAmount,
     decimal? TotalAmount,
@@ -59,7 +59,7 @@ public record CreateInvoiceRequest(
     string Number,
     DateTime Date,
     int? ClientId,
-    int? DevisId,
+    int? QuoteId,
     List<CreateInvoiceItemRequest> Items
 );
 

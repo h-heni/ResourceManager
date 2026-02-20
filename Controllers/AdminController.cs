@@ -3,8 +3,10 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using ResourceManager.Application.Interfaces;
 using ResourceManager.Data;
+using ResourceManager.Dtos;
 using ResourceManager.Models;
 using ResourceManager.Services;
 
@@ -25,6 +27,7 @@ public class AdminController : BaseApiController
     private readonly SecurityAlertService _securityAlerts;
     private readonly UserCountryService _countryService;
     private readonly ICacheService _cache;
+    private readonly IMemoryCache _memoryCache;
     private readonly ILogger<AdminController> _logger;
 
     public AdminController(
@@ -35,6 +38,7 @@ public class AdminController : BaseApiController
         SecurityAlertService securityAlerts,
         UserCountryService countryService,
         ICacheService cache,
+        IMemoryCache memoryCache,
         ILogger<AdminController> logger)
     {
         _context = context;
@@ -44,6 +48,7 @@ public class AdminController : BaseApiController
         _securityAlerts = securityAlerts;
         _countryService = countryService;
         _cache = cache;
+        _memoryCache = memoryCache;
         _logger = logger;
     }
 
@@ -378,5 +383,178 @@ public class AdminController : BaseApiController
             _logger.LogError(ex, "Error fetching admin overview");
             return Ok(new { Health = new { Status = "Unknown" }, LiveUsers = new { ActiveCount = 0 }, TotalAlertCount = 0, TotalLogCount = 0 });
         }
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // SUBSCRIPTION MANAGEMENT
+    // ════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// GET /api/admin/companies — List all companies with subscription status.
+    /// Auto-flags expired accounts based on SubscriptionExpiryDate.
+    /// </summary>
+    [HttpGet("companies")]
+    public async Task<IActionResult> GetCompanies()
+    {
+        // Auto-expire: flag any Active companies whose subscription has passed
+        var now = DateTime.UtcNow;
+        var expired = await _context.Companies
+            .IgnoreQueryFilters()
+            .Where(c => !c.IsDeleted
+                && c.AccountStatus == AccountStatus.Active
+                && c.SubscriptionExpiryDate.HasValue
+                && c.SubscriptionExpiryDate.Value < now)
+            .ToListAsync();
+
+        if (expired.Count > 0)
+        {
+            foreach (var c in expired)
+            {
+                c.AccountStatus = AccountStatus.Expired;
+                _logger.LogWarning("Auto-expired CompanyId={Id}, Name={Name}, ExpiredAt={Expiry}",
+                    c.Id, c.Name, c.SubscriptionExpiryDate);
+            }
+            await _context.SaveChangesAsync();
+        }
+
+        var companies = await _context.Companies
+            .IgnoreQueryFilters()
+            .Where(c => !c.IsDeleted)
+            .Select(c => new
+            {
+                c.Id,
+                c.Name,
+                c.Email,
+                c.EmployeeLimit,
+                EmployeeCount = _context.Users.Count(u => u.CompanyId == c.Id),
+                c.SubscriptionExpiryDate,
+                AccountStatus = c.AccountStatus.ToString(),
+                c.CreatedAt
+            })
+            .OrderBy(c => c.Name)
+            .ToListAsync();
+
+        return Ok(companies);
+    }
+
+    /// <summary>
+    /// PUT /api/admin/companies/{id}/subscription — Update subscription for a company.
+    /// Body: { subscriptionExpiryDate, accountStatus, employeeLimit }
+    /// </summary>
+    [HttpPut("companies/{id}/subscription")]
+    public async Task<IActionResult> UpdateSubscription(int id, [FromBody] UpdateSubscriptionDto dto)
+    {
+        var company = await _context.Companies
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(c => c.Id == id);
+
+        if (company == null)
+            return NotFound(new { error = "Company not found." });
+
+        if (dto.SubscriptionExpiryDate.HasValue)
+            company.SubscriptionExpiryDate = dto.SubscriptionExpiryDate.Value;
+
+        if (!string.IsNullOrEmpty(dto.AccountStatus))
+        {
+            if (Enum.TryParse<AccountStatus>(dto.AccountStatus, true, out var status))
+                company.AccountStatus = status;
+            else
+                return BadRequest(new { error = $"Invalid account status: {dto.AccountStatus}. Valid values: Active, Suspended, Expired." });
+        }
+
+        if (dto.EmployeeLimit.HasValue)
+            company.EmployeeLimit = dto.EmployeeLimit.Value;
+
+        await _context.SaveChangesAsync();
+
+        // Evict cached company status after subscription update
+        SubscriptionLockoutMiddleware.InvalidateCompanyCache(_memoryCache, id);
+
+        _logger.LogInformation("Subscription updated for CompanyId={CompanyId} — Status={Status}, Expiry={Expiry}, EmployeeLimit={Limit}",
+            id, company.AccountStatus, company.SubscriptionExpiryDate, company.EmployeeLimit);
+
+        return Ok(new
+        {
+            message = "Subscription updated.",
+            companyId = company.Id,
+            accountStatus = company.AccountStatus.ToString(),
+            subscriptionExpiryDate = company.SubscriptionExpiryDate,
+            employeeLimit = company.EmployeeLimit
+        });
+    }
+
+    /// <summary>
+    /// POST /api/admin/companies/{id}/suspend — Suspend a company account.
+    /// Uses ExecuteUpdateAsync for a direct SQL UPDATE (bypasses SaveChangesAsync override).
+    /// </summary>
+    [HttpPost("companies/{id}/suspend")]
+    public async Task<IActionResult> SuspendCompany(int id)
+    {
+        var affected = await _context.Companies
+            .IgnoreQueryFilters()
+            .Where(c => c.Id == id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(c => c.AccountStatus, AccountStatus.Suspended)
+                .SetProperty(c => c.UpdatedAt, DateTime.UtcNow));
+
+        if (affected == 0)
+            return NotFound(new { error = "Company not found." });
+
+        // Evict cached company status so middleware picks up the change immediately
+        SubscriptionLockoutMiddleware.InvalidateCompanyCache(_memoryCache, id);
+
+        _logger.LogWarning("Company suspended. CompanyId={CompanyId}", id);
+        return Ok(new { message = "Company suspended.", companyId = id });
+    }
+
+    /// <summary>
+    /// POST /api/admin/companies/{id}/reactivate — Reactivate a suspended/expired company.
+    /// Uses ExecuteUpdateAsync for a direct SQL UPDATE (bypasses SaveChangesAsync override).
+    /// </summary>
+    [HttpPost("companies/{id}/reactivate")]
+    public async Task<IActionResult> ReactivateCompany(int id)
+    {
+        var affected = await _context.Companies
+            .IgnoreQueryFilters()
+            .Where(c => c.Id == id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(c => c.AccountStatus, AccountStatus.Active)
+                .SetProperty(c => c.UpdatedAt, DateTime.UtcNow));
+
+        if (affected == 0)
+            return NotFound(new { error = "Company not found." });
+
+        // Evict cached company status so middleware picks up the change immediately
+        SubscriptionLockoutMiddleware.InvalidateCompanyCache(_memoryCache, id);
+
+        _logger.LogInformation("Company reactivated. CompanyId={CompanyId}", id);
+        return Ok(new { message = "Company reactivated.", companyId = id });
+    }
+
+    /// <summary>
+    /// GET /api/admin/companies/expiring — Companies expiring within N days.
+    /// </summary>
+    [HttpGet("companies/expiring")]
+    public async Task<IActionResult> GetExpiringCompanies([FromQuery] int days = 30)
+    {
+        var cutoff = DateTime.UtcNow.AddDays(days);
+        var companies = await _context.Companies
+            .IgnoreQueryFilters()
+            .Where(c => !c.IsDeleted
+                && c.SubscriptionExpiryDate.HasValue
+                && c.SubscriptionExpiryDate.Value <= cutoff
+                && c.AccountStatus == AccountStatus.Active)
+            .Select(c => new
+            {
+                c.Id,
+                c.Name,
+                c.Email,
+                c.SubscriptionExpiryDate,
+                DaysUntilExpiry = (c.SubscriptionExpiryDate!.Value - DateTime.UtcNow).Days
+            })
+            .OrderBy(c => c.SubscriptionExpiryDate)
+            .ToListAsync();
+
+        return Ok(companies);
     }
 }

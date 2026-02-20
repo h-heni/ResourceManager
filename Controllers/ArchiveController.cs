@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -11,7 +12,9 @@ namespace ResourceManager.Controllers
     /// <summary>
     /// Archive controller for viewing historical invoices (revenues) and expenses.
     /// Combines regular records with imported CSV data.
+    /// Employees cannot access archive data.
     /// </summary>
+    [Authorize(Roles = "SuperAdmin,Manager,FreeUser")]
     public class ArchiveController : BaseApiController
     {
         private readonly AppDbContext _context;
@@ -64,7 +67,7 @@ namespace ResourceManager.Controllers
                     .ToListAsync();
 
                 // Get years from paid supplier invoices
-                var supplierYears = await _context.FournisseurInvoices
+                var supplierYears = await _context.SupplierInvoices
                     .Where(si => si.Payments != null && si.Payments.Any(p => p.Status == "Completed"))
                     .Where(si => si.InvoiceDate.HasValue)
                     .Select(si => si.InvoiceDate!.Value.Year)
@@ -122,7 +125,7 @@ namespace ResourceManager.Controllers
                     .AsNoTracking()
                     .Include(i => i.Client)
                     .Include(i => i.Payments)
-                    .Include(i => i.Devis)
+                    .Include(i => i.Quote)
                     .Where(i => i.Treated == true && i.CompanyId == user.CompanyId && i.Date.Year == filterYear)
                     .ToListAsync();
 
@@ -145,8 +148,8 @@ namespace ResourceManager.Controllers
                         TotalAmount = i.TotalAmount,
                         ClientName = i.Client != null ? i.Client.Name : "Unknown",
                         ClientId = i.ClientId,
-                        Currency = i.Devis?.Currency ?? "",
-                        CurrencySymbol = i.Devis?.CurrencySymbol ?? "",
+                        Currency = i.Quote?.Currency ?? "",
+                        CurrencySymbol = i.Quote?.CurrencySymbol ?? "",
                         AmountPaid = i.Payments != null ? i.Payments.Where(p => p.Status == "Completed").Sum(p => p.Amount) : 0m,
                         RemainingAmount = i.TotalAmount - (i.Payments != null ? i.Payments.Where(p => p.Status == "Completed").Sum(p => p.Amount) : 0m),
                         Status = i.Status ?? "Paid",
@@ -250,9 +253,9 @@ namespace ResourceManager.Controllers
                     .ToListAsync();
 
                 // Get paid supplier invoices
-                var supplierInvoices = await _context.FournisseurInvoices
+                var supplierInvoices = await _context.SupplierInvoices
                     .AsNoTracking()
-                    .Include(si => si.Fournisseur)
+                    .Include(si => si.Supplier)
                     .Include(si => si.Payments)
                     .Where(si => si.Payments != null && si.Payments.Any(p => p.Status == "Completed"))
                     .Where(si => si.InvoiceDate.HasValue && si.InvoiceDate.Value.Year == filterYear)
@@ -260,7 +263,7 @@ namespace ResourceManager.Controllers
                     {
                         si.Id,
                         Date = si.InvoiceDate!.Value,
-                        SupplierName = si.Fournisseur != null ? si.Fournisseur.Name : "Unknown",
+                        SupplierName = si.Supplier != null ? si.Supplier.Name : "Unknown",
                         Amount = si.Payments!.Where(p => p.Status == "Completed").Sum(p => p.Amount),
                         Currency = si.Currency ?? "",
                         CurrencySymbol = si.CurrencySymbol ?? "",
@@ -274,7 +277,7 @@ namespace ResourceManager.Controllers
                 // Get historical expenses
                 var historicalExpenses = await _context.HistoricalExpenses
                     .AsNoTracking()
-                    .Include(h => h.Fournisseur)
+                    .Include(h => h.Supplier)
                     .Where(h => h.Date.Year == filterYear)
                     .Select(h => new
                     {

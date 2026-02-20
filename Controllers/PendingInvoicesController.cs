@@ -80,7 +80,7 @@ namespace ResourceManager.Controllers
                 }
 
                 // Try to link to existing supplier (case-insensitive)
-                var supplier = await _context.Fournisseurs
+                var supplier = await _context.Suppliers
                     .FirstOrDefaultAsync(f => f.Name.ToLower() == supplierName.Trim().ToLower()
                                            && f.CompanyId == user.CompanyId);
 
@@ -93,7 +93,7 @@ namespace ResourceManager.Controllers
                     Content = compressedContent,
                     OriginalSize = originalSize,
                     IsProcessed = false,
-                    FournisseurId = supplier?.Id,
+                    SupplierId = supplier?.Id,
                     CompanyId = user.CompanyId,
                     CreatedByUserId = userId,
                     CreatedAt = DateTime.UtcNow

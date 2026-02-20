@@ -37,7 +37,7 @@ interface Invoice {
     status: string;
     isLocked?: boolean;
     treated?: boolean;
-    devisId?: number;
+    quoteId?: number;
     amountPaid: number;
     pendingAmount: number;
     remainingAmount: number;
@@ -478,20 +478,22 @@ export default function InvoicesPage() {
                         <Filter size={16} />
                         {t('supplierInvoice.activeInvoices')} ({activeCount})
                     </button>
-                    <button
-                        onClick={() => {
-                            setViewMode('archived');
-                            setArchivedPage(1);
-                        }}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                            viewMode === 'archived'
-                                ? 'bg-white shadow-sm text-emerald-600'
-                                : 'text-gray-500 hover:text-gray-700'
-                        }`}
-                    >
-                        <Archive size={16} />
-                        {t('invoice.messages.archived')} ({archivedCount})
-                    </button>
+                    {isManager && (
+                        <button
+                            onClick={() => {
+                                setViewMode('archived');
+                                setArchivedPage(1);
+                            }}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                viewMode === 'archived'
+                                    ? 'bg-white shadow-sm text-emerald-600'
+                                    : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                        >
+                            <Archive size={16} />
+                            {t('invoice.messages.archived')} ({archivedCount})
+                        </button>
+                    )}
                 </div>
 
                 {/* Year filter dropdown - only show when archived view is active */}
@@ -524,6 +526,16 @@ export default function InvoicesPage() {
             ) : (
                 <div className="rm-table-card">
                         <table className="rm-table">
+                            <colgroup>
+                                <col style={{ width: '12%' }} />{/* Invoice # */}
+                                <col style={{ width: '15%' }} />{/* Client */}
+                                <col style={{ width: '11%' }} />{/* Date */}
+                                <col style={{ width: '13%' }} />{/* Total */}
+                                <col style={{ width: '13%' }} />{/* Paid */}
+                                <col style={{ width: '13%' }} />{/* Remaining */}
+                                <col style={{ width: '12%' }} />{/* Status */}
+                                <col style={{ width: '11%' }} />{/* Actions */}
+                            </colgroup>
                             <thead>
                                 <tr>
                                     <th

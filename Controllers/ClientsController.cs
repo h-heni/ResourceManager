@@ -82,7 +82,7 @@ namespace ResourceManager.Controllers
         var client = new Client
         {
             Name = clientDto.CompanyName,
-            MatriculeFiscal = clientDto.MatriculeFiscal,
+            TaxId = clientDto.TaxId,
             Address = clientDto.Address,
             Phone = clientDto.Phone,
             Email = clientDto.Email
@@ -104,7 +104,7 @@ namespace ResourceManager.Controllers
         }
         clientDb.Name=client.CompanyName;
         clientDb.Address=client.Address;
-        clientDb.MatriculeFiscal=client.MatriculeFiscal;
+        clientDb.TaxId=client.TaxId;
         clientDb.Phone=client.Phone;
         clientDb.Email=client.Email;
 

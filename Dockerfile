@@ -32,6 +32,8 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine AS runtime
 WORKDIR /app
 
 # Install ca-certificates first to fix TLS issues, then other dependencies
+# libfontconfig1 + freetype needed by SkiaSharp native on Alpine
+# ttf-liberation + font-noto = actual font files for QuestPDF rendering
 RUN apk add --no-cache ca-certificates && \
     apk add --no-cache \
     icu-libs \
@@ -40,7 +42,12 @@ RUN apk add --no-cache ca-certificates && \
     freetype \
     libstdc++ \
     tesseract-ocr \
-    curl
+    curl \
+    libgcc \
+    ttf-liberation \
+    font-noto \
+    font-noto-arabic && \
+    fc-cache -f
 
 # Create non-root user for security
 RUN adduser -D -u 1001 appuser

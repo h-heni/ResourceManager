@@ -89,7 +89,9 @@ namespace ResourceManager.Controllers
         public async Task<ActionResult> GetExpenseSummary([FromQuery] int? year = null)
         {
             var now = _time.GetUtcNow().DateTime;
-            var selectedYear = year ?? now.Year;
+            // year == null means "All Years" (no filter)
+            var isAllYears = !year.HasValue;
+            var selectedYear = isAllYears ? now.Year : year.GetValueOrDefault(now.Year);
             var startOfMonth = new DateTime(selectedYear, now.Month, 1);
             var startOfYear = new DateTime(selectedYear, 1, 1);
 
@@ -109,17 +111,17 @@ namespace ResourceManager.Controllers
             }
 
             var expensesQuery = _context.OtherExpenses.AsQueryable();
-            if (year.HasValue)
+            if (!isAllYears)
             {
                 expensesQuery = expensesQuery.Where(e => e.Date.Year == selectedYear);
             }
             var allExpenses = await expensesQuery.ToListAsync();
 
             // Include paid supplier invoices in expense totals
-            var supplierInvoicesQuery = _context.FournisseurInvoices
+            var supplierInvoicesQuery = _context.SupplierInvoices
                 .Include(si => si.Payments)
                 .AsQueryable();
-            if (year.HasValue)
+            if (!isAllYears)
             {
                 supplierInvoicesQuery = supplierInvoicesQuery
                     .Where(si => (si.InvoiceDate ?? si.CreatedAt).Year == selectedYear);
@@ -140,7 +142,7 @@ namespace ResourceManager.Controllers
                 })
                 .ToList();
 
-            // Add supplier invoices per currency
+            // Add supplier invoices per currency — "Paid Only" logic: use AmountPaid (confirmed payments)
             var supplierByCurrency = allSupplierInvoices
                 .Where(si => si.AmountPaid > 0)
                 .GroupBy(si => si.Currency ?? defaultCurrency)
@@ -194,11 +196,11 @@ namespace ResourceManager.Controllers
                 .OrderByDescending(g => g.Total)
                 .ToList();
 
-            var totalSupplierPaid = allSupplierInvoices.Sum(si => si.AmountPaid);
+            var totalSupplierAmount = allSupplierInvoices.Sum(si => si.AmountPaid);
             // Add supplier invoices as a category if any paid amount exists
-            if (totalSupplierPaid > 0)
+            if (totalSupplierAmount > 0)
             {
-                byCategory.Add(new { Category = "supplier_invoices", Total = totalSupplierPaid, Count = allSupplierInvoices.Count(si => si.AmountPaid > 0) });
+                byCategory.Add(new { Category = "supplier_invoices", Total = totalSupplierAmount, Count = allSupplierInvoices.Count(si => si.AmountPaid > 0) });
             }
 
             return Ok(new

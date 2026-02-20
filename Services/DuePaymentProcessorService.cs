@@ -81,7 +81,7 @@ namespace ResourceManager.Services
                 .Include(p => p.Invoice)
                     .ThenInclude(i => i!.Client)
                 .Include(p => p.Invoice)
-                    .ThenInclude(i => i!.Devis)
+                    .ThenInclude(i => i!.Quote)
                 .Include(p => p.Invoice)
                     .ThenInclude(i => i!.Payments)
                 .Where(p => p.Status == "Pending" && p.PaymentDate <= now);
@@ -142,7 +142,7 @@ namespace ResourceManager.Services
                     var totalPaidCompleted = inv.Payments?.Where(p => p.Status == "Completed").Sum(p => p.Amount) ?? 0;
                     var totalAmount = inv.TotalAmount ?? 0;
 
-                    if (totalPaidCompleted >= totalAmount && totalAmount > 0)
+                    if (totalAmount - totalPaidCompleted <= 0)
                     {
                         inv.Status = "Paid";
                         inv.IsLocked = true;
@@ -158,8 +158,8 @@ namespace ResourceManager.Services
             // SUPPLIER INVOICE PAYMENTS: Pending → Completed
             // ═══════════════════════════════════════════════════════
             var supplierPaymentQuery = _context.SupplierPayments
-                .Include(p => p.FournisseurInvoice)
-                    .ThenInclude(fi => fi!.Fournisseur)
+                .Include(p => p.SupplierInvoice)
+                    .ThenInclude(fi => fi!.Supplier)
                 .Where(p => p.Status == "Pending" && p.PaymentDate <= now);
 
             if (userId != null)
@@ -176,9 +176,9 @@ namespace ResourceManager.Services
                     payment.Id,
                     payment.PaymentDate.ToString("yyyy-MM-dd HH:mm:ss"),
                     now.ToString("yyyy-MM-dd HH:mm:ss"),
-                    payment.FournisseurInvoiceId,
-                    payment.FournisseurInvoice?.InvoiceNumber ?? "Unknown",
-                    payment.FournisseurInvoice?.Fournisseur?.Name ?? "Unknown",
+                    payment.SupplierInvoiceId,
+                    payment.SupplierInvoice?.InvoiceNumber ?? "Unknown",
+                    payment.SupplierInvoice?.Supplier?.Name ?? "Unknown",
                     payment.Amount);
 
                 // Transition status
@@ -191,16 +191,16 @@ namespace ResourceManager.Services
 
                 if (!hasExistingNotification)
                 {
-                    var supplierName = payment.FournisseurInvoice?.Fournisseur?.Name ?? "Unknown";
-                    var invoiceNumber = payment.FournisseurInvoice?.InvoiceNumber ?? "Unknown";
-                    var currencySymbol = payment.FournisseurInvoice?.CurrencySymbol ?? "TND";
+                    var supplierName = payment.SupplierInvoice?.Supplier?.Name ?? "Unknown";
+                    var invoiceNumber = payment.SupplierInvoice?.InvoiceNumber ?? "Unknown";
+                    var currencySymbol = payment.SupplierInvoice?.CurrencySymbol ?? "TND";
 
                     var notification = new PaymentNotification
                     {
                         PaymentId = 0,
                         InvoiceId = 0,
                         SupplierPaymentId = payment.Id,
-                        SupplierInvoiceId = payment.FournisseurInvoiceId,
+                        SupplierInvoiceId = payment.SupplierInvoiceId,
                         Message = $"📦 Scheduled supplier payment of {payment.Amount:N3} {currencySymbol} for Invoice #{invoiceNumber} ({supplierName}) has been auto-completed.",
                         CreatedAt = DateTime.UtcNow,
                         IsRead = false,

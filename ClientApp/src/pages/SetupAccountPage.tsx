@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { Building2, User, Lock, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { Building2, User, Lock, AlertCircle, CheckCircle, Loader2, Globe } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
@@ -64,6 +64,17 @@ export default function SetupAccountPage() {
                 if (res.data.valid) {
                     setTokenValid(true);
                     setInvitedEmail(res.data.email);
+                    // Apply preferred language from invitation
+                    const lang = res.data.preferredLanguage;
+                    if (lang) {
+                        setForm(prev => ({ ...prev, defaultLanguage: lang }));
+                        import('../i18n').then(() => {
+                            import('i18next').then(({ default: i18n }) => {
+                                i18n.changeLanguage(lang);
+                                localStorage.setItem('language', lang);
+                            });
+                        });
+                    }
                 } else {
                     setTokenError(res.data.error || t('invitation.invalidOrExpired', 'This invitation is invalid or expired.'));
                 }
@@ -79,6 +90,18 @@ export default function SetupAccountPage() {
 
     const handleChange = (field: keyof FormData) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         setForm(prev => ({ ...prev, [field]: e.target.value }));
+    };
+
+    const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const lang = e.target.value;
+        setForm(prev => ({ ...prev, defaultLanguage: lang }));
+        // Apply language immediately to the app
+        import('../i18n').then(() => {
+            import('i18next').then(({ default: i18n }) => {
+                i18n.changeLanguage(lang);
+                localStorage.setItem('language', lang);
+            });
+        });
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -208,6 +231,27 @@ export default function SetupAccountPage() {
                 )}
 
                 <form onSubmit={handleSubmit} className="space-y-6">
+                    {/* Language Selection — FIRST STEP */}
+                    <div className="p-5 bg-indigo-50 rounded-xl border border-indigo-200">
+                        <h3 className="font-semibold text-indigo-800 mb-3 flex items-center gap-2">
+                            <Globe size={18} />
+                            {t('invitation.languageSection', 'Choose Your Language')}
+                        </h3>
+                        <p className="text-sm text-gray-500 mb-4">
+                            {t('invitation.languageSectionDesc', 'Select your preferred language. The entire form and application will switch immediately.')}
+                        </p>
+                        <select
+                            className="w-full px-4 py-3 border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-base"
+                            value={form.defaultLanguage}
+                            onChange={handleLanguageChange}
+                        >
+                            <option value="fr">🇫🇷 Français</option>
+                            <option value="en">🇺🇸 English</option>
+                            <option value="ar">🇸🇦 العربية</option>
+                            <option value="de">🇩🇪 Deutsch</option>
+                        </select>
+                    </div>
+
                     {/* Profile Section */}
                     <div className="p-5 bg-[#065F46]/5 rounded-xl border border-[#065F46]/20">
                         <h3 className="font-semibold text-[#065F46] mb-4 flex items-center gap-2">

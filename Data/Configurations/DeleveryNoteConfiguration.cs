@@ -8,10 +8,10 @@ namespace ResourceManager.Data.Configurations
     {
         public void Configure(EntityTypeBuilder<DeliveryNote> builder)
         {
-            // DeliveryNote -> Invoice
-            builder.HasOne(dn => dn.Devis)
+            // DeliveryNote -> Quote
+            builder.HasOne(dn => dn.Quote)
                 .WithMany(i => i.DeliveryNotes)
-                .HasForeignKey(dn => dn.DevisId);
+                .HasForeignKey(dn => dn.QuoteId);
             builder.HasMany(d=>d.DeliveryNoteItems)
                 .WithOne(dni => dni.DeliveryNote)
                 .HasForeignKey(dni => dni.DeliveryNoteId);

@@ -67,8 +67,8 @@ namespace ResourceManager.Controllers
                     {
                         description = "PDFs are organized in the following structure:",
                         clientDocuments = "[CompanyName]/[Year]/Clients/[ClientName]/[Month]/[DocumentType]/",
-                        fournisseurDocuments = "[CompanyName]/[Year]/Fournisseurs/[FournisseurName]/[Month]/Invoices/",
-                        documentTypes = new[] { "Factures", "BonsLivraison", "Devis" },
+                        supplierDocuments = "[CompanyName]/[Year]/Suppliers/[SupplierName]/[Month]/Invoices/",
+                        documentTypes = new[] { "Invoices", "DeliveryNotes", "Quotes" },
                         months = new[] { "Janvier", "Février", "Mars", "Avril", "Mai", "Juin", 
                                         "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre" }
                     }
@@ -132,6 +132,308 @@ namespace ResourceManager.Controllers
                 {
                     message = "Failed to set PDF storage folder. Make sure the path is valid and you have write permissions."
                 });
+            }
+        }
+
+        /// <summary>
+        /// POST: api/pdf-storage/test-path - Test if a path is writable without persisting
+        /// Used during company setup to validate the storage path before committing
+        /// </summary>
+        [HttpPost("test-path")]
+        public IActionResult TestPath([FromBody] TestPathDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(dto.Path))
+            {
+                return BadRequest(new { message = "Path is required" });
+            }
+
+            var path = dto.Path.Trim();
+
+            try
+            {
+                // Check if the path is an absolute path
+                if (!Path.IsPathRooted(path))
+                {
+                    return BadRequest(new { message = "Please provide an absolute path (e.g., C:\\PDFs or /home/user/pdfs)" });
+                }
+
+                // Check if directory exists, or try to create it
+                if (!Directory.Exists(path))
+                {
+                    try
+                    {
+                        Directory.CreateDirectory(path);
+                        _logger.LogInformation("Test-path created directory: {Path}", path);
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                        return BadRequest(new { message = "Permission denied. Cannot create directory at the specified path." });
+                    }
+                    catch (IOException ex)
+                    {
+                        return BadRequest(new { message = $"Cannot create directory: {ex.Message}" });
+                    }
+                }
+
+                // Try to create and delete a test file to verify write permissions
+                var testFileName = Path.Combine(path, $".write_test_{Guid.NewGuid():N}.tmp");
+                try
+                {
+                    System.IO.File.WriteAllText(testFileName, "Test write permission");
+                    System.IO.File.Delete(testFileName);
+                    
+                    _logger.LogInformation("Test-path write test passed for: {Path}", path);
+                    return Ok(new { 
+                        message = "Path is valid and writable",
+                        path = path,
+                        exists = true,
+                        writable = true
+                    });
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    return BadRequest(new { message = "Directory exists but is not writable. Check folder permissions." });
+                }
+                catch (IOException ex)
+                {
+                    return BadRequest(new { message = $"Cannot write to directory: {ex.Message}" });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error testing path: {Path}", path);
+                return BadRequest(new { message = $"Invalid path: {ex.Message}" });
+            }
+        }
+
+        /// <summary>
+        /// POST: api/pdf-storage/resolve-folder - Find the full path of a folder using its name + contents fingerprint
+        /// The browser's native folder picker only returns the folder name, so we match by
+        /// checking which directory on this machine has the same name AND contains the same entries.
+        /// </summary>
+        [HttpPost("resolve-folder")]
+        public IActionResult ResolveFolder([FromBody] ResolveFolderDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(dto.Name))
+                return BadRequest(new { message = "Folder name is required" });
+
+            var folderName = dto.Name.Trim();
+            var entries = dto.Entries ?? Array.Empty<string>();
+
+            try
+            {
+                var candidates = new List<string>();
+
+                // Search all fixed drives
+                var drives = DriveInfo.GetDrives()
+                    .Where(d => d.IsReady && d.DriveType == DriveType.Fixed)
+                    .Select(d => d.RootDirectory.FullName)
+                    .ToList();
+
+                foreach (var drive in drives)
+                {
+                    try
+                    {
+                        // Recursively search for directories with this name (max 4 levels deep to avoid slow scanning)
+                        SearchForFolder(drive, folderName, 0, 4, candidates);
+                    }
+                    catch (UnauthorizedAccessException) { }
+                    catch (IOException) { }
+
+                    if (candidates.Count >= 20) break;
+                }
+
+                // If we have fingerprint entries, rank candidates by how many entries match
+                if (entries.Length > 0 && candidates.Count > 0)
+                {
+                    var ranked = candidates
+                        .Select(c =>
+                        {
+                            try
+                            {
+                                var dirEntries = Directory.GetFileSystemEntries(c)
+                                    .Select(Path.GetFileName)
+                                    .Where(n => n != null)
+                                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                                var matchCount = entries.Count(e => dirEntries.Contains(e));
+                                return new { Path = c, MatchCount = matchCount };
+                            }
+                            catch
+                            {
+                                return new { Path = c, MatchCount = 0 };
+                            }
+                        })
+                        .OrderByDescending(x => x.MatchCount)
+                        .ToList();
+
+                    // If top result matches most entries, that's our answer
+                    if (ranked.Count > 0 && ranked[0].MatchCount > 0)
+                    {
+                        return Ok(new { fullPath = ranked[0].Path });
+                    }
+                }
+
+                // Fallback: return first candidate or empty
+                return Ok(new { fullPath = candidates.FirstOrDefault() ?? "" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error resolving folder: {Name}", folderName);
+                return BadRequest(new { message = $"Error resolving folder: {ex.Message}" });
+            }
+        }
+
+        private static void SearchForFolder(string currentDir, string targetName, int depth, int maxDepth, List<string> results)
+        {
+            if (depth > maxDepth || results.Count >= 20) return;
+
+            try
+            {
+                foreach (var subDir in Directory.EnumerateDirectories(currentDir))
+                {
+                    try
+                    {
+                        var name = Path.GetFileName(subDir);
+                        if (string.Equals(name, targetName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            results.Add(subDir);
+                        }
+
+                        if (depth < maxDepth && results.Count < 20)
+                        {
+                            // Skip known heavy directories
+                            var lower = name?.ToLowerInvariant() ?? "";
+                            if (lower is "windows" or "program files" or "program files (x86)" 
+                                or "$recycle.bin" or "recovery" or "node_modules" or ".git" 
+                                or "obj" or "bin" or "appdata")
+                                continue;
+
+                            SearchForFolder(subDir, targetName, depth + 1, maxDepth, results);
+                        }
+                    }
+                    catch (UnauthorizedAccessException) { }
+                    catch (IOException) { }
+                }
+            }
+            catch (UnauthorizedAccessException) { }
+            catch (IOException) { }
+        }
+
+        /// <summary>
+        /// GET: api/pdf-storage/browse-system - Browse server directories for folder selection
+        /// Used in company setup to let users navigate and select a storage folder
+        /// </summary>
+        [HttpGet("browse-system")]
+        public IActionResult BrowseDirectories([FromQuery] string? path)
+        {
+            try
+            {
+                string currentPath;
+                
+                // Determine the starting path
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    // Return available drives on Windows, or root on Linux
+                    if (OperatingSystem.IsWindows())
+                    {
+                        var drives = DriveInfo.GetDrives()
+                            .Where(d => d.IsReady && d.DriveType == DriveType.Fixed)
+                            .Select(d => new DirectoryItem
+                            {
+                                Name = d.Name.TrimEnd(Path.DirectorySeparatorChar),
+                                Path = d.Name,
+                                IsDirectory = true,
+                                IsDrive = true
+                            })
+                            .ToList();
+
+                        return Ok(new BrowseResult
+                        {
+                            CurrentPath = "",
+                            ParentPath = null,
+                            Items = drives
+                        });
+                    }
+                    else
+                    {
+                        currentPath = "/";
+                    }
+                }
+                else
+                {
+                    currentPath = path.Trim();
+                }
+
+                // Validate the path
+                if (!Path.IsPathRooted(currentPath))
+                {
+                    return BadRequest(new { message = "Invalid path" });
+                }
+
+                if (!Directory.Exists(currentPath))
+                {
+                    return BadRequest(new { message = "Directory not found" });
+                }
+
+                // Get parent path
+                var dirInfo = new DirectoryInfo(currentPath);
+                var parentPath = dirInfo.Parent?.FullName;
+
+                // List subdirectories only (not files)
+                var items = new List<DirectoryItem>();
+                try
+                {
+                    var subDirs = Directory.GetDirectories(currentPath)
+                        .OrderBy(d => Path.GetFileName(d), StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var dir in subDirs)
+                    {
+                        var name = Path.GetFileName(dir);
+                        // Skip hidden and system directories
+                        if (name.StartsWith(".") || name.StartsWith("$")) continue;
+                        
+                        try
+                        {
+                            // Check if we can access the directory
+                            var testAccess = Directory.GetDirectories(dir).Length >= 0;
+                            items.Add(new DirectoryItem
+                            {
+                                Name = name,
+                                Path = dir,
+                                IsDirectory = true,
+                                IsDrive = false
+                            });
+                        }
+                        catch (UnauthorizedAccessException)
+                        {
+                            // Include but mark as inaccessible
+                            items.Add(new DirectoryItem
+                            {
+                                Name = name,
+                                Path = dir,
+                                IsDirectory = true,
+                                IsDrive = false,
+                                IsAccessible = false
+                            });
+                        }
+                    }
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    return BadRequest(new { message = "Access denied to this directory" });
+                }
+
+                return Ok(new BrowseResult
+                {
+                    CurrentPath = currentPath,
+                    ParentPath = parentPath,
+                    Items = items
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error browsing directories: {Path}", path);
+                return BadRequest(new { message = $"Error browsing: {ex.Message}" });
             }
         }
 
@@ -290,7 +592,7 @@ namespace ResourceManager.Controllers
                         r.DocumentNumber,
                         r.DocumentDate,
                         r.ClientName,
-                        r.FournisseurName,
+                        r.SupplierName,
                         r.FileSizeBytes,
                         r.CreatedAt,
                         hasCloudBackup = !string.IsNullOrEmpty(r.CloudUrl),
@@ -465,8 +767,35 @@ namespace ResourceManager.Controllers
         public string BaseFolderPath { get; set; } = string.Empty;
     }
 
+    public class TestPathDto
+    {
+        public string Path { get; set; } = string.Empty;
+    }
+
     public class RecoverFilesDto
     {
         public List<int> FileIds { get; set; } = new();
+    }
+
+    public class ResolveFolderDto
+    {
+        public string Name { get; set; } = string.Empty;
+        public string[] Entries { get; set; } = Array.Empty<string>();
+    }
+
+    public class BrowseResult
+    {
+        public string CurrentPath { get; set; } = string.Empty;
+        public string? ParentPath { get; set; }
+        public List<DirectoryItem> Items { get; set; } = new();
+    }
+
+    public class DirectoryItem
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Path { get; set; } = string.Empty;
+        public bool IsDirectory { get; set; } = true;
+        public bool IsDrive { get; set; }
+        public bool IsAccessible { get; set; } = true;
     }
 }

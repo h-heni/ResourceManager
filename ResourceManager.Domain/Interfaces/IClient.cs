@@ -8,6 +8,6 @@ public interface IClient
 {
     string Name { get; set; }
     string Address { get; set; }
-    string MatriculeFiscal { get; set; }
+    string TaxId { get; set; }
     string Phone { get; set; }
 }

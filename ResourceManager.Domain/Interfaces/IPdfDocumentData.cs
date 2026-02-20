@@ -1,7 +1,7 @@
 namespace ResourceManager.Domain.Interfaces;
 
 /// <summary>
-/// Contract for PDF-exportable documents (Invoice, Devis, DeliveryNote).
+/// Contract for PDF-exportable documents (Invoice, Quote, DeliveryNote).
 /// </summary>
 public interface IPdfDocumentData
 {

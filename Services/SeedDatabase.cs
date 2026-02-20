@@ -39,7 +39,7 @@ public static class SeedDatabase
                 {
                     Name = "SYSTEM",
                     Address = "HQ",
-                    MatriculeFiscal = "000000",
+                    TaxId = "000000",
                     Phone = "00000000",
                     CreatedAt = DateTime.UtcNow
                 };

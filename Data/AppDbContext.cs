@@ -43,14 +43,14 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Client> Clients { get; set; }
     public DbSet<Invoice> Invoices { get; set; }
     public DbSet<DeliveryNote> DeliveryNotes { get; set; }
-    public DbSet<Devis> Devis { get; set; }
+    public DbSet<Quote> Quotes { get; set; }
     public DbSet<InvoiceItem> InvoiceItems { get; set; }
     public DbSet<DeliveryNoteItem> DeliveryNoteItems { get; set; }
-    public DbSet<DevisItem> DevisItems { get; set; }
+    public DbSet<QuoteItem> QuoteItems { get; set; }
     public DbSet<Payment> Payments { get; set; }
-    public DbSet<Fournisseur> Fournisseurs { get; set; }
-    public DbSet<FournisseurInvoice> FournisseurInvoices { get; set; }
-    public DbSet<FournisseurInvoiceItem> FournisseurInvoiceItems { get; set; }
+    public DbSet<Supplier> Suppliers { get; set; }
+    public DbSet<SupplierInvoice> SupplierInvoices { get; set; }
+    public DbSet<SupplierInvoiceItem> SupplierInvoiceItems { get; set; }
     public DbSet<SupplierPayment> SupplierPayments { get; set; }
     public DbSet<Company> Companies { get; set; }
     public DbSet<UserProfile> UserProfiles { get; set; }
@@ -66,6 +66,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<HistoricalRevenue> HistoricalRevenues { get; set; }
     public DbSet<HistoricalExpense> HistoricalExpenses { get; set; }
     public DbSet<PendingInvoice> PendingInvoices { get; set; }
+    public DbSet<EmailAuditLog> EmailAuditLogs { get; set; }
+    public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
 
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -88,9 +90,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<Client>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
         builder.Entity<Invoice>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
         builder.Entity<DeliveryNote>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
-        builder.Entity<Devis>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
-        builder.Entity<Fournisseur>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
-        builder.Entity<FournisseurInvoice>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
+        builder.Entity<Quote>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
+        builder.Entity<Supplier>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
+        builder.Entity<SupplierInvoice>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
         builder.Entity<PdfFileRecord>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
         builder.Entity<OtherExpense>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
         builder.Entity<ProductService>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
@@ -98,6 +100,13 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<HistoricalExpense>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
         builder.Entity<CompanySettings>().HasQueryFilter(e => _isSuperAdmin || e.CompanyId == _currentCompanyId);
         builder.Entity<PendingInvoice>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
+
+        // Matching query filters for dependent entities with required FK to a filtered parent
+        // (prevents EF Core warning about required-end relationship with global-filtered entity)
+        builder.Entity<Payment>().HasQueryFilter(p => _isSuperAdmin || p.Invoice!.CompanyId == _currentCompanyId);
+        builder.Entity<InvoiceEmail>().HasQueryFilter(e => _isSuperAdmin || e.Invoice!.CompanyId == _currentCompanyId);
+        builder.Entity<SupplierInvoiceItem>().HasQueryFilter(i => _isSuperAdmin || i.SupplierInvoice!.CompanyId == _currentCompanyId);
+        builder.Entity<SupplierPayment>().HasQueryFilter(p => _isSuperAdmin || p.SupplierInvoice!.CompanyId == _currentCompanyId);
 
         builder.Entity<HistoricalRevenue>()
             .HasOne(e => e.Invoice)
@@ -129,7 +138,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<Invoice>()
             .HasIndex(e => new { e.CompanyId, e.Number })
             .IsUnique();
-        builder.Entity<Devis>()
+        builder.Entity<Quote>()
             .HasIndex(e => new { e.CompanyId, e.Number })
             .IsUnique();
     }
@@ -149,6 +158,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
         // Get User ID (string)
         string? currentUserId = user?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        string? currentUserFirstName = user?.FindFirst("FirstName")?.Value
+            ?? user?.FindFirst(ClaimTypes.GivenName)?.Value;
 
         // 2. Look at the Change Tracker
         var addedEntities = ChangeTracker.Entries()
@@ -192,12 +203,36 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
                 userProp.SetValue(entry.Entity, currentUserId);
             }
 
+            var createdByNameProp = entry.Entity.GetType().GetProperty("CreatedBy");
+            if (createdByNameProp != null && !string.IsNullOrWhiteSpace(currentUserFirstName))
+            {
+                createdByNameProp.SetValue(entry.Entity, currentUserFirstName);
+            }
+
             // --- STAMP 3: CREATED DATE ---
             // While we are here, let's auto-set the date too!
             var dateProp = entry.Entity.GetType().GetProperty("CreatedAt");
             if (dateProp != null)
             {
                 dateProp.SetValue(entry.Entity, DateTime.UtcNow);
+            }
+        }
+
+        var modifiedEntities = ChangeTracker.Entries()
+            .Where(e => e.State == EntityState.Modified);
+
+        foreach (var entry in modifiedEntities)
+        {
+            var updatedAtProp = entry.Entity.GetType().GetProperty("UpdatedAt");
+            if (updatedAtProp != null)
+            {
+                updatedAtProp.SetValue(entry.Entity, DateTime.UtcNow);
+            }
+
+            var modifiedByNameProp = entry.Entity.GetType().GetProperty("ModifiedBy");
+            if (modifiedByNameProp != null && !string.IsNullOrWhiteSpace(currentUserFirstName))
+            {
+                modifiedByNameProp.SetValue(entry.Entity, currentUserFirstName);
             }
         }
 

@@ -8,6 +8,18 @@ namespace ResourceManager.Dtos
         [EmailAddress(ErrorMessage = "Invalid email format.")]
         [StringLength(256)]
         public string Email { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Max employees this tenant is allowed (0 = unlimited).
+        /// </summary>
+        [Range(0, 10000)]
+        public int EmployeeCapacity { get; set; } = 0;
+
+        /// <summary>
+        /// Preferred UI language (en, fr, ar, de).
+        /// </summary>
+        [StringLength(5)]
+        public string PreferredLanguage { get; set; } = "fr";
     }
 
     public record CompleteInvitationDto

@@ -20,7 +20,7 @@ public record ClientDto(
     int Id,
     string Name,
     string Address,
-    string MatriculeFiscal,
+    string TaxId,
     string Phone,
     DateTime CreatedAt
 );
@@ -28,13 +28,13 @@ public record ClientDto(
 public record CreateClientRequest(
     string Name,
     string Address,
-    string MatriculeFiscal,
+    string TaxId,
     string Phone
 );
 
 public record UpdateClientRequest(
     string? Name,
     string? Address,
-    string? MatriculeFiscal,
+    string? TaxId,
     string? Phone
 );

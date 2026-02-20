@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Plus, Trash2, Save, FileText, Truck, User, Calendar, Package, AlertCircle } from 'lucide-react';
@@ -24,7 +24,7 @@ interface DeliveryNote {
     date: string;
     clientName?: string;
     totalAmount: number;
-    devisId?: number;
+    quoteId?: number;
     createdByUser?: { email?: string; userName?: string; firstName?: string; lastName?: string };
     createdByUserId?: string;
     deliveryNoteItems?: DeliveryNoteItem[];
@@ -39,14 +39,15 @@ interface InvoiceItem {
     fromCatalog?: boolean; // true when selected from product catalog, quote, or delivery note
 }
 
-interface DevisItem {
+interface QuoteItem {
     description: string;
     quantity: number;
     price: number;
     tva: boolean;
+    vatRate?: number;
 }
 
-interface Devis {
+interface QuoteData {
     id: number;
     number: string;
     Number?: string;
@@ -54,10 +55,10 @@ interface Devis {
     clientName: string;
     status: string;
     totalAmount: number;
-    devisItems?: DevisItem[];
+    quoteItems?: QuoteItem[];
 }
 
-const getDevisNumber = (devis: Devis) => devis.number || devis.Number || '';
+const getQuoteNumber = (quote: QuoteData) => quote.number || quote.Number || '';
 
 // Validation errors interface
 interface ValidationErrors {
@@ -94,10 +95,10 @@ export default function InvoiceCreatePage() {
     const [loading, setLoading] = useState(false);
     const [loadingInvoice, setLoadingInvoice] = useState(false);
     const [clients, setClients] = useState<Client[]>([]);
-    const [quotes, setQuotes] = useState<Devis[]>([]);
+    const [quotes, setQuotes] = useState<QuoteData[]>([]);
     const [deliveryNotes, setDeliveryNotes] = useState<DeliveryNote[]>([]);
     const [selectedDeliveryNoteIds, setSelectedDeliveryNoteIds] = useState<number[]>([]);
-    const [selectedQuoteData, setSelectedQuoteData] = useState<Devis | null>(null);
+    const [selectedQuoteData, setSelectedQuoteData] = useState<QuoteData | null>(null);
     const [errors, setErrors] = useState<ValidationErrors>({});
     const [touched, setTouched] = useState<Record<string, boolean>>({});
     const [submitted, setSubmitted] = useState(false);
@@ -123,22 +124,6 @@ export default function InvoiceCreatePage() {
     const [items, setItems] = useState<InvoiceItem[]>([
         { description: '', quantity: 1, price: 0, tva: true, vatRate: 19, fromCatalog: false }
     ]);
-
-    // Calculate aggregated quantities from selected delivery notes
-    const deliveredQuantitiesByDescription = useMemo(() => {
-        const quantityMap: Record<string, number> = {};
-
-        deliveryNotes
-            .filter(dn => selectedDeliveryNoteIds.includes(dn.id))
-            .forEach(dn => {
-                dn.deliveryNoteItems?.forEach(item => {
-                    const key = item.description.toLowerCase().trim();
-                    quantityMap[key] = (quantityMap[key] || 0) + (item.quantity || 0);
-                });
-            });
-
-        return quantityMap;
-    }, [deliveryNotes, selectedDeliveryNoteIds]);
 
     // Validate form fields
     const validateForm = (): boolean => {
@@ -196,7 +181,7 @@ export default function InvoiceCreatePage() {
                 setInvoiceNumber(inv.number || '');
                 setDate(inv.date ? new Date(inv.date).toISOString().split('T')[0] : '');
                 setClientId(inv.clientId?.toString() || '');
-                if (inv.devisId) setSelectedQuoteId(inv.devisId.toString());
+                if (inv.quoteId) setSelectedQuoteId(inv.quoteId.toString());
                 // Load per-document currency/language if available
                 if (inv.currency) setPdfCurrency(inv.currency);
                 if (inv.currencySymbol) setPdfCurrencySymbol(inv.currencySymbol);
@@ -298,10 +283,10 @@ export default function InvoiceCreatePage() {
             return;
         }
         try {
-            const res = await api.get('/Devis');
-            const allDevis = Array.isArray(res.data) ? res.data : (res.data.data || []);
+            const res = await api.get('/Quotes');
+            const allQuotes = Array.isArray(res.data) ? res.data : (res.data.data || []);
             // Filter to only show Draft or Accepted status quotes for this client
-            const clientQuotes = allDevis.filter((d: { status: string; isDeleted?: boolean; treated?: boolean; clientId: number }) =>
+            const clientQuotes = allQuotes.filter((d: { status: string; isDeleted?: boolean; treated?: boolean; clientId: number }) =>
                 (d.status === 'Draft' || d.status === 'Accepted') &&
                 !d.isDeleted &&
                 !d.treated &&
@@ -309,7 +294,7 @@ export default function InvoiceCreatePage() {
             );
             setQuotes(clientQuotes);
         } catch (error) {
-            logger.error("Error fetching devis", error);
+            logger.error("Error fetching quotes", error);
         }
     };
 
@@ -321,7 +306,7 @@ export default function InvoiceCreatePage() {
         }
         try {
             const res = await api.get('/DeliveryNotes');
-            let allNotes: Array<{ id: number; devisId?: number; invoiceId?: number | null }> = [];
+            let allNotes: Array<{ id: number; quoteId?: number; invoiceId?: number | null }> = [];
             if (Array.isArray(res.data)) {
                 allNotes = res.data;
             } else if (res.data?.Data) {
@@ -332,8 +317,8 @@ export default function InvoiceCreatePage() {
 
             // Filter delivery notes linked to this quote that don't have an invoice yet
             const linkedNoteIds = allNotes
-                .filter((dn: { id: number; devisId?: number; invoiceId?: number | null }) => dn.devisId === parseInt(quoteId) && !dn.invoiceId)
-                .map((dn: { id: number; devisId?: number; invoiceId?: number | null }) => dn.id);
+                .filter((dn: { id: number; quoteId?: number; invoiceId?: number | null }) => dn.quoteId === parseInt(quoteId) && !dn.invoiceId)
+                .map((dn: { id: number; quoteId?: number; invoiceId?: number | null }) => dn.id);
 
             // Fetch full details for each delivery note to get items and creator info
             const detailedNotes = await Promise.all(
@@ -375,40 +360,49 @@ export default function InvoiceCreatePage() {
     };
 
     // When delivery note selection changes, update items
+    // Logic: description & quantity from delivery notes if they exist, otherwise from quote
+    // Unit price ALWAYS comes from the quote
     useEffect(() => {
-        if (selectedQuoteData && selectedDeliveryNoteIds.length > 0) {
-            // Auto-update items based on selected delivery notes and quote prices
-            const quoteData = selectedQuoteData;
-            const selectedDNIds = selectedDeliveryNoteIds;
-            if (!quoteData?.devisItems || selectedDNIds.length === 0) {
-                return;
-            }
+        if (!selectedQuoteData?.quoteItems) return;
 
-            // Calculate aggregated delivered quantities
-            const deliveredQty: Record<string, number> = {};
-            deliveryNotes
-                .filter(dn => selectedDNIds.includes(dn.id))
-                .forEach(dn => {
-                    dn.deliveryNoteItems?.forEach(item => {
-                        const key = item.description.toLowerCase().trim();
-                        deliveredQty[key] = (deliveredQty[key] || 0) + (item.quantity || 0);
-                    });
+        const quoteData = selectedQuoteData;
+
+        // Build a price map from quote items (key: lowercase trimmed description)
+        const quotePriceMap: Record<string, { price: number; tva: boolean; vatRate?: number }> = {};
+        quoteData.quoteItems?.forEach(qi => {
+            const key = qi.description.toLowerCase().trim();
+            quotePriceMap[key] = { price: qi.price, tva: qi.tva, vatRate: qi.vatRate };
+        });
+
+        // Check if we have selected delivery notes
+        const selectedDNs = deliveryNotes.filter(dn => selectedDeliveryNoteIds.includes(dn.id));
+        
+        if (selectedDNs.length > 0) {
+            // Delivery notes exist: use description & quantity from delivery notes, price from quote
+            // Aggregate quantities by description across all selected delivery notes
+            const deliveredItems: Record<string, { description: string; quantity: number }> = {};
+            selectedDNs.forEach(dn => {
+                dn.deliveryNoteItems?.forEach(item => {
+                    const key = item.description.toLowerCase().trim();
+                    if (!deliveredItems[key]) {
+                        deliveredItems[key] = { description: item.description, quantity: 0 };
+                    }
+                    deliveredItems[key].quantity += item.quantity || 0;
                 });
+            });
 
-            // Map quote items with delivered quantities
-            const newItems: InvoiceItem[] = quoteData.devisItems
-                .filter(qi => {
-                    const key = qi.description.toLowerCase().trim();
-                    return deliveredQty[key] && deliveredQty[key] > 0;
-                })
-                .map(qi => {
-                    const key = qi.description.toLowerCase().trim();
+            // Map delivery note items with prices from quote
+            const newItems: InvoiceItem[] = Object.values(deliveredItems)
+                .filter(di => di.quantity > 0)
+                .map(di => {
+                    const key = di.description.toLowerCase().trim();
+                    const quoteInfo = quotePriceMap[key];
                     return {
-                        description: qi.description,
-                        quantity: deliveredQty[key] || qi.quantity,
-                        price: qi.price,
-                        tva: qi.tva,
-                        vatRate: qi.tva ? Math.round(taxSettings.defaultVatRate * 100) : 0,
+                        description: di.description,
+                        quantity: di.quantity,
+                        price: quoteInfo?.price ?? 0, // Price ALWAYS from quote
+                        tva: quoteInfo?.tva ?? true,
+                        vatRate: quoteInfo?.tva ? Math.round((quoteInfo?.vatRate ?? taxSettings.defaultVatRate) * 100) : 0,
                         fromCatalog: true
                     };
                 });
@@ -416,7 +410,22 @@ export default function InvoiceCreatePage() {
             if (newItems.length > 0) {
                 setItems(newItems);
             }
+        } else if (deliveryNotes.length === 0 && quoteData.quoteItems) {
+            // No delivery notes exist: use description, quantity, and price from quote
+            const newItems: InvoiceItem[] = quoteData.quoteItems.map(qi => ({
+                description: qi.description,
+                quantity: qi.quantity,
+                price: qi.price,
+                tva: qi.tva,
+                vatRate: qi.tva ? Math.round((qi.vatRate ?? taxSettings.defaultVatRate) * 100) : 0,
+                fromCatalog: true
+            }));
+
+            if (newItems.length > 0) {
+                setItems(newItems);
+            }
         }
+        // If delivery notes exist but none are selected, keep current items (user deselected all)
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedDeliveryNoteIds, selectedQuoteData, deliveryNotes]);
 
@@ -430,7 +439,7 @@ export default function InvoiceCreatePage() {
         }
 
         try {
-            const res = await api.get(`/Devis/${qid}`);
+            const res = await api.get(`/Quotes/${qid}`);
             const quote = res.data;
             setSelectedQuoteData(quote);
 
@@ -439,19 +448,8 @@ export default function InvoiceCreatePage() {
             if (quote.currencySymbol) setPdfCurrencySymbol(quote.currencySymbol);
             if (quote.pdfLanguage) setPdfLanguage(quote.pdfLanguage);
 
-            // Pre-fill items from quote
-            if (quote.devisItems && quote.devisItems.length > 0) {
-                setItems(quote.devisItems.map((item: { description: string; quantity: number; price: number; tva: boolean; vatRate?: number }) => ({
-                    description: item.description,
-                    quantity: item.quantity,
-                    price: item.price,
-                    tva: item.tva,
-                    vatRate: item.tva ? Math.round((item.vatRate ?? taxSettings.defaultVatRate) * 100) : 0,
-                    fromCatalog: true
-                })));
-            }
-
             // Fetch delivery notes linked to this quote
+            // Items will be populated by the useEffect based on whether delivery notes exist
             await fetchDeliveryNotesForQuote(qid);
         } catch (error) {
             logger.error("Error fetching quote details", error);
@@ -558,7 +556,7 @@ export default function InvoiceCreatePage() {
                 number: invoiceNumber.trim(),
                 date: new Date(date).toISOString(),
                 clientId: parseInt(clientId),
-                devisId: selectedQuoteId ? parseInt(selectedQuoteId) : null,
+                quoteId: selectedQuoteId ? parseInt(selectedQuoteId) : null,
                 deliveryNoteIds: selectedDeliveryNoteIds.length > 0 ? selectedDeliveryNoteIds : null,
                 items: items
                     .filter(item => item.description.trim() !== '')
@@ -719,7 +717,7 @@ export default function InvoiceCreatePage() {
                             <option value="">{t('createPage.noQuoteSelected')}</option>
                             {quotes.map(quote => (
                                 <option key={quote.id} value={quote.id}>
-                                    {t('createPage.selectQuote', { number: getDevisNumber(quote), amount: (quote.totalAmount || 0).toLocaleString() + ' ' + (pdfCurrencySymbol || DEFAULT_CURRENCY) })}
+                                    {t('createPage.selectQuote', { number: getQuoteNumber(quote), amount: (quote.totalAmount || 0).toLocaleString() + ' ' + (pdfCurrencySymbol || DEFAULT_CURRENCY) })}
                                 </option>
                             ))}
                         </select>
@@ -810,20 +808,6 @@ export default function InvoiceCreatePage() {
                                 </div>
                             ))}
                         </div>
-
-                        {/* Summary of delivered quantities */}
-                        {selectedDeliveryNoteIds.length > 0 && Object.keys(deliveredQuantitiesByDescription).length > 0 && (
-                            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-xl">
-                                <h4 className="font-semibold text-blue-800 text-sm mb-2">{t('deliveryNote.messages.totalDelivered')}</h4>
-                                <div className="flex flex-wrap gap-2">
-                                    {Object.entries(deliveredQuantitiesByDescription).map(([desc, qty]) => (
-                                        <span key={desc} className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm">
-                                            {desc}: <strong>{qty}</strong>
-                                        </span>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
                     </div>
                 )}
 

@@ -3,12 +3,12 @@ namespace ResourceManager.Dtos
 {
     public class ClientDto
     {
-        [Required(ErrorMessage = "Le nom est obligatoire.")]
+        [Required(ErrorMessage = "Name is required.")]
         public string CompanyName { get; set; } = string.Empty;
-        [Required(ErrorMessage = "L'adresse est obligatoire.")]
+        [Required(ErrorMessage = "Address is required.")]
         public string Address { get; set; } = string.Empty;
-        [Required(ErrorMessage = "Le numéro d'identification fiscale est obligatoire.")]
-        public string MatriculeFiscal { get; set; } = string.Empty;
+        [Required(ErrorMessage = "Tax identification number is required.")]
+        public string TaxId { get; set; } = string.Empty;
         public string Phone { get; set; } = string.Empty;
         public string? Email { get; set; }
     }

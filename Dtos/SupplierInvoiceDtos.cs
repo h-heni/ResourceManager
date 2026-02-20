@@ -13,10 +13,10 @@ namespace ResourceManager.DTOs
         public decimal? TVA { get; set; }
         public string? RawExtractedText { get; set; }
         public double? ConfidenceScore { get; set; }
-        public int? FournisseurId { get; set; }
-        public string? FournisseurName { get; set; }
-        public string? FournisseurAddress { get; set; }
-        public string? FournisseurPhone { get; set; }
+        public int? SupplierId { get; set; }
+        public string? SupplierName { get; set; }
+        public string? SupplierAddress { get; set; }
+        public string? SupplierPhone { get; set; }
         
         // Per-document currency
         public string? Currency { get; set; }
@@ -33,10 +33,10 @@ namespace ResourceManager.DTOs
         public decimal? TotalHT { get; set; }
         public decimal? TotalTTC { get; set; }
         public decimal? TVA { get; set; }
-        public int? FournisseurId { get; set; }
-        public string? FournisseurName { get; set; }
-        public string? FournisseurAddress { get; set; }
-        public string? FournisseurPhone { get; set; }
+        public int? SupplierId { get; set; }
+        public string? SupplierName { get; set; }
+        public string? SupplierAddress { get; set; }
+        public string? SupplierPhone { get; set; }
         public List<ConfirmSupplierItemDto>? Items { get; set; }
     }
 

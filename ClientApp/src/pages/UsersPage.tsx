@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import api from '../services/api';
 import { getErrorMessage, getErrorStatus, getAxiosResponseData } from '../utils/errorUtils';
 import { useAuth } from '../context/AuthContext';
-import { Plus, Users, AlertCircle, Trash2, KeyRound, X, Building2, Settings, Mail, CheckCircle, UserPlus } from 'lucide-react';
+import { Plus, Users, AlertCircle, Trash2, KeyRound, X, Building2, Settings, Mail, CheckCircle, UserPlus, Shield } from 'lucide-react';
 import { logger } from '../lib/logger';
 import { useTranslation } from 'react-i18next';
 import { useNotify } from '../hooks/useNotify';
@@ -15,6 +15,18 @@ interface UserDto {
     role: string;
     company?: string;
     companyId?: number;
+    employeeLimit?: number;
+    subscriptionExpiryDate?: string;
+    accountStatus?: string;
+}
+
+interface CompanyCapacity {
+    id: number;
+    name: string;
+    employeeLimit: number;
+    employeeCount: number;
+    subscriptionExpiryDate?: string;
+    accountStatus: string;
 }
 
 export default function UsersPage() {
@@ -29,6 +41,9 @@ export default function UsersPage() {
     const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
     const [selectedUser, setSelectedUser] = useState<UserDto | null>(null);
     const [actionLoading, setActionLoading] = useState(false);
+    const [employeeLimit, setEmployeeLimit] = useState(0);
+    const [employeeCount, setEmployeeCount] = useState(0);
+    const [, setCompanies] = useState<CompanyCapacity[]>([]);
 
     const isSuperAdmin = user?.roles?.includes('SuperAdmin');
     const isManager = user?.roles?.includes('Manager') || user?.roles?.includes('FreeUser');
@@ -43,7 +58,9 @@ export default function UsersPage() {
     });
 
     const [newTenant, setNewTenant] = useState({
-        email: ''
+        email: '',
+        employeeCapacity: 0,
+        preferredLanguage: 'fr'
     });
     const [invitationSent, setInvitationSent] = useState(false);
     const [tenantMode, setTenantMode] = useState<'invite' | 'direct'>('invite');
@@ -51,7 +68,7 @@ export default function UsersPage() {
     const [newDirectTenant, setNewDirectTenant] = useState({
         companyName: '',
         address: '',
-        matriculeFiscal: '',
+        taxId: '',
         phone: '',
         email: '',
         userEmail: '',
@@ -79,6 +96,10 @@ export default function UsersPage() {
             const res = await api.get('/Users');
             const data = res.data;
             setUsers(Array.isArray(data) ? data : (data.data || []));
+            // Capacity data from API
+            if (data.employeeLimit !== undefined) setEmployeeLimit(data.employeeLimit);
+            if (data.employeeCount !== undefined) setEmployeeCount(data.employeeCount);
+            if (data.companies) setCompanies(data.companies);
         } catch (err: unknown) {
             logger.error("Failed to fetch users", err);
             const status = getErrorStatus(err);
@@ -120,7 +141,11 @@ export default function UsersPage() {
         setActionLoading(true);
         setInvitationSent(false);
         try {
-            await api.post('/superadmin/invite-manager', { email: newTenant.email });
+            await api.post('/superadmin/invite-manager', {
+                email: newTenant.email,
+                employeeCapacity: newTenant.employeeCapacity,
+                preferredLanguage: newTenant.preferredLanguage
+            });
             setInvitationSent(true);
         } catch (err: unknown) {
             logger.error("Failed to send invitation", err);
@@ -276,6 +301,18 @@ export default function UsersPage() {
                             ? t('users.messages.manageSuperAdmin')
                             : t('users.messages.manageManager')}
                     </p>
+                    {/* Capacity counter for Manager view */}
+                    {isManager && !isSuperAdmin && employeeLimit > 0 && (
+                        <div className="mt-2 flex items-center gap-2">
+                            <Shield size={16} className={employeeCount >= employeeLimit + 1 ? 'text-red-500' : 'text-emerald-600'} />
+                            <span className={`text-sm font-medium ${employeeCount >= employeeLimit + 1 ? 'text-red-600' : 'text-gray-600'}`}>
+                                {t('users.capacity.label')}: {employeeCount} / {employeeLimit + 1}
+                            </span>
+                            {employeeCount >= employeeLimit + 1 && (
+                                <span className="text-xs text-red-500 bg-red-50 px-2 py-0.5 rounded-full">{t('users.capacity.full')}</span>
+                            )}
+                        </div>
+                    )}
                 </div>
                 <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
                     {isSuperAdmin && (
@@ -299,6 +336,13 @@ export default function UsersPage() {
 
             <div className="rm-table-card overflow-x-auto">
                 <table className="rm-table min-w-[700px]">
+                    <colgroup>
+                        <col style={{ width: '35%' }} />{/* User */}
+                        {isSuperAdmin && <col style={{ width: '15%' }} />}{/* Company */}
+                        <col style={{ width: '18%' }} />{/* Role */}
+                        <col style={{ width: '15%' }} />{/* Status */}
+                        <col style={{ width: isSuperAdmin ? '17%' : '32%' }} />{/* Actions */}
+                    </colgroup>
                     <thead>
                         <tr>
                             <th>{t('users.table.user')}</th>
@@ -471,7 +515,7 @@ export default function UsersPage() {
                                 {tenantMode === 'invite' ? <Mail className="text-emerald-600" size={24} /> : <UserPlus className="text-blue-600" size={24} />}
                                 {t('users.actions.addTenant')}
                             </h2>
-                            <button onClick={() => { setShowTenantModal(false); setInvitationSent(false); setDirectTenantCreated(false); setNewTenant({ email: '' }); setTenantMode('invite'); setNewDirectTenant({ companyName: '', address: '', matriculeFiscal: '', phone: '', email: '', userEmail: '', userPassword: '', userFirstName: '', userLastName: '', defaultCurrency: 'TND', defaultLanguage: 'fr', employeeLimit: 0 }); }} className="p-2 hover:bg-gray-100 rounded-full">
+                            <button onClick={() => { setShowTenantModal(false); setInvitationSent(false); setDirectTenantCreated(false); setNewTenant({ email: '', employeeCapacity: 0, preferredLanguage: 'fr' }); setTenantMode('invite'); setNewDirectTenant({ companyName: '', address: '', taxId: '', phone: '', email: '', userEmail: '', userPassword: '', userFirstName: '', userLastName: '', defaultCurrency: 'TND', defaultLanguage: 'fr', employeeLimit: 0 }); }} className="p-2 hover:bg-gray-100 rounded-full">
                                 <X size={20} />
                             </button>
                         </div>
@@ -513,7 +557,7 @@ export default function UsersPage() {
                                             {t('users.messages.invitationSentDesc')}
                                         </p>
                                         <button
-                                            onClick={() => { setShowTenantModal(false); setInvitationSent(false); setNewTenant({ email: '' }); setTenantMode('invite'); }}
+                                            onClick={() => { setShowTenantModal(false); setInvitationSent(false); setNewTenant({ email: '', employeeCapacity: 0, preferredLanguage: 'fr' }); setTenantMode('invite'); }}
                                             className="px-6 py-2 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow-md"
                                         >
                                             {t('common.close')}
@@ -536,10 +580,38 @@ export default function UsersPage() {
                                                     required
                                                 />
                                             </div>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.employeeCapacity')}</label>
+                                                    <input
+                                                        type="number"
+                                                        className="fancy-input w-full"
+                                                        value={newTenant.employeeCapacity}
+                                                        onChange={e => setNewTenant({ ...newTenant, employeeCapacity: parseInt(e.target.value) || 0 })}
+                                                        min={0}
+                                                        placeholder={t('users.fields.employeeCapacityPlaceholder')}
+                                                    />
+                                                    <p className="text-xs text-gray-400 mt-1">{t('users.fields.employeeCapacityHint')}</p>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.preferredLanguage')}</label>
+                                                    <select
+                                                        className="fancy-input w-full"
+                                                        value={newTenant.preferredLanguage}
+                                                        onChange={e => setNewTenant({ ...newTenant, preferredLanguage: e.target.value })}
+                                                    >
+                                                        <option value="fr">Français</option>
+                                                        <option value="en">English</option>
+                                                        <option value="ar">العربية</option>
+                                                        <option value="de">Deutsch</option>
+                                                    </select>
+                                                    <p className="text-xs text-gray-400 mt-1">{t('users.fields.preferredLanguageHint')}</p>
+                                                </div>
+                                            </div>
                                             <div className="flex justify-end space-x-3">
                                                 <button
                                                     type="button"
-                                                    onClick={() => { setShowTenantModal(false); setNewTenant({ email: '' }); setTenantMode('invite'); }}
+                                                    onClick={() => { setShowTenantModal(false); setNewTenant({ email: '', employeeCapacity: 0, preferredLanguage: 'fr' }); setTenantMode('invite'); }}
                                                     className="px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-100"
                                                 >
                                                     {t('common.cancel')}
@@ -574,7 +646,7 @@ export default function UsersPage() {
                                             {t('users.messages.directTenantCreatedDesc')}
                                         </p>
                                         <button
-                                            onClick={() => { setShowTenantModal(false); setDirectTenantCreated(false); setTenantMode('invite'); setNewDirectTenant({ companyName: '', address: '', matriculeFiscal: '', phone: '', email: '', userEmail: '', userPassword: '', userFirstName: '', userLastName: '', defaultCurrency: 'TND', defaultLanguage: 'fr', employeeLimit: 0 }); }}
+                                            onClick={() => { setShowTenantModal(false); setDirectTenantCreated(false); setTenantMode('invite'); setNewDirectTenant({ companyName: '', address: '', taxId: '', phone: '', email: '', userEmail: '', userPassword: '', userFirstName: '', userLastName: '', defaultCurrency: 'TND', defaultLanguage: 'fr', employeeLimit: 0 }); }}
                                             className="px-6 py-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow-md"
                                         >
                                             {t('common.close')}
@@ -658,8 +730,8 @@ export default function UsersPage() {
                                                         <label className="block text-sm font-medium text-gray-700 mb-1">{t('users.fields.fiscalIdRequired')}</label>
                                                         <input
                                                             className="fancy-input w-full"
-                                                            value={newDirectTenant.matriculeFiscal}
-                                                            onChange={e => setNewDirectTenant({ ...newDirectTenant, matriculeFiscal: e.target.value })}
+                                                            value={newDirectTenant.taxId}
+                                                            onChange={e => setNewDirectTenant({ ...newDirectTenant, taxId: e.target.value })}
                                                         />
                                                     </div>
                                                 </div>
@@ -736,7 +808,7 @@ export default function UsersPage() {
                                             <div className="flex justify-end space-x-3 pt-2">
                                                 <button
                                                     type="button"
-                                                    onClick={() => { setShowTenantModal(false); setTenantMode('invite'); setNewDirectTenant({ companyName: '', address: '', matriculeFiscal: '', phone: '', email: '', userEmail: '', userPassword: '', userFirstName: '', userLastName: '', defaultCurrency: 'TND', defaultLanguage: 'fr', employeeLimit: 0 }); }}
+                                                    onClick={() => { setShowTenantModal(false); setTenantMode('invite'); setNewDirectTenant({ companyName: '', address: '', taxId: '', phone: '', email: '', userEmail: '', userPassword: '', userFirstName: '', userLastName: '', defaultCurrency: 'TND', defaultLanguage: 'fr', employeeLimit: 0 }); }}
                                                     className="px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-100"
                                                 >
                                                     {t('common.cancel')}

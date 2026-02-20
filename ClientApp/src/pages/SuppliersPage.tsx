@@ -11,7 +11,7 @@ interface Supplier {
     id: number;
     name: string;
     address: string;
-    matriculeFiscal: string;
+    taxId: string;
     phone: string;
 }
 
@@ -29,7 +29,7 @@ export default function SuppliersPage() {
     const [formData, setFormData] = useState({
         name: '',
         address: '',
-        matriculeFiscal: '',
+        taxId: '',
         phone: ''
     });
     const [saving, setSaving] = useState(false);
@@ -40,7 +40,7 @@ export default function SuppliersPage() {
 
     const fetchSuppliers = async () => {
         try {
-            const res = await api.get('/Fournisseurs');
+            const res = await api.get('/Suppliers');
             // Handle both pagination and raw list
             const data = Array.isArray(res.data) ? res.data : (res.data.data || []);
             setSuppliers(data);
@@ -57,12 +57,12 @@ export default function SuppliersPage() {
             setFormData({
                 name: supplier.name,
                 address: supplier.address,
-                matriculeFiscal: supplier.matriculeFiscal,
+                taxId: supplier.taxId,
                 phone: supplier.phone
             });
         } else {
             setEditingSupplier(null);
-            setFormData({ name: '', address: '', matriculeFiscal: '', phone: '' });
+            setFormData({ name: '', address: '', taxId: '', phone: '' });
         }
         setIsModalOpen(true);
     };
@@ -73,9 +73,9 @@ export default function SuppliersPage() {
         setSaving(true);
         try {
             if (editingSupplier) {
-                await api.put(`/Fournisseurs/${editingSupplier.id}`, { ...formData, id: editingSupplier.id });
+                await api.put(`/Suppliers/${editingSupplier.id}`, { ...formData, id: editingSupplier.id });
             } else {
-                await api.post('/Fournisseurs', formData);
+                await api.post('/Suppliers', formData);
             }
             setIsModalOpen(false);
             fetchSuppliers();
@@ -90,7 +90,7 @@ export default function SuppliersPage() {
     const handleDelete = async (id: number) => {
         if (!confirm(t('supplier.messages.confirmDelete'))) return;
         try {
-            await api.delete(`/Fournisseurs/${id}`);
+            await api.delete(`/Suppliers/${id}`);
             fetchSuppliers();
         } catch (error) {
             logger.error("Error deleting supplier", error);
@@ -99,7 +99,7 @@ export default function SuppliersPage() {
 
     const filteredSuppliers = suppliers.filter(s =>
         s.name.toLowerCase().includes(search.toLowerCase()) ||
-        s.matriculeFiscal.includes(search)
+        s.taxId.includes(search)
     );
 
     return (
@@ -135,6 +135,13 @@ export default function SuppliersPage() {
             ) : (
                 <div className="rm-table-card">
                     <table className="rm-table">
+                        <colgroup>
+                            <col style={{ width: '25%' }} />{/* Company Name */}
+                            <col style={{ width: '18%' }} />{/* Fiscal ID */}
+                            <col style={{ width: '15%' }} />{/* Phone */}
+                            <col style={{ width: '30%' }} />{/* Address */}
+                            <col style={{ width: '12%' }} />{/* Actions */}
+                        </colgroup>
                         <thead>
                             <tr>
                                 <th>{t('supplier.messages.companyName')}</th>
@@ -150,7 +157,7 @@ export default function SuppliersPage() {
                                     <td className="rm-cell-text">
                                         <span className="font-semibold text-gray-900">{supplier.name}</span>
                                     </td>
-                                    <td className="rm-cell-text whitespace-nowrap text-gray-600">{supplier.matriculeFiscal || '-'}</td>
+                                    <td className="rm-cell-text whitespace-nowrap text-gray-600">{supplier.taxId || '-'}</td>
                                     <td className="rm-cell-text whitespace-nowrap text-gray-600">{supplier.phone || '-'}</td>
                                     <td className="rm-cell-text text-gray-600">{supplier.address || '-'}</td>
                                     <td className="rm-cell-actions">
@@ -165,7 +172,7 @@ export default function SuppliersPage() {
                                                     const formData = new FormData();
                                                     formData.append('file', file);
                                                     try {
-                                                        await api.post(`/Fournisseurs/${supplier.id}/upload-invoice`, formData, {
+                                                        await api.post(`/Suppliers/${supplier.id}/upload-invoice`, formData, {
                                                             headers: { 'Content-Type': 'multipart/form-data' }
                                                         });
                                                         notify('success', t('supplier.messages.uploadSuccess'));
@@ -224,8 +231,8 @@ export default function SuppliersPage() {
                         <input
                             type="text"
                             required
-                            value={formData.matriculeFiscal}
-                            onChange={e => setFormData({ ...formData, matriculeFiscal: e.target.value })}
+                            value={formData.taxId}
+                            onChange={e => setFormData({ ...formData, taxId: e.target.value })}
                             className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] outline-none"
                             placeholder={t('supplier.messages.placeholders.fiscalId')}
                         />

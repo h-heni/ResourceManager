@@ -149,10 +149,10 @@ public class DashboardSummary
 /// </summary>
 public class SupplierExtractionResult
 {
-    public string? FournisseurName { get; set; }
-    public string? FournisseurEmail { get; set; }
-    public string? FournisseurPhone { get; set; }
-    public string? FournisseurAddress { get; set; }
+    public string? SupplierName { get; set; }
+    public string? SupplierEmail { get; set; }
+    public string? SupplierPhone { get; set; }
+    public string? SupplierAddress { get; set; }
     public string? InvoiceNumber { get; set; }
     public string? InvoiceDate { get; set; }
     public string? DueDate { get; set; }
@@ -181,7 +181,7 @@ public class SupplierInvoiceDTO
 {
     public int Id { get; set; }
     public string InvoiceNumber { get; set; } = "";
-    public string FournisseurName { get; set; } = "";
+    public string SupplierName { get; set; } = "";
     public decimal TotalTTC { get; set; }
     public string? InvoiceDate { get; set; }
     public string? PaymentStatus { get; set; }

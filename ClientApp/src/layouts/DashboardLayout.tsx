@@ -22,7 +22,8 @@ import {
     ChevronDown,
     ChevronRight,
     Building2,
-    Database
+    Database,
+    Shield
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { logger } from '../lib/logger';
@@ -46,7 +47,7 @@ export default function DashboardLayout() {
     // Hooks must be called before any derived values that depend on them
     const navigate = useNavigate();
     const location = useLocation();
-    const { logout, canManageUsers, canManageSettings, displayName, isSuperAdmin, isManager } = useAuth();
+    const { logout, canManageUsers, canManageSettings, displayName, isSuperAdmin, isManager, isEmployee, isAuthenticated } = useAuth();
     const { t } = useTranslation();
 
     // Below lg (1024 px) → mobile/tablet (drawer); lg+ → sidebar always visible
@@ -83,13 +84,16 @@ export default function DashboardLayout() {
     }, [location.pathname]);
     /* eslint-enable react-hooks/set-state-in-effect */
 
-    // Fetch company branding on mount
+    // Fetch company branding on mount (only if authenticated)
     useEffect(() => {
+        if (!isAuthenticated) return;
+        
         let logoUrlToCleanup: string | null = null;
 
         const fetchCompanyBranding = async () => {
             try {
-                const res = await api.get('/Settings');
+                // Use /branding endpoint for all roles (works for Employee too)
+                const res = await api.get('/Settings/branding');
                 if (res.data) {
                     setCompanyName(res.data.companyName || 'Resource Manager');
                 }
@@ -121,7 +125,7 @@ export default function DashboardLayout() {
                 URL.revokeObjectURL(logoUrlToCleanup);
             }
         };
-    }, []);
+    }, [isAuthenticated]);
 
     // userName is derived directly from displayName (no sync effect needed)
 
@@ -170,9 +174,10 @@ export default function DashboardLayout() {
     // NAVIGATION STRUCTURE
     // ════════════════════════════════════════════════════════
 
-    const topNavItems: NavItem[] = [
-        { icon: LayoutDashboard, label: t('nav.dashboard'), path: '/dashboard' },
-    ];
+    // Dashboard is hidden from Employee role
+    const topNavItems: NavItem[] = isEmployee
+        ? []
+        : [{ icon: LayoutDashboard, label: t('nav.dashboard'), path: '/dashboard' }];
 
     const navSections: NavSection[] = [
         {
@@ -202,7 +207,7 @@ export default function DashboardLayout() {
     const bottomNavItems: NavItem[] = [
         ...(isManager ? [{ icon: Database, label: t('nav.dataManagement', 'Data Management'), path: '/data-management' }] : []),
         ...(canManageUsers ? [{ icon: UserPlus, label: t('nav.users'), path: '/users' }] : []),
-
+        ...(isSuperAdmin ? [{ icon: Shield, label: t('nav.subscriptions', 'Subscriptions'), path: '/subscriptions' }] : []),
         ...(canManageSettings ? [{ icon: Settings, label: t('nav.settings'), path: '/settings' }] : []),
     ];
 
@@ -316,8 +321,12 @@ export default function DashboardLayout() {
             {/* Navigation */}
             <nav className="flex-1 p-3 space-y-1 overflow-y-auto mt-1">
                 {topNavItems.map(item => renderNavItem(item))}
-                <div className="border-t border-slate-200 my-2" />
-                {navSections.map(section => renderSection(section))}
+                {!isSuperAdmin && (
+                    <>
+                        <div className="border-t border-slate-200 my-2" />
+                        {navSections.map(section => renderSection(section))}
+                    </>
+                )}
                 <div className="border-t border-slate-200 my-2" />
                 {bottomNavItems.map(item => renderNavItem(item))}
             </nav>

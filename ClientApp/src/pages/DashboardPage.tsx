@@ -29,14 +29,24 @@ interface TopClient {
 
 interface ChartPoint {
     month: number;
+    year?: number;
+    label?: string;
     amount: number;
     count: number;
 }
 
 interface ExpenseChartPoint {
     month: number;
+    year?: number;
+    label?: string;
     amount: number;
     supplierCount: number;
+}
+
+interface ProductItem {
+    description: string;
+    totalQuantity: number;
+    totalAmount: number;
 }
 
 interface DashboardStats {
@@ -45,7 +55,7 @@ interface DashboardStats {
     availableCurrencies: string[];
     availableYears?: number[];
     defaultCurrency: string;
-    selectedYear: number;
+    selectedYear: number | null;
 
     totalRevenue: number;
     pendingInvoicesCount: number;
@@ -68,7 +78,9 @@ interface DashboardStats {
     topClients: TopClient[];
     revenueChart: ChartPoint[];
     expenseChart: ExpenseChartPoint[];
-    mostBoughtProducts: { description: string; totalQuantity: number; totalAmount: number }[];
+    mostBoughtProducts: ProductItem[];
+    mostSoldProducts: ProductItem[];
+    isAllYearsMode: boolean;
 
     /* mixed-mode fields (only present when mode=mixed) */
     currencyBreakdownRevenue?: Record<string, number>;
@@ -89,6 +101,12 @@ interface RevenueSummary {
     revenueByYear: { year: number; total: number }[];
 }
 
+interface PurchasesSummary {
+    totalAllTime: number;
+    selectedYearTotal: number;
+    purchasesByYear: { year: number; total: number }[];
+}
+
 export default function DashboardPage() {
     const { t } = useTranslation();
     const { isManager, isSuperAdmin } = useAuth();
@@ -96,8 +114,10 @@ export default function DashboardPage() {
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [expenseSummary, setExpenseSummary] = useState<ExpenseSummary | null>(null);
     const [revenueSummary, setRevenueSummary] = useState<RevenueSummary | null>(null);
+    const [purchasesSummary, setPurchasesSummary] = useState<PurchasesSummary | null>(null);
     const [archivedInvoiceCount, setArchivedInvoiceCount] = useState(0);
     const [loading, setLoading] = useState(true);
+    const [fetchError, setFetchError] = useState<string | null>(null);
     const [activeCurrency, setActiveCurrency] = useState<string | null>(null);
     const [recoveryStatus, setRecoveryStatus] = useState<{ type: 'running' | 'success' | 'warning' | 'error'; message: string } | null>(null);
     const recoveryRunRef = useRef(false);
@@ -110,30 +130,38 @@ export default function DashboardPage() {
 
     /* ─── Year filter state ─── */
     const currentYear = new Date().getFullYear();
-    const [selectedYear, setSelectedYear] = useState<number>(currentYear);
+    // null = "All Years" mode; number = specific year
+    const [selectedYear, setSelectedYear] = useState<number | null>(currentYear);
     const [availableYears, setAvailableYears] = useState<number[]>([currentYear]);
 
     /* ─── Data fetch (skipped for SuperAdmin) ─── */
-    const fetchStats = async (currency?: string, mixedMode?: boolean, yearOverride?: number) => {
+    const fetchStats = async (currency?: string, mixedMode?: boolean, yearOverride?: number | null) => {
         if (isSuperAdmin) return;
-        const yearParam = yearOverride ?? selectedYear;
+        // null/undefined = All Years (omit year param); positive number = specific year
+        const yearParam: number | null = yearOverride !== undefined ? yearOverride : selectedYear;
+        const isAllYears = yearParam === null || yearParam === -1;
         try {
             let queryParam = '';
+            const yearQs = isAllYears ? '' : `year=${yearParam}`;
             if (mixedMode && mixedTargetCurrency && parseFloat(mixedExchangeRate) > 0) {
-                queryParam = `?mode=mixed&targetCurrency=${encodeURIComponent(mixedTargetCurrency)}&exchangeRate=${encodeURIComponent(mixedExchangeRate)}&year=${yearParam}`;
+                queryParam = `?mode=mixed&targetCurrency=${encodeURIComponent(mixedTargetCurrency)}&exchangeRate=${encodeURIComponent(mixedExchangeRate)}${yearQs ? '&' + yearQs : ''}`;
             } else if (currency) {
-                queryParam = `?currency=${encodeURIComponent(currency)}&year=${yearParam}`;
+                queryParam = `?currency=${encodeURIComponent(currency)}${yearQs ? '&' + yearQs : ''}`;
             } else {
-                queryParam = `?year=${yearParam}`;
+                queryParam = yearQs ? `?${yearQs}` : '';
             }
-            const [dashRes, expensesRes, revenueRes, archivedRes] = await Promise.allSettled([
+            const expenseYearQs = isAllYears ? '' : `?year=${yearParam}`;
+            const archivedYearQs = isAllYears ? '' : `?year=${yearParam}`;
+            const [dashRes, expensesRes, revenueRes, archivedRes, purchasesRes] = await Promise.allSettled([
                 api.get(`/Dashboard/stats${queryParam}`),
-                api.get(`/Expenses/summary?year=${yearParam}`),
+                api.get(`/Expenses/summary${expenseYearQs}`),
                 api.get(`/Dashboard/revenue-summary${queryParam}`),
-                api.get(`/Invoices/archived/count?year=${yearParam}`)
+                api.get(`/Invoices/archived/count${archivedYearQs}`),
+                api.get(`/Dashboard/purchases-summary${queryParam}`)
             ]);
 
             let archivedCountFallback: number | null = null;
+            setFetchError(null);  // Clear any previous error on new fetch
 
             if (dashRes.status === 'fulfilled') {
                 const d = dashRes.value.data;
@@ -142,7 +170,9 @@ export default function DashboardPage() {
                     : [currentYear];
 
                 setAvailableYears(dynamicYears);
-                setSelectedYear(d.selectedYear ?? currentYear);
+                // Backend returns null for "All Years" mode, or a specific year number
+                const backendYear = d.selectedYear;
+                setSelectedYear(backendYear == null ? null : backendYear);
 
                 setStats({
                     selectedCurrency: d.selectedCurrency || DEFAULT_CURRENCY,
@@ -172,6 +202,8 @@ export default function DashboardPage() {
                     revenueChart: d.revenueChart || [],
                     expenseChart: d.expenseChart || [],
                     mostBoughtProducts: d.mostBoughtProducts || [],
+                    mostSoldProducts: d.mostSoldProducts || [],
+                    isAllYearsMode: d.isAllYearsMode ?? false,
                     currencyBreakdownRevenue: d.currencyBreakdownRevenue ?? undefined,
                     currencyBreakdownExpense: d.currencyBreakdownExpense ?? undefined,
                 });
@@ -205,8 +237,18 @@ export default function DashboardPage() {
             } else if (archivedCountFallback !== null) {
                 setArchivedInvoiceCount(archivedCountFallback);
             }
+
+            if (purchasesRes.status === 'fulfilled') {
+                const pd = purchasesRes.value.data;
+                setPurchasesSummary({
+                    totalAllTime: pd.totalAllTime ?? 0,
+                    selectedYearTotal: pd.selectedYearTotal ?? 0,
+                    purchasesByYear: pd.purchasesByYear || [],
+                });
+            }
         } catch (error) {
             console.error('Failed to fetch dashboard stats', error);
+            setFetchError(t('dashboard.fetchError', 'Failed to load dashboard data. Please try again.'));
         } finally {
             setLoading(false);
         }
@@ -221,7 +263,8 @@ export default function DashboardPage() {
     /* eslint-enable react-hooks/exhaustive-deps */
 
     /* Re-fetch when year changes */
-    const handleYearChange = (yr: number) => {
+    const handleYearChange = (rawValue: string) => {
+        const yr = rawValue === 'all' ? null : Number(rawValue);
         setSelectedYear(yr);
         setLoading(true);
         fetchStats(activeCurrency || undefined, dashboardMode === 'mixed', yr);
@@ -274,7 +317,7 @@ export default function DashboardPage() {
 
                 const typeConfig: Record<string, { listEndpoint: string; pdfEndpoint: (id: number) => string }> = {
                     'Invoice': { listEndpoint: '/Invoices?page=1&size=9999', pdfEndpoint: (id) => `/Invoices/${id}/pdf` },
-                    'Quote': { listEndpoint: '/Devis?page=1&size=9999', pdfEndpoint: (id) => `/Devis/${id}/pdf` },
+                    'Quote': { listEndpoint: '/Quotes?page=1&size=9999', pdfEndpoint: (id) => `/Quotes/${id}/pdf` },
                     'DeliveryNote': { listEndpoint: '/DeliveryNotes?page=1&size=9999', pdfEndpoint: (id) => `/DeliveryNotes/${id}/pdf` },
                 };
 
@@ -314,7 +357,7 @@ export default function DashboardPage() {
 
                     for (const missing of files) {
                         const entity = entities.find((e: Record<string, unknown>) => {
-                            const num = e.number || e.Number || e.invoiceNumber || e.devisNumber || '';
+                            const num = e.number || e.Number || e.invoiceNumber || e.quoteNumber || '';
                             return num === missing.documentNumber;
                         });
                         if (!entity) { failed++; continue; }
@@ -365,14 +408,18 @@ export default function DashboardPage() {
         return growth >= 0 ? `+${growth.toFixed(1)}%` : `${growth.toFixed(1)}%`;
     };
 
-    /* Growth Trajectory data — revenue minus expenses per month */
+    /* Growth Trajectory data — revenue minus expenses per period */
     const growthTrajectoryData = useMemo(() => {
         if (!stats) return [];
+        const allYears = stats.isAllYearsMode;
         return stats.revenueChart.map((r) => {
-            const exp = stats.expenseChart.find(e => e.month === r.month);
+            const exp = allYears
+                ? stats.expenseChart.find(e => e.label === r.label)
+                : stats.expenseChart.find(e => e.month === r.month);
             const expAmount = exp?.amount ?? 0;
             return {
                 month: r.month,
+                label: r.label || '',
                 revenue: r.amount,
                 expenses: expAmount,
                 net: r.amount - expAmount,
@@ -387,17 +434,24 @@ export default function DashboardPage() {
         t('months.oct', 'Oct'), t('months.nov', 'Nov'), t('months.dec', 'Dec')
     ], [t]);
 
-    const selectedYearRevenue = revenueSummary?.selectedYearTotal ?? stats?.totalRevenue ?? 0;
+    // In "All Years" mode, use totalAllTime for revenue; otherwise use selectedYearTotal
+    const isAllYearsMode = selectedYear === null;
+    const selectedYearRevenue = isAllYearsMode
+        ? (revenueSummary?.totalAllTime ?? stats?.totalRevenue ?? 0)
+        : (revenueSummary?.selectedYearTotal ?? stats?.totalRevenue ?? 0);
     const allTimeRevenue = revenueSummary?.totalAllTime ?? 0;
     const netResult = selectedYearRevenue - (stats?.totalExpenses ?? 0);
 
-    /* Recharts chart data */
+    /* Recharts chart data — dynamic labels: years for "All Years", months for specific year */
     const revenueExpenseChartData = useMemo(() => {
         if (!stats?.revenueChart) return [];
+        const allYears = stats.isAllYearsMode;
         return stats.revenueChart.map((r) => {
-            const exp = stats.expenseChart?.find(e => e.month === r.month);
+            const exp = allYears
+                ? stats.expenseChart?.find(e => e.label === r.label)
+                : stats.expenseChart?.find(e => e.month === r.month);
             return {
-                name: monthNames[r.month - 1],
+                name: allYears ? (r.label || String(r.year)) : monthNames[r.month - 1],
                 revenue: r.amount,
                 expenses: exp?.amount ?? 0,
             };
@@ -441,6 +495,23 @@ export default function DashboardPage() {
             <SuperAdminDashboard />
         </ErrorBoundary>
     );
+
+    /* ─── Error state ─── */
+    if (fetchError && !stats) {
+        return (
+            <div className="flex flex-col items-center justify-center h-64 gap-4">
+                <div className="text-red-600 bg-red-50 border border-red-200 rounded-xl p-6 text-center max-w-md">
+                    <p className="font-medium mb-2">{fetchError}</p>
+                    <button
+                        onClick={() => { setFetchError(null); setLoading(true); fetchStats(); }}
+                        className="mt-2 px-4 py-2 bg-[#065F46] text-white rounded-lg text-sm hover:bg-[#054E3B] transition-colors"
+                    >
+                        {t('common.retry', 'Retry')}
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     /* ─── Loading skeleton ─── */
     if (loading) {
@@ -528,10 +599,11 @@ export default function DashboardPage() {
                     )}
                     {/* Year selector */}
                     <select
-                        value={selectedYear}
-                        onChange={e => handleYearChange(Number(e.target.value))}
+                        value={selectedYear === null ? 'all' : selectedYear}
+                        onChange={e => handleYearChange(e.target.value)}
                         className="px-3 py-1.5 text-sm font-medium rounded-lg bg-gray-100 border-0 text-gray-700 focus:ring-2 focus:ring-[#065F46] outline-none cursor-pointer"
                     >
+                        <option value="all">{t('dashboard.allYears', 'All Years')}</option>
                         {availableYears.map(yr => (
                             <option key={yr} value={yr}>{yr}</option>
                         ))}
@@ -565,7 +637,7 @@ export default function DashboardPage() {
                                 min="0.0001"
                                 value={mixedExchangeRate}
                                 onChange={e => setMixedExchangeRate(e.target.value)}
-                                placeholder="e.g. 3.3"
+                                placeholder={t('settings.exchangeRatePlaceholder')}
                                 className="px-3 py-2 border border-blue-200 rounded-lg text-sm w-32 bg-white focus:ring-2 focus:ring-blue-400"
                             />
                         </div>
@@ -659,7 +731,7 @@ export default function DashboardPage() {
                             <p className="text-xs text-gray-500 mt-0.5">{t('dashboard.totalRevenueLabel', 'Revenue')}</p>
                         </div>
                         <div className="text-center">
-                            <p className="text-lg font-bold text-gray-900">{(stats?.totalInvoiceCount ?? 0) - archivedInvoiceCount}</p>
+                            <p className="text-lg font-bold text-gray-900">{Math.max(0, (stats?.totalInvoiceCount ?? 0) - archivedInvoiceCount)}</p>
                             <p className="text-xs text-gray-500 mt-0.5">{t('dashboard.invoicesLabel', 'Invoices')}</p>
                         </div>
                         <div className="text-center">
@@ -676,6 +748,10 @@ export default function DashboardPage() {
                             <p className="text-[11px] text-gray-400 mb-2">{t('dashboard.revenueByYear', 'Revenue by year')}</p>
                             <div className="rm-table-card border-gray-100 shadow-none">
                                 <table className="rm-table">
+                                    <colgroup>
+                                        <col style={{ width: '40%' }} />
+                                        <col style={{ width: '60%' }} />
+                                    </colgroup>
                                     <thead>
                                         <tr>
                                             <th className="rm-th-id">{t('common.year', 'Year')}</th>
@@ -713,6 +789,33 @@ export default function DashboardPage() {
                             <p className="text-xs text-gray-500 mt-0.5">{t('nav.suppliers', 'Suppliers')}</p>
                         </div>
                     </div>
+                    {purchasesSummary?.purchasesByYear?.length ? (
+                        <div className="mt-3 border-t border-gray-50 pt-2">
+                            <p className="text-[11px] text-gray-400 mb-2">{t('dashboard.expensesByYear', 'Expenses by year')}</p>
+                            <div className="rm-table-card border-gray-100 shadow-none">
+                                <table className="rm-table">
+                                    <colgroup>
+                                        <col style={{ width: '40%' }} />
+                                        <col style={{ width: '60%' }} />
+                                    </colgroup>
+                                    <thead>
+                                        <tr>
+                                            <th className="rm-th-id">{t('common.year', 'Year')}</th>
+                                            <th className="rm-th-number">{t('expense.totalExpenses', 'Expenses')}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {purchasesSummary.purchasesByYear.map((entry) => (
+                                            <tr key={entry.year}>
+                                                <td className="rm-cell-text whitespace-nowrap font-medium text-gray-700">{entry.year}</td>
+                                                <td className="rm-cell-currency">{fmt(entry.total)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    ) : null}
                     {stats && (
                         <div className={`mt-3 p-2.5 rounded-lg border text-center ${netResult >= 0 ? 'bg-emerald-50/50 border-emerald-100' : 'bg-red-50/50 border-red-100'}`}>
                             <span className="text-xs text-gray-500 me-2">{t('dashboard.netResult', 'Net Result')}</span>
@@ -747,7 +850,7 @@ export default function DashboardPage() {
                                 <BarChart data={revenueExpenseChartData} barGap={4}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
                                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94A3B8' }} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94A3B8' }} width={60} tickFormatter={(v: number) => formatNumber(v)} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94A3B8' }} width={80} tickFormatter={(v: number) => formatNumber(v)} />
                                     <RechartsTooltip content={<ChartTooltipContent />} />
                                     <Bar dataKey="revenue" name={t('dashboard.revenueLabel', 'Revenue')} fill={CHART_COLORS.revenue} radius={[4, 4, 0, 0]} />
                                     <Bar dataKey="expenses" name={t('expense.totalExpenses', 'Expenses')} fill={CHART_COLORS.expenses} radius={[4, 4, 0, 0]} />
@@ -771,7 +874,7 @@ export default function DashboardPage() {
                         <div className="h-[280px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
                                 <AreaChart data={growthTrajectoryData.map(d => ({
-                                    name: monthNames[d.month - 1],
+                                    name: isAllYearsMode ? d.label : monthNames[d.month - 1],
                                     net: d.net
                                 }))}>
                                     <defs>
@@ -782,7 +885,7 @@ export default function DashboardPage() {
                                     </defs>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
                                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94A3B8' }} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94A3B8' }} width={60} tickFormatter={(v: number) => formatNumber(v)} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94A3B8' }} width={80} tickFormatter={(v: number) => formatNumber(v)} />
                                     <RechartsTooltip content={<ChartTooltipContent />} />
                                     <Area type="monotone" dataKey="net" name={t('dashboard.netLabel', 'Net')} stroke={CHART_COLORS.net} strokeWidth={2.5} fill="url(#gradNet)" />
                                 </AreaChart>
@@ -794,6 +897,89 @@ export default function DashboardPage() {
                 </div>
             </div>
 
+            {/* Product Performance: Top Sales + Top Purchases */}
+            {stats && ((stats.mostSoldProducts?.length > 0) || (stats.mostBoughtProducts?.length > 0)) && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Top Sold Products (from client invoices) */}
+                    <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-4">
+                            {t('dashboard.topSoldProducts', 'Top Sold Products')}
+                        </h3>
+                        {stats.mostSoldProducts?.length > 0 ? (
+                            <div className="rm-table-card border-gray-100 shadow-none">
+                                <table className="rm-table">
+                                    <colgroup>
+                                        <col style={{ width: '8%' }} />
+                                        <col style={{ width: '47%' }} />
+                                        <col style={{ width: '18%' }} />
+                                        <col style={{ width: '27%' }} />
+                                    </colgroup>
+                                    <thead>
+                                        <tr>
+                                            <th className="rm-th-id">#</th>
+                                            <th>{t('common.description', 'Description')}</th>
+                                            <th className="rm-th-number">{t('common.quantity', 'Qty')}</th>
+                                            <th className="rm-th-number">{t('common.total', 'Total')}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {stats.mostSoldProducts.slice(0, 5).map((p, idx) => (
+                                            <tr key={p.description}>
+                                                <td className="rm-cell-text whitespace-nowrap font-semibold text-gray-500">{idx + 1}</td>
+                                                <td className="rm-cell-text font-medium text-gray-900">{p.description}</td>
+                                                <td className="rm-cell-number">{p.totalQuantity}</td>
+                                                <td className="rm-cell-currency">{fmt(p.totalAmount)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <p className="text-gray-400 text-sm">{t('common.noData')}</p>
+                        )}
+                    </div>
+
+                    {/* Top Purchased Products (from supplier invoices) */}
+                    <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-4">
+                            {t('dashboard.topPurchasedProducts', 'Top Purchased Products')}
+                        </h3>
+                        {stats.mostBoughtProducts?.length > 0 ? (
+                            <div className="rm-table-card border-gray-100 shadow-none">
+                                <table className="rm-table">
+                                    <colgroup>
+                                        <col style={{ width: '8%' }} />
+                                        <col style={{ width: '47%' }} />
+                                        <col style={{ width: '18%' }} />
+                                        <col style={{ width: '27%' }} />
+                                    </colgroup>
+                                    <thead>
+                                        <tr>
+                                            <th className="rm-th-id">#</th>
+                                            <th>{t('common.description', 'Description')}</th>
+                                            <th className="rm-th-number">{t('common.quantity', 'Qty')}</th>
+                                            <th className="rm-th-number">{t('common.total', 'Total')}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {stats.mostBoughtProducts.slice(0, 5).map((p, idx) => (
+                                            <tr key={p.description}>
+                                                <td className="rm-cell-text whitespace-nowrap font-semibold text-gray-500">{idx + 1}</td>
+                                                <td className="rm-cell-text font-medium text-gray-900">{p.description}</td>
+                                                <td className="rm-cell-number">{p.totalQuantity}</td>
+                                                <td className="rm-cell-currency">{fmt(p.totalAmount)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ) : (
+                            <p className="text-gray-400 text-sm">{t('common.noData')}</p>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* Bottom Row: Status Breakdown + Top Clients */}
             <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
                 {/* Invoice Status Breakdown */}
@@ -803,10 +989,10 @@ export default function DashboardPage() {
                     </h3>
                     {stats?.statusBreakdown && stats.statusBreakdown.length > 0 ? (
                         <div className="space-y-3">
-                            {stats.statusBreakdown
-                                .filter(item => item.status !== 'Archived') // Filter out Archived
-                                .map((item) => {
-                                const totalCount = (stats.totalInvoiceCount || 0) - archivedInvoiceCount || 1; // Use active total for %
+                            {(() => {
+                                const activeItems = stats.statusBreakdown.filter(item => item.status !== 'Archived');
+                                const totalCount = Math.max(1, activeItems.reduce((sum, item) => sum + item.count, 0));
+                                return activeItems.map((item) => {
                                 const pct = Math.round((item.count / totalCount) * 100);
                                 const barColor = statusBarColor[item.status] || CHART_COLORS.draft;
                                 return (
@@ -823,7 +1009,8 @@ export default function DashboardPage() {
                                         </div>
                                     </div>
                                 );
-                            })}
+                                });
+                            })()}
                         </div>
                     ) : (
                         <p className="text-gray-400 text-sm">{t('common.noData')}</p>
@@ -838,6 +1025,13 @@ export default function DashboardPage() {
                     {stats?.topClients && stats.topClients.length > 0 ? (
                         <div className="rm-table-card border-gray-100 shadow-none">
                             <table className="rm-table">
+                                <colgroup>
+                                    <col style={{ width: '6%' }} />
+                                    <col style={{ width: '34%' }} />
+                                    <col style={{ width: '16%' }} />
+                                    <col style={{ width: '30%' }} />
+                                    <col style={{ width: '14%' }} />
+                                </colgroup>
                                 <thead>
                                     <tr>
                                         <th className="rm-th-id">#</th>
@@ -878,9 +1072,7 @@ export default function DashboardPage() {
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
                         {expenseSummary.byCategory.map((cat) => {
-                            const maxTotal = expenseSummary.byCategory[0]?.total || 1;
-                            const pct = Math.round((cat.total / expenseSummary.totalAll) * 100);
-                            const barPct = Math.round((cat.total / maxTotal) * 100);
+                            const pct = Math.round((cat.total / (expenseSummary.totalAll || 1)) * 100);
                             return (
                                 <div key={cat.category}>
                                     <div className="flex justify-between text-sm mb-1">
@@ -890,7 +1082,7 @@ export default function DashboardPage() {
                                     <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                                         <div
                                             className="h-full rounded-full"
-                                            style={{ width: `${barPct}%`, backgroundColor: CHART_COLORS.expenses }}
+                                            style={{ width: `${pct}%`, backgroundColor: CHART_COLORS.expenses }}
                                         />
                                     </div>
                                 </div>

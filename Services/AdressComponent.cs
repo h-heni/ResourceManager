@@ -28,7 +28,7 @@ namespace ResourceManager.Services
 
                 column.Item().Text(Client.Name);
                 column.Item().Text(Client.Address);
-                column.Item().Text(Client.MatriculeFiscal);
+                column.Item().Text(Client.TaxId);
                 column.Item().Text(Client.Phone);
             });
         }

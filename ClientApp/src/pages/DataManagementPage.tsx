@@ -324,7 +324,7 @@ export default function DataManagementPage() {
     if (!isManager) {
         return (
             <div className="text-center py-20 text-gray-500">
-                <p>This feature is available to managers only.</p>
+                <p>{t('common.managerOnly')}</p>
             </div>
         );
     }
@@ -427,7 +427,7 @@ export default function DataManagementPage() {
 
                     {/* Required columns info */}
                     <div className="p-3 bg-blue-50/50 rounded-lg border border-blue-100">
-                        <p className="text-xs font-semibold text-blue-800 mb-1">Required columns:</p>
+                        <p className="text-xs font-semibold text-blue-800 mb-1">{t('dataManagement.requiredColumns')}</p>
                         <div className="flex flex-wrap gap-1">
                             {config.requiredColumns.map(col => (
                                 <span key={col} className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">{col}</span>
@@ -435,7 +435,7 @@ export default function DataManagementPage() {
                         </div>
                         {config.optionalColumns.length > 0 && (
                             <>
-                                <p className="text-xs font-semibold text-blue-800 mt-2 mb-1">Optional columns:</p>
+                                <p className="text-xs font-semibold text-blue-800 mt-2 mb-1">{t('dataManagement.optionalColumns')}</p>
                                 <div className="flex flex-wrap gap-1">
                                     {config.optionalColumns.map(col => (
                                         <span key={col} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">{col}</span>
@@ -448,7 +448,7 @@ export default function DataManagementPage() {
                             className="mt-2 text-xs text-blue-600 hover:text-blue-800 underline flex items-center gap-1"
                         >
                             <Download size={12} />
-                            Download template CSV
+                            {t('dataManagement.downloadTemplateCsv')}
                         </button>
                     </div>
 

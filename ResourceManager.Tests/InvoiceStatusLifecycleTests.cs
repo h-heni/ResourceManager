@@ -127,9 +127,9 @@ public class InvoiceStatusLifecycleTests
     }
 
     [Fact]
-    public void FournisseurInvoice_FullLifecycle()
+    public void SupplierInvoice_FullLifecycle()
     {
-        var fi = new FournisseurInvoice { TotalTTC = 5000m };
+        var fi = new SupplierInvoice { TotalTTC = 5000m };
 
         // Initial: Pending
         Assert.Equal("Pending", fi.PaymentStatus);
@@ -170,6 +170,23 @@ public class InvoiceStatusLifecycleTests
         Assert.DoesNotContain(invoice.Status, legacyStatuses);
     }
 
+    [Fact]
+    public void RecalculateStatus_UsesRemainingAmountRule_ForPaid()
+    {
+        var invoice = new Invoice(new List<InvoiceItem>
+        {
+            new() { Description = "Zero amount", Quantity = 1, Price = 0m, Tva = false }
+        })
+        {
+            Tfiscal = 0m
+        };
+        invoice.CalculTotalAmount();
+        RecalculateStatus(invoice);
+
+        Assert.Equal("Paid", invoice.Status);
+        Assert.True(invoice.IsLocked);
+    }
+
     /// <summary>
     /// Mirrors the status recalculation logic from InvoicesController / DuePaymentProcessorService.
     /// </summary>
@@ -180,7 +197,7 @@ public class InvoiceStatusLifecycleTests
             .Sum(p => p.Amount);
         var totalAmount = invoice.TotalAmount ?? 0;
 
-        if (totalPaid >= totalAmount && totalAmount > 0)
+        if (totalAmount - totalPaid <= 0)
         {
             invoice.Status = "Paid";
             invoice.IsLocked = true;
