@@ -871,8 +871,8 @@ namespace ResourceManager.Controllers
                             var amountStr = SafeGet(row, "Amount Paid") is { Length: > 0 } ap ? ap : SafeGet(row, "Amount");
                             if (!TryParseAmount(amountStr, out var parsedAmount) || parsedAmount <= 0) { skipped++; continue; }
 
-                            var category = SafeGet(row, "Category", "other").ToLowerInvariant();
-                            var currency = SafeGet(row, "Currency", "TND").ToUpperInvariant();
+                            var category = ExpensesController.NormalizeCategory(SafeGet(row, "Category", "other"));
+                            var currency = ExpensesController.NormalizeCurrency(SafeGet(row, "Currency", "TND"));
                             var notes = SafeGet(row, "Notes");
                             var recurringStr = SafeGet(row, "Recurring");
                             var isRecurring = recurringStr.Equals("yes", StringComparison.OrdinalIgnoreCase)

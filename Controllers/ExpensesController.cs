@@ -12,6 +12,64 @@ namespace ResourceManager.Controllers
         private readonly TimeProvider _time;
         private readonly ILogger<ExpensesController> _logger;
 
+        // ═══ Currency alias → canonical ISO code ═══
+        // DT (French symbol for Tunisian Dinar) → TND, etc.
+        private static readonly Dictionary<string, string> CurrencyAliases = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["DT"] = "TND",
+            ["dt"] = "TND",
+            // Arabic symbol for TND
+            ["\u062F\u062A"] = "TND",
+        };
+
+        // ═══ Category translations → canonical English key ═══
+        // Covers FR, DE, AR translations so imported data maps back correctly.
+        private static readonly Dictionary<string, string> CategoryAliases = new(StringComparer.OrdinalIgnoreCase)
+        {
+            // French
+            ["loyer"] = "rent", ["services publics"] = "utilities",
+            ["fournitures de bureau"] = "office", ["déplacements"] = "travel",
+            ["assurance"] = "insurance", ["abonnements"] = "subscription",
+            ["salaires"] = "salary", ["télécommunications"] = "telecom",
+            ["frais bancaires"] = "bankFees", ["autre"] = "other",
+            ["factures fournisseurs"] = "supplier_invoices",
+            // German
+            ["miete"] = "rent", ["nebenkosten"] = "utilities",
+            ["bürobedarf"] = "office", ["reisen"] = "travel",
+            ["versicherung"] = "insurance", ["wartung"] = "maintenance",
+            ["gehälter"] = "salary", ["telekommunikation"] = "telecom",
+            ["bankgebühren"] = "bankFees", ["sonstiges"] = "other",
+            ["lieferantenrechnungen"] = "supplier_invoices",
+            // Arabic
+            ["إيجار"] = "rent", ["مرافق"] = "utilities",
+            ["مستلزمات مكتبية"] = "office", ["سفر"] = "travel",
+            ["تسويق"] = "marketing", ["تأمين"] = "insurance",
+            ["صيانة"] = "maintenance", ["اشتراكات"] = "subscription",
+            ["رواتب"] = "salary", ["اتصالات"] = "telecom",
+            ["رسوم بنكية"] = "bankFees", ["أخرى"] = "other",
+            ["فواتير الموردين"] = "supplier_invoices",
+        };
+
+        /// <summary>Normalize currency code: DT → TND, dt → TND, etc.</summary>
+        internal static string NormalizeCurrency(string? currency)
+        {
+            if (string.IsNullOrWhiteSpace(currency)) return "TND";
+            var trimmed = currency.Trim();
+            if (CurrencyAliases.TryGetValue(trimmed, out var canonical))
+                return canonical;
+            return trimmed.ToUpperInvariant();
+        }
+
+        /// <summary>Normalize category: translated names → canonical English key, lowercase.</summary>
+        internal static string NormalizeCategory(string? category)
+        {
+            if (string.IsNullOrWhiteSpace(category)) return "other";
+            var trimmed = category.Trim();
+            if (CategoryAliases.TryGetValue(trimmed, out var canonical))
+                return canonical;
+            return trimmed.ToLowerInvariant();
+        }
+
         public ExpensesController(AppDbContext context, TimeProvider time, ILogger<ExpensesController> logger)
         {
             _context = context;
@@ -129,8 +187,9 @@ namespace ResourceManager.Controllers
             var allSupplierInvoices = await supplierInvoicesQuery.ToListAsync();
 
             // ═══ Per-currency breakdown ═══
+            // Normalize currency codes so DT/TND/dt all group together
             var byCurrency = allExpenses
-                .GroupBy(e => e.Currency ?? defaultCurrency)
+                .GroupBy(e => NormalizeCurrency(e.Currency ?? defaultCurrency))
                 .Select(g => new
                 {
                     Currency = g.Key,
@@ -145,7 +204,7 @@ namespace ResourceManager.Controllers
             // Add supplier invoices per currency — "Paid Only" logic: use AmountPaid (confirmed payments)
             var supplierByCurrency = allSupplierInvoices
                 .Where(si => si.AmountPaid > 0)
-                .GroupBy(si => si.Currency ?? defaultCurrency)
+                .GroupBy(si => NormalizeCurrency(si.Currency ?? defaultCurrency))
                 .Select(g => new
                 {
                     Currency = g.Key,
@@ -185,8 +244,9 @@ namespace ResourceManager.Controllers
             var totalThisYear = currencyBreakdowns.Sum(c => c.TotalThisYear);
 
             // Group by category (OtherExpenses only — supplier invoices are a separate category)
+            // Normalize category names so translated/cased variants group together
             var byCategory = allExpenses
-                .GroupBy(e => e.Category)
+                .GroupBy(e => NormalizeCategory(e.Category))
                 .Select(g => new
                 {
                     Category = g.Key,
@@ -219,16 +279,19 @@ namespace ResourceManager.Controllers
         [HttpPost]
         public async Task<ActionResult> CreateExpense(CreateExpenseDto dto)
         {
+            var normalizedCurrency = NormalizeCurrency(dto.Currency);
+            var normalizedCategory = NormalizeCategory(dto.Category);
+
             var expense = new OtherExpense
             {
                 Description = dto.Description,
                 Amount = dto.Amount,
                 Date = dto.Date ?? _time.GetUtcNow().DateTime,
-                Category = dto.Category,
+                Category = normalizedCategory,
                 Notes = dto.Notes,
                 IsRecurring = dto.IsRecurring,
-                Currency = dto.Currency,
-                CurrencySymbol = dto.CurrencySymbol
+                Currency = normalizedCurrency,
+                CurrencySymbol = dto.CurrencySymbol ?? normalizedCurrency
             };
 
             _context.OtherExpenses.Add(expense);
@@ -261,10 +324,10 @@ namespace ResourceManager.Controllers
             expense.Description = dto.Description;
             expense.Amount = dto.Amount;
             expense.Date = dto.Date ?? expense.Date;
-            expense.Category = dto.Category;
+            expense.Category = NormalizeCategory(dto.Category);
             expense.Notes = dto.Notes;
             expense.IsRecurring = dto.IsRecurring;
-            expense.Currency = dto.Currency ?? expense.Currency;
+            expense.Currency = NormalizeCurrency(dto.Currency ?? expense.Currency);
             expense.CurrencySymbol = dto.CurrencySymbol ?? expense.CurrencySymbol;
             expense.UpdatedAt = _time.GetUtcNow().DateTime;
 
