@@ -40,8 +40,9 @@ Dockerfile*
 docker-compose*
 .dockerignore
 
-# Frontend (built separately)
+# Frontend (built separately — except i18n locales needed by API)
 ClientApp/
+!ClientApp/src/i18n/locales/
 
 # Mobile (not needed for API)
 ResourceManager.Mobile/
