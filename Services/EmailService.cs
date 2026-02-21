@@ -39,6 +39,10 @@ namespace ResourceManager.Services
         /// Human-readable bounce status for the UI
         /// </summary>
         public string? BounceStatus { get; set; }
+        /// <summary>
+        /// SMTP Message-ID for webhook correlation
+        /// </summary>
+        public string? MessageId { get; set; }
     }
 
     /// <summary>
@@ -206,22 +210,24 @@ namespace ResourceManager.Services
 
             var retryCount = 0;
             var context = new Context { ["To"] = to };
+            string? messageId = null;
 
             try
             {
                 await _retryPolicy.ExecuteAsync(async (ctx) =>
                 {
                     retryCount++;
-                    await SendViaSmtpAsync(to, subject, htmlBody, pdfAttachment, attachmentName);
+                    messageId = await SendViaSmtpAsync(to, subject, htmlBody, pdfAttachment, attachmentName);
                 }, context);
 
-                _logger.LogInformation("Email sent successfully to {To} (retries: {Retries})", to, retryCount - 1);
+                _logger.LogInformation("Email sent successfully to {To} (retries: {Retries}), MessageId: {MessageId}", to, retryCount - 1, messageId);
 
                 return new EmailSendResult
                 {
                     Success = true,
                     Message = $"Email sent successfully to {to}",
-                    RetryCount = retryCount - 1
+                    RetryCount = retryCount - 1,
+                    MessageId = messageId
                 };
             }
             catch (Exception ex) when (_isDevMode)
@@ -358,7 +364,7 @@ namespace ResourceManager.Services
         /// <summary>
         /// Send email via SMTP with proper headers for deliverability
         /// </summary>
-        private async Task SendViaSmtpAsync(
+        private async Task<string> SendViaSmtpAsync(
             string to,
             string subject,
             string htmlBody,
@@ -398,7 +404,8 @@ namespace ResourceManager.Services
 
             // Message-ID header (prevents duplicate detection issues)
             var domain = _fromEmail.Contains('@') ? _fromEmail.Split('@')[1] : "resourcemanager.local";
-            message.Headers.Add("Message-ID", $"<{Guid.NewGuid()}@{domain}>");
+            var messageId = $"<{Guid.NewGuid()}@{domain}>";
+            message.Headers.Add("Message-ID", messageId);
 
             // X-Mailer header
             message.Headers.Add("X-Mailer", "Resource Manager v1.0");
@@ -428,6 +435,8 @@ namespace ResourceManager.Services
             }
 
             await client.SendMailAsync(message);
+
+            return messageId;
         }
 
         /// <summary>

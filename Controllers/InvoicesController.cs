@@ -1222,6 +1222,7 @@ namespace ResourceManager.Controllers
             if (result.Success)
             {
                 emailRecord.Status = "Sent";
+                emailRecord.MessageId = result.MessageId;
                 await _context.SaveChangesAsync();
                 _logger.LogInformation("Invoice {InvoiceId} email sent to {Email}", id, recipientEmail);
 

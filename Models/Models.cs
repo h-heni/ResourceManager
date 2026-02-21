@@ -447,8 +447,12 @@ namespace ResourceManager.Models
         public string Body { get; set; } = string.Empty;
         public DateTime SentAt { get; set; } = DateTime.UtcNow;
         public string? CreatedByUserId { get; set; }
-        public string Status { get; set; } = "Sent"; // Sent, Failed, Pending
+        public string Status { get; set; } = "Sent"; // Sent, Failed, Pending, Bounced, Delivered
         public string? ErrorMessage { get; set; }
+        /// <summary>
+        /// SMTP Message-ID header for correlating webhook delivery events (e.g. Brevo bounces)
+        /// </summary>
+        public string? MessageId { get; set; }
     }
 
     // Company Settings for customization
