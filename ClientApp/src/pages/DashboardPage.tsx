@@ -734,7 +734,7 @@ export default function DashboardPage() {
                             <p className="text-xs text-gray-500 mt-0.5">{t('dashboard.totalRevenueLabel', 'Revenue')}</p>
                         </div>
                         <div className="text-center">
-                            <p className="text-lg font-bold text-gray-900">{Math.max(0, (stats?.totalInvoiceCount ?? 0) - archivedInvoiceCount)}</p>
+                            <p className="text-lg font-bold text-gray-900">{stats?.totalInvoiceCount ?? 0}</p>
                             <p className="text-xs text-gray-500 mt-0.5">{t('dashboard.invoicesLabel', 'Invoices')}</p>
                         </div>
                         <div className="text-center">
