@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ResourceManager.Data;
+using ResourceManager.Services;
 
 namespace ResourceManager.Controllers
 {
@@ -87,6 +88,29 @@ namespace ResourceManager.Controllers
             emailRecord.Status = status;
             if (!string.IsNullOrEmpty(errorMessage))
                 emailRecord.ErrorMessage = errorMessage;
+
+            // For failure events, create a bell notification so the user knows
+            var failureStatuses = new[] { "Bounced", "Blocked", "Spam", "Invalid", "SoftBounce" };
+            if (failureStatuses.Contains(status) && !string.IsNullOrEmpty(emailRecord.CreatedByUserId))
+            {
+                // Load the invoice to get the invoice number for the notification message
+                var invoice = await _context.Invoices
+                    .IgnoreQueryFilters()
+                    .FirstOrDefaultAsync(i => i.Id == emailRecord.InvoiceId);
+
+                var invoiceRef = invoice?.Number ?? $"#{emailRecord.InvoiceId}";
+                var message = $"Email to {emailRecord.RecipientEmail} for invoice {invoiceRef} failed: {status}. {errorMessage}";
+
+                _context.PaymentNotifications.Add(new PaymentNotification
+                {
+                    PaymentId = 0, // Not a payment notification
+                    InvoiceId = emailRecord.InvoiceId,
+                    UserId = emailRecord.CreatedByUserId,
+                    Message = message,
+                    CreatedAt = DateTime.UtcNow,
+                    IsRead = false
+                });
+            }
 
             await _context.SaveChangesAsync();
 

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ResourceManager.Data;
@@ -23,32 +24,62 @@ namespace ResourceManager.Controllers
         };
 
         // ═══ Category translations → canonical English key ═══
-        // Covers FR, DE, AR translations so imported data maps back correctly.
-        private static readonly Dictionary<string, string> CategoryAliases = new(StringComparer.OrdinalIgnoreCase)
+        // Loaded dynamically from i18n locale files (ClientApp/src/i18n/locales/*.json)
+        // so adding a new language or category automatically updates the mapping.
+        private static Dictionary<string, string>? _categoryAliases;
+        private static readonly object _aliasLock = new();
+
+        private static Dictionary<string, string> GetCategoryAliases()
         {
-            // French
-            ["loyer"] = "rent", ["services publics"] = "utilities",
-            ["fournitures de bureau"] = "office", ["déplacements"] = "travel",
-            ["assurance"] = "insurance", ["abonnements"] = "subscription",
-            ["salaires"] = "salary", ["télécommunications"] = "telecom",
-            ["frais bancaires"] = "bankFees", ["autre"] = "other",
-            ["factures fournisseurs"] = "supplier_invoices",
-            // German
-            ["miete"] = "rent", ["nebenkosten"] = "utilities",
-            ["bürobedarf"] = "office", ["reisen"] = "travel",
-            ["versicherung"] = "insurance", ["wartung"] = "maintenance",
-            ["gehälter"] = "salary", ["telekommunikation"] = "telecom",
-            ["bankgebühren"] = "bankFees", ["sonstiges"] = "other",
-            ["lieferantenrechnungen"] = "supplier_invoices",
-            // Arabic
-            ["إيجار"] = "rent", ["مرافق"] = "utilities",
-            ["مستلزمات مكتبية"] = "office", ["سفر"] = "travel",
-            ["تسويق"] = "marketing", ["تأمين"] = "insurance",
-            ["صيانة"] = "maintenance", ["اشتراكات"] = "subscription",
-            ["رواتب"] = "salary", ["اتصالات"] = "telecom",
-            ["رسوم بنكية"] = "bankFees", ["أخرى"] = "other",
-            ["فواتير الموردين"] = "supplier_invoices",
-        };
+            if (_categoryAliases != null) return _categoryAliases;
+            lock (_aliasLock)
+            {
+                if (_categoryAliases != null) return _categoryAliases;
+                _categoryAliases = LoadCategoryAliasesFromLocales();
+                return _categoryAliases;
+            }
+        }
+
+        /// <summary>
+        /// Reads all i18n locale JSON files and builds a reverse map:
+        /// translated category value → canonical English key.
+        /// e.g. "Loyer" → "rent", "Salaires" → "salary", "إيجار" → "rent".
+        /// </summary>
+        private static Dictionary<string, string> LoadCategoryAliasesFromLocales()
+        {
+            var aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            // Try published output first (Docker), then development path
+            var localesDir = Path.Combine(AppContext.BaseDirectory, "locales");
+            if (!Directory.Exists(localesDir))
+                localesDir = Path.Combine(Directory.GetCurrentDirectory(), "ClientApp", "src", "i18n", "locales");
+
+            if (!Directory.Exists(localesDir))
+                return aliases; // No locale files found — normalization still lowercases
+
+            foreach (var file in Directory.GetFiles(localesDir, "*.json"))
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(System.IO.File.ReadAllText(file));
+                    if (doc.RootElement.TryGetProperty("expense", out var expense)
+                        && expense.TryGetProperty("categories", out var categories))
+                    {
+                        foreach (var prop in categories.EnumerateObject())
+                        {
+                            var translated = prop.Value.GetString();
+                            // Map translated value → English key (skip identity mappings)
+                            if (!string.IsNullOrWhiteSpace(translated) && !string.Equals(translated, prop.Name, StringComparison.OrdinalIgnoreCase))
+                            {
+                                aliases.TryAdd(translated, prop.Name);
+                            }
+                        }
+                    }
+                }
+                catch { /* skip malformed locale files */ }
+            }
+            return aliases;
+        }
 
         /// <summary>Normalize currency code: DT → TND, dt → TND, etc.</summary>
         internal static string NormalizeCurrency(string? currency)
@@ -65,7 +96,8 @@ namespace ResourceManager.Controllers
         {
             if (string.IsNullOrWhiteSpace(category)) return "other";
             var trimmed = category.Trim();
-            if (CategoryAliases.TryGetValue(trimmed, out var canonical))
+            var aliases = GetCategoryAliases();
+            if (aliases.TryGetValue(trimmed, out var canonical))
                 return canonical;
             return trimmed.ToLowerInvariant();
         }
@@ -243,24 +275,36 @@ namespace ResourceManager.Controllers
             var totalThisMonth = currencyBreakdowns.Sum(c => c.TotalThisMonth);
             var totalThisYear = currencyBreakdowns.Sum(c => c.TotalThisYear);
 
-            // Group by category (OtherExpenses only — supplier invoices are a separate category)
-            // Normalize category names so translated/cased variants group together
+            // Group by (category, currency) so amounts are correctly separated per currency
+            // Normalize both category names and currency codes
             var byCategory = allExpenses
-                .GroupBy(e => NormalizeCategory(e.Category))
+                .GroupBy(e => new { Category = NormalizeCategory(e.Category), Currency = NormalizeCurrency(e.Currency ?? defaultCurrency) })
                 .Select(g => new
                 {
-                    Category = g.Key,
+                    Category = g.Key.Category,
+                    Currency = g.Key.Currency,
                     Total = g.Sum(e => e.Amount),
                     Count = g.Count()
                 })
                 .OrderByDescending(g => g.Total)
                 .ToList();
 
-            var totalSupplierAmount = allSupplierInvoices.Sum(si => si.AmountPaid);
-            // Add supplier invoices as a category if any paid amount exists
-            if (totalSupplierAmount > 0)
+            // Add supplier invoices as a category per currency if any paid amount exists
+            var supplierByCategory = allSupplierInvoices
+                .Where(si => si.AmountPaid > 0)
+                .GroupBy(si => NormalizeCurrency(si.Currency ?? defaultCurrency))
+                .Select(g => new
+                {
+                    Category = "supplier_invoices",
+                    Currency = g.Key,
+                    Total = g.Sum(si => si.AmountPaid),
+                    Count = g.Count()
+                })
+                .ToList();
+
+            foreach (var sc in supplierByCategory)
             {
-                byCategory.Add(new { Category = "supplier_invoices", Total = totalSupplierAmount, Count = allSupplierInvoices.Count(si => si.AmountPaid > 0) });
+                byCategory.Add(sc);
             }
 
             return Ok(new

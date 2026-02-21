@@ -91,8 +91,9 @@ interface ExpenseSummary {
     totalAll: number;
     totalThisMonth: number;
     totalThisYear: number;
-    byCategory: { category: string; total: number; count: number }[];
+    byCategory: { category: string; currency: string; total: number; count: number }[];
     count: number;
+    defaultCurrency?: string;
 }
 
 interface RevenueSummary {
@@ -217,7 +218,8 @@ export default function DashboardPage() {
                     totalAll: ed.totalAll ?? 0,
                     totalThisMonth: ed.totalThisMonth ?? 0,
                     totalThisYear: ed.totalThisYear ?? 0,
-                    byCategory: (ed.byCategory || []).map((c: { category: string; total: number; count: number }) => ({ category: c.category, total: c.total, count: c.count })),
+                    byCategory: (ed.byCategory || []).map((c: { category: string; currency: string; total: number; count: number }) => ({ category: c.category, currency: c.currency || '', total: c.total, count: c.count })),
+                    defaultCurrency: ed.defaultCurrency,
                     count: ed.count ?? 0,
                 });
             }
@@ -1065,19 +1067,25 @@ export default function DashboardPage() {
             </div>
 
             {/* Expense by Category */}
-            {expenseSummary && expenseSummary.byCategory.length > 0 && (
+            {expenseSummary && expenseSummary.byCategory.length > 0 && (() => {
+                // Filter categories by the active dashboard currency
+                const activeCur = cur || expenseSummary.defaultCurrency || DEFAULT_CURRENCY;
+                const filtered = expenseSummary.byCategory.filter(c => !c.currency || c.currency === activeCur);
+                const currencyTotal = filtered.reduce((s, c) => s + c.total, 0);
+                if (filtered.length === 0) return null;
+                return (
                 <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
                     <h3 className="text-sm font-semibold text-gray-900 mb-4">
                         {t('dashboard.expensesByCategory', 'Expenses by Category')}
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
-                        {expenseSummary.byCategory.map((cat) => {
-                            const pct = Math.round((cat.total / (expenseSummary.totalAll || 1)) * 100);
+                        {filtered.map((cat) => {
+                            const pct = Math.round((cat.total / (currencyTotal || 1)) * 100);
                             return (
-                                <div key={cat.category}>
+                                <div key={`${cat.category}-${cat.currency}`}>
                                     <div className="flex justify-between text-sm mb-1">
                                         <span className="text-gray-700 font-medium">{t(`expense.categories.${cat.category}`, cat.category)}</span>
-                                        <span className="text-gray-500 text-xs">{fmt(cat.total)} ({pct}%)</span>
+                                        <span className="text-gray-500 text-xs">{formatCurrency(cat.total, activeCur)} ({pct}%)</span>
                                     </div>
                                     <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                                         <div
@@ -1090,7 +1098,8 @@ export default function DashboardPage() {
                         })}
                     </div>
                 </div>
-            )}
+                );
+            })()}
         </div>
     );
 }
