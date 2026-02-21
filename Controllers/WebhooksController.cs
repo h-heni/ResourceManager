@@ -99,7 +99,16 @@ namespace ResourceManager.Controllers
                     .FirstOrDefaultAsync(i => i.Id == emailRecord.InvoiceId);
 
                 var invoiceRef = invoice?.Number ?? $"#{emailRecord.InvoiceId}";
-                var message = $"Email to {emailRecord.RecipientEmail} for invoice {invoiceRef} failed: {status}. {errorMessage}";
+                var friendlyReason = status switch
+                {
+                    "Bounced"    => "The email account does not exist.",
+                    "Blocked"    => "The email was blocked by the recipient server.",
+                    "Spam"       => "The email was marked as spam.",
+                    "Invalid"    => "The email address is invalid.",
+                    "SoftBounce" => "The mailbox is temporarily unavailable.",
+                    _            => "Delivery failed."
+                };
+                var message = $"Invoice {invoiceRef}: email to {emailRecord.RecipientEmail} failed — {friendlyReason}";
 
                 _context.PaymentNotifications.Add(new PaymentNotification
                 {
