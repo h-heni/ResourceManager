@@ -70,7 +70,7 @@
 
 	<!-- Copy i18n locale files to output for dynamic category normalization -->
 	<ItemGroup>
-		<Content Update="ClientApp\src\i18n\locales\*.json" CopyToOutputDirectory="PreserveNewest" Link="locales\%(Filename)%(Extension)" />
+		<Content Update="ClientApp\src\i18n\locales\*.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" TargetPath="locales\%(Filename)%(Extension)" />
 	</ItemGroup>
 
 	<ItemGroup>
