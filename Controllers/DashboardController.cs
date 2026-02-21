@@ -608,12 +608,9 @@ namespace ResourceManager.Controllers
                 .Take(10)
                 .ToList();
 
-            // Accurate paid/archived count — respect tenant filter, only exclude IsDeleted
-            var paidInvoiceCount = await _context.Invoices
-                .AsNoTracking()
-                .Where(i => i.Treated == true)
-                .Where(i => i.Date >= startOfYear && i.Date < endOfYear)
-                .CountAsync();
+            // Currency-filtered archived count: only count Treated invoices matching
+            // the selected currency, plus imported historical revenues (UI treats them as archived).
+            var paidInvoiceCount = filteredInvoices.Count(i => i.Treated) + importedSalesCount;
 
             return Ok(new {
                 // Multi-currency metadata

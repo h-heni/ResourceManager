@@ -218,9 +218,12 @@ namespace ResourceManager.Controllers
             var allHistoricalExpenses = await historicalQuery.ToListAsync();
 
             // ═══ Per-currency breakdown ═══
+            // Local helper: coalesce null/empty/whitespace currency to defaultCurrency before normalization
+            string Cur(string? raw) => NormalizeCurrency(string.IsNullOrWhiteSpace(raw) ? defaultCurrency : raw);
+
             // Normalize currency codes so DT/TND/dt all group together
             var byCurrency = allExpenses
-                .GroupBy(e => NormalizeCurrency(e.Currency ?? defaultCurrency))
+                .GroupBy(e => Cur(e.Currency))
                 .Select(g => new
                 {
                     Currency = g.Key,
@@ -235,7 +238,7 @@ namespace ResourceManager.Controllers
             // Add supplier invoices per currency — "Paid Only" logic: use AmountPaid (confirmed payments)
             var supplierByCurrency = allSupplierInvoices
                 .Where(si => si.AmountPaid > 0)
-                .GroupBy(si => NormalizeCurrency(si.Currency ?? defaultCurrency))
+                .GroupBy(si => Cur(si.Currency))
                 .Select(g => new
                 {
                     Currency = g.Key,
@@ -248,7 +251,7 @@ namespace ResourceManager.Controllers
 
             // Historical expenses per currency
             var historicalByCurrency = allHistoricalExpenses
-                .GroupBy(h => NormalizeCurrency(h.Currency ?? defaultCurrency))
+                .GroupBy(h => Cur(h.Currency))
                 .Select(g => new
                 {
                     Currency = g.Key,
@@ -292,7 +295,7 @@ namespace ResourceManager.Controllers
             // Group by (category, currency) so amounts are correctly separated per currency
             // Normalize both category names and currency codes
             var byCategory = allExpenses
-                .GroupBy(e => new { Category = NormalizeCategory(e.Category), Currency = NormalizeCurrency(e.Currency ?? defaultCurrency) })
+                .GroupBy(e => new { Category = NormalizeCategory(e.Category), Currency = Cur(e.Currency) })
                 .Select(g => new
                 {
                     Category = g.Key.Category,
@@ -306,7 +309,7 @@ namespace ResourceManager.Controllers
             // Add supplier invoices as a category per currency if any paid amount exists
             var supplierByCategory = allSupplierInvoices
                 .Where(si => si.AmountPaid > 0)
-                .GroupBy(si => NormalizeCurrency(si.Currency ?? defaultCurrency))
+                .GroupBy(si => Cur(si.Currency))
                 .Select(g => new
                 {
                     Category = "supplier_invoices",
@@ -324,7 +327,7 @@ namespace ResourceManager.Controllers
             // Add historical (imported) expenses as a category per currency
             var historicalByCategory = allHistoricalExpenses
                 .Where(h => h.AmountPaid > 0)
-                .GroupBy(h => NormalizeCurrency(h.Currency ?? defaultCurrency))
+                .GroupBy(h => Cur(h.Currency))
                 .Select(g => new
                 {
                     Category = "imported_expenses",

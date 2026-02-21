@@ -233,11 +233,12 @@ export default function DashboardPage() {
                 });
             }
 
-            if (archivedRes.status === 'fulfilled') {
-                const payload = archivedRes.value.data;
-                setArchivedInvoiceCount(payload?.count ?? 0);
-            } else if (archivedCountFallback !== null) {
+            // Always use currency-filtered paidInvoiceCount from dashboard stats
+            // (the separate /archived/count endpoint is NOT currency-aware)
+            if (archivedCountFallback !== null) {
                 setArchivedInvoiceCount(archivedCountFallback);
+            } else if (archivedRes.status === 'fulfilled') {
+                setArchivedInvoiceCount(archivedRes.value.data?.count ?? 0);
             }
 
             if (purchasesRes.status === 'fulfilled') {
@@ -1070,7 +1071,7 @@ export default function DashboardPage() {
             {expenseSummary && expenseSummary.byCategory.length > 0 && (() => {
                 // Filter categories by the active dashboard currency
                 const activeCur = cur || expenseSummary.defaultCurrency || DEFAULT_CURRENCY;
-                const filtered = expenseSummary.byCategory.filter(c => !c.currency || c.currency === activeCur);
+                const filtered = expenseSummary.byCategory.filter(c => c.currency === activeCur);
                 const currencyTotal = filtered.reduce((s, c) => s + c.total, 0);
                 if (filtered.length === 0) return null;
                 return (
