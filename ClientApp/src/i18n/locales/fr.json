@@ -978,6 +978,7 @@
     "exportProducts": "Exporter les produits",
     "exportRevenues": "Exporter les revenus",
     "exportSuppliers": "Exporter les fournisseurs",
+    "exportOtherExpenses": "Autres dépenses",
     "import": "Importer",
     "importDesc": "Importez des données depuis un fichier CSV",
     "selectFile": "Sélectionner un fichier",

@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     Download, Upload, FileSpreadsheet, AlertTriangle, CheckCircle,
-    FileText, Users, Package, DollarSign, Truck
+    FileText, Users, Package, DollarSign, Truck, Receipt
 } from 'lucide-react';
 import api from '../services/api';
 import { getErrorMessage } from '../utils/errorUtils';
@@ -10,7 +10,7 @@ import { logger } from '../lib/logger';
 import { useAuth } from '../context/AuthContext';
 
 /* ─── Types ─── */
-type DataType = 'revenues' | 'expenses' | 'clients' | 'products' | 'suppliers';
+type DataType = 'revenues' | 'expenses' | 'clients' | 'products' | 'suppliers' | 'otherExpenses';
 type ImportStep = 'upload' | 'preview' | 'result';
 
 interface ValidationError {
@@ -67,6 +67,13 @@ const DATA_TYPE_CONFIG: Record<DataType, {
         requiredColumns: ['Name'],
         optionalColumns: ['Matricule Fiscal', 'Phone Number', 'Address'],
         exampleRow: { Name: 'Supplier X', 'Matricule Fiscal': 'MF789012', 'Phone Number': '+21699654321', Address: 'Sfax, Zone Industrielle' },
+    },
+    otherExpenses: {
+        label: 'Other Expense',
+        icon: Receipt,
+        requiredColumns: ['Description', 'Amount', 'Date'],
+        optionalColumns: ['Category', 'Currency', 'Notes', 'Recurring'],
+        exampleRow: { Description: 'Office Supplies', Amount: '150.00', Date: '2025-01-15', Category: 'office', Currency: 'TND', Notes: 'Monthly stationery', Recurring: 'No' },
     },
 };
 
@@ -313,6 +320,7 @@ export default function DataManagementPage() {
         { key: 'clients', label: t('dataManagement.exportClients', 'Clients'), icon: Users, needsDate: false },
         { key: 'products', label: t('dataManagement.exportProducts', 'Products'), icon: Package, needsDate: false },
         { key: 'suppliers', label: t('dataManagement.exportSuppliers', 'Suppliers'), icon: Truck, needsDate: false },
+        { key: 'otherExpenses', label: t('dataManagement.exportOtherExpenses', 'Other Expenses'), icon: Receipt, needsDate: true },
     ];
 
     // Column info for preview table

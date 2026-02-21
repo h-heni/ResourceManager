@@ -1233,15 +1233,17 @@ namespace ResourceManager.Controllers
             }
             else
             {
-                emailRecord.Status = "Failed";
-                emailRecord.ErrorMessage = result.ErrorDetails ?? result.Message;
+                emailRecord.Status = result.BounceType == "hard" ? "Bounced" : "Failed";
+                emailRecord.ErrorMessage = result.BounceStatus ?? result.ErrorDetails ?? result.Message;
                 await _context.SaveChangesAsync();
 
-                return StatusCode(500, new { 
+                return StatusCode(result.BounceType != null ? 422 : 500, new { 
                     message = result.Message,
                     emailId = emailRecord.Id,
-                    status = "Failed",
-                    errorDetails = result.ErrorDetails
+                    status = emailRecord.Status,
+                    errorDetails = result.ErrorDetails,
+                    bounceType = result.BounceType,
+                    bounceStatus = result.BounceStatus
                 });
             }
         }

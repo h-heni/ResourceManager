@@ -334,6 +334,81 @@ namespace ResourceManager.Controllers
             }
         }
 
+        /// <summary>
+        /// Export other expenses (operational costs) as Excel/CSV.
+        /// </summary>
+        [HttpGet("export/otherExpenses")]
+        public async Task<IActionResult> ExportOtherExpenses(
+            [FromQuery] DateTime? from,
+            [FromQuery] DateTime? to,
+            [FromQuery] string format = "csv")
+        {
+            try
+            {
+                var fromDate = from ?? DateTime.MinValue;
+                var toDate = to ?? DateTime.MaxValue;
+
+                var userId = _userManager.GetUserId(User);
+                string defaultCurrency = "TND";
+                if (userId != null)
+                {
+                    var user = await _userManager.FindByIdAsync(userId);
+                    if (user != null)
+                    {
+                        var settings = await _context.CompanySettings
+                            .FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
+                        if (settings != null)
+                            defaultCurrency = settings.Currency ?? "TND";
+                    }
+                }
+
+                var expenses = await _context.OtherExpenses
+                    .AsNoTracking()
+                    .Where(e => e.Date >= fromDate && e.Date <= toDate)
+                    .OrderBy(e => e.Date)
+                    .ToListAsync();
+
+                var headers = new[] { "Description", "Amount", "Date", "Category", "Currency", "Notes", "Recurring" };
+                var dataRows = expenses.Select(e => new object[]
+                {
+                    e.Description,
+                    e.Amount,
+                    e.Date,
+                    e.Category,
+                    e.Currency ?? defaultCurrency,
+                    e.Notes ?? "",
+                    e.IsRecurring ? "Yes" : "No"
+                }).ToList();
+
+                if (format?.Equals("xlsx", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    var bytes = BuildExcel("Other Expenses", headers, dataRows);
+                    return File(bytes,
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        $"other_expenses_{DateTime.UtcNow:yyyyMMdd}.xlsx");
+                }
+
+                var csv = BuildCsv(headers, dataRows.Select(r => new[]
+                {
+                    r[0].ToString()!,
+                    r[1] is decimal d ? d.ToString("F2", CultureInfo.InvariantCulture) : r[1].ToString()!,
+                    ((DateTime)r[2]).ToString("yyyy-MM-dd"),
+                    r[3].ToString()!,
+                    r[4].ToString()!,
+                    r[5].ToString()!,
+                    r[6].ToString()!
+                }));
+                return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray(),
+                    "text/csv; charset=utf-8",
+                    $"other_expenses_{DateTime.UtcNow:yyyyMMdd}.csv");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error exporting other expenses");
+                return StatusCode(500, new { message = "Failed to export other expenses" });
+            }
+        }
+
         // ═══════════════════════════════════════════════════════════
         // HISTORICAL DATA IMPORT — VALIDATE (DRY RUN)
         // ═══════════════════════════════════════════════════════════
@@ -770,6 +845,54 @@ namespace ResourceManager.Controllers
                         break;
                     }
 
+                    case "otherexpenses":
+                    {
+                        // Import OtherExpense records directly (not historical).
+                        // NOTE: NormalizeKeys aliases "Amount" → "Amount Paid" globally,
+                        // so we read "Amount Paid" first, then fall back to "Amount".
+                        foreach (var row in validation.ValidRows)
+                        {
+                            if (row == null) { skipped++; continue; }
+
+                            var description = SafeGet(row, "Description");
+                            if (string.IsNullOrWhiteSpace(description)) { skipped++; continue; }
+
+                            var dateStr = SafeGet(row, "Date");
+                            if (!TryParseDate(dateStr, out var parsedDate)) { skipped++; continue; }
+                            // Use SpecifyKind(Utc) to avoid local → UTC shift
+                            var utcDate = DateTime.SpecifyKind(parsedDate, DateTimeKind.Utc);
+
+                            // "Amount" gets aliased to "Amount Paid" by NormalizeKeys — check both
+                            var amountStr = SafeGet(row, "Amount Paid") is { Length: > 0 } ap ? ap : SafeGet(row, "Amount");
+                            if (!TryParseAmount(amountStr, out var parsedAmount) || parsedAmount <= 0) { skipped++; continue; }
+
+                            var category = SafeGet(row, "Category", "other").ToLowerInvariant();
+                            var currency = SafeGet(row, "Currency", "TND").ToUpperInvariant();
+                            var notes = SafeGet(row, "Notes");
+                            var recurringStr = SafeGet(row, "Recurring");
+                            var isRecurring = recurringStr.Equals("yes", StringComparison.OrdinalIgnoreCase)
+                                           || recurringStr.Equals("true", StringComparison.OrdinalIgnoreCase)
+                                           || recurringStr == "1";
+
+                            _context.OtherExpenses.Add(new OtherExpense
+                            {
+                                Description = description,
+                                Amount = parsedAmount,
+                                Date = utcDate,
+                                Category = category,
+                                Currency = currency,
+                                CurrencySymbol = currency,
+                                Notes = string.IsNullOrWhiteSpace(notes) ? null : notes,
+                                IsRecurring = isRecurring,
+                                CompanyId = companyId,
+                                CreatedByUserId = userId,
+                                CreatedAt = DateTime.UtcNow
+                            });
+                            imported++;
+                        }
+                        break;
+                    }
+
                     default:
                         return BadRequest(new { message = $"Unknown data type: {request.DataType}" });
                 }
@@ -795,13 +918,18 @@ namespace ResourceManager.Controllers
                 await transaction.RollbackAsync();
 
                 _logger.LogError(ex,
-                    "Import failed for {Type} by user {User}. Imported={Imported}, Updated={Updated}, Skipped={Skipped}",
-                    request.DataType, userId, imported, updated, skipped);
+                    "Import failed for {Type} by user {User}. Imported={Imported}, Updated={Updated}, Skipped={Skipped}. Inner={Inner}",
+                    request.DataType, userId, imported, updated, skipped, ex.InnerException?.Message ?? "none");
+
+                // Provide full error chain for debugging
+                var details = ex.InnerException?.Message;
+                var deepDetails = ex.InnerException?.InnerException?.Message;
 
                 return StatusCode(500, new
                 {
                     message = $"Import failed: {ex.Message}",
-                    details = ex.InnerException?.Message
+                    details,
+                    deepDetails
                 });
             }
         }
@@ -860,6 +988,10 @@ namespace ResourceManager.Controllers
                     headers = "Name;Price;Currency;TVA Rate;Description";
                     exampleRow = "Product Name;100,00;TND;19;Annual subscription";
                     break;
+                case "otherexpenses":
+                    headers = "Description;Amount;Date;Category;Currency;Notes;Recurring";
+                    exampleRow = "Office Supplies;150,00;31/01/2025;office;TND;Monthly stationery;No";
+                    break;
                 default:
                     return BadRequest(new { message = $"Unknown template type: {type}" });
             }
@@ -911,6 +1043,9 @@ namespace ResourceManager.Controllers
                 case "suppliers":
                     requiredColumns = new[] { "Name" };
                     break;
+                case "otherexpenses":
+                    requiredColumns = new[] { "Description", "Amount", "Date" };
+                    break;
                 default:
                     errors.Add(new ValidationError(0, $"Unknown data type: {dataType}"));
                     return new ValidationResult(errors, validRows);
@@ -930,7 +1065,10 @@ namespace ResourceManager.Controllers
                 {
                     if (!firstRowKeys.Contains(col))
                     {
-                        errors.Add(new ValidationError(0, $"Required column missing: '{col}'"));
+                        // Also check if this required column name has been aliased to a canonical name
+                        bool foundViaAlias = ColumnAliases.TryGetValue(col, out var aliased) && firstRowKeys.Contains(aliased);
+                        if (!foundViaAlias)
+                            errors.Add(new ValidationError(0, $"Required column missing: '{col}'"));
                     }
                 }
                 if (errors.Count > 0)
@@ -940,6 +1078,16 @@ namespace ResourceManager.Controllers
             for (int i = 0; i < rows.Count; i++)
             {
                 var row = NormalizeKeys(rows[i]);
+
+                // For otherExpenses the template uses "Amount" but NormalizeKeys aliases it
+                // to "Amount Paid".  Copy it back so both keys exist and required-column checks
+                // and type-specific validation blocks all work consistently.
+                if (dataType.ToLower() == "otherexpenses"
+                    && row.ContainsKey("Amount Paid") && !row.ContainsKey("Amount"))
+                {
+                    row["Amount"] = row["Amount Paid"];
+                }
+
                 // Use i + 2 to map to Excel row number (Row 1 = Headers, Row 2 = Data Row 0)
                 var rowNum = i + 2;
                 var rowErrors = new List<string>();
@@ -947,14 +1095,17 @@ namespace ResourceManager.Controllers
                 // Validate required fields are non-empty
                 foreach (var col in requiredColumns)
                 {
-                    if (!row.ContainsKey(col) || string.IsNullOrWhiteSpace(row[col]))
+                    // Check canonical name first, then try if the column was aliased
+                    var actualKey = row.ContainsKey(col) ? col
+                        : (ColumnAliases.TryGetValue(col, out var aliased) && row.ContainsKey(aliased) ? aliased : col);
+                    if (!row.ContainsKey(actualKey) || string.IsNullOrWhiteSpace(row[actualKey]))
                     {
                         rowErrors.Add($"'{col}' is required");
                     }
                 }
 
                 // Type-specific validation
-                if (dataType.ToLower() == "revenues" || dataType.ToLower() == "expenses")
+                if (dataType.ToLower() == "revenues" || dataType.ToLower() == "expenses" || dataType.ToLower() == "otherexpenses")
                 {
                     if (row.ContainsKey("Date") && !string.IsNullOrWhiteSpace(row["Date"]))
                     {
@@ -984,6 +1135,14 @@ namespace ResourceManager.Controllers
                         {
                             rowErrors.Add("'Amount Paid' must be a valid positive number");
                         }
+                    }
+                    // otherExpenses uses "Amount" column instead of "Amount Paid"
+                    if (row.ContainsKey("Amount") && !string.IsNullOrWhiteSpace(row["Amount"]))
+                    {
+                        if (TryParseAmount(row["Amount"], out var amtDirect) && amtDirect > 0)
+                            row["Amount"] = amtDirect.ToString(CultureInfo.InvariantCulture);
+                        else if (amtDirect <= 0)
+                            rowErrors.Add("'Amount' must be a positive number");
                     }
                 }
 

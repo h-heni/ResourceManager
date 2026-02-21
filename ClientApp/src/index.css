@@ -289,6 +289,25 @@ body > .container {
     .rm-table-card {
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
+      /* Pure-CSS scroll shadow (Lea Verou technique) — shows
+         left/right shadows only when there is content to scroll */
+      background-color: #fff;
+      background-image:
+        /* White covers that scroll with content */
+        linear-gradient(to right, #fff 30%, rgba(255,255,255,0)),
+        linear-gradient(to left,  #fff 30%, rgba(255,255,255,0)),
+        /* Soft shadows that stay at container edges */
+        linear-gradient(to right, rgba(0,0,0,.06), transparent),
+        linear-gradient(to left,  rgba(0,0,0,.06), transparent);
+      background-position: left center, right center, left center, right center;
+      background-repeat: no-repeat;
+      background-size: 28px 100%, 28px 100%, 12px 100%, 12px 100%;
+      background-attachment: local, local, scroll, scroll;
+    }
+
+    .rm-table {
+      table-layout: auto;
+      min-width: 640px;
     }
   }
 }

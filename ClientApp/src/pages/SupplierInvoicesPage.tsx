@@ -879,7 +879,7 @@ export default function SupplierInvoicesPage() {
                     </div>
                 ) : (
                     <div className="rm-table-card">
-                        <table className="rm-table">
+                        <table className="rm-table min-w-[850px]">
                             <colgroup>
                                 <col style={{ width: '14%' }} />{/* Invoice # */}
                                 <col style={{ width: '13%' }} />{/* Supplier */}

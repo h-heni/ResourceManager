@@ -31,6 +31,14 @@ namespace ResourceManager.Services
         /// True if this is a preview/dev mode result (email not actually sent)
         /// </summary>
         public bool IsPreview { get; set; } = false;
+        /// <summary>
+        /// Bounce type: null (no bounce), "hard" (permanent - mailbox doesn't exist), "soft" (temporary)
+        /// </summary>
+        public string? BounceType { get; set; }
+        /// <summary>
+        /// Human-readable bounce status for the UI
+        /// </summary>
+        public string? BounceStatus { get; set; }
     }
 
     /// <summary>
@@ -82,36 +90,32 @@ namespace ResourceManager.Services
             _environment = environment;
             _isDevMode = environment.IsDevelopment();
 
-            // Load SMTP configuration from appsettings or environment variables
-            // In Development, allow missing config (will use preview mode)
-            _smtpHost = configuration["Email:SmtpHost"]
-                ?? Environment.GetEnvironmentVariable("EMAIL_SMTP_HOST")
+            // Load SMTP configuration: environment variables take priority over appsettings
+            // This prevents appsettings placeholder strings from poisoning the config
+            _smtpHost = GetConfigValue(configuration, "Email:SmtpHost", "EMAIL_SMTP_HOST")
                 ?? (_isDevMode ? "localhost" : throw new InvalidOperationException("Email:SmtpHost is not configured. Set it in appsettings.json or EMAIL_SMTP_HOST environment variable."));
 
-            _smtpPort = int.TryParse(configuration["Email:SmtpPort"] ?? Environment.GetEnvironmentVariable("EMAIL_SMTP_PORT"), out var port)
+            _smtpPort = int.TryParse(
+                GetConfigValue(configuration, "Email:SmtpPort", "EMAIL_SMTP_PORT"), out var port)
                 ? port
                 : (_isDevMode ? 1025 : 587); // MailHog default port for dev
 
-            _smtpUser = configuration["Email:SmtpUser"]
-                ?? Environment.GetEnvironmentVariable("EMAIL_SMTP_USER");
+            _smtpUser = GetConfigValue(configuration, "Email:SmtpUser", "EMAIL_SMTP_USER");
 
-            _smtpPassword = configuration["Email:SmtpPassword"]
-                ?? Environment.GetEnvironmentVariable("EMAIL_SMTP_PASSWORD");
+            _smtpPassword = GetConfigValue(configuration, "Email:SmtpPassword", "EMAIL_SMTP_PASSWORD");
 
-            _fromEmail = configuration["Email:FromEmail"]
-                ?? Environment.GetEnvironmentVariable("EMAIL_FROM_ADDRESS")
+            _fromEmail = GetConfigValue(configuration, "Email:FromEmail", "EMAIL_FROM_ADDRESS")
                 ?? _smtpUser
                 ?? (_isDevMode ? "noreply@localhost" : throw new InvalidOperationException("Email:FromEmail is not configured."));
 
-            _fromName = configuration["Email:FromName"]
-                ?? Environment.GetEnvironmentVariable("EMAIL_FROM_NAME")
+            _fromName = GetConfigValue(configuration, "Email:FromName", "EMAIL_FROM_NAME")
                 ?? "Resource Manager";
 
-            _replyToEmail = configuration["Email:ReplyToEmail"]
-                ?? Environment.GetEnvironmentVariable("EMAIL_REPLY_TO")
+            _replyToEmail = GetConfigValue(configuration, "Email:ReplyToEmail", "EMAIL_REPLY_TO")
                 ?? _fromEmail;
 
-            _enableSsl = bool.TryParse(configuration["Email:EnableSsl"] ?? Environment.GetEnvironmentVariable("EMAIL_ENABLE_SSL"), out var ssl)
+            _enableSsl = bool.TryParse(
+                GetConfigValue(configuration, "Email:EnableSsl", "EMAIL_ENABLE_SSL"), out var ssl)
                 ? ssl
                 : !_isDevMode; // Disable SSL in dev (MailHog doesn't need it)
 
@@ -133,6 +137,30 @@ namespace ResourceManager.Services
             _logger.LogInformation(
                 "EmailService initialized - SMTP: {Host}:{Port}, SSL: {Ssl}, From: {From}",
                 _smtpHost, _smtpPort, _enableSsl, _fromEmail);
+        }
+
+        /// <summary>
+        /// Get a config value, preferring environment variables over appsettings.
+        /// Filters out placeholder strings like "OVERRIDE_VIA_ENVIRONMENT_VARIABLE".
+        /// </summary>
+        private static string? GetConfigValue(IConfiguration configuration, string configKey, string envVarName)
+        {
+            // Environment variable takes highest priority
+            var envValue = Environment.GetEnvironmentVariable(envVarName);
+            if (!string.IsNullOrWhiteSpace(envValue))
+                return envValue;
+
+            // Fall back to appsettings, but filter out placeholder strings
+            var configValue = configuration[configKey];
+            if (!string.IsNullOrWhiteSpace(configValue) &&
+                !configValue.Contains("OVERRIDE", StringComparison.OrdinalIgnoreCase) &&
+                !configValue.Contains("REPLACE_ME", StringComparison.OrdinalIgnoreCase) &&
+                !configValue.Contains("CHANGE_ME", StringComparison.OrdinalIgnoreCase))
+            {
+                return configValue;
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -216,14 +244,34 @@ namespace ResourceManager.Services
                 _logger.LogError(smtpEx, "SMTP error sending email to {To}. Status: {Status}", to, smtpEx.StatusCode);
 
                 var errorMessage = GetSmtpErrorMessage(smtpEx);
-                throw new InvalidOperationException(
-                    $"Failed to send email to {to}: {errorMessage}. SMTP Status: {smtpEx.StatusCode}",
-                    smtpEx);
+                var isHardBounce = IsHardBounceStatus(smtpEx.StatusCode);
+                var isSoftBounce = smtpEx.StatusCode == SmtpStatusCode.MailboxBusy ||
+                                   smtpEx.StatusCode == SmtpStatusCode.InsufficientStorage;
+
+                return new EmailSendResult
+                {
+                    Success = false,
+                    Message = isHardBounce
+                        ? "The email account that you tried to reach does not exist."
+                        : $"SMTP error sending email to {to}: {errorMessage}",
+                    ErrorDetails = $"SMTP Status: {smtpEx.StatusCode}. {smtpEx.Message}",
+                    RetryCount = retryCount - 1,
+                    BounceType = isHardBounce ? "hard" : (isSoftBounce ? "soft" : null),
+                    BounceStatus = isHardBounce ? $"Hard bounce ({smtpEx.StatusCode})"
+                                 : isSoftBounce ? $"Soft bounce ({smtpEx.StatusCode})"
+                                 : null
+                };
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to send email to {To}", to);
-                throw new InvalidOperationException($"Failed to send email to {to}: {ex.Message}", ex);
+                return new EmailSendResult
+                {
+                    Success = false,
+                    Message = $"Failed to send email to {to}",
+                    ErrorDetails = ex.Message,
+                    RetryCount = retryCount - 1
+                };
             }
         }
 
@@ -419,6 +467,22 @@ namespace ResourceManager.Services
                 SmtpStatusCode.MailboxBusy => true,
                 SmtpStatusCode.LocalErrorInProcessing => true,
                 SmtpStatusCode.InsufficientStorage => true,
+                _ => false
+            };
+        }
+
+        /// <summary>
+        /// Determine if an SMTP status code indicates a hard bounce (permanent delivery failure)
+        /// </summary>
+        private static bool IsHardBounceStatus(SmtpStatusCode statusCode)
+        {
+            return statusCode switch
+            {
+                SmtpStatusCode.MailboxUnavailable => true,    // 550 - mailbox not found
+                SmtpStatusCode.UserNotLocalTryAlternatePath => true, // 551
+                SmtpStatusCode.ExceededStorageAllocation => true, // 552
+                SmtpStatusCode.MailboxNameNotAllowed => true,  // 553 - invalid address
+                SmtpStatusCode.TransactionFailed => true,      // 554
                 _ => false
             };
         }

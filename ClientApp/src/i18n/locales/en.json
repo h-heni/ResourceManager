@@ -978,6 +978,7 @@
     "exportProducts": "Export Products",
     "exportRevenues": "Export Revenues",
     "exportSuppliers": "Export Suppliers",
+    "exportOtherExpenses": "Other Expenses",
     "import": "Import",
     "importDesc": "Import Desc",
     "selectFile": "Select File",

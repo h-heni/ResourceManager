@@ -11,7 +11,7 @@ import api from '../services/api';
 import { invalidateSettingsCache } from '../hooks/useSettings';
 import { DEFAULT_CURRENCY, CURRENCY_SYMBOL_MAP, CURRENCY_OPTIONS } from '../lib/currencyUtils';
 import PasswordInput from '../components/PasswordInput';
-import { getErrorMessage } from '../utils/errorUtils';
+import { getErrorMessage, getAxiosResponseData } from '../utils/errorUtils';
 
 // ═══════════════════════════════════════════════════════════════
 // TYPES
@@ -398,7 +398,13 @@ Best regards,
             const res = await api.post('/Settings/test-email', { toEmail: testEmail });
             setStatus({ type: res.data.success ? 'success' : 'error', message: res.data.message || 'Test email sent!' });
         } catch (error: unknown) {
-            setStatus({ type: 'error', message: getErrorMessage(error, 'Failed to send test email') });
+            const responseData = getAxiosResponseData(error);
+            const bounceType = responseData?.bounceType as string | undefined;
+            const bounceStatus = responseData?.bounceStatus as string | undefined;
+            const msg = bounceType === 'hard'
+                ? `${getErrorMessage(error)}${bounceStatus ? ` (${bounceStatus})` : ''}`
+                : getErrorMessage(error, 'Failed to send test email');
+            setStatus({ type: 'error', message: msg });
         } finally { setTestingEmail(false); }
     };
 
