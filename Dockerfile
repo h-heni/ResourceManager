@@ -26,6 +26,8 @@ COPY . .
 # Publish in one step (skip separate build for smaller layers)
 FROM build AS publish
 RUN dotnet publish ResourceManager.API.csproj -c Release -o /app/publish /p:UseAppHost=false
+# Copy i18n locale files for dynamic category normalization
+RUN mkdir -p /app/publish/locales && cp ClientApp/src/i18n/locales/*.json /app/publish/locales/
 
 # Stage 2: Runtime (Alpine for minimal image size ~110MB vs ~220MB Debian)
 FROM mcr.microsoft.com/dotnet/aspnet:8.0-alpine AS runtime
