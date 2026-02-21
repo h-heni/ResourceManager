@@ -205,7 +205,7 @@ export default function InvoiceDetailView({
             const total = Number(invoice?.totalAmount || 0);
             const paid = Number(invoice?.amountPaid || 0);
             const percentage = total > 0 ? Number(Math.min(100, (paid / total) * 100) ): 0;
-            const percentageDisplay = Number(percentage.toFixed(1)) ;
+            const percentageDisplay = percentage.toFixed(1);
     const formatDate = (date: string) => {
         return new Date(date).toLocaleDateString('fr-FR', {
             year: 'numeric',

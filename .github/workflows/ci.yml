@@ -244,7 +244,7 @@ jobs:
 
             if [ -f "$NGINX_SRC" ]; then
               echo "━━━ Deploying Nginx site config ━━━"
-              sudo cp "$NGINX_SRC" /etc/nginx/sites-available/rscmanager.conf
+              sudo cp "$NGINX_SRC" /etc/nginx/sites-available/rscmanager.conf || { echo "ERROR: Failed to copy Nginx config"; exit 1; }
               sudo ln -sf /etc/nginx/sites-available/rscmanager.conf /etc/nginx/sites-enabled/rscmanager.conf
               sudo rm -f /etc/nginx/sites-enabled/default
               sudo nginx -t && sudo systemctl reload nginx

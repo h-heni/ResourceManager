@@ -359,11 +359,19 @@ export default function InvoiceCreatePage() {
         );
     };
 
+    // Track the previous key to guard against running when deps haven't meaningfully changed
+    const prevItemsKeyRef = useRef<string>('');
+
     // When delivery note selection changes, update items
     // Logic: description & quantity from delivery notes if they exist, otherwise from quote
     // Unit price ALWAYS comes from the quote
     useEffect(() => {
         if (!selectedQuoteData?.quoteItems) return;
+
+        // Build a stable key from the current deps to avoid re-running for identical state
+        const currentKey = `${selectedQuoteData.id}:${[...selectedDeliveryNoteIds].sort().join(',')}`;
+        if (currentKey === prevItemsKeyRef.current) return;
+        prevItemsKeyRef.current = currentKey;
 
         const quoteData = selectedQuoteData;
 
