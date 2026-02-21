@@ -876,7 +876,8 @@
       "telecom": "Telecom",
       "bankFees": "Bank Fees",
       "other": "Other",
-      "supplier_invoices": "Supplier Invoices"
+      "supplier_invoices": "Supplier Invoices",
+      "imported_expenses": "Imported Expenses"
     },
     "totalExpenses": "Total Expenses",
     "thisMonth": "This Month",

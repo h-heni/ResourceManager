@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using ResourceManager.Data;
 using ResourceManager.Models;
 using ResourceManager.Dtos;
+using ResourceManager.Helpers;
 
 namespace ResourceManager.Controllers
 {
@@ -12,16 +13,6 @@ namespace ResourceManager.Controllers
         private readonly AppDbContext _context;
         private readonly TimeProvider _time;
         private readonly ILogger<ExpensesController> _logger;
-
-        // ═══ Currency alias → canonical ISO code ═══
-        // DT (French symbol for Tunisian Dinar) → TND, etc.
-        private static readonly Dictionary<string, string> CurrencyAliases = new(StringComparer.OrdinalIgnoreCase)
-        {
-            ["DT"] = "TND",
-            ["dt"] = "TND",
-            // Arabic symbol for TND
-            ["\u062F\u062A"] = "TND",
-        };
 
         // ═══ Category translations → canonical English key ═══
         // Loaded dynamically from i18n locale files (ClientApp/src/i18n/locales/*.json)
@@ -81,14 +72,11 @@ namespace ResourceManager.Controllers
             return aliases;
         }
 
-        /// <summary>Normalize currency code: DT → TND, dt → TND, etc.</summary>
+        /// <summary>Normalize currency code: DT → TND, dt → TND, etc. Delegates to shared CurrencyHelper.</summary>
         internal static string NormalizeCurrency(string? currency)
         {
-            if (string.IsNullOrWhiteSpace(currency)) return "TND";
-            var trimmed = currency.Trim();
-            if (CurrencyAliases.TryGetValue(trimmed, out var canonical))
-                return canonical;
-            return trimmed.ToUpperInvariant();
+            var result = CurrencyHelper.NormalizeCurrency(currency);
+            return string.IsNullOrEmpty(result) ? "TND" : result;
         }
 
         /// <summary>Normalize category: translated names → canonical English key, lowercase.</summary>
@@ -218,6 +206,14 @@ namespace ResourceManager.Controllers
             }
             var allSupplierInvoices = await supplierInvoicesQuery.ToListAsync();
 
+            // Include historical (imported) expenses so totals match the Dashboard
+            var historicalQuery = _context.HistoricalExpenses.AsNoTracking().AsQueryable();
+            if (!isAllYears)
+            {
+                historicalQuery = historicalQuery.Where(h => h.Date.Year == selectedYear);
+            }
+            var allHistoricalExpenses = await historicalQuery.ToListAsync();
+
             // ═══ Per-currency breakdown ═══
             // Normalize currency codes so DT/TND/dt all group together
             var byCurrency = allExpenses
@@ -247,9 +243,23 @@ namespace ResourceManager.Controllers
                 })
                 .ToList();
 
-            // Merge expense + supplier totals per currency
+            // Historical expenses per currency
+            var historicalByCurrency = allHistoricalExpenses
+                .GroupBy(h => NormalizeCurrency(h.Currency ?? defaultCurrency))
+                .Select(g => new
+                {
+                    Currency = g.Key,
+                    TotalAll = g.Sum(h => h.AmountPaid),
+                    TotalThisMonth = g.Where(h => h.Date >= startOfMonth).Sum(h => h.AmountPaid),
+                    TotalThisYear = g.Where(h => h.Date >= startOfYear).Sum(h => h.AmountPaid),
+                    Count = g.Count()
+                })
+                .ToList();
+
+            // Merge expense + supplier + historical totals per currency
             var allCurrencies = byCurrency.Select(b => b.Currency)
                 .Union(supplierByCurrency.Select(s => s.Currency))
+                .Union(historicalByCurrency.Select(h => h.Currency))
                 .Distinct()
                 .ToList();
 
@@ -257,14 +267,15 @@ namespace ResourceManager.Controllers
             {
                 var exp = byCurrency.FirstOrDefault(b => b.Currency == cur);
                 var sup = supplierByCurrency.FirstOrDefault(s => s.Currency == cur);
+                var hist = historicalByCurrency.FirstOrDefault(h => h.Currency == cur);
                 return new
                 {
                     Currency = cur,
                     CurrencySymbol = exp?.CurrencySymbol ?? cur,
-                    TotalAll = (exp?.TotalAll ?? 0) + (sup?.TotalPaid ?? 0),
-                    TotalThisMonth = (exp?.TotalThisMonth ?? 0) + (sup?.TotalThisMonth ?? 0),
-                    TotalThisYear = (exp?.TotalThisYear ?? 0) + (sup?.TotalThisYear ?? 0),
-                    Count = (exp?.Count ?? 0) + (sup?.Count ?? 0)
+                    TotalAll = (exp?.TotalAll ?? 0) + (sup?.TotalPaid ?? 0) + (hist?.TotalAll ?? 0),
+                    TotalThisMonth = (exp?.TotalThisMonth ?? 0) + (sup?.TotalThisMonth ?? 0) + (hist?.TotalThisMonth ?? 0),
+                    TotalThisYear = (exp?.TotalThisYear ?? 0) + (sup?.TotalThisYear ?? 0) + (hist?.TotalThisYear ?? 0),
+                    Count = (exp?.Count ?? 0) + (sup?.Count ?? 0) + (hist?.Count ?? 0)
                 };
             })
             .OrderByDescending(c => c.TotalAll)
@@ -307,13 +318,31 @@ namespace ResourceManager.Controllers
                 byCategory.Add(sc);
             }
 
+            // Add historical (imported) expenses as a category per currency
+            var historicalByCategory = allHistoricalExpenses
+                .Where(h => h.AmountPaid > 0)
+                .GroupBy(h => NormalizeCurrency(h.Currency ?? defaultCurrency))
+                .Select(g => new
+                {
+                    Category = "imported_expenses",
+                    Currency = g.Key,
+                    Total = g.Sum(h => h.AmountPaid),
+                    Count = g.Count()
+                })
+                .ToList();
+
+            foreach (var hc in historicalByCategory)
+            {
+                byCategory.Add(hc);
+            }
+
             return Ok(new
             {
                 TotalAll = totalAll,
                 TotalThisMonth = totalThisMonth,
                 TotalThisYear = totalThisYear,
                 ByCategory = byCategory,
-                Count = allExpenses.Count + allSupplierInvoices.Count(si => si.AmountPaid > 0),
+                Count = allExpenses.Count + allSupplierInvoices.Count(si => si.AmountPaid > 0) + allHistoricalExpenses.Count,
                 CurrencyBreakdowns = currencyBreakdowns,
                 DefaultCurrency = defaultCurrency
             });

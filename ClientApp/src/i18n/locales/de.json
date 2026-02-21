@@ -849,7 +849,8 @@
       "telecom": "Telekommunikation",
       "bankFees": "Bankgebühren",
       "other": "Sonstiges",
-      "supplier_invoices": "Lieferantenrechnungen"
+      "supplier_invoices": "Lieferantenrechnungen",
+      "imported_expenses": "Importierte Ausgaben"
     },
     "totalExpenses": "Gesamtausgaben",
     "thisMonth": "Diesen Monat",

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using ResourceManager.Data;
 using ResourceManager.Models;
+using ResourceManager.Helpers;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
 
@@ -126,8 +127,19 @@ namespace ResourceManager.Controllers
                 }
             }
 
+            // Normalize company default currency (e.g. DT → TND)
+            defaultCurrency = CurrencyHelper.NormalizeCurrency(defaultCurrency);
+            if (string.IsNullOrEmpty(defaultCurrency)) defaultCurrency = "TND";
+
+            // Local helper: normalize any raw currency, fallback to company default
+            string NC(string? raw)
+            {
+                var n = CurrencyHelper.NormalizeCurrency(raw);
+                return string.IsNullOrEmpty(n) ? defaultCurrency : n;
+            }
+
             var invoiceCurrencies = yearInvoices
-                .Select(i => i.Quote?.Currency ?? defaultCurrency)
+                .Select(i => NC(i.Quote?.Currency))
                 .Distinct()
                 .ToList();
 
@@ -141,7 +153,7 @@ namespace ResourceManager.Controllers
                 .ToListAsync();
 
             var supplierCurrencies = yearSupplierInvoices
-                .Select(si => si.Currency ?? defaultCurrency)
+                .Select(si => NC(si.Currency))
                 .Distinct()
                 .ToList();
 
@@ -155,13 +167,13 @@ namespace ResourceManager.Controllers
                 .ToListAsync();
 
             var expenseCurrencies = yearOtherExpenses
-                .Select(e => e.Currency ?? defaultCurrency)
+                .Select(e => NC(e.Currency))
                 .Distinct()
                 .ToList();
 
             // Include historical data currencies
-            var histRevCurrencies = yearHistoricalRevenues.Select(h => h.Currency ?? defaultCurrency).Distinct();
-            var histExpCurrencies = yearHistoricalExpenses.Select(h => h.Currency ?? defaultCurrency).Distinct();
+            var histRevCurrencies = yearHistoricalRevenues.Select(h => NC(h.Currency)).Distinct();
+            var histExpCurrencies = yearHistoricalExpenses.Select(h => NC(h.Currency)).Distinct();
 
             var availableCurrencies = invoiceCurrencies
                 .Union(supplierCurrencies)
@@ -176,13 +188,13 @@ namespace ResourceManager.Controllers
             // ═══ MIXED MODE: Convert all currencies to target with user-supplied rate ═══
             var isMixedMode = mode == "mixed" && !string.IsNullOrEmpty(targetCurrency) && exchangeRate.HasValue && exchangeRate.Value > 0;
 
-            var selectedCurrency = isMixedMode ? targetCurrency! : (currency ?? defaultCurrency);
+            var selectedCurrency = NC(isMixedMode ? targetCurrency : currency);
 
-            // Helper: apply conversion if in mixed mode
+            // Helper: apply conversion if in mixed mode (normalizes source currency)
             decimal ConvertAmount(decimal amount, string sourceCurrency)
             {
                 if (!isMixedMode) return amount;
-                if (sourceCurrency == targetCurrency) return amount;
+                if (NC(sourceCurrency) == selectedCurrency) return amount;
                 return amount * exchangeRate!.Value;
             }
 
@@ -203,7 +215,7 @@ namespace ResourceManager.Controllers
 
                 foreach (var invoice in revenueInvoices)
                 {
-                    var invCurrency = invoice.Quote?.Currency ?? defaultCurrency;
+                    var invCurrency = NC(invoice.Quote?.Currency);
                     var confirmedPaid = invoice.AmountPaid; // Only confirmed payments count as revenue
                     totalRevenue += ConvertAmount(confirmedPaid, invCurrency);
                     if (!currencyBreakdownRevenue.ContainsKey(invCurrency))
@@ -213,7 +225,7 @@ namespace ResourceManager.Controllers
 
                 foreach (var h in yearHistoricalRevenues)
                 {
-                    var hCurrency = h.Currency ?? defaultCurrency;
+                    var hCurrency = NC(h.Currency);
                     totalRevenue += ConvertAmount(h.AmountPaid, hCurrency);
                     if (!currencyBreakdownRevenue.ContainsKey(hCurrency))
                         currencyBreakdownRevenue[hCurrency] = 0;
@@ -223,7 +235,7 @@ namespace ResourceManager.Controllers
             else
             {
                 filteredInvoices = yearInvoices
-                    .Where(i => (i.Quote?.Currency ?? defaultCurrency) == selectedCurrency)
+                    .Where(i => NC(i.Quote?.Currency) == selectedCurrency)
                     .ToList();
 
                 revenueInvoices = filteredInvoices
@@ -232,13 +244,13 @@ namespace ResourceManager.Controllers
 
                 totalRevenue = revenueInvoices.Sum(i => i.AmountPaid); // Only confirmed payments count as revenue
                 totalRevenue += yearHistoricalRevenues
-                    .Where(h => (h.Currency ?? defaultCurrency) == selectedCurrency)
+                    .Where(h => NC(h.Currency) == selectedCurrency)
                     .Sum(h => h.AmountPaid);
             }
 
             var filteredHistoricalRevenues = isMixedMode
                 ? yearHistoricalRevenues
-                : yearHistoricalRevenues.Where(h => (h.Currency ?? defaultCurrency) == selectedCurrency).ToList();
+                : yearHistoricalRevenues.Where(h => NC(h.Currency) == selectedCurrency).ToList();
             var importedSalesCount = filteredHistoricalRevenues.Count;
 
             // ═══ Filter expenses ═══
@@ -256,7 +268,7 @@ namespace ResourceManager.Controllers
                 // Only confirmed payments count — ignores unpaid/remaining balances.
                 foreach (var si in filteredSupplierInvoices)
                 {
-                    var siCurrency = si.Currency ?? defaultCurrency;
+                    var siCurrency = NC(si.Currency);
                     var paidAmount = si.AmountPaid;
                     totalExpenses += ConvertAmount(paidAmount, siCurrency);
                     if (!currencyBreakdownExpense.ContainsKey(siCurrency))
@@ -265,7 +277,7 @@ namespace ResourceManager.Controllers
                 }
                 foreach (var e in filteredOtherExpenses)
                 {
-                    var eCurrency = e.Currency ?? defaultCurrency;
+                    var eCurrency = NC(e.Currency);
                     totalExpenses += ConvertAmount(e.Amount, eCurrency);
                     if (!currencyBreakdownExpense.ContainsKey(eCurrency))
                         currencyBreakdownExpense[eCurrency] = 0;
@@ -273,7 +285,7 @@ namespace ResourceManager.Controllers
                 }
                 foreach (var h in yearHistoricalExpenses)
                 {
-                    var hCurrency = h.Currency ?? defaultCurrency;
+                    var hCurrency = NC(h.Currency);
                     totalExpenses += ConvertAmount(h.AmountPaid, hCurrency);
                     if (!currencyBreakdownExpense.ContainsKey(hCurrency))
                         currencyBreakdownExpense[hCurrency] = 0;
@@ -283,10 +295,10 @@ namespace ResourceManager.Controllers
             else
             {
                 filteredSupplierInvoices = yearSupplierInvoices
-                    .Where(si => (si.Currency ?? defaultCurrency) == selectedCurrency)
+                    .Where(si => NC(si.Currency) == selectedCurrency)
                     .ToList();
                 filteredOtherExpenses = yearOtherExpenses
-                    .Where(e => (e.Currency ?? defaultCurrency) == selectedCurrency)
+                    .Where(e => NC(e.Currency) == selectedCurrency)
                     .ToList();
 
                 // "Paid Only" logic: Total Expenses = Sum(AmountPaid) from supplier invoices.
@@ -297,7 +309,7 @@ namespace ResourceManager.Controllers
                     + supplierPaidAmount;
 
                 totalExpenses += yearHistoricalExpenses
-                    .Where(h => (h.Currency ?? defaultCurrency) == selectedCurrency)
+                    .Where(h => NC(h.Currency) == selectedCurrency)
                     .Sum(h => h.AmountPaid);
             }
 
@@ -305,14 +317,14 @@ namespace ResourceManager.Controllers
             var pendingInvoicesList = filteredInvoices.Where(i => i.Status == "Pending" && !i.Treated).ToList();
             var pendingInvoicesCount = pendingInvoicesList.Count;
             var pendingInvoicesAmount = isMixedMode
-                ? pendingInvoicesList.Sum(i => ConvertAmount(i.RemainingAmount, i.Quote?.Currency ?? defaultCurrency))
+                ? pendingInvoicesList.Sum(i => ConvertAmount(i.RemainingAmount, NC(i.Quote?.Currency)))
                 : pendingInvoicesList.Sum(i => i.RemainingAmount);
 
             // Partially Paid
             var partiallyPaidList = filteredInvoices.Where(i => i.Status == "PartiallyPaid").ToList();
             var partiallyPaidCount = partiallyPaidList.Count;
             var partiallyPaidAmount = isMixedMode
-                ? partiallyPaidList.Sum(i => ConvertAmount(i.RemainingAmount, i.Quote?.Currency ?? defaultCurrency))
+                ? partiallyPaidList.Sum(i => ConvertAmount(i.RemainingAmount, NC(i.Quote?.Currency)))
                 : partiallyPaidList.Sum(i => i.RemainingAmount);
 
             // Pending Payments (Scheduled future payments)
@@ -335,7 +347,7 @@ namespace ResourceManager.Controllers
                     .GroupBy(i => i.Date.Year)
                     .ToDictionary(g => g.Key, g => new {
                         amount = isMixedMode
-                            ? g.Sum(i => ConvertAmount(i.AmountPaid, i.Quote?.Currency ?? defaultCurrency))
+                            ? g.Sum(i => ConvertAmount(i.AmountPaid, NC(i.Quote?.Currency)))
                             : g.Sum(i => i.AmountPaid),
                         count = g.Count()
                     });
@@ -344,7 +356,7 @@ namespace ResourceManager.Controllers
                 var histByYear = historicalRevenueForChart
                     .GroupBy(h => h.Date.Year)
                     .ToDictionary(g => g.Key, g => new {
-                        amount = g.Sum(h => isMixedMode ? ConvertAmount(h.AmountPaid, h.Currency ?? defaultCurrency) : h.AmountPaid),
+                        amount = g.Sum(h => isMixedMode ? ConvertAmount(h.AmountPaid, NC(h.Currency)) : h.AmountPaid),
                         count = g.Count()
                     });
 
@@ -368,14 +380,14 @@ namespace ResourceManager.Controllers
                 var revenueByMonth = revenueInvoices
                     .GroupBy(i => i.Date.Month)
                     .ToDictionary(g => g.Key, g => isMixedMode
-                        ? g.Sum(i => ConvertAmount(i.AmountPaid, i.Quote?.Currency ?? defaultCurrency))
+                        ? g.Sum(i => ConvertAmount(i.AmountPaid, NC(i.Quote?.Currency)))
                         : g.Sum(i => i.AmountPaid));
 
                 chart = Enumerable.Range(1, 12).Select(month => {
                     var invoiceAmount = revenueByMonth.GetValueOrDefault(month, 0);
                     var histAmount = historicalRevenueForChart
                         .Where(h => h.Date.Month == month && h.Date.Year == chartYear)
-                        .Sum(h => isMixedMode ? ConvertAmount(h.AmountPaid, h.Currency ?? defaultCurrency) : h.AmountPaid);
+                        .Sum(h => isMixedMode ? ConvertAmount(h.AmountPaid, NC(h.Currency)) : h.AmountPaid);
                     return new {
                         year = chartYear,
                         month,
@@ -399,15 +411,15 @@ namespace ResourceManager.Controllers
                              && i.Date >= periodStart
                              && i.Date < periodEnd)
                     .Sum(i => isMixedMode
-                        ? ConvertAmount(i.AmountPaid, i.Quote?.Currency ?? defaultCurrency)
-                        : ((i.Quote?.Currency ?? defaultCurrency) == selectedCurrency ? i.AmountPaid : 0m));
+                        ? ConvertAmount(i.AmountPaid, NC(i.Quote?.Currency))
+                        : (NC(i.Quote?.Currency) == selectedCurrency ? i.AmountPaid : 0m));
 
                 // Imported historical revenues are treated as imported invoice totals
                 var imported = yearHistoricalRevenues
                     .Where(h => h.Date >= periodStart && h.Date < periodEnd)
                     .Sum(h => isMixedMode
-                        ? ConvertAmount(h.AmountPaid, h.Currency ?? defaultCurrency)
-                        : ((h.Currency ?? defaultCurrency) == selectedCurrency ? h.AmountPaid : 0m));
+                        ? ConvertAmount(h.AmountPaid, NC(h.Currency))
+                        : (NC(h.Currency) == selectedCurrency ? h.AmountPaid : 0m));
 
                 return regular + imported;
             }
@@ -440,7 +452,7 @@ namespace ResourceManager.Controllers
             // Historical expenses for chart
             var historicalExpenseForChart = isMixedMode
                 ? yearHistoricalExpenses.ToList()
-                : yearHistoricalExpenses.Where(h => (h.Currency ?? defaultCurrency) == selectedCurrency).ToList();
+                : yearHistoricalExpenses.Where(h => NC(h.Currency) == selectedCurrency).ToList();
 
             object expenseChart;
             if (isAllYearsMode)
@@ -449,17 +461,17 @@ namespace ResourceManager.Controllers
                 var otherByYear = filteredOtherExpenses
                     .GroupBy(e => e.Date.Year)
                     .ToDictionary(g => g.Key, g => isMixedMode
-                        ? g.Sum(e => ConvertAmount(e.Amount, e.Currency ?? defaultCurrency))
+                        ? g.Sum(e => ConvertAmount(e.Amount, NC(e.Currency)))
                         : g.Sum(e => e.Amount));
                 var supplierByYear = filteredSupplierInvoices
                     .GroupBy(si => (si.InvoiceDate ?? si.CreatedAt).Year)
                     .ToDictionary(g => g.Key, g => isMixedMode
-                        ? g.Sum(si => ConvertAmount(si.AmountPaid, si.Currency ?? defaultCurrency))
+                        ? g.Sum(si => ConvertAmount(si.AmountPaid, NC(si.Currency)))
                         : g.Sum(si => si.AmountPaid));
                 var histByYear = historicalExpenseForChart
                     .GroupBy(h => h.Date.Year)
                     .ToDictionary(g => g.Key, g => isMixedMode
-                        ? g.Sum(h => ConvertAmount(h.AmountPaid, h.Currency ?? defaultCurrency))
+                        ? g.Sum(h => ConvertAmount(h.AmountPaid, NC(h.Currency)))
                         : g.Sum(h => h.AmountPaid));
 
                 var allExpYears = otherByYear.Keys.Union(supplierByYear.Keys).Union(histByYear.Keys).OrderBy(y => y).ToList();
@@ -478,12 +490,12 @@ namespace ResourceManager.Controllers
                 var otherExpensesByMonth = filteredOtherExpenses
                     .GroupBy(e => e.Date.Month)
                     .ToDictionary(g => g.Key, g => isMixedMode
-                        ? g.Sum(e => ConvertAmount(e.Amount, e.Currency ?? defaultCurrency))
+                        ? g.Sum(e => ConvertAmount(e.Amount, NC(e.Currency)))
                         : g.Sum(e => e.Amount));
                 var supplierExpensesByMonth = filteredSupplierInvoices
                     .GroupBy(si => (si.InvoiceDate ?? si.CreatedAt).Month)
                     .ToDictionary(g => g.Key, g => isMixedMode
-                        ? g.Sum(si => ConvertAmount(si.AmountPaid, si.Currency ?? defaultCurrency))
+                        ? g.Sum(si => ConvertAmount(si.AmountPaid, NC(si.Currency)))
                         : g.Sum(si => si.AmountPaid));
 
                 expenseChart = Enumerable.Range(1, 12).Select(month => {
@@ -491,7 +503,7 @@ namespace ResourceManager.Controllers
                     var supplierAmt = supplierExpensesByMonth.GetValueOrDefault(month, 0);
                     var histAmt = historicalExpenseForChart
                         .Where(h => h.Date.Month == month && h.Date.Year == chartYear)
-                        .Sum(h => isMixedMode ? ConvertAmount(h.AmountPaid, h.Currency ?? defaultCurrency) : h.AmountPaid);
+                        .Sum(h => isMixedMode ? ConvertAmount(h.AmountPaid, NC(h.Currency)) : h.AmountPaid);
                     return new {
                         year = chartYear,
                         month,
@@ -520,7 +532,7 @@ namespace ResourceManager.Controllers
                 .Where(i => i.ClientId.HasValue)
                 .GroupBy(i => i.ClientId!.Value)
                 .Select(g => {
-                    var totalAmount = g.Sum(i => NormalizeAmount(i.AmountPaid, i.Quote?.Currency ?? defaultCurrency));
+                    var totalAmount = g.Sum(i => NormalizeAmount(i.AmountPaid, NC(i.Quote?.Currency)));
                     return new {
                         clientId = g.Key,
                         clientName = g.First().Client?.Name ?? "Unknown",
@@ -537,7 +549,7 @@ namespace ResourceManager.Controllers
                 .GroupBy(h => h.ClientId!.Value)
                 .ToDictionary(g => g.Key, g => new {
                     totalInvoices = g.Count(),
-                    totalAmount = g.Sum(h => NormalizeAmount(h.AmountPaid, h.Currency ?? defaultCurrency)),
+                    totalAmount = g.Sum(h => NormalizeAmount(h.AmountPaid, NC(h.Currency))),
                     clientName = g.First().Client?.Name ?? g.First().ClientName ?? "Unknown"
                 });
 
@@ -707,12 +719,21 @@ namespace ResourceManager.Controllers
             }
 
             var isMixedMode = mode == "mixed" && !string.IsNullOrEmpty(targetCurrency) && exchangeRate.HasValue && exchangeRate.Value > 0;
-            var selectedCurrency = isMixedMode ? targetCurrency! : (currency ?? defaultCurrency);
+
+            // Normalize currencies
+            defaultCurrency = CurrencyHelper.NormalizeCurrency(defaultCurrency);
+            if (string.IsNullOrEmpty(defaultCurrency)) defaultCurrency = "TND";
+            string NC(string? raw)
+            {
+                var n = CurrencyHelper.NormalizeCurrency(raw);
+                return string.IsNullOrEmpty(n) ? defaultCurrency : n;
+            }
+            var selectedCurrency = NC(isMixedMode ? targetCurrency : currency);
 
             decimal ConvertAmount(decimal amount, string sourceCurrency)
             {
                 if (!isMixedMode) return amount;
-                if (sourceCurrency == targetCurrency) return amount;
+                if (NC(sourceCurrency) == selectedCurrency) return amount;
                 return amount * exchangeRate!.Value;
             }
 
@@ -744,14 +765,14 @@ namespace ResourceManager.Controllers
                 .Select(i => new
                 {
                     i.Year,
-                    Currency = i.Currency ?? defaultCurrency,
+                    Currency = NC(i.Currency),
                     i.Amount
                 });
 
             var historicalItems = historicalRevenues.Select(h => new
             {
                 h.Year,
-                Currency = h.Currency ?? defaultCurrency,
+                Currency = NC(h.Currency),
                 h.Amount
             });
 
@@ -814,12 +835,21 @@ namespace ResourceManager.Controllers
             }
 
             var isMixedMode = mode == "mixed" && !string.IsNullOrEmpty(targetCurrency) && exchangeRate.HasValue && exchangeRate.Value > 0;
-            var selectedCurrency = isMixedMode ? targetCurrency! : (currency ?? defaultCurrency);
+
+            // Normalize currencies
+            defaultCurrency = CurrencyHelper.NormalizeCurrency(defaultCurrency);
+            if (string.IsNullOrEmpty(defaultCurrency)) defaultCurrency = "TND";
+            string NC(string? raw)
+            {
+                var n = CurrencyHelper.NormalizeCurrency(raw);
+                return string.IsNullOrEmpty(n) ? defaultCurrency : n;
+            }
+            var selectedCurrency = NC(isMixedMode ? targetCurrency : currency);
 
             decimal ConvertAmount(decimal amount, string sourceCurrency)
             {
                 if (!isMixedMode) return amount;
-                if (sourceCurrency == targetCurrency) return amount;
+                if (NC(sourceCurrency) == selectedCurrency) return amount;
                 return amount * exchangeRate!.Value;
             }
 
@@ -860,9 +890,9 @@ namespace ResourceManager.Controllers
                 .ToListAsync();
 
             var expenseItems = supplierInvoiceItems
-                .Select(si => new { si.Year, Currency = si.Currency ?? defaultCurrency, si.Amount })
-                .Concat(otherExpenses.Select(e => new { e.Year, Currency = e.Currency ?? defaultCurrency, e.Amount }))
-                .Concat(historicalExpenses.Select(h => new { h.Year, Currency = h.Currency ?? defaultCurrency, h.Amount }));
+                .Select(si => new { si.Year, Currency = NC(si.Currency), si.Amount })
+                .Concat(otherExpenses.Select(e => new { e.Year, Currency = NC(e.Currency), e.Amount }))
+                .Concat(historicalExpenses.Select(h => new { h.Year, Currency = NC(h.Currency), h.Amount }));
 
             if (!isMixedMode)
             {
@@ -908,7 +938,13 @@ namespace ResourceManager.Controllers
                 // Get default currency for this company
                 var settings = await _context.CompanySettings
                     .FirstOrDefaultAsync(s => s.CompanyId == company.Id);
-                var defaultCurrency = settings?.Currency ?? "TND";
+                var defaultCurrency = CurrencyHelper.NormalizeCurrency(settings?.Currency ?? "TND");
+                if (string.IsNullOrEmpty(defaultCurrency)) defaultCurrency = "TND";
+                string NC(string? raw)
+                {
+                    var n = CurrencyHelper.NormalizeCurrency(raw);
+                    return string.IsNullOrEmpty(n) ? defaultCurrency : n;
+                }
 
                 // Fetch invoices for this company (bypass global filter via IgnoreQueryFilters)
                 var invoices = await _context.Invoices.IgnoreQueryFilters()
@@ -929,19 +965,19 @@ namespace ResourceManager.Controllers
                     .Where(e => e.CompanyId == company.Id && !e.IsDeleted)
                     .ToListAsync();
 
-                // Group by currency
-                var currencies = invoices.Select(i => i.Quote?.Currency ?? defaultCurrency)
-                    .Union(supplierInvoices.Select(si => si.Currency ?? defaultCurrency))
-                    .Union(otherExpenses.Select(e => e.Currency ?? defaultCurrency))
+                // Group by normalized currency
+                var currencies = invoices.Select(i => NC(i.Quote?.Currency))
+                    .Union(supplierInvoices.Select(si => NC(si.Currency)))
+                    .Union(otherExpenses.Select(e => NC(e.Currency)))
                     .Union(new[] { defaultCurrency })
                     .Distinct()
                     .ToList();
 
                 var currencyBuckets = currencies.Select(cur =>
                 {
-                    var curInvoices = invoices.Where(i => (i.Quote?.Currency ?? defaultCurrency) == cur).ToList();
-                    var curSupplier = supplierInvoices.Where(si => (si.Currency ?? defaultCurrency) == cur).ToList();
-                    var curExpenses = otherExpenses.Where(e => (e.Currency ?? defaultCurrency) == cur).ToList();
+                    var curInvoices = invoices.Where(i => NC(i.Quote?.Currency) == cur).ToList();
+                    var curSupplier = supplierInvoices.Where(si => NC(si.Currency) == cur).ToList();
+                    var curExpenses = otherExpenses.Where(e => NC(e.Currency) == cur).ToList();
 
                     // PAYMENT-BASED: Revenue = sum of all Completed payments
                     var revenue = curInvoices

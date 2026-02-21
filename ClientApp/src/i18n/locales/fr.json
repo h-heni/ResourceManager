@@ -876,7 +876,8 @@
       "telecom": "Télécommunications",
       "bankFees": "Frais bancaires",
       "other": "Autre",
-      "supplier_invoices": "Factures fournisseurs"
+      "supplier_invoices": "Factures fournisseurs",
+      "imported_expenses": "Dépenses importées"
     },
     "totalExpenses": "Total des dépenses",
     "thisMonth": "Ce mois",
