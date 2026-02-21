@@ -188,6 +188,9 @@ namespace ResourceManager.Controllers
                 }
             }
 
+            // Normalize the default currency (e.g., DT → TND) so it matches normalized category currencies
+            defaultCurrency = NormalizeCurrency(defaultCurrency);
+
             var expensesQuery = _context.OtherExpenses.AsQueryable();
             if (!isAllYears)
             {

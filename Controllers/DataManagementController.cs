@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ResourceManager.Data;
 using ResourceManager.Dtos;
+using ResourceManager.Helpers;
 using ResourceManager.Models;
 using ResourceManager.Services;
 using System.Globalization;
@@ -520,7 +521,8 @@ namespace ResourceManager.Controllers
                             var amountStr = SafeGet(row, "Amount Paid");
                             if (!TryParseAmount(amountStr, out var parsedAmount) || parsedAmount < 0) { skipped++; continue; }
 
-                            var currency = SafeGet(row, "Currency", "TND");
+                            var currency = CurrencyHelper.NormalizeCurrency(SafeGet(row, "Currency", "TND"));
+                            if (string.IsNullOrEmpty(currency)) currency = "TND";
                             var paymentMethod = SafeGet(row, "Payment Method");
                             var invoiceNumber = SafeGet(row, "InvoiceNumber");
 
@@ -644,7 +646,8 @@ namespace ResourceManager.Controllers
                             var amountStr = SafeGet(row, "Amount Paid");
                             if (!TryParseAmount(amountStr, out var parsedAmount) || parsedAmount < 0) { skipped++; continue; }
 
-                            var currency = SafeGet(row, "Currency", "TND");
+                            var currency = CurrencyHelper.NormalizeCurrency(SafeGet(row, "Currency", "TND"));
+                            if (string.IsNullOrEmpty(currency)) currency = "TND";
                             var category = SafeGet(row, "Category");
                             var reference = SafeGet(row, "Reference");
 
@@ -1717,7 +1720,7 @@ namespace ResourceManager.Controllers
                         ClientName = clientName,
                         Client = client,
                         AmountPaid = dto.AmountPaid,
-                        Currency = string.IsNullOrWhiteSpace(dto.Currency) ? "TND" : dto.Currency.Trim(),
+                        Currency = CurrencyHelper.NormalizeCurrency(dto.Currency) is { Length: > 0 } nc ? nc : "TND",
                         PaymentMethod = dto.PaymentMethod?.Trim(),
                         InvoiceId = invoiceId,
                         InvoiceNumber = normalizedInvoiceNumber,

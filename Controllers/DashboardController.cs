@@ -62,10 +62,18 @@ namespace ResourceManager.Controllers
                     .Distinct()
                     .ToListAsync();
 
+                // Include OtherExpenses years so the year picker shows years that only have other expenses
+                var otherExpenseYears = await _context.OtherExpenses
+                    .AsNoTracking()
+                    .Select(e => e.Date.Year)
+                    .Distinct()
+                    .ToListAsync();
+
                 var availableYears = clientYears
                     .Union(supplierYears)
                     .Union(historicalRevenueYears)
                     .Union(historicalExpenseYears)
+                    .Union(otherExpenseYears)
                     .Distinct()
                     .OrderByDescending(y => y)
                     .ToList();
