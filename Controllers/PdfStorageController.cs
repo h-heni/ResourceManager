@@ -21,6 +21,13 @@ namespace ResourceManager.Controllers
         private readonly ILogger<PdfStorageController> _logger;
         private readonly IConfiguration _configuration;
 
+        /// <summary>Directories to skip during recursive folder search (heavy or system directories).</summary>
+        private static readonly HashSet<string> SkipDirectories = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "windows", "program files", "program files (x86)", "$recycle.bin",
+            "recovery", "node_modules", ".git", "obj", "bin", "appdata"
+        };
+
         public PdfStorageController(
             AppDbContext context,
             UserManager<ApplicationUser> userManager,
@@ -301,11 +308,7 @@ namespace ResourceManager.Controllers
 
                         if (depth < maxDepth && results.Count < 20)
                         {
-                            // Skip known heavy directories
-                            var lower = name?.ToLowerInvariant() ?? "";
-                            if (lower is "windows" or "program files" or "program files (x86)" 
-                                or "$recycle.bin" or "recovery" or "node_modules" or ".git" 
-                                or "obj" or "bin" or "appdata")
+                            if (SkipDirectories.Contains(name ?? ""))
                                 continue;
 
                             SearchForFolder(subDir, targetName, depth + 1, maxDepth, results);

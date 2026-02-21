@@ -155,7 +155,8 @@ function resolveCurrencyIntlLocale(locale: string): string {
  * @param amount  Numeric amount
  * @param currencyCode  ISO 4217 code (e.g. 'TND')
  * @param locale  Active UI locale (e.g. 'fr', 'en')
- * @returns Formatted string like "2 026,700 DT" or "2 026,700 TND"
+ * @returns Formatted string like "2 026,700\u00A0DT" or "2 026,700\u00A0TND"
+ *          (amount and symbol are separated by a non-breaking space \u00A0)
  */
 export function formatCurrencyAmount(
     amount: number,

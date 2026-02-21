@@ -35,8 +35,8 @@ namespace ResourceManager.Controllers
         {
             var normalisedMime = NormaliseMime(file.ContentType);
             if (!_allowedImageTypes.Contains(normalisedMime)) return false;
-            var ext = Path.GetExtension(file.FileName); // case-insensitive via HashSet
-            return string.IsNullOrEmpty(ext) || AllowedImageExtensions.Contains(ext);
+            var ext = Path.GetExtension(file.FileName)?.ToLowerInvariant(); // normalize before HashSet lookup
+            return !string.IsNullOrEmpty(ext) && AllowedImageExtensions.Contains(ext);
         }
 
         public SettingsController(
