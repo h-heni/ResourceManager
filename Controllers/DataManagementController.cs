@@ -461,14 +461,19 @@ namespace ResourceManager.Controllers
             int imported = 0;
             int updated = 0;
             int skipped = 0;
+            string? unknownType = null;
 
-            // ── Wrap everything in a transaction: if ANY row fails, nothing is saved ──
-            using var transaction = await _context.Database.BeginTransactionAsync();
+            // ── NpgsqlRetryingExecutionStrategy requires wrapping user transactions ──
+            var strategy = _context.Database.CreateExecutionStrategy();
 
             try
             {
-                switch (request.DataType.ToLower())
+                await strategy.ExecuteAsync(async () =>
                 {
+                    using var transaction = await _context.Database.BeginTransactionAsync();
+
+                    switch (request.DataType.ToLower())
+                    {
                     case "revenues":
                     {
                         // 1. Pre-load Clients
@@ -894,11 +899,16 @@ namespace ResourceManager.Controllers
                     }
 
                     default:
-                        return BadRequest(new { message = $"Unknown data type: {request.DataType}" });
+                        unknownType = request.DataType;
+                        return; // exit the lambda; controller will return BadRequest
                 }
 
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
+                });   // end strategy.ExecuteAsync
+
+                if (unknownType != null)
+                    return BadRequest(new { message = $"Unknown data type: {unknownType}" });
 
                 _logger.LogInformation(
                     "Historical import: {Imported} new, {Updated} updated {Type} records, {Skipped} skipped, by user {User}",
@@ -915,8 +925,6 @@ namespace ResourceManager.Controllers
             }
             catch (Exception ex)
             {
-                await transaction.RollbackAsync();
-
                 _logger.LogError(ex,
                     "Import failed for {Type} by user {User}. Imported={Imported}, Updated={Updated}, Skipped={Skipped}. Inner={Inner}",
                     request.DataType, userId, imported, updated, skipped, ex.InnerException?.Message ?? "none");
