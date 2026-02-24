@@ -38,7 +38,7 @@ interface ExpenseSummary {
     totalAll: number;
     totalThisMonth: number;
     totalThisYear: number;
-    byCategory: { category: string; total: number; count: number }[];
+    byCategory: { category: string; currency: string; total: number; count: number }[];
     count: number;
     currencyBreakdowns?: CurrencyBreakdown[];
     defaultCurrency?: string;
@@ -661,6 +661,7 @@ export default function ExpensesPage() {
                     </div>
                 </div>
             )}
+
         </div>
     );
 }

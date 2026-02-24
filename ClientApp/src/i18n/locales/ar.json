@@ -849,7 +849,8 @@
       "telecom": "اتصالات",
       "bankFees": "رسوم بنكية",
       "other": "أخرى",
-      "supplier_invoices": "فواتير الموردين"
+      "supplier_invoices": "فواتير الموردين",
+      "imported_expenses": "مصاريف مستوردة"
     },
     "totalExpenses": "إجمالي المصاريف",
     "thisMonth": "هذا الشهر",
@@ -978,6 +979,7 @@
     "exportProducts": "تصدير المنتجات",
     "exportRevenues": "تصدير الإيرادات",
     "exportSuppliers": "تصدير الموردين",
+    "exportOtherExpenses": "مصاريف أخرى",
     "import": "استيراد",
     "importDesc": "وصف الاستيراد",
     "selectFile": "اختر ملف",

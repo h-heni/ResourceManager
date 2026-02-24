@@ -262,6 +262,40 @@ namespace ResourceManager.Services
                     RetryCount = retryCount - 1
                 };
             }
+            catch (SmtpCommandException smtpEx) when (IsHardBounce(smtpEx))
+            {
+                // Hard bounce: mailbox doesn't exist, permanently rejected
+                var bounceMsg = GetBounceMessage(smtpEx);
+                _logger.LogWarning(smtpEx, "Hard bounce for {To}: {Status} {Message}", to, smtpEx.StatusCode, smtpEx.Message);
+
+                return new EmailSendResult
+                {
+                    Success = false,
+                    Message = bounceMsg,
+                    ErrorDetails = $"SMTP {(int)smtpEx.StatusCode}: {smtpEx.Message}",
+                    RetryCount = retryCount - 1,
+                    BounceType = "hard",
+                    BounceStatus = GetBounceStatusLabel(smtpEx)
+                };
+            }
+            catch (SmtpCommandException smtpEx)
+            {
+                // Soft bounce or other SMTP error
+                _logger.LogError(smtpEx, "SMTP error sending email to {To}: {Status}", to, smtpEx.StatusCode);
+
+                var isSoftBounce = (int)smtpEx.StatusCode >= 400 && (int)smtpEx.StatusCode < 500;
+                return new EmailSendResult
+                {
+                    Success = false,
+                    Message = isSoftBounce
+                        ? $"The email to {to} could not be delivered temporarily. Please try again later."
+                        : $"Failed to send email to {to}: {smtpEx.Message}",
+                    ErrorDetails = $"SMTP {(int)smtpEx.StatusCode}: {smtpEx.Message}",
+                    RetryCount = retryCount - 1,
+                    BounceType = isSoftBounce ? "soft" : null,
+                    BounceStatus = isSoftBounce ? "Temporary failure" : $"SMTP error {(int)smtpEx.StatusCode}"
+                };
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to send email to {To} after {Attempts} attempts", to, retryCount);
@@ -646,8 +680,84 @@ namespace ResourceManager.Services
         /// </summary>
         private static bool IsTransientError(SmtpCommandException ex)
         {
-            // 4xx errors are temporary, 5xx are permanent
+            // 4xx errors are temporary, 5xx are permanent — only retry 4xx
             return (int)ex.StatusCode >= 400 && (int)ex.StatusCode < 500;
+        }
+
+        /// <summary>
+        /// Determine if this is a permanent hard bounce (mailbox doesn't exist, domain not found, etc.)
+        /// </summary>
+        private static bool IsHardBounce(SmtpCommandException ex)
+        {
+            var code = (int)ex.StatusCode;
+            var msg = ex.Message?.ToLowerInvariant() ?? "";
+
+            // 5xx permanent failures
+            if (code < 500) return false;
+
+            // Common hard bounce patterns from Brevo/SMTP relays
+            return code == 550 || code == 551 || code == 552 || code == 553 || code == 554
+                || msg.Contains("does not exist")
+                || msg.Contains("mailbox not found")
+                || msg.Contains("user unknown")
+                || msg.Contains("no such user")
+                || msg.Contains("recipient rejected")
+                || msg.Contains("address rejected")
+                || msg.Contains("invalid recipient")
+                || msg.Contains("hard bounce")
+                || msg.Contains("mailbox unavailable");
+        }
+
+        /// <summary>
+        /// Get user-friendly bounce message
+        /// </summary>
+        private static string GetBounceMessage(SmtpCommandException ex)
+        {
+            var code = (int)ex.StatusCode;
+            var msg = ex.Message?.ToLowerInvariant() ?? "";
+
+            if (code == 550 || msg.Contains("does not exist") || msg.Contains("user unknown") || msg.Contains("no such user"))
+                return "The email account that you tried to reach does not exist. Please check the recipient's email address and try again.";
+
+            if (code == 551)
+                return "The recipient email address is not valid. The mail server suggests the address may have moved.";
+
+            if (code == 552 || msg.Contains("storage") || msg.Contains("quota"))
+                return "The recipient's mailbox is full and cannot accept new messages.";
+
+            if (code == 553 || msg.Contains("address rejected") || msg.Contains("invalid"))
+                return "The recipient email address format is not valid. Please verify the address.";
+
+            if (code == 554 || msg.Contains("blocked") || msg.Contains("spam") || msg.Contains("rejected"))
+                return "The email was permanently rejected by the recipient's mail server.";
+
+            return $"The email could not be delivered: {ex.Message}";
+        }
+
+        /// <summary>
+        /// Get bounce status label for UI display
+        /// </summary>
+        private static string GetBounceStatusLabel(SmtpCommandException ex)
+        {
+            var code = (int)ex.StatusCode;
+            var msg = ex.Message?.ToLowerInvariant() ?? "";
+
+            if (code == 550 || msg.Contains("does not exist") || msg.Contains("user unknown"))
+                return "Hard Bounce — Mailbox does not exist";
+
+            if (code == 551)
+                return "Hard Bounce — Address moved";
+
+            if (code == 552)
+                return "Hard Bounce — Mailbox full";
+
+            if (code == 553)
+                return "Hard Bounce — Invalid address";
+
+            if (code == 554)
+                return "Hard Bounce — Permanently rejected";
+
+            return $"Hard Bounce — SMTP {code}";
         }
     }
 }

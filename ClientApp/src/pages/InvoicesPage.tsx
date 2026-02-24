@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Plus, Search, Download, Eye, DollarSign, X, Mail, Send, Calendar, Clock, Edit2, Archive, Filter, CheckCircle, FileWarning } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import { getErrorMessage } from '../utils/errorUtils';
+import { getErrorMessage, getAxiosResponseData } from '../utils/errorUtils';
 import { useAuth } from '../context/AuthContext';
 import InvoiceDetailView from '../components/InvoiceDetailView';
 import Pagination from '../components/Pagination';
@@ -352,7 +352,15 @@ export default function InvoicesPage() {
             setShowEmailModal(false);
         } catch (error: unknown) {
             logger.error("Error sending email", error);
-            notify('error', `${t('email.sendFailed')}: ${getErrorMessage(error)}`);
+            const responseData = getAxiosResponseData(error);
+            const bounceType = responseData?.bounceType as string | undefined;
+            const bounceStatus = responseData?.bounceStatus as string | undefined;
+
+            if (bounceType === 'hard') {
+                notify('error', `${getErrorMessage(error)}${bounceStatus ? ` (${bounceStatus})` : ''}`);
+            } else {
+                notify('error', `${t('email.sendFailed')}: ${getErrorMessage(error)}`);
+            }
         } finally {
             setSendingEmail(false);
         }
@@ -525,7 +533,7 @@ export default function InvoicesPage() {
                 <div className="text-center py-20 text-gray-500">{t('common.loadingData')}</div>
             ) : (
                 <div className="rm-table-card">
-                        <table className="rm-table">
+                        <table className="rm-table min-w-[850px]">
                             <colgroup>
                                 <col style={{ width: '12%' }} />{/* Invoice # */}
                                 <col style={{ width: '15%' }} />{/* Client */}

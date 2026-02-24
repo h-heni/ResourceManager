@@ -149,7 +149,7 @@ export default function ClientsPage() {
             ) : (
                 <>
                     <div className="rm-table-card">
-                        <table className="rm-table">
+                        <table className="rm-table min-w-[750px]">
                             <colgroup>
                                 <col style={{ width: '20%' }} />{/* Company Name */}
                                 <col style={{ width: '15%' }} />{/* Fiscal ID */}

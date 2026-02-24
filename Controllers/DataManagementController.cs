@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ResourceManager.Data;
 using ResourceManager.Dtos;
+using ResourceManager.Helpers;
 using ResourceManager.Models;
 using ResourceManager.Services;
 using System.Globalization;
@@ -334,6 +335,81 @@ namespace ResourceManager.Controllers
             }
         }
 
+        /// <summary>
+        /// Export other expenses (operational costs) as Excel/CSV.
+        /// </summary>
+        [HttpGet("export/otherExpenses")]
+        public async Task<IActionResult> ExportOtherExpenses(
+            [FromQuery] DateTime? from,
+            [FromQuery] DateTime? to,
+            [FromQuery] string format = "csv")
+        {
+            try
+            {
+                var fromDate = from ?? DateTime.MinValue;
+                var toDate = to ?? DateTime.MaxValue;
+
+                var userId = _userManager.GetUserId(User);
+                string defaultCurrency = "TND";
+                if (userId != null)
+                {
+                    var user = await _userManager.FindByIdAsync(userId);
+                    if (user != null)
+                    {
+                        var settings = await _context.CompanySettings
+                            .FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
+                        if (settings != null)
+                            defaultCurrency = settings.Currency ?? "TND";
+                    }
+                }
+
+                var expenses = await _context.OtherExpenses
+                    .AsNoTracking()
+                    .Where(e => e.Date >= fromDate && e.Date <= toDate)
+                    .OrderBy(e => e.Date)
+                    .ToListAsync();
+
+                var headers = new[] { "Description", "Amount", "Date", "Category", "Currency", "Notes", "Recurring" };
+                var dataRows = expenses.Select(e => new object[]
+                {
+                    e.Description,
+                    e.Amount,
+                    e.Date,
+                    e.Category,
+                    e.Currency ?? defaultCurrency,
+                    e.Notes ?? "",
+                    e.IsRecurring ? "Yes" : "No"
+                }).ToList();
+
+                if (format?.Equals("xlsx", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    var bytes = BuildExcel("Other Expenses", headers, dataRows);
+                    return File(bytes,
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        $"other_expenses_{DateTime.UtcNow:yyyyMMdd}.xlsx");
+                }
+
+                var csv = BuildCsv(headers, dataRows.Select(r => new[]
+                {
+                    r[0].ToString()!,
+                    r[1] is decimal d ? d.ToString("F2", CultureInfo.InvariantCulture) : r[1].ToString()!,
+                    ((DateTime)r[2]).ToString("yyyy-MM-dd"),
+                    r[3].ToString()!,
+                    r[4].ToString()!,
+                    r[5].ToString()!,
+                    r[6].ToString()!
+                }));
+                return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray(),
+                    "text/csv; charset=utf-8",
+                    $"other_expenses_{DateTime.UtcNow:yyyyMMdd}.csv");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error exporting other expenses");
+                return StatusCode(500, new { message = "Failed to export other expenses" });
+            }
+        }
+
         // ═══════════════════════════════════════════════════════════
         // HISTORICAL DATA IMPORT — VALIDATE (DRY RUN)
         // ═══════════════════════════════════════════════════════════
@@ -386,14 +462,19 @@ namespace ResourceManager.Controllers
             int imported = 0;
             int updated = 0;
             int skipped = 0;
+            string? unknownType = null;
 
-            // ── Wrap everything in a transaction: if ANY row fails, nothing is saved ──
-            using var transaction = await _context.Database.BeginTransactionAsync();
+            // ── NpgsqlRetryingExecutionStrategy requires wrapping user transactions ──
+            var strategy = _context.Database.CreateExecutionStrategy();
 
             try
             {
-                switch (request.DataType.ToLower())
+                await strategy.ExecuteAsync(async () =>
                 {
+                    using var transaction = await _context.Database.BeginTransactionAsync();
+
+                    switch (request.DataType.ToLower())
+                    {
                     case "revenues":
                     {
                         // 1. Pre-load Clients
@@ -440,7 +521,8 @@ namespace ResourceManager.Controllers
                             var amountStr = SafeGet(row, "Amount Paid");
                             if (!TryParseAmount(amountStr, out var parsedAmount) || parsedAmount < 0) { skipped++; continue; }
 
-                            var currency = SafeGet(row, "Currency", "TND");
+                            var currency = CurrencyHelper.NormalizeCurrency(SafeGet(row, "Currency", "TND"));
+                            if (string.IsNullOrEmpty(currency)) currency = "TND";
                             var paymentMethod = SafeGet(row, "Payment Method");
                             var invoiceNumber = SafeGet(row, "InvoiceNumber");
 
@@ -564,7 +646,8 @@ namespace ResourceManager.Controllers
                             var amountStr = SafeGet(row, "Amount Paid");
                             if (!TryParseAmount(amountStr, out var parsedAmount) || parsedAmount < 0) { skipped++; continue; }
 
-                            var currency = SafeGet(row, "Currency", "TND");
+                            var currency = CurrencyHelper.NormalizeCurrency(SafeGet(row, "Currency", "TND"));
+                            if (string.IsNullOrEmpty(currency)) currency = "TND";
                             var category = SafeGet(row, "Category");
                             var reference = SafeGet(row, "Reference");
 
@@ -770,12 +853,65 @@ namespace ResourceManager.Controllers
                         break;
                     }
 
+                    case "otherexpenses":
+                    {
+                        // Import OtherExpense records directly (not historical).
+                        // NOTE: NormalizeKeys aliases "Amount" → "Amount Paid" globally,
+                        // so we read "Amount Paid" first, then fall back to "Amount".
+                        foreach (var row in validation.ValidRows)
+                        {
+                            if (row == null) { skipped++; continue; }
+
+                            var description = SafeGet(row, "Description");
+                            if (string.IsNullOrWhiteSpace(description)) { skipped++; continue; }
+
+                            var dateStr = SafeGet(row, "Date");
+                            if (!TryParseDate(dateStr, out var parsedDate)) { skipped++; continue; }
+                            // Use SpecifyKind(Utc) to avoid local → UTC shift
+                            var utcDate = DateTime.SpecifyKind(parsedDate, DateTimeKind.Utc);
+
+                            // "Amount" gets aliased to "Amount Paid" by NormalizeKeys — check both
+                            var amountStr = SafeGet(row, "Amount Paid") is { Length: > 0 } ap ? ap : SafeGet(row, "Amount");
+                            if (!TryParseAmount(amountStr, out var parsedAmount) || parsedAmount <= 0) { skipped++; continue; }
+
+                            var category = ExpensesController.NormalizeCategory(SafeGet(row, "Category", "other"));
+                            var currency = ExpensesController.NormalizeCurrency(SafeGet(row, "Currency", "TND"));
+                            var notes = SafeGet(row, "Notes");
+                            var recurringStr = SafeGet(row, "Recurring");
+                            var isRecurring = recurringStr.Equals("yes", StringComparison.OrdinalIgnoreCase)
+                                           || recurringStr.Equals("true", StringComparison.OrdinalIgnoreCase)
+                                           || recurringStr == "1";
+
+                            _context.OtherExpenses.Add(new OtherExpense
+                            {
+                                Description = description,
+                                Amount = parsedAmount,
+                                Date = utcDate,
+                                Category = category,
+                                Currency = currency,
+                                CurrencySymbol = currency,
+                                Notes = string.IsNullOrWhiteSpace(notes) ? null : notes,
+                                IsRecurring = isRecurring,
+                                CompanyId = companyId,
+                                CreatedByUserId = userId,
+                                CreatedAt = DateTime.UtcNow
+                            });
+                            imported++;
+                        }
+                        break;
+                    }
+
                     default:
-                        return BadRequest(new { message = $"Unknown data type: {request.DataType}" });
+                        unknownType = request.DataType;
+                        return; // exit the lambda; controller will return BadRequest
                 }
 
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
+                });   // end strategy.ExecuteAsync
+
+                if (unknownType != null)
+                    return BadRequest(new { message = $"Unknown data type: {unknownType}" });
 
                 _logger.LogInformation(
                     "Historical import: {Imported} new, {Updated} updated {Type} records, {Skipped} skipped, by user {User}",
@@ -792,16 +928,19 @@ namespace ResourceManager.Controllers
             }
             catch (Exception ex)
             {
-                await transaction.RollbackAsync();
-
                 _logger.LogError(ex,
-                    "Import failed for {Type} by user {User}. Imported={Imported}, Updated={Updated}, Skipped={Skipped}",
-                    request.DataType, userId, imported, updated, skipped);
+                    "Import failed for {Type} by user {User}. Imported={Imported}, Updated={Updated}, Skipped={Skipped}. Inner={Inner}",
+                    request.DataType, userId, imported, updated, skipped, ex.InnerException?.Message ?? "none");
+
+                // Provide full error chain for debugging
+                var details = ex.InnerException?.Message;
+                var deepDetails = ex.InnerException?.InnerException?.Message;
 
                 return StatusCode(500, new
                 {
                     message = $"Import failed: {ex.Message}",
-                    details = ex.InnerException?.Message
+                    details,
+                    deepDetails
                 });
             }
         }
@@ -833,32 +972,145 @@ namespace ResourceManager.Controllers
         /// CRITICAL: Uses ';' separator to match our MiniExcel/CSV parser configuration.
         /// </summary>
         [HttpGet("template/{type}")]
-        public IActionResult DownloadTemplate(string type)
+        public IActionResult DownloadTemplate(string type, [FromQuery] string lang = "en")
         {
             string headers;
             string exampleRow;
+            lang = lang.ToLower();
 
             switch (type.ToLower())
             {
                 case "revenues":
-                    headers = "Date;Client Name;Amount Paid;Currency;Payment Method;InvoiceNumber";
-                    exampleRow = "31/10/2024;Client Name;1500,50;TND;Bank Transfer;FA26-001";
+                    if (lang == "fr")
+                    {
+                        headers = "Date;Nom Client;Montant Payé;Devise;Mode de paiement;Numéro de facture";
+                        exampleRow = "31/10/2024;Nom du client;1500,50;TND;Virement bancaire;FA26-001";
+                    }
+                    else if (lang == "ar")
+                    {
+                        headers = "التاريخ;اسم العميل;المبلغ المدفوع;العملة;طريقة الدفع;رقم الفاتورة";
+                        exampleRow = "31/10/2024;اسم العميل;1500.50;TND;تحويل بنكي;FA26-001";
+                    }
+                    else if (lang == "de")
+                    {
+                        headers = "Datum;Kundenname;Gezahlter Betrag;Währung;Zahlungsmethode;Rechnungsnummer";
+                        exampleRow = "31.10.2024;Kundenname;1500,50;TND;Banküberweisung;FA26-001";
+                    }
+                    else
+                    {
+                        headers = "Date;Client Name;Amount Paid;Currency;Payment Method;InvoiceNumber";
+                        exampleRow = "10/31/2024;Client Name;1500.50;TND;Bank Transfer;FA26-001";
+                    }
                     break;
                 case "expenses":
-                    headers = "Date;Supplier;Amount Paid;Currency;Category";
-                    exampleRow = "31/10/2024;Supplier Name;500,00;TND;Office Supplies";
+                    if (lang == "fr")
+                    {
+                        headers = "Date;Fournisseur;Montant Payé;Devise;Catégorie";
+                        exampleRow = "31/10/2024;Nom fournisseur;500,00;TND;Fournitures de bureau";
+                    }
+                    else if (lang == "ar")
+                    {
+                        headers = "التاريخ;المزود;المبلغ المدفوع;العملة;الفئة";
+                        exampleRow = "31/10/2024;اسم المزود;500.50;TND;لوازم مكتبية";
+                    }
+                    else if (lang == "de")
+                    {
+                        headers = "Datum;Lieferant;Gezahlter Betrag;Währung;Kategorie";
+                        exampleRow = "31.10.2024;Lieferant Name;500,00;TND;Bürobedarf";
+                    }
+                    else
+                    {
+                        headers = "Date;Supplier;Amount Paid;Currency;Category";
+                        exampleRow = "10/31/2024;Supplier Name;500.00;TND;Office Supplies";
+                    }
                     break;
                 case "clients":
-                    headers = "Name;Matricule Fiscal;Phone Number;Address;Email";
-                    exampleRow = "Client Name;MF123456;+21699123456;Tunis;client@email.com";
+                    if (lang == "fr")
+                    {
+                        headers = "Nom;Matricule Fiscal;Numéro de téléphone;Adresse;Email";
+                        exampleRow = "Nom Client;MF123456;+21699123456;Tunis;client@email.com";
+                    }
+                    else if (lang == "ar")
+                    {
+                        headers = "الاسم;المعرف الجبائي;رقم الهاتف;العنوان;البريد الإلكتروني";
+                        exampleRow = "اسم العميل;MF123456;+21699123456;تونس;client@email.com";
+                    }
+                    else if (lang == "de")
+                    {
+                        headers = "Name;Steuernummer;Telefonnummer;Adresse;E-Mail";
+                        exampleRow = "Kundenname;MF123456;+21699123456;Berlin;client@email.com";
+                    }
+                    else
+                    {
+                        headers = "Name;Matricule Fiscal;Phone Number;Address;Email";
+                        exampleRow = "Client Name;MF123456;+21699123456;City;client@email.com";
+                    }
                     break;
                 case "suppliers":
-                    headers = "Name;Matricule Fiscal;Phone Number;Address";
-                    exampleRow = "Supplier Name;MF654321;+21699654321;Tunis";
+                    if (lang == "fr")
+                    {
+                        headers = "Nom;Matricule Fiscal;Numéro de téléphone;Adresse";
+                        exampleRow = "Nom Fournisseur;MF654321;+21699654321;Tunis";
+                    }
+                    else if (lang == "ar")
+                    {
+                        headers = "الاسم;المعرف الجبائي;رقم الهاتف;العنوان";
+                        exampleRow = "اسم المزود;MF654321;+21699654321;تونس";
+                    }
+                    else if (lang == "de")
+                    {
+                        headers = "Name;Steuernummer;Telefonnummer;Adresse";
+                        exampleRow = "Lieferantenname;MF654321;+21699654321;Hamburg";
+                    }
+                    else
+                    {
+                        headers = "Name;Matricule Fiscal;Phone Number;Address";
+                        exampleRow = "Supplier Name;MF654321;+21699654321;City";
+                    }
                     break;
                 case "products":
-                    headers = "Name;Price;Currency;TVA Rate;Description";
-                    exampleRow = "Product Name;100,00;TND;19;Annual subscription";
+                    if (lang == "fr")
+                    {
+                        headers = "Nom;Prix;Devise;Taux TVA;Description";
+                        exampleRow = "Nom Produit;100,00;TND;19;Abonnement annuel";
+                    }
+                    else if (lang == "ar")
+                    {
+                        headers = "الاسم;السعر;العملة;نسبة الأداء;الوصف";
+                        exampleRow = "اسم المنتج;100.00;TND;19;اشتراك سنوي";
+                    }
+                    else if (lang == "de")
+                    {
+                        headers = "Name;Preis;Währung;MwSt-Satz;Beschreibung";
+                        exampleRow = "Produktname;100,00;TND;19;Jahresabonnement";
+                    }
+                    else
+                    {
+                        headers = "Name;Price;Currency;TVA Rate;Description";
+                        exampleRow = "Product Name;100.00;TND;19;Annual subscription";
+                    }
+                    break;
+                case "otherexpenses":
+                    if (lang == "fr")
+                    {
+                        headers = "Description;Montant;Date;Catégorie;Devise;Notes;Récurrent";
+                        exampleRow = "Fournitures de bureau;150,00;31/01/2025;bureau;TND;Papeterie mensuelle;Non";
+                    }
+                    else if (lang == "ar")
+                    {
+                        headers = "الوصف;المبلغ;التاريخ;الفئة;العملة;ملاحظات;متكرر";
+                        exampleRow = "لوازم مكتبية;150.00;31/01/2025;office;TND;قرطاسية شهرية;لا";
+                    }
+                    else if (lang == "de")
+                    {
+                        headers = "Beschreibung;Betrag;Datum;Kategorie;Währung;Notizen;Wiederkehrend";
+                        exampleRow = "Büromaterial;150,00;31.01.2025;office;TND;Monatlicher Schreibwarenbedarf;Nein";
+                    }
+                    else
+                    {
+                        headers = "Description;Amount;Date;Category;Currency;Notes;Recurring";
+                        exampleRow = "Office Supplies;150.00;01/31/2025;office;TND;Monthly stationery;No";
+                    }
                     break;
                 default:
                     return BadRequest(new { message = $"Unknown template type: {type}" });
@@ -911,6 +1163,9 @@ namespace ResourceManager.Controllers
                 case "suppliers":
                     requiredColumns = new[] { "Name" };
                     break;
+                case "otherexpenses":
+                    requiredColumns = new[] { "Description", "Amount", "Date" };
+                    break;
                 default:
                     errors.Add(new ValidationError(0, $"Unknown data type: {dataType}"));
                     return new ValidationResult(errors, validRows);
@@ -930,7 +1185,10 @@ namespace ResourceManager.Controllers
                 {
                     if (!firstRowKeys.Contains(col))
                     {
-                        errors.Add(new ValidationError(0, $"Required column missing: '{col}'"));
+                        // Also check if this required column name has been aliased to a canonical name
+                        bool foundViaAlias = ColumnAliases.TryGetValue(col, out var aliased) && firstRowKeys.Contains(aliased);
+                        if (!foundViaAlias)
+                            errors.Add(new ValidationError(0, $"Required column missing: '{col}'"));
                     }
                 }
                 if (errors.Count > 0)
@@ -940,6 +1198,16 @@ namespace ResourceManager.Controllers
             for (int i = 0; i < rows.Count; i++)
             {
                 var row = NormalizeKeys(rows[i]);
+
+                // For otherExpenses the template uses "Amount" but NormalizeKeys aliases it
+                // to "Amount Paid".  Copy it back so both keys exist and required-column checks
+                // and type-specific validation blocks all work consistently.
+                if (dataType.ToLower() == "otherexpenses"
+                    && row.ContainsKey("Amount Paid") && !row.ContainsKey("Amount"))
+                {
+                    row["Amount"] = row["Amount Paid"];
+                }
+
                 // Use i + 2 to map to Excel row number (Row 1 = Headers, Row 2 = Data Row 0)
                 var rowNum = i + 2;
                 var rowErrors = new List<string>();
@@ -947,14 +1215,17 @@ namespace ResourceManager.Controllers
                 // Validate required fields are non-empty
                 foreach (var col in requiredColumns)
                 {
-                    if (!row.ContainsKey(col) || string.IsNullOrWhiteSpace(row[col]))
+                    // Check canonical name first, then try if the column was aliased
+                    var actualKey = row.ContainsKey(col) ? col
+                        : (ColumnAliases.TryGetValue(col, out var aliased) && row.ContainsKey(aliased) ? aliased : col);
+                    if (!row.ContainsKey(actualKey) || string.IsNullOrWhiteSpace(row[actualKey]))
                     {
                         rowErrors.Add($"'{col}' is required");
                     }
                 }
 
                 // Type-specific validation
-                if (dataType.ToLower() == "revenues" || dataType.ToLower() == "expenses")
+                if (dataType.ToLower() == "revenues" || dataType.ToLower() == "expenses" || dataType.ToLower() == "otherexpenses")
                 {
                     if (row.ContainsKey("Date") && !string.IsNullOrWhiteSpace(row["Date"]))
                     {
@@ -984,6 +1255,14 @@ namespace ResourceManager.Controllers
                         {
                             rowErrors.Add("'Amount Paid' must be a valid positive number");
                         }
+                    }
+                    // otherExpenses uses "Amount" column instead of "Amount Paid"
+                    if (row.ContainsKey("Amount") && !string.IsNullOrWhiteSpace(row["Amount"]))
+                    {
+                        if (TryParseAmount(row["Amount"], out var amtDirect) && amtDirect > 0)
+                            row["Amount"] = amtDirect.ToString(CultureInfo.InvariantCulture);
+                        else if (amtDirect <= 0)
+                            rowErrors.Add("'Amount' must be a positive number");
                     }
                 }
 
@@ -1067,39 +1346,102 @@ namespace ResourceManager.Controllers
         /// </summary>
         private static readonly Dictionary<string, string> ColumnAliases = new(StringComparer.OrdinalIgnoreCase)
         {
+            // Revenue / Expense shared
+            { "Date", "Date" },
+            { "Datum", "Date" },                      // German
+            { "التاريخ", "Date" },                    // Arabic
+            
             // Revenue aliases
             { "Payment", "Payment Method" },
             { "Method", "Payment Method" },
             { "Paiement", "Payment Method" },        // French
-            { "Mode de paiement", "Payment Method" },
+            { "Mode de paiement", "Payment Method" }, // French
+            { "طريقة الدفع", "Payment Method" },      // Arabic
+            { "Zahlungsmethode", "Payment Method" },  // German
+            
             { "Client", "Client Name" },
+            { "Client Name", "Client Name" },
             { "Nom Client", "Client Name" },          // French
-            { "Montant", "Amount Paid" },
-            { "Montant Payé", "Amount Paid" },
+            { "Nom du client", "Client Name" },       // French
+            { "اسم العميل", "Client Name" },          // Arabic
+            { "Kundenname", "Client Name" },          // German
+            
+            { "Amount Paid", "Amount Paid" },
+            { "Montant", "Amount Paid" },             // French
+            { "Montant Payé", "Amount Paid" },        // French
             { "Amount", "Amount Paid" },
-            { "Devise", "Currency" },
+            { "المبلغ المدفوع", "Amount Paid" },      // Arabic
+            { "Gezahlter Betrag", "Amount Paid" },    // German
+            { "Betrag", "Amount Paid" },              // German
+            
+            { "Devise", "Currency" },                 // French
+            { "العملة", "Currency" },                  // Arabic
+            { "Währung", "Currency" },                // German
+            
             { "Invoice Number", "InvoiceNumber" },
             { "InvoiceNumber", "InvoiceNumber" },
             { "Invoice No", "InvoiceNumber" },
             { "Ref", "InvoiceNumber" },
-            { "Référence", "InvoiceNumber" },
+            { "Référence", "InvoiceNumber" },         // French
+            { "Numéro de facture", "InvoiceNumber" }, // French
+            { "رقم الفاتورة", "InvoiceNumber" },      // Arabic
+            { "Rechnungsnummer", "InvoiceNumber" },   // German
+            
             // Expense aliases
-            { "Fournisseur", "Supplier" },
+            { "Fournisseur", "Supplier" },            // French
             { "Supplier Name", "Supplier" },
-            { "Catégorie", "Category" },
-            // Client aliases
-            { "Nom", "Name" },
-            { "Téléphone", "Phone Number" },
+            { "المزود", "Supplier" },                 // Arabic
+            { "اسم المزود", "Supplier" },              // Arabic
+            { "Lieferant", "Supplier" },              // German
+            { "Lieferant Name", "Supplier" },         // German
+            
+            { "Catégorie", "Category" },              // French
+            { "الفئة", "Category" },                  // Arabic
+            { "Kategorie", "Category" },              // German
+            
+            // Client / Supplier aliases
+            { "Nom", "Name" },                        // French
+            { "الاسم", "Name" },                      // Arabic
+            { "Téléphone", "Phone Number" },          // French
+            { "Numéro de téléphone", "Phone Number" }, // French
             { "Phone", "Phone Number" },
             { "Tel", "Phone Number" },
-            { "Adresse", "Address" },
-            { "Matricule", "Matricule Fiscal" },
+            { "رقم الهاتف", "Phone Number" },         // Arabic
+            { "Telefonnummer", "Phone Number" },      // German
+            
+            { "Adresse", "Address" },                 // French/German
+            { "العنوان", "Address" },                 // Arabic
+            
+            { "Matricule", "Matricule Fiscal" },      // French
+            { "Matricule Fiscal", "Matricule Fiscal" },
+            { "المعرف الجبائي", "Matricule Fiscal" }, // Arabic
+            { "Steuernummer", "Matricule Fiscal" },   // German
+            
             // Product aliases
-            { "Prix", "Price" },
-            { "Taux TVA", "TVA Rate" },
+            { "Prix", "Price" },                      // French
+            { "السعر", "Price" },                     // Arabic
+            { "Preis", "Price" },                     // German
+            
+            { "Taux TVA", "TVA Rate" },               // French
             { "TVA", "TVA Rate" },
             { "VAT Rate", "TVA Rate" },
             { "VAT", "TVA Rate" },
+            { "نسبة الأداء", "TVA Rate" },            // Arabic
+            { "MwSt-Satz", "TVA Rate" },              // German
+            { "MwSt", "TVA Rate" },                   // German
+
+            // Other Expenses
+            { "الوصف", "Description" },               // Arabic
+            { "Beschreibung", "Description" },        // German
+            { "المبلغ", "Amount" },                   // Arabic
+            { "Betrag_Direct", "Amount" },
+            { "Notes", "Notes" },
+            { "ملاحظات", "Notes" },                   // Arabic
+            { "Notizen", "Notizen" },                 // German
+            { "Recurring", "Recurring" },
+            { "Récurrent", "Recurring" },             // French
+            { "متكرر", "Recurring" },                 // Arabic
+            { "Wiederkehrend", "Recurring" },         // German
         };
 
         private static Dictionary<string, string> NormalizeKeys(Dictionary<string, string> row)
@@ -1550,7 +1892,7 @@ namespace ResourceManager.Controllers
                         ClientName = clientName,
                         Client = client,
                         AmountPaid = dto.AmountPaid,
-                        Currency = string.IsNullOrWhiteSpace(dto.Currency) ? "TND" : dto.Currency.Trim(),
+                        Currency = CurrencyHelper.NormalizeCurrency(dto.Currency) is { Length: > 0 } nc ? nc : "TND",
                         PaymentMethod = dto.PaymentMethod?.Trim(),
                         InvoiceId = invoiceId,
                         InvoiceNumber = normalizedInvoiceNumber,

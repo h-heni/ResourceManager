@@ -136,13 +136,24 @@ services:
       - Jwt__Issuer=${JWT_ISSUER:-ResourceManager}
       - Jwt__Audience=${JWT_AUDIENCE:-ResourceManager-Users}
       - Jwt__TokenExpirationInMinutes=${JWT_EXPIRATION:-60}
-      - EMAIL_SMTP_HOST=${EMAIL_SMTP_HOST:-mail.rscmanager.com}
+      - EMAIL_SMTP_HOST=${EMAIL_SMTP_HOST:-smtp-relay.brevo.com}
       - EMAIL_SMTP_PORT=${EMAIL_SMTP_PORT:-587}
       - EMAIL_SMTP_USER=${EMAIL_SMTP_USER:-}
       - EMAIL_SMTP_PASSWORD=${EMAIL_SMTP_PASSWORD:-}
       - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-noreply@rscmanager.com}
       - EMAIL_FROM_NAME=${EMAIL_FROM_NAME:-Resource Manager}
+      - EMAIL_REPLY_TO=${EMAIL_REPLY_TO:-support@rscmanager.com}
       - EMAIL_USE_TLS=${EMAIL_USE_TLS:-true}
+      - APP_BASE_URL=${APP_BASE_URL:-https://rscmanager.com}
+      # ASP.NET Core config overrides (override appsettings.Production.json placeholders)
+      - Email__SmtpHost=${EMAIL_SMTP_HOST:-smtp-relay.brevo.com}
+      - Email__SmtpPort=${EMAIL_SMTP_PORT:-587}
+      - Email__SmtpUser=${EMAIL_SMTP_USER:-}
+      - Email__SmtpPassword=${EMAIL_SMTP_PASSWORD:-}
+      - Email__FromEmail=${EMAIL_FROM_ADDRESS:-noreply@rscmanager.com}
+      - Email__FromName=${EMAIL_FROM_NAME:-Resource Manager}
+      - Email__ReplyToEmail=${EMAIL_REPLY_TO:-support@rscmanager.com}
+      - Email__EnableSsl=${EMAIL_USE_TLS:-true}
       - Redis__ConnectionString=redis:6379,password=${REDIS_PASSWORD:?err},abortConnect=false
       - Redis__InstanceName=ResourceManager_
       - Cors__AllowedOrigins__0=${CORS_ORIGIN_1:-http://localhost}
@@ -236,13 +247,24 @@ services:
       - Jwt__Issuer=${JWT_ISSUER:-ResourceManager}
       - Jwt__Audience=${JWT_AUDIENCE:-ResourceManager-Users}
       - Jwt__TokenExpirationInMinutes=${JWT_EXPIRATION:-60}
-      - EMAIL_SMTP_HOST=${EMAIL_SMTP_HOST:-mail.rscmanager.com}
+      - EMAIL_SMTP_HOST=${EMAIL_SMTP_HOST:-smtp-relay.brevo.com}
       - EMAIL_SMTP_PORT=${EMAIL_SMTP_PORT:-587}
       - EMAIL_SMTP_USER=${EMAIL_SMTP_USER:-}
       - EMAIL_SMTP_PASSWORD=${EMAIL_SMTP_PASSWORD:-}
       - EMAIL_FROM_ADDRESS=${EMAIL_FROM_ADDRESS:-noreply@rscmanager.com}
       - EMAIL_FROM_NAME=${EMAIL_FROM_NAME:-Resource Manager}
+      - EMAIL_REPLY_TO=${EMAIL_REPLY_TO:-support@rscmanager.com}
       - EMAIL_USE_TLS=${EMAIL_USE_TLS:-true}
+      - APP_BASE_URL=${APP_BASE_URL:-https://rscmanager.com}
+      # ASP.NET Core config overrides (override appsettings.Production.json placeholders)
+      - Email__SmtpHost=${EMAIL_SMTP_HOST:-smtp-relay.brevo.com}
+      - Email__SmtpPort=${EMAIL_SMTP_PORT:-587}
+      - Email__SmtpUser=${EMAIL_SMTP_USER:-}
+      - Email__SmtpPassword=${EMAIL_SMTP_PASSWORD:-}
+      - Email__FromEmail=${EMAIL_FROM_ADDRESS:-noreply@rscmanager.com}
+      - Email__FromName=${EMAIL_FROM_NAME:-Resource Manager}
+      - Email__ReplyToEmail=${EMAIL_REPLY_TO:-support@rscmanager.com}
+      - Email__EnableSsl=${EMAIL_USE_TLS:-true}
       - Redis__ConnectionString=redis:6379,password=${REDIS_PASSWORD:?err},abortConnect=false
       - Redis__InstanceName=ResourceManager_
       - Cors__AllowedOrigins__0=${CORS_ORIGIN_1:-http://localhost}

@@ -744,12 +744,14 @@ namespace ResourceManager.Controllers
             }
             else
             {
-                return BadRequest(new
+                return StatusCode(result.BounceType != null ? 422 : 400, new
                 {
                     success = false,
                     message = result.Message,
                     mode = "SMTP",
-                    errorDetails = result.ErrorDetails
+                    errorDetails = result.ErrorDetails,
+                    bounceType = result.BounceType,
+                    bounceStatus = result.BounceStatus
                 });
             }
         }

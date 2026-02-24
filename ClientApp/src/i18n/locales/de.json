@@ -849,7 +849,8 @@
       "telecom": "Telekommunikation",
       "bankFees": "Bankgebühren",
       "other": "Sonstiges",
-      "supplier_invoices": "Lieferantenrechnungen"
+      "supplier_invoices": "Lieferantenrechnungen",
+      "imported_expenses": "Importierte Ausgaben"
     },
     "totalExpenses": "Gesamtausgaben",
     "thisMonth": "Diesen Monat",
@@ -970,22 +971,28 @@
     "languageFromQuote": "Sprache wird vom verknüpften Angebot übernommen"
   },
   "dataManagement": {
-    "dropOrSelect": "Datei ablegen oder auswählen",
-    "export": "Exportieren",
-    "exportClients": "Kunden exportieren",
-    "exportDesc": "Exportieren Sie Ihre Daten im CSV-Format.",
-    "exportExpenses": "Ausgaben exportieren",
-    "exportProducts": "Produkte exportieren",
-    "exportRevenues": "Einnahmen exportieren",
-    "exportSuppliers": "Lieferanten exportieren",
-    "import": "Importieren",
-    "importDesc": "Importieren Sie Daten aus CSV-Dateien.",
-    "selectFile": "Datei auswählen",
-    "subtitle": "Daten verwalten (Import/Export)",
     "title": "Datenverwaltung",
-    "requiredColumns": "Pflichtfelder:",
-    "optionalColumns": "Optionale Felder:",
-    "downloadTemplateCsv": "Vorlage-CSV herunterladen"
+    "subtitle": "Importieren und Exportieren Sie Ihre Daten",
+    "export": "Daten exportieren",
+    "exportDesc": "Laden Sie Ihre historischen Aufzeichnungen im CSV- oder Excel-Format herunter.",
+    "exportRevenues": "Einnahmen exportieren",
+    "exportExpenses": "Lieferantenrechnungen exportieren",
+    "exportOtherExpenses": "Sonstige Ausgaben exportieren",
+    "exportClients": "Kunden exportieren",
+    "exportSuppliers": "Lieferanten exportieren",
+    "exportProducts": "Produkte exportieren",
+    "import": "Daten importieren",
+    "importDesc": "Laden Sie Ihre historischen Aufzeichnungen aus CSV- oder Excel-Dateien hoch.",
+    "selectFile": "Datei auswählen",
+    "dropOrSelect": "Datei hier ablegen oder klicken, um sie auszuwählen",
+    "downloadTemplateCsv": "CSV-Vorlage herunterladen",
+    "requiredColumns": "Pflichtspalten:",
+    "optionalColumns": "Optionale Spalten:",
+    "importSuccess": "Import erfolgreich abgeschlossen!",
+    "importError": "Import fehlgeschlagen. Bitte überprüfen Sie Ihre Datei und versuchen Sie es erneut.",
+    "validating": "Daten werden validiert...",
+    "importing": "Einträge werden importiert...",
+    "invalidFileType": "Ungültiger Dateityp. Bitte laden Sie eine .csv- oder .xlsx-Datei hoch."
   },
   "devis": {
     "descriptionPlaceholder": "Beschreibung des Angebots..."

@@ -334,7 +334,7 @@ export default function UsersPage() {
                 </div>
             </div>
 
-            <div className="rm-table-card overflow-x-auto">
+            <div className="rm-table-card">
                 <table className="rm-table min-w-[700px]">
                     <colgroup>
                         <col style={{ width: '35%' }} />{/* User */}
