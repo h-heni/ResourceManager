@@ -142,7 +142,7 @@ export default function DataManagementPage() {
         } finally {
             setExportLoading(null);
         }
-    }, [exportDateFrom, exportDateTo]);
+    }, [exportDateFrom, exportDateTo, t]);
 
     // ═══ CSV PARSING ═══
 
@@ -274,7 +274,7 @@ export default function DataManagementPage() {
 
         // Reset file input
         if (fileInputRef.current) fileInputRef.current.value = '';
-    }, [importType, parseCsv]);
+    }, [importType, parseCsv, t]);
 
     // ═══ CONFIRM IMPORT ═══
     const handleConfirmImport = useCallback(async () => {
@@ -282,7 +282,7 @@ export default function DataManagementPage() {
 
         setImportLoading(true);
         try {
-            const res = await api.post('/DataManagement/import/confirm', {
+            await api.post('/DataManagement/import/confirm', {
                 dataType: importType,
                 rows: validationResult.validRows,
             });
@@ -294,7 +294,7 @@ export default function DataManagementPage() {
         } finally {
             setImportLoading(false);
         }
-    }, [importType, validationResult]);
+    }, [importType, validationResult, t]);
 
     // ═══ CONFLICT RESOLUTION ═══
     const handleOpenConflictModal = useCallback(() => {
@@ -328,7 +328,7 @@ export default function DataManagementPage() {
         } finally {
             setConflictResolving(false);
         }
-    }, [validationResult, conflictResolutions]);
+    }, [validationResult, conflictResolutions, t]);
 
     // ═══ RESET ═══
     const resetImport = useCallback(() => {
@@ -372,7 +372,7 @@ export default function DataManagementPage() {
             document.body.removeChild(link);
             window.URL.revokeObjectURL(url);
         }
-    }, []);
+    }, [i18n.language]);
 
     const config = DATA_TYPE_CONFIG[importType];
     const exportTypes = [
