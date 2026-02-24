@@ -972,36 +972,145 @@ namespace ResourceManager.Controllers
         /// CRITICAL: Uses ';' separator to match our MiniExcel/CSV parser configuration.
         /// </summary>
         [HttpGet("template/{type}")]
-        public IActionResult DownloadTemplate(string type)
+        public IActionResult DownloadTemplate(string type, [FromQuery] string lang = "en")
         {
             string headers;
             string exampleRow;
+            lang = lang.ToLower();
 
             switch (type.ToLower())
             {
                 case "revenues":
-                    headers = "Date;Client Name;Amount Paid;Currency;Payment Method;InvoiceNumber";
-                    exampleRow = "31/10/2024;Client Name;1500,50;TND;Bank Transfer;FA26-001";
+                    if (lang == "fr")
+                    {
+                        headers = "Date;Nom Client;Montant Payé;Devise;Mode de paiement;Numéro de facture";
+                        exampleRow = "31/10/2024;Nom du client;1500,50;TND;Virement bancaire;FA26-001";
+                    }
+                    else if (lang == "ar")
+                    {
+                        headers = "التاريخ;اسم العميل;المبلغ المدفوع;العملة;طريقة الدفع;رقم الفاتورة";
+                        exampleRow = "31/10/2024;اسم العميل;1500.50;TND;تحويل بنكي;FA26-001";
+                    }
+                    else if (lang == "de")
+                    {
+                        headers = "Datum;Kundenname;Gezahlter Betrag;Währung;Zahlungsmethode;Rechnungsnummer";
+                        exampleRow = "31.10.2024;Kundenname;1500,50;TND;Banküberweisung;FA26-001";
+                    }
+                    else
+                    {
+                        headers = "Date;Client Name;Amount Paid;Currency;Payment Method;InvoiceNumber";
+                        exampleRow = "10/31/2024;Client Name;1500.50;TND;Bank Transfer;FA26-001";
+                    }
                     break;
                 case "expenses":
-                    headers = "Date;Supplier;Amount Paid;Currency;Category";
-                    exampleRow = "31/10/2024;Supplier Name;500,00;TND;Office Supplies";
+                    if (lang == "fr")
+                    {
+                        headers = "Date;Fournisseur;Montant Payé;Devise;Catégorie";
+                        exampleRow = "31/10/2024;Nom fournisseur;500,00;TND;Fournitures de bureau";
+                    }
+                    else if (lang == "ar")
+                    {
+                        headers = "التاريخ;المزود;المبلغ المدفوع;العملة;الفئة";
+                        exampleRow = "31/10/2024;اسم المزود;500.50;TND;لوازم مكتبية";
+                    }
+                    else if (lang == "de")
+                    {
+                        headers = "Datum;Lieferant;Gezahlter Betrag;Währung;Kategorie";
+                        exampleRow = "31.10.2024;Lieferant Name;500,00;TND;Bürobedarf";
+                    }
+                    else
+                    {
+                        headers = "Date;Supplier;Amount Paid;Currency;Category";
+                        exampleRow = "10/31/2024;Supplier Name;500.00;TND;Office Supplies";
+                    }
                     break;
                 case "clients":
-                    headers = "Name;Matricule Fiscal;Phone Number;Address;Email";
-                    exampleRow = "Client Name;MF123456;+21699123456;Tunis;client@email.com";
+                    if (lang == "fr")
+                    {
+                        headers = "Nom;Matricule Fiscal;Numéro de téléphone;Adresse;Email";
+                        exampleRow = "Nom Client;MF123456;+21699123456;Tunis;client@email.com";
+                    }
+                    else if (lang == "ar")
+                    {
+                        headers = "الاسم;المعرف الجبائي;رقم الهاتف;العنوان;البريد الإلكتروني";
+                        exampleRow = "اسم العميل;MF123456;+21699123456;تونس;client@email.com";
+                    }
+                    else if (lang == "de")
+                    {
+                        headers = "Name;Steuernummer;Telefonnummer;Adresse;E-Mail";
+                        exampleRow = "Kundenname;MF123456;+21699123456;Berlin;client@email.com";
+                    }
+                    else
+                    {
+                        headers = "Name;Matricule Fiscal;Phone Number;Address;Email";
+                        exampleRow = "Client Name;MF123456;+21699123456;City;client@email.com";
+                    }
                     break;
                 case "suppliers":
-                    headers = "Name;Matricule Fiscal;Phone Number;Address";
-                    exampleRow = "Supplier Name;MF654321;+21699654321;Tunis";
+                    if (lang == "fr")
+                    {
+                        headers = "Nom;Matricule Fiscal;Numéro de téléphone;Adresse";
+                        exampleRow = "Nom Fournisseur;MF654321;+21699654321;Tunis";
+                    }
+                    else if (lang == "ar")
+                    {
+                        headers = "الاسم;المعرف الجبائي;رقم الهاتف;العنوان";
+                        exampleRow = "اسم المزود;MF654321;+21699654321;تونس";
+                    }
+                    else if (lang == "de")
+                    {
+                        headers = "Name;Steuernummer;Telefonnummer;Adresse";
+                        exampleRow = "Lieferantenname;MF654321;+21699654321;Hamburg";
+                    }
+                    else
+                    {
+                        headers = "Name;Matricule Fiscal;Phone Number;Address";
+                        exampleRow = "Supplier Name;MF654321;+21699654321;City";
+                    }
                     break;
                 case "products":
-                    headers = "Name;Price;Currency;TVA Rate;Description";
-                    exampleRow = "Product Name;100,00;TND;19;Annual subscription";
+                    if (lang == "fr")
+                    {
+                        headers = "Nom;Prix;Devise;Taux TVA;Description";
+                        exampleRow = "Nom Produit;100,00;TND;19;Abonnement annuel";
+                    }
+                    else if (lang == "ar")
+                    {
+                        headers = "الاسم;السعر;العملة;نسبة الأداء;الوصف";
+                        exampleRow = "اسم المنتج;100.00;TND;19;اشتراك سنوي";
+                    }
+                    else if (lang == "de")
+                    {
+                        headers = "Name;Preis;Währung;MwSt-Satz;Beschreibung";
+                        exampleRow = "Produktname;100,00;TND;19;Jahresabonnement";
+                    }
+                    else
+                    {
+                        headers = "Name;Price;Currency;TVA Rate;Description";
+                        exampleRow = "Product Name;100.00;TND;19;Annual subscription";
+                    }
                     break;
                 case "otherexpenses":
-                    headers = "Description;Amount;Date;Category;Currency;Notes;Recurring";
-                    exampleRow = "Office Supplies;150,00;31/01/2025;office;TND;Monthly stationery;No";
+                    if (lang == "fr")
+                    {
+                        headers = "Description;Montant;Date;Catégorie;Devise;Notes;Récurrent";
+                        exampleRow = "Fournitures de bureau;150,00;31/01/2025;bureau;TND;Papeterie mensuelle;Non";
+                    }
+                    else if (lang == "ar")
+                    {
+                        headers = "الوصف;المبلغ;التاريخ;الفئة;العملة;ملاحظات;متكرر";
+                        exampleRow = "لوازم مكتبية;150.00;31/01/2025;office;TND;قرطاسية شهرية;لا";
+                    }
+                    else if (lang == "de")
+                    {
+                        headers = "Beschreibung;Betrag;Datum;Kategorie;Währung;Notizen;Wiederkehrend";
+                        exampleRow = "Büromaterial;150,00;31.01.2025;office;TND;Monatlicher Schreibwarenbedarf;Nein";
+                    }
+                    else
+                    {
+                        headers = "Description;Amount;Date;Category;Currency;Notes;Recurring";
+                        exampleRow = "Office Supplies;150.00;01/31/2025;office;TND;Monthly stationery;No";
+                    }
                     break;
                 default:
                     return BadRequest(new { message = $"Unknown template type: {type}" });
@@ -1237,39 +1346,102 @@ namespace ResourceManager.Controllers
         /// </summary>
         private static readonly Dictionary<string, string> ColumnAliases = new(StringComparer.OrdinalIgnoreCase)
         {
+            // Revenue / Expense shared
+            { "Date", "Date" },
+            { "Datum", "Date" },                      // German
+            { "التاريخ", "Date" },                    // Arabic
+            
             // Revenue aliases
             { "Payment", "Payment Method" },
             { "Method", "Payment Method" },
             { "Paiement", "Payment Method" },        // French
-            { "Mode de paiement", "Payment Method" },
+            { "Mode de paiement", "Payment Method" }, // French
+            { "طريقة الدفع", "Payment Method" },      // Arabic
+            { "Zahlungsmethode", "Payment Method" },  // German
+            
             { "Client", "Client Name" },
+            { "Client Name", "Client Name" },
             { "Nom Client", "Client Name" },          // French
-            { "Montant", "Amount Paid" },
-            { "Montant Payé", "Amount Paid" },
+            { "Nom du client", "Client Name" },       // French
+            { "اسم العميل", "Client Name" },          // Arabic
+            { "Kundenname", "Client Name" },          // German
+            
+            { "Amount Paid", "Amount Paid" },
+            { "Montant", "Amount Paid" },             // French
+            { "Montant Payé", "Amount Paid" },        // French
             { "Amount", "Amount Paid" },
-            { "Devise", "Currency" },
+            { "المبلغ المدفوع", "Amount Paid" },      // Arabic
+            { "Gezahlter Betrag", "Amount Paid" },    // German
+            { "Betrag", "Amount Paid" },              // German
+            
+            { "Devise", "Currency" },                 // French
+            { "العملة", "Currency" },                  // Arabic
+            { "Währung", "Currency" },                // German
+            
             { "Invoice Number", "InvoiceNumber" },
             { "InvoiceNumber", "InvoiceNumber" },
             { "Invoice No", "InvoiceNumber" },
             { "Ref", "InvoiceNumber" },
-            { "Référence", "InvoiceNumber" },
+            { "Référence", "InvoiceNumber" },         // French
+            { "Numéro de facture", "InvoiceNumber" }, // French
+            { "رقم الفاتورة", "InvoiceNumber" },      // Arabic
+            { "Rechnungsnummer", "InvoiceNumber" },   // German
+            
             // Expense aliases
-            { "Fournisseur", "Supplier" },
+            { "Fournisseur", "Supplier" },            // French
             { "Supplier Name", "Supplier" },
-            { "Catégorie", "Category" },
-            // Client aliases
-            { "Nom", "Name" },
-            { "Téléphone", "Phone Number" },
+            { "المزود", "Supplier" },                 // Arabic
+            { "اسم المزود", "Supplier" },              // Arabic
+            { "Lieferant", "Supplier" },              // German
+            { "Lieferant Name", "Supplier" },         // German
+            
+            { "Catégorie", "Category" },              // French
+            { "الفئة", "Category" },                  // Arabic
+            { "Kategorie", "Category" },              // German
+            
+            // Client / Supplier aliases
+            { "Nom", "Name" },                        // French
+            { "الاسم", "Name" },                      // Arabic
+            { "Téléphone", "Phone Number" },          // French
+            { "Numéro de téléphone", "Phone Number" }, // French
             { "Phone", "Phone Number" },
             { "Tel", "Phone Number" },
-            { "Adresse", "Address" },
-            { "Matricule", "Matricule Fiscal" },
+            { "رقم الهاتف", "Phone Number" },         // Arabic
+            { "Telefonnummer", "Phone Number" },      // German
+            
+            { "Adresse", "Address" },                 // French/German
+            { "العنوان", "Address" },                 // Arabic
+            
+            { "Matricule", "Matricule Fiscal" },      // French
+            { "Matricule Fiscal", "Matricule Fiscal" },
+            { "المعرف الجبائي", "Matricule Fiscal" }, // Arabic
+            { "Steuernummer", "Matricule Fiscal" },   // German
+            
             // Product aliases
-            { "Prix", "Price" },
-            { "Taux TVA", "TVA Rate" },
+            { "Prix", "Price" },                      // French
+            { "السعر", "Price" },                     // Arabic
+            { "Preis", "Price" },                     // German
+            
+            { "Taux TVA", "TVA Rate" },               // French
             { "TVA", "TVA Rate" },
             { "VAT Rate", "TVA Rate" },
             { "VAT", "TVA Rate" },
+            { "نسبة الأداء", "TVA Rate" },            // Arabic
+            { "MwSt-Satz", "TVA Rate" },              // German
+            { "MwSt", "TVA Rate" },                   // German
+
+            // Other Expenses
+            { "الوصف", "Description" },               // Arabic
+            { "Beschreibung", "Description" },        // German
+            { "المبلغ", "Amount" },                   // Arabic
+            { "Betrag_Direct", "Amount" },
+            { "Notes", "Notes" },
+            { "ملاحظات", "Notes" },                   // Arabic
+            { "Notizen", "Notizen" },                 // German
+            { "Recurring", "Recurring" },
+            { "Récurrent", "Recurring" },             // French
+            { "متكرر", "Recurring" },                 // Arabic
+            { "Wiederkehrend", "Recurring" },         // German
         };
 
         private static Dictionary<string, string> NormalizeKeys(Dictionary<string, string> row)
