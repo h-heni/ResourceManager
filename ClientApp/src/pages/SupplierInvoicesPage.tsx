@@ -231,6 +231,7 @@ export default function SupplierInvoicesPage() {
         fetchCounts();
     }, [selectedYear]);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const transformInvoice = (item: any): SupplierInvoice => ({
         id: item.id,
         fileName: item.fileName || '',
@@ -315,6 +316,7 @@ export default function SupplierInvoicesPage() {
             try {
                 const res = await api.get('/Suppliers?size=9999');
                 const data = Array.isArray(res.data) ? res.data : (res.data.data ||[]);
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 setSuppliers(data.map((s: any) => ({ id: s.id, name: s.name, address: s.address, phone: s.phone, taxId: s.taxId, email: s.email })));
             } catch { /* ignore */ }
         };
@@ -419,6 +421,7 @@ export default function SupplierInvoicesPage() {
                 supplierAddress: data.extractedData.address || '',
             });
 
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             setLineItems((data.extractedData.lineItems ||[]).map((item: any, index: number) => ({
                 id: `item-${Date.now()}-${index}`, description: item.description || '',
                 quantity: item.quantity || 1, unitPrice: item.unitPrice || 0,
@@ -500,7 +503,7 @@ export default function SupplierInvoicesPage() {
             await api.delete(`/SupplierInvoices/${id}`);
             notify('success', t('common.deleted'));
             if (viewMode === 'active') fetchActiveInvoices(); else fetchArchivedInvoices();
-        } catch (error) { notify('error', t('common.deleteError')); }
+        } catch { notify('error', t('common.deleteError')); }
     };
 
     const resetReviewState = () => {
@@ -565,6 +568,7 @@ export default function SupplierInvoicesPage() {
                 totalHT: data.totalHT?.toString() || '', totalTTC: data.totalTTC?.toString() || '', tva: data.tva?.toString() || '',
                 supplierPhone: data.supplierPhone || '', supplierAddress: data.supplierAddress || ''
             });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             setLineItems((data.items ||[]).map((item: any, i: number) => ({ id: `item-${Date.now()}-${i}`, ...item, taxRate: item.taxRate ?? 0.19 })));
             setSelectedSupplierId(data.supplierId); setConfidenceScore(data.confidenceScore || 0);
             
@@ -585,6 +589,7 @@ export default function SupplierInvoicesPage() {
             const res = await api.get(`/SupplierInvoices/${id}`);
             const inv = viewMode === 'archived' ? archivedInvoices.find(i => i.id === id) : invoices.find(i => i.id === id);
             setDetailInvoice({ ...inv, ...res.data });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             setDetailItems((res.data.items ||[]).map((item: any, i: number) => ({ id: `item-${Date.now()}-${i}`, ...item, taxRate: item.taxRate ?? 0.19 })));
             setShowDetailModal(true);
         } catch { notify('error', t('supplierInvoice.loadFailed')); }

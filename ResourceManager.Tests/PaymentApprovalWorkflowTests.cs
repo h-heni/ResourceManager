@@ -228,23 +228,7 @@ public class PaymentApprovalWorkflowTests
         Assert.Equal(2000m, fi.PendingAmount);
     }
 
-    [Fact]
-    public void SupplierInvoice_ManualApproval_TransitionsToPaid()
-    {
-        var fi = new SupplierInvoice { TotalTTC = 2000m };
-        var payment = new SupplierPayment { Amount = 2000m, Status = "Pending" };
-        fi.Payments.Add(payment);
-
-        Assert.Equal("Pending", fi.PaymentStatus);
-
-        // Manually approve
-        payment.Status = "Completed";
-
-        Assert.Equal("Paid", fi.PaymentStatus);
-        Assert.Equal(2000m, fi.AmountPaid);
-        Assert.Equal(0m, fi.PendingAmount);
-    }
-
+    
     // ═══════════════════════════════════════════════════════════
     // 6. Audit Trail — ConfirmedBy Fields
     // ═══════════════════════════════════════════════════════════

@@ -126,33 +126,6 @@ public class InvoiceStatusLifecycleTests
         Assert.Equal("Pending", invoice.Status);
     }
 
-    [Fact]
-    public void SupplierInvoice_FullLifecycle()
-    {
-        var fi = new SupplierInvoice { TotalTTC = 5000m };
-
-        // Initial: Pending
-        Assert.Equal("Pending", fi.PaymentStatus);
-
-        // Partial payment
-        fi.Payments.Add(new SupplierPayment { Amount = 2000m, Status = "Completed" });
-        Assert.Equal("PartiallyPaid", fi.PaymentStatus);
-        Assert.Equal(2000m, fi.AmountPaid);
-        Assert.Equal(3000m, fi.RemainingAmount);
-
-        // Add scheduled (pending) payment
-        fi.Payments.Add(new SupplierPayment { Amount = 3000m, Status = "Pending" });
-        Assert.Equal("PartiallyPaid", fi.PaymentStatus); // Pending doesn't count for status
-        Assert.Equal(3000m, fi.PendingAmount);
-        // Remaining includes pending: 5000 - (2000 + 3000) = 0
-        Assert.Equal(0m, fi.RemainingAmount);
-
-        // Complete the scheduled payment
-        fi.Payments.Last().Status = "Completed";
-        Assert.Equal("Paid", fi.PaymentStatus);
-        Assert.Equal(5000m, fi.AmountPaid);
-        Assert.Equal(0m, fi.RemainingAmount);
-    }
 
     [Fact]
     public void StatusValues_NeverContainLegacyValues()

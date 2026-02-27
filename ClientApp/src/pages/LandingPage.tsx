@@ -46,6 +46,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import LanguageSelector from '../components/LanguageSelector';
 import { useState, useEffect } from 'react';
 import {
@@ -66,8 +67,24 @@ import { formatNumber } from '../lib/formatNumber';
 // FEATURE PREVIEW COMPONENTS
 // ============================================
 
+const fmt = (value: number) => `$${formatNumber(value)}`;
+
+const ChartTooltipContent = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; name: string; color: string }>; label?: string }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">
+      <p className="font-medium text-gray-900 mb-1">{label}</p>
+      {payload.map((entry, i) => (
+        <p key={i} className="text-gray-600" style={{ color: entry.color }}>
+          {entry.name}: {fmt(entry.value)}
+        </p>
+      ))}
+    </div>
+  );
+};
+
 // Dashboard Preview - Real UI Mockup (Non-clickable)
-const DashboardPreview = ({ t }: { t: any }) => {
+const DashboardPreview = ({ t }: { t: TFunction }) => {
   const revenueExpenseChartData = [
     { name: 'Jul', revenue: 48200, expenses: 28600 },
     { name: 'Aug', revenue: 51700, expenses: 30100 },
@@ -83,21 +100,6 @@ const DashboardPreview = ({ t }: { t: any }) => {
   }));
 
   const netResult = growthTrajectoryData[growthTrajectoryData.length - 1]?.net ?? 0;
-  const fmt = (value: number) => `$${formatNumber(value)}`;
-
-  const ChartTooltipContent = ({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; name: string; color: string }>; label?: string }) => {
-    if (!active || !payload?.length) return null;
-    return (
-      <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">
-        <p className="font-medium text-gray-900 mb-1">{label}</p>
-        {payload.map((entry, i) => (
-          <p key={i} className="text-gray-600" style={{ color: entry.color }}>
-            {entry.name}: {fmt(entry.value)}
-          </p>
-        ))}
-      </div>
-    );
-  };
 
   return (
     <div className="w-full bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-200 pointer-events-none select-none">
@@ -218,7 +220,7 @@ const DashboardPreview = ({ t }: { t: any }) => {
 };
 
 // Invoices Preview - Real UI Mockup (Non-clickable)
-const InvoicesPreview = ({ t }: { t: any }) => (
+const InvoicesPreview = ({ t }: { t: TFunction }) => (
   <div className="w-full bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-200 pointer-events-none select-none">
     <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-3 flex items-center gap-2 border-b border-gray-200">
       <div className="flex gap-1.5">
@@ -318,7 +320,7 @@ const InvoicesPreview = ({ t }: { t: any }) => (
 );
 
 // Data Management Preview - Real UI Mockup (Non-clickable)
-const DataManagementPreview = ({ t }: { t: any }) => (
+const DataManagementPreview = ({ t }: { t: TFunction }) => (
   <div className="w-full bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-200 pointer-events-none select-none">
     <div className="bg-gradient-to-r from-purple-600 to-purple-700 px-4 py-3 flex items-center gap-2 border-b border-gray-200">
       <div className="flex gap-1.5">
@@ -582,11 +584,6 @@ export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
-  // Redirect authenticated users to their dashboard
-  if (!loading && isAuthenticated) {
-    return <Navigate to={isEmployee ? '/invoices' : '/dashboard'} replace />;
-  }
-
   const toggleFaq = (index: number) => {
     setOpenFaq(openFaq === index ? null : index);
   };
@@ -617,6 +614,11 @@ export default function LandingPage() {
     document.documentElement.lang = i18n.language;
     document.documentElement.dir = direction;
   }, [i18n.language, direction, t]);
+
+  // Redirect authenticated users to their dashboard
+  if (!loading && isAuthenticated) {
+    return <Navigate to={isEmployee ? '/invoices' : '/dashboard'} replace />;
+  }
 
   return (
     <div className="min-h-screen bg-white font-sans" dir={direction}>
@@ -1106,34 +1108,6 @@ export default function LandingPage() {
             <p className="text-xl text-gray-400 max-w-2xl mx-auto">
               {t('landing.explorePlatformDesc')}
             </p>
-          </div>
-
-          <div className="grid lg:grid-cols-2 gap-8">
-            <div className="space-y-4">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 bg-blue-500/20 rounded-xl flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-blue-400" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white">{t('landing.invoiceManagement')}</h3>
-                  <p className="text-sm text-gray-400">{t('landing.createSendTrack')}</p>
-                </div>
-              </div>
-              <InvoicesPreview t={t} />
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
-                  <HardDrive className="w-5 h-5 text-purple-400" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white">{t('landing.dataManagement')}</h3>
-                  <p className="text-sm text-gray-400">{t('landing.importExportArchive')}</p>
-                </div>
-              </div>
-              <DataManagementPreview t={t} />
-            </div>
           </div>
 
           {/* Additional Features Grid */}

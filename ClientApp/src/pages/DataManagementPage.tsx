@@ -437,7 +437,7 @@ export default function DataManagementPage() {
             document.body.removeChild(link);
             window.URL.revokeObjectURL(url);
         }
-    }, []);
+    }, [i18n.language]);
 
     const config = DATA_TYPE_CONFIG[importType];
     const exportTypes = [
