@@ -285,6 +285,19 @@ body > .container {
     width: 1%;
   }
 
+  /* Group header classes for collapsible year sections */
+  .rm-table .rm-group-header {
+    @apply bg-[#ECFDF5] border-b border-emerald-200 cursor-pointer hover:bg-emerald-50 transition-colors;
+  }
+
+  .rm-table .rm-cell-group-header {
+    @apply px-2.5 lg:px-3 py-3 text-sm align-middle;
+  }
+
+  .rm-table .rm-year-footer {
+    @apply bg-[#065F46]/5 border-t border-[#065F46]/10;
+  }
+
   @media (max-width: 1023px) {
     .rm-table-card {
       overflow-x: auto;

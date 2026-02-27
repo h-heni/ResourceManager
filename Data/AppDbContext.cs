@@ -63,8 +63,6 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<RefreshToken> RefreshTokens { get; set; }
     public DbSet<UserLoginRecord> UserLoginRecords { get; set; }
     public DbSet<ManagerInvitation> ManagerInvitations { get; set; }
-    public DbSet<HistoricalRevenue> HistoricalRevenues { get; set; }
-    public DbSet<HistoricalExpense> HistoricalExpenses { get; set; }
     public DbSet<PendingInvoice> PendingInvoices { get; set; }
     public DbSet<EmailAuditLog> EmailAuditLogs { get; set; }
     public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
@@ -96,8 +94,6 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<PdfFileRecord>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
         builder.Entity<OtherExpense>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
         builder.Entity<ProductService>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
-        builder.Entity<HistoricalRevenue>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
-        builder.Entity<HistoricalExpense>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
         builder.Entity<CompanySettings>().HasQueryFilter(e => _isSuperAdmin || e.CompanyId == _currentCompanyId);
         builder.Entity<PendingInvoice>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
 
@@ -107,20 +103,6 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<InvoiceEmail>().HasQueryFilter(e => _isSuperAdmin || e.Invoice!.CompanyId == _currentCompanyId);
         builder.Entity<SupplierInvoiceItem>().HasQueryFilter(i => _isSuperAdmin || i.SupplierInvoice!.CompanyId == _currentCompanyId);
         builder.Entity<SupplierPayment>().HasQueryFilter(p => _isSuperAdmin || p.SupplierInvoice!.CompanyId == _currentCompanyId);
-
-        builder.Entity<HistoricalRevenue>()
-            .HasOne(e => e.Invoice)
-            .WithMany()
-            .HasForeignKey(e => e.InvoiceId)
-            .OnDelete(DeleteBehavior.SetNull);
-
-        builder.Entity<HistoricalRevenue>()
-            .HasIndex(e => e.InvoiceId);
-
-        builder.Entity<HistoricalRevenue>()
-            .HasIndex(e => new { e.CompanyId, e.InvoiceId })
-            .IsUnique()
-            .HasFilter("\"InvoiceId\" IS NOT NULL");
 
         // RefreshToken indexes for fast lookup
         builder.Entity<RefreshToken>().HasIndex(e => e.Token).IsUnique();

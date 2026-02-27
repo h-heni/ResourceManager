@@ -98,30 +98,6 @@ public class ProductServiceIndexConfiguration : IEntityTypeConfiguration<Product
     }
 }
 
-public class HistoricalRevenueIndexConfiguration : IEntityTypeConfiguration<HistoricalRevenue>
-{
-    public void Configure(EntityTypeBuilder<HistoricalRevenue> builder)
-    {
-        builder.HasIndex(e => new { e.CompanyId, e.IsDeleted })
-            .HasDatabaseName("IX_HistoricalRevenues_CompanyId_IsDeleted");
-
-        builder.HasIndex(e => e.Date)
-            .HasDatabaseName("IX_HistoricalRevenues_Date");
-    }
-}
-
-public class HistoricalExpenseIndexConfiguration : IEntityTypeConfiguration<HistoricalExpense>
-{
-    public void Configure(EntityTypeBuilder<HistoricalExpense> builder)
-    {
-        builder.HasIndex(e => new { e.CompanyId, e.IsDeleted })
-            .HasDatabaseName("IX_HistoricalExpenses_CompanyId_IsDeleted");
-
-        builder.HasIndex(e => e.Date)
-            .HasDatabaseName("IX_HistoricalExpenses_Date");
-    }
-}
-
 public class PendingInvoiceIndexConfiguration : IEntityTypeConfiguration<PendingInvoice>
 {
     public void Configure(EntityTypeBuilder<PendingInvoice> builder)

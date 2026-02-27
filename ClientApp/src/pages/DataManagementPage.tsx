@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     Download, Upload, FileSpreadsheet, AlertTriangle, CheckCircle,
-    FileText, Users, Package, DollarSign, Truck, Receipt, X, ArrowRightLeft, RefreshCw, SkipForward
+    FileText, Users, Package, DollarSign, Truck, Receipt
 } from 'lucide-react';
 import api from '../services/api';
 import { getErrorMessage } from '../utils/errorUtils';
@@ -18,23 +18,25 @@ interface ValidationError {
     message: string;
 }
 
-interface ConflictRow {
-    rowIndex: number;
-    newData: Record<string, string>;
+interface ImportConflict {
+    identifier: string;
+    existingId: number;
     existingData: Record<string, string>;
-    invoiceNumber: string;
-    existingHistoricalRevenueId: number;
+    newData: Record<string, string>;
+    rowIndex: number;
 }
 
 interface ValidationResult {
     errors: ValidationError[];
     validRows: Record<string, string>[];
-    conflicts: ConflictRow[];
+    conflicts: ImportConflict[];
     totalRows: number;
     validCount: number;
     errorCount: number;
     conflictCount: number;
 }
+
+const SOURCE_ROW_NUMBER_KEY = '__SourceRowNumber';
 
 const DATA_TYPE_CONFIG: Record<DataType, {
     labelKey: string;
@@ -53,9 +55,9 @@ const DATA_TYPE_CONFIG: Record<DataType, {
     expenses: {
         labelKey: 'dataManagement.exportExpenses',
         icon: FileText,
-        requiredColumns: ['Date', 'Supplier', 'Amount Paid', 'Currency'],
-        optionalColumns: ['Category', 'Reference'],
-        exampleRow: { Date: '2023-04-02', Supplier: 'Supplier X', 'Amount Paid': '500', Currency: 'USD', Category: 'Office', Reference: 'EXP-001' },
+        requiredColumns: ['Date', 'Supplier', 'Amount Paid', 'Currency', 'InvoiceNumber'],
+        optionalColumns: ['Reference'],
+        exampleRow: { Date: '2023-04-02', Supplier: 'Supplier X', 'Amount Paid': '500', Currency: 'USD', Reference: 'EXP-001', InvoiceNumber: 'SUP-2024-001' },
     },
     clients: {
         labelKey: 'dataManagement.exportClients',
@@ -82,8 +84,8 @@ const DATA_TYPE_CONFIG: Record<DataType, {
         labelKey: 'dataManagement.exportOtherExpenses',
         icon: Receipt,
         requiredColumns: ['Description', 'Amount', 'Date'],
-        optionalColumns: ['Category', 'Currency', 'Notes', 'Recurring'],
-        exampleRow: { Description: 'Office Supplies', Amount: '150.00', Date: '2025-01-15', Category: 'office', Currency: 'TND', Notes: 'Monthly stationery', Recurring: 'No' },
+        optionalColumns: ['Currency', 'Notes', 'Recurring'],
+        exampleRow: { Description: 'Office Supplies', Amount: '150.00', Date: '2025-01-15', Currency: 'TND', Notes: 'Monthly stationery', Recurring: 'No' },
     },
 };
 
@@ -103,12 +105,9 @@ export default function DataManagementPage() {
     const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
     const [importLoading, setImportLoading] = useState(false);
     const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
-    // ═══ CONFLICT RESOLUTION STATE ═══
     const [showConflictModal, setShowConflictModal] = useState(false);
-    const [conflictResolutions, setConflictResolutions] = useState<Record<string, 'update' | 'skip'>>({});
-    const [conflictResolving, setConflictResolving] = useState(false);
+    const [resolutions, setResolutions] = useState<Record<number, 'update' | 'keep_original'>>({});
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // ═══ EXPORT HANDLERS ═══
     const handleExport = useCallback(async (type: string) => {
@@ -138,11 +137,10 @@ export default function DataManagementPage() {
             window.URL.revokeObjectURL(url);
         } catch (error) {
             logger.error('Export failed:', error);
-            setImportResult({ success: false, message: t('common.exportFailed', 'Export failed') });
         } finally {
             setExportLoading(null);
         }
-    }, [exportDateFrom, exportDateTo, t]);
+    }, [exportDateFrom, exportDateTo]);
 
     // ═══ CSV PARSING ═══
 
@@ -174,8 +172,9 @@ export default function DataManagementPage() {
     const parseCsv = useCallback((text: string): Record<string, string>[] => {
         // Strip BOM
         const clean = text.replace(/^\uFEFF/, '');
-        const lines = clean.split(/\r?\n/).filter(l => l.trim().length > 0);
-        if (lines.length < 2) return [];
+        const lines = clean.split(/\r?\n/);
+        const headerIndex = lines.findIndex(l => l.trim().length > 0);
+        if (headerIndex < 0 || headerIndex >= lines.length - 1) return [];
 
         // Auto-detect delimiter from the header row (inlined to satisfy exhaustive-deps)
         const detectDelim = (headerLine: string): string => {
@@ -185,26 +184,28 @@ export default function DataManagementPage() {
             }
             return ',';
         };
-        const delimiter = detectDelim(lines[0]);
+        const delimiter = detectDelim(lines[headerIndex]);
 
         // Parse header
-        const headers = parseCsvLineWith(lines[0], delimiter);
+        const headers = parseCsvLineWith(lines[headerIndex].replace(/^\uFEFF/, ''), delimiter);
         const rows: Record<string, string>[] = [];
 
-        for (let i = 1; i < lines.length; i++) {
-            const values = parseCsvLineWith(lines[i], delimiter);
-            const row: Record<string, string> = {};
-            let hasData = false;
+        for (let lineIndex = headerIndex + 1; lineIndex < lines.length; lineIndex++) {
+            const line = lines[lineIndex];
+            if (line.trim().length === 0) continue;
+
+            const values = parseCsvLineWith(line, delimiter);
+            const row: Record<string, string> = {
+                [SOURCE_ROW_NUMBER_KEY]: String(lineIndex + 1),
+            };
 
             headers.forEach((h, idx) => {
-                const val = (values[idx] ?? '').trim();
-                row[h.trim()] = val;
-                if (val !== '') hasData = true;
+                const header = h.trim();
+                if (header.length === 0) return;
+                row[header] = (values[idx] ?? '').trim();
             });
 
-            if (hasData) {
-                rows.push(row);
-            }
+            rows.push(row);
         }
 
         return rows;
@@ -228,7 +229,7 @@ export default function DataManagementPage() {
                 });
                 rows = res.data.rows ?? [];
             } catch (error: unknown) {
-                const msg = getErrorMessage(error, t('dataManagement.importError'));
+                const msg = getErrorMessage(error, 'Failed to parse Excel file');
                 setImportResult({ success: false, message: msg });
                 if (fileInputRef.current) fileInputRef.current.value = '';
                 return;
@@ -240,7 +241,7 @@ export default function DataManagementPage() {
         }
 
         if (rows.length === 0) {
-            setImportResult({ success: false, message: t('dataManagement.invalidFileType') });
+            setImportResult({ success: false, message: 'File is empty or has invalid format' });
             if (fileInputRef.current) fileInputRef.current.value = '';
             return;
         }
@@ -258,14 +259,14 @@ export default function DataManagementPage() {
             });
             setValidationResult(res.data);
         } catch (error: unknown) {
-            const msg = getErrorMessage(error, t('dataManagement.importError'));
+            const msg = getErrorMessage(error, 'Validation failed');
             setValidationResult({
                 errors: [{ row: 0, message: msg }],
                 validRows: [],
+                conflicts: [],
                 totalRows: rows.length,
                 validCount: 0,
                 errorCount: rows.length,
-                conflicts: [],
                 conflictCount: 0,
             });
         } finally {
@@ -274,61 +275,126 @@ export default function DataManagementPage() {
 
         // Reset file input
         if (fileInputRef.current) fileInputRef.current.value = '';
-    }, [importType, parseCsv, t]);
+    }, [importType, parseCsv]);
 
     // ═══ CONFIRM IMPORT ═══
     const handleConfirmImport = useCallback(async () => {
         if (!validationResult || validationResult.validRows.length === 0) return;
 
+        // Check if there are conflicts that haven't been resolved yet
+        if (validationResult.conflicts.length > 0 && !showConflictModal) {
+            // Initialize resolutions (default to keep_original if not set)
+            const initialResolutions: Record<number, 'update' | 'keep_original'> = {};
+            validationResult.conflicts.forEach(c => {
+                initialResolutions[c.existingId] = 'keep_original';
+            });
+            setResolutions(initialResolutions);
+            setShowConflictModal(true);
+            return;
+        }
+
         setImportLoading(true);
         try {
-            await api.post('/DataManagement/import/confirm', {
+            const res = await api.post('/DataManagement/import/confirm', {
                 dataType: importType,
                 rows: validationResult.validRows,
             });
-            setImportResult({ success: true, message: t('dataManagement.importSuccess') });
+
+            const { imported, updated, skipped } = res.data;
+            const message = t('dataManagement.importDetailedSummary', {
+                new: imported || 0,
+                updated: updated || 0,
+                skipped: skipped || 0
+            });
+
+            setImportResult({ success: true, message });
             setImportStep('result');
+            setValidationResult(null);
         } catch (error: unknown) {
-            const msg = getErrorMessage(error, t('dataManagement.importError'));
+            const msg = getErrorMessage(error, 'Import failed');
             setImportResult({ success: false, message: msg });
         } finally {
             setImportLoading(false);
         }
-    }, [importType, validationResult, t]);
+    }, [importType, validationResult, showConflictModal, t]);
 
-    // ═══ CONFLICT RESOLUTION ═══
-    const handleOpenConflictModal = useCallback(() => {
-        if (!validationResult?.conflicts?.length) return;
-        // Initialize all conflicts as 'skip' (keep original)
-        const initial: Record<string, 'update' | 'skip'> = {};
+    const handleApplyAllNew = useCallback(() => {
+        if (!validationResult) return;
+        const newResolutions = { ...resolutions };
         validationResult.conflicts.forEach(c => {
-            initial[c.invoiceNumber] = 'skip';
+            newResolutions[c.existingId] = 'update';
         });
-        setConflictResolutions(initial);
-        setShowConflictModal(true);
-    }, [validationResult]);
+        setResolutions(newResolutions);
+    }, [validationResult, resolutions]);
 
     const handleResolveConflicts = useCallback(async () => {
-        if (!validationResult?.conflicts?.length) return;
-        setConflictResolving(true);
+        if (!validationResult) return;
+
+        setImportLoading(true);
         try {
-            const resolutions = validationResult.conflicts.map(c => ({
-                existingHistoricalRevenueId: c.existingHistoricalRevenueId,
-                invoiceNumber: c.invoiceNumber,
-                action: conflictResolutions[c.invoiceNumber] || 'skip',
-                newData: c.newData,
+            // Step 1: Send conflict resolutions to backend
+            const resolutionsPayload = validationResult.conflicts.map(c => ({
+                existingId: c.existingId,
+                choice: resolutions[c.existingId] || 'keep_original',
+                newData: c.newData
             }));
-            const res = await api.post('/DataManagement/import/resolve-conflicts', { resolutions });
-            setShowConflictModal(false);
-            setImportResult({ success: true, message: res.data.message });
+
+            const resolveRes = await api.post('/DataManagement/import/resolve-conflicts', {
+                dataType: importType,
+                resolutions: resolutionsPayload
+            });
+
+            const rData = resolveRes.data;
+
+            // Step 2: Find rows that were NOT involved in any conflict
+            const conflictRowIndices = new Set(
+                validationResult.conflicts
+                    .map(c => c.rowIndex)
+                    .filter(rowIndex => Number.isFinite(rowIndex) && rowIndex > 0)
+            );
+
+            const nonConflictingRows = validationResult.validRows.filter((row, rowIdxZeroBased) => {
+                const fallbackRowNumber = rowIdxZeroBased + 2;
+                const rowIdx = Number.parseInt(
+                    row['__RowNumber'] ?? row[SOURCE_ROW_NUMBER_KEY] ?? String(fallbackRowNumber),
+                    10
+                );
+                return !conflictRowIndices.has(rowIdx);
+            });
+
+            // Step 3: Only call ConfirmImport if there are genuinely new rows
+            let cData = { imported: 0, updated: 0, skipped: 0 };
+            if (nonConflictingRows.length > 0) {
+                const confirmRes = await api.post('/DataManagement/import/confirm', {
+                    dataType: importType,
+                    rows: nonConflictingRows,
+                });
+                cData = confirmRes.data;
+            }
+
+            // Unify results: Total = Resolve + Confirm
+            const totalNew = (cData.imported || 0);
+            const totalUpdated = (rData.updated || 0) + (cData.updated || 0);
+            const totalSkipped = (rData.skipped || 0) + (cData.skipped || 0);
+
+            const finalMessage = t('dataManagement.importDetailedSummary', {
+                new: totalNew,
+                updated: totalUpdated,
+                skipped: totalSkipped
+            });
+
+            setImportResult({ success: true, message: finalMessage });
             setImportStep('result');
+            setShowConflictModal(false);
         } catch (error: unknown) {
-            const msg = getErrorMessage(error, t('dataManagement.importError'));
-            setImportResult({ success: false, message: msg });
+            console.error('Resolution failed:', error);
+            const message = error instanceof Error ? error.message : t('dataManagement.importError');
+            setImportResult({ success: false, message });
+            setImportStep('result');
         } finally {
-            setConflictResolving(false);
+            setImportLoading(false);
         }
-    }, [validationResult, conflictResolutions, t]);
+    }, [validationResult, resolutions, importType, t]);
 
     // ═══ RESET ═══
     const resetImport = useCallback(() => {
@@ -336,21 +402,20 @@ export default function DataManagementPage() {
         setParsedRows([]);
         setValidationResult(null);
         setImportResult(null);
-        setShowConflictModal(false);
-        setConflictResolutions({});
     }, []);
 
     // ═══ TEMPLATE DOWNLOAD ═══
     const downloadTemplate = useCallback(async (type: DataType) => {
         try {
-            const response = await api.get(`/DataManagement/template/${type}?lang=${i18n.language}`, {
+            const lang = i18n.language || 'en';
+            const response = await api.get(`/DataManagement/template/${type}?lang=${lang}`, {
                 responseType: 'blob',
             });
             const blob = new Blob([response.data], { type: 'text/csv;charset=utf-8;' });
             const url = window.URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `${type}_template.csv`;
+            link.download = `${type}_template_${lang}.csv`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
@@ -372,22 +437,52 @@ export default function DataManagementPage() {
             document.body.removeChild(link);
             window.URL.revokeObjectURL(url);
         }
-    }, [i18n.language]);
+    }, []);
 
     const config = DATA_TYPE_CONFIG[importType];
     const exportTypes = [
-        { key: 'revenues', label: t('dataManagement.exportRevenues'), icon: DollarSign, needsDate: true },
-        { key: 'expenses', label: t('dataManagement.exportExpenses'), icon: FileText, needsDate: true },
-        { key: 'clients', label: t('dataManagement.exportClients'), icon: Users, needsDate: false },
-        { key: 'products', label: t('dataManagement.exportProducts'), icon: Package, needsDate: false },
-        { key: 'suppliers', label: t('dataManagement.exportSuppliers'), icon: Truck, needsDate: false },
-        { key: 'otherExpenses', label: t('dataManagement.exportOtherExpenses'), icon: Receipt, needsDate: true },
+        { key: 'revenues', label: t('dataManagement.exportRevenues', 'Paid Revenues'), icon: DollarSign, needsDate: true },
+        { key: 'expenses', label: t('dataManagement.exportExpenses', 'Paid Expenses'), icon: FileText, needsDate: true },
+        { key: 'clients', label: t('dataManagement.exportClients', 'Clients'), icon: Users, needsDate: false },
+        { key: 'products', label: t('dataManagement.exportProducts', 'Products'), icon: Package, needsDate: false },
+        { key: 'suppliers', label: t('dataManagement.exportSuppliers', 'Suppliers'), icon: Truck, needsDate: false },
+        { key: 'otherExpenses', label: t('dataManagement.exportOtherExpenses', 'Other Expenses'), icon: Receipt, needsDate: true },
     ];
+
+    const getConflictFieldLabel = useCallback((fieldKey: string) => {
+        const normalized = fieldKey.trim().toLowerCase();
+        const explicitMap: Record<string, string> = {
+            date: 'common.date',
+            name: 'common.name',
+            address: 'common.address',
+            email: 'common.email',
+            supplier: 'common.supplier',
+            category: 'common.category',
+            description: 'common.description',
+            amount: 'common.amount',
+            notes: 'common.notes',
+            recurring: 'expense.recurring',
+            reference: 'common.reference',
+            currency: 'common.currency',
+            'client name': 'common.client name',
+            'amount paid': 'common.amount paid',
+            'payment method': 'common.payment method',
+            taxid: 'detail.taxId',
+            'tax id': 'detail.taxId',
+            'matricule fiscal': 'detail.taxId',
+            'phone number': 'common.phone',
+            phone: 'common.phone',
+            'invoice number': 'common.invoicenumber',
+        };
+
+        const translationKey = explicitMap[normalized] ?? `common.${normalized}`;
+        return t(translationKey, fieldKey);
+    }, [t]);
 
     // Column info for preview table
     const previewColumns = useMemo(() => {
         if (parsedRows.length === 0) return [];
-        return Object.keys(parsedRows[0]);
+        return Object.keys(parsedRows[0]).filter(col => !col.startsWith('__'));
     }, [parsedRows]);
 
     if (!isManager) {
@@ -401,8 +496,8 @@ export default function DataManagementPage() {
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-2xl font-bold text-gray-900">{t('dataManagement.title')}</h1>
-                <p className="text-sm text-gray-500 mt-0.5">{t('dataManagement.subtitle')}</p>
+                <h1 className="text-2xl font-bold text-gray-900">{t('dataManagement.title', 'Data Management')}</h1>
+                <p className="text-sm text-gray-500 mt-0.5">{t('dataManagement.subtitle', 'Export data and import historical records')}</p>
             </div>
 
             {/* ═══════ DATA EXPORT SECTION ═══════ */}
@@ -410,16 +505,16 @@ export default function DataManagementPage() {
                 <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/50">
                     <div className="flex items-center gap-2">
                         <Download size={18} className="text-emerald-600" />
-                        <h2 className="text-lg font-semibold text-gray-900">{t('dataManagement.export')}</h2>
+                        <h2 className="text-lg font-semibold text-gray-900">{t('dataManagement.export', 'Data Export')}</h2>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">{t('dataManagement.exportDesc')}</p>
+                    <p className="text-xs text-gray-500 mt-1">{t('dataManagement.exportDesc', 'Export clean, well-formatted Excel files with payment-based data')}</p>
                 </div>
 
                 <div className="p-5 space-y-4">
                     {/* Date range */}
                     <div className="flex flex-wrap items-end gap-4">
                         <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">{t('common.from')}</label>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">{t('common.from', 'From')}</label>
                             <input
                                 type="date"
                                 value={exportDateFrom}
@@ -428,7 +523,7 @@ export default function DataManagementPage() {
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">{t('common.to')}</label>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">{t('common.to', 'To')}</label>
                             <input
                                 type="date"
                                 value={exportDateTo}
@@ -453,7 +548,7 @@ export default function DataManagementPage() {
                                 <div className="text-left">
                                     <p className="text-sm font-medium text-gray-900">{exp.label}</p>
                                     <p className="text-xs text-gray-500">
-                                        {exportLoading === exp.key ? t('common.downloading') : 'Excel (.xlsx)'}
+                                        {exportLoading === exp.key ? t('common.downloading', 'Downloading...') : 'Excel (.xlsx)'}
                                     </p>
                                 </div>
                             </button>
@@ -467,9 +562,9 @@ export default function DataManagementPage() {
                 <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/50">
                     <div className="flex items-center gap-2">
                         <Upload size={18} className="text-blue-600" />
-                        <h2 className="text-lg font-semibold text-gray-900">{t('dataManagement.import')}</h2>
+                        <h2 className="text-lg font-semibold text-gray-900">{t('dataManagement.import', 'Historical Data Import')}</h2>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">{t('dataManagement.importDesc')}</p>
+                    <p className="text-xs text-gray-500 mt-1">{t('dataManagement.importDesc', 'Import previous data. Marked as historical and included in dashboard calculations.')}</p>
                 </div>
 
                 <div className="p-5 space-y-4">
@@ -524,7 +619,7 @@ export default function DataManagementPage() {
                     {importStep === 'upload' && (
                         <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center hover:border-blue-300 transition-colors">
                             <FileSpreadsheet size={40} className="mx-auto mb-3 text-gray-300" />
-                            <p className="text-sm text-gray-600 mb-3">{t('dataManagement.dropOrSelect')}</p>
+                            <p className="text-sm text-gray-600 mb-3">{t('dataManagement.dropOrSelect', 'Select a CSV or Excel (.xlsx) file to import')}</p>
                             <input
                                 ref={fileInputRef}
                                 type="file"
@@ -546,20 +641,19 @@ export default function DataManagementPage() {
                         <div className="space-y-4">
                             {/* Validation summary */}
                             {validationResult && (
-                                <div className={`p-3 rounded-lg border ${validationResult.errorCount === 0 && (!validationResult.conflicts || validationResult.conflicts.length === 0)
+                                <div className={`p-3 rounded-lg border ${validationResult.errorCount === 0
                                     ? 'bg-emerald-50 border-emerald-200'
                                     : 'bg-amber-50 border-amber-200'
                                     }`}>
                                     <div className="flex items-center gap-2 text-sm">
-                                        {validationResult.errorCount === 0 && (!validationResult.conflicts || validationResult.conflicts.length === 0) ? (
+                                        {validationResult.errorCount === 0 ? (
                                             <CheckCircle size={16} className="text-emerald-600" />
                                         ) : (
                                             <AlertTriangle size={16} className="text-amber-600" />
                                         )}
-                                        <span className={validationResult.errorCount === 0 && (!validationResult.conflicts || validationResult.conflicts.length === 0) ? 'text-emerald-800' : 'text-amber-800'}>
-                                            {validationResult.validCount} {t('common.valid', 'valid')} {t('common.rows', 'row(s)')}
-                                            {validationResult.errorCount > 0 && `, ${validationResult.errorCount} ${t('common.invalid', 'invalid')}`}
-                                            {validationResult.conflicts?.length > 0 && `, ${validationResult.conflicts.length} ${t('common.conflicts', 'conflict(s)')}`}
+                                        <span className={validationResult.errorCount === 0 ? 'text-emerald-800' : 'text-amber-800'}>
+                                            {t('dataManagement.validRows', { count: validationResult.validCount })}
+                                            {validationResult.errorCount > 0 && `, ${t('dataManagement.invalidRows', { count: validationResult.errorCount })}`}
                                         </span>
                                     </div>
                                     {/* Show errors */}
@@ -567,28 +661,9 @@ export default function DataManagementPage() {
                                         <div className="mt-2 max-h-32 overflow-y-auto">
                                             {validationResult.errors.map((err, i) => (
                                                 <p key={i} className="text-xs text-red-700">
-                                                    {err.row > 0 ? `${t('common.row')} ${err.row}: ` : ''}{err.message}
+                                                    {err.row > 0 ? `${t('common.row', 'Row')} ${err.row}: ` : ''}{err.message}
                                                 </p>
                                             ))}
-                                        </div>
-                                    )}
-                                    {/* Conflict notice */}
-                                    {validationResult.conflicts?.length > 0 && (
-                                        <div className="mt-2 p-2 bg-orange-50 border border-orange-200 rounded">
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex items-center gap-2">
-                                                    <ArrowRightLeft size={14} className="text-orange-600" />
-                                                    <span className="text-xs text-orange-800 font-medium">
-                                                        {validationResult.conflicts.length} {t('common.conflictsFound', 'invoice(s) already have existing data — resolve conflicts to proceed')}
-                                                    </span>
-                                                </div>
-                                                <button
-                                                    onClick={handleOpenConflictModal}
-                                                    className="px-3 py-1 bg-orange-600 text-white text-xs rounded-lg hover:bg-orange-700 transition-colors"
-                                                >
-                                                    {t('common.resolveConflicts', 'Resolve Conflicts')}
-                                                </button>
-                                            </div>
                                         </div>
                                     )}
                                 </div>
@@ -612,10 +687,12 @@ export default function DataManagementPage() {
                                         </thead>
                                         <tbody className="divide-y divide-gray-100">
                                             {parsedRows.slice(0, 20).map((row, i) => {
-                                                const hasError = validationResult?.errors.some(e => e.row === i + 1);
+                                                const parsedRowNumber = Number.parseInt(row[SOURCE_ROW_NUMBER_KEY] ?? '', 10);
+                                                const rowNumber = Number.isFinite(parsedRowNumber) ? parsedRowNumber : i + 2;
+                                                const hasError = validationResult?.errors.some(e => e.row === rowNumber);
                                                 return (
                                                     <tr key={i} className={hasError ? 'bg-red-50' : ''}>
-                                                        <td className="px-3 py-2 text-xs text-gray-400">{i + 1}</td>
+                                                        <td className="px-3 py-2 text-xs text-gray-400">{rowNumber}</td>
                                                         {previewColumns.map(col => (
                                                             <td key={col} className="px-3 py-2 text-xs text-gray-700">{row[col] ?? ''}</td>
                                                         ))}
@@ -626,7 +703,7 @@ export default function DataManagementPage() {
                                     </table>
                                     {parsedRows.length > 20 && (
                                         <p className="text-xs text-gray-500 p-2 text-center border-t">
-                                            {t('common.showingRows', 'Showing {{count}} of {{total}} rows', { count: 20, total: parsedRows.length })}
+                                            {t('common.showingRows', { count: Math.min(20, parsedRows.length), total: parsedRows.length })}
                                         </p>
                                     )}
                                 </div>
@@ -650,7 +727,9 @@ export default function DataManagementPage() {
                                     ) : (
                                         <Upload size={16} />
                                     )}
-                                    {t('common.import')} {validationResult?.validCount ?? 0} {t('common.records')}
+                                    {validationResult?.conflictCount && validationResult.conflictCount > 0
+                                        ? t('dataManagement.resolveConflicts', { count: validationResult.conflictCount })
+                                        : t('dataManagement.importRecords', { count: validationResult?.validCount ?? 0 })}
                                 </button>
                             </div>
                         </div>
@@ -677,134 +756,121 @@ export default function DataManagementPage() {
                                 onClick={resetImport}
                                 className="mt-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-xs rounded-lg hover:bg-gray-50"
                             >
-                                {t('common.importMore', 'Import more data')}
+                                {t('dataManagement.importMore')}
                             </button>
                         </div>
                     )}
                 </div>
             </div>
-
             {/* ═══════ CONFLICT RESOLUTION MODAL ═══════ */}
-            {showConflictModal && validationResult && validationResult.conflicts && validationResult.conflicts.length > 0 && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col">
-                        {/* Modal Header */}
-                        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                            <div>
-                                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                                    <ArrowRightLeft size={20} className="text-orange-600" />
-                                    {t('common.conflictResolution', 'Conflict Resolution')}
-                                </h3>
-                                <p className="text-xs text-gray-500 mt-0.5">
-                                    {t('common.conflictsDesc', '{{count}} invoice(s) already have existing records. Choose what to do for each.', { count: validationResult!.conflicts.length })}
-                                </p>
+            {showConflictModal && validationResult && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+                        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-amber-50">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-amber-100 rounded-lg">
+                                    <AlertTriangle className="text-amber-600" size={20} />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-gray-900">{t('dataManagement.conflictResolution')}</h3>
+                                    <p className="text-xs text-amber-700">{t('dataManagement.conflictResolutionDesc', { count: validationResult.conflicts.length })}</p>
+                                </div>
                             </div>
-                            <button onClick={() => setShowConflictModal(false)} className="p-1 hover:bg-gray-100 rounded-lg transition-colors">
-                                <X size={20} className="text-gray-400" />
-                            </button>
+                            <div className="flex items-center gap-4">
+                                <button
+                                    onClick={handleApplyAllNew}
+                                    className="px-4 py-2 bg-amber-600 text-white text-sm font-bold rounded-xl hover:bg-amber-700 shadow-sm transition-all flex items-center gap-2"
+                                >
+                                    <CheckCircle size={16} />
+                                    {t('dataManagement.applyAllNew')}
+                                </button>
+                                <button onClick={() => setShowConflictModal(false)} className="text-gray-400 hover:text-gray-600 text-2xl font-light leading-none">
+                                    &times;
+                                </button>
+                            </div>
                         </div>
 
-                        {/* Conflict List */}
-                        <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                            {validationResult!.conflicts.map((conflict, idx) => {
-                                const fields = Object.keys(conflict.existingData);
-                                const resolution = conflictResolutions[conflict.invoiceNumber] || 'skip';
-                                return (
-                                    <div key={idx} className={`border rounded-xl overflow-hidden transition-colors ${resolution === 'update' ? 'border-blue-300 bg-blue-50/30' : 'border-gray-200'
-                                        }`}>
-                                        {/* Conflict Header */}
-                                        <div className="px-4 py-3 bg-gray-50 flex items-center justify-between">
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-sm font-semibold text-gray-800">
-                                                    {t('common.invoice')} #{conflict.invoiceNumber}
-                                                </span>
-                                                <span className="text-xs text-gray-500">({t('common.row')} {conflict.rowIndex})</span>
+                        <div className="flex-1 overflow-y-auto p-6 space-y-8">
+                            {validationResult.conflicts.map((conflict, idx) => (
+                                <div key={idx} className="border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                                    <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                                        <span className="text-sm font-semibold text-gray-700">{t('dataManagement.conflict')} #{idx + 1}: {conflict.identifier}</span>
+                                        <span className="text-xs text-gray-500">{t('dataManagement.sourceRow')}: {conflict.rowIndex}</span>
+                                    </div>
+                                    <div className="grid grid-cols-2 divide-x divide-gray-200">
+                                        {/* Existing Data */}
+                                        <div className={`p-4 transition-colors ${resolutions[conflict.existingId] === 'keep_original' ? 'bg-blue-50/50' : 'bg-white'}`}>
+                                            <div className="flex items-center justify-between mb-3">
+                                                <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">{t('dataManagement.currentInDatabase')}</h4>
+                                                <button
+                                                    onClick={() => setResolutions(prev => ({ ...prev, [conflict.existingId]: 'keep_original' }))}
+                                                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${resolutions[conflict.existingId] === 'keep_original'
+                                                        ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+                                                        : 'bg-white border-gray-200 text-gray-600 hover:border-blue-400'
+                                                        }`}
+                                                >
+                                                    {t('dataManagement.keepOriginal')}
+                                                </button>
                                             </div>
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={() => setConflictResolutions(prev => ({ ...prev, [conflict.invoiceNumber]: 'update' }))}
-                                                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${resolution === 'update'
-                                                        ? 'bg-blue-600 text-white'
-                                                        : 'bg-white border border-gray-200 text-gray-600 hover:bg-blue-50 hover:border-blue-300'
-                                                        }`}
-                                                >
-                                                    <RefreshCw size={12} />
-                                                    {t('common.updateExisting', 'Update Existing')}
-                                                </button>
-                                                <button
-                                                    onClick={() => setConflictResolutions(prev => ({ ...prev, [conflict.invoiceNumber]: 'skip' }))}
-                                                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${resolution === 'skip'
-                                                        ? 'bg-gray-600 text-white'
-                                                        : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-                                                        }`}
-                                                >
-                                                    <SkipForward size={12} />
-                                                    {t('common.skipRow', 'Keep Original')}
-                                                </button>
+                                            <div className="space-y-2">
+                                                {Object.entries(conflict.existingData).map(([key, val]) => (
+                                                    <div key={key} className="flex justify-between text-sm py-1 border-b border-gray-50 last:border-0">
+                                                        <span className="text-gray-500">{getConflictFieldLabel(key)}:</span>
+                                                        <span className="font-medium text-gray-900">{val}</span>
+                                                    </div>
+                                                ))}
                                             </div>
                                         </div>
 
-                                        {/* Comparison Table */}
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-xs">
-                                                <thead>
-                                                    <tr className="border-b border-gray-100">
-                                                        <th className="px-3 py-2 text-left text-gray-500 font-medium w-1/4">{t('common.field', 'Field')}</th>
-                                                        <th className="px-3 py-2 text-left text-gray-500 font-medium w-[37.5%]">{t('common.existingData', 'Existing Data')}</th>
-                                                        <th className="px-3 py-2 text-left text-gray-500 font-medium w-[37.5%]">{t('common.newData', 'New Data (from file)')}</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {fields.map(field => {
-                                                        const existVal = conflict.existingData[field] || '';
-                                                        const newVal = conflict.newData[field] || '';
-                                                        const isDifferent = existVal !== newVal;
-                                                        return (
-                                                            <tr key={field} className={`border-b border-gray-50 ${isDifferent ? 'bg-amber-50/50' : ''}`}>
-                                                                <td className="px-3 py-2 font-medium text-gray-700">{t(`common.${field.toLowerCase()}`, field)}</td>
-                                                                <td className={`px-3 py-2 ${isDifferent ? 'text-red-700' : 'text-gray-600'}`}>
-                                                                    {existVal || <span className="text-gray-300 italic">{t('common.empty', 'empty')}</span>}
-                                                                </td>
-                                                                <td className={`px-3 py-2 ${isDifferent ? 'text-blue-700 font-medium' : 'text-gray-600'}`}>
-                                                                    {newVal || <span className="text-gray-300 italic">{t('common.empty', 'empty')}</span>}
-                                                                </td>
-                                                            </tr>
-                                                        );
-                                                    })}
-                                                </tbody>
-                                            </table>
+                                        {/* New Data */}
+                                        <div className={`p-4 transition-colors ${resolutions[conflict.existingId] === 'update' ? 'bg-amber-50/50' : 'bg-white'}`}>
+                                            <div className="flex items-center justify-between mb-3">
+                                                <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">{t('dataManagement.newFromFile')}</h4>
+                                                <button
+                                                    onClick={() => setResolutions(prev => ({ ...prev, [conflict.existingId]: 'update' }))}
+                                                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${resolutions[conflict.existingId] === 'update'
+                                                        ? 'bg-amber-600 border-amber-600 text-white shadow-sm'
+                                                        : 'bg-white border-gray-200 text-gray-600 hover:border-amber-400'
+                                                        }`}
+                                                >
+                                                    {t('dataManagement.updateWithNew')}
+                                                </button>
+                                            </div>
+                                            <div className="space-y-2">
+                                                {Object.entries(conflict.existingData).map(([key]) => (
+                                                    <div key={key} className="flex justify-between text-sm py-1 border-b border-gray-50 last:border-0">
+                                                        <span className="text-gray-500">{getConflictFieldLabel(key)}:</span>
+                                                        <span className={`font-medium ${conflict.newData[key] !== conflict.existingData[key] ? 'text-amber-700' : 'text-gray-900'}`}>
+                                                            {conflict.newData[key] || '-'}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
                                         </div>
                                     </div>
-                                );
-                            })}
+                                </div>
+                            ))}
                         </div>
 
-                        {/* Modal Footer */}
-                        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-gray-50/50">
-                            <div className="text-xs text-gray-500">
-                                {Object.values(conflictResolutions).filter(v => v === 'update').length} {t('common.toUpdate', 'to update')},{' '}
-                                {Object.values(conflictResolutions).filter(v => v === 'skip').length} {t('common.toSkip', 'to skip')}
-                            </div>
-                            <div className="flex gap-3">
-                                <button
-                                    onClick={() => setShowConflictModal(false)}
-                                    className="px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-50 transition-colors"
-                                >
-                                    {t('common.cancel')}
-                                </button>
-                                <button
-                                    onClick={handleResolveConflicts}
-                                    disabled={conflictResolving}
-                                    className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
-                                >
-                                    {conflictResolving ? (
-                                        <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
-                                    ) : (
-                                        <RefreshCw size={16} />
-                                    )}
-                                    {t('common.resolveConflicts', 'Resolve Conflicts')}
-                                </button>
-                            </div>
+                        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-end gap-3">
+                            <button
+                                onClick={() => setShowConflictModal(false)}
+                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50"
+                            >
+                                {t('dataManagement.cancelImport')}
+                            </button>
+                            <button
+                                onClick={handleResolveConflicts}
+                                disabled={importLoading}
+                                className="px-6 py-2 text-sm font-bold text-white bg-blue-600 rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200 disabled:opacity-50 flex items-center gap-2"
+                            >
+                                {importLoading ? (
+                                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                                ) : (
+                                    <CheckCircle size={18} />
+                                )}
+                                {t('dataManagement.applyResolutions')}
+                            </button>
                         </div>
                     </div>
                 </div>

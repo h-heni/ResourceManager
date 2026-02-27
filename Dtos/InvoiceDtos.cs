@@ -5,6 +5,7 @@ namespace ResourceManager.DTOs
     public class CreateInvoiceDto
     {
         public string Number { get; set; } = string.Empty;
+        public string? Category { get; set; }
         
         [Required]
         public DateTime Date { get; set; }
@@ -34,6 +35,7 @@ namespace ResourceManager.DTOs
     public class UpdateInvoiceDto
     {
         public string Number { get; set; } = string.Empty;
+        public string? Category { get; set; }
         public DateTime Date { get; set; }
         public DateTime? DueDate { get; set; } // Payment due date
         public int? ClientId { get; set; }

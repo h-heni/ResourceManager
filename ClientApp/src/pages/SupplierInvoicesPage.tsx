@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
     Upload, FileText, Loader2, CheckCircle, AlertTriangle, Trash2,
     Plus, Save, ArrowLeft, Eye, X, Edit2, Search, DollarSign, ShieldCheck, Calendar,
-    Clock
+    Clock, Filter, Archive
 } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -13,13 +12,15 @@ import { DEFAULT_CURRENCY, CURRENCY_OPTIONS, getCurrencySymbol } from '../lib/cu
 import { logger } from '../lib/logger';
 import { useNotify } from '../hooks/useNotify';
 import { getErrorMessage } from '../utils/errorUtils';
+import Pagination from '../components/Pagination'; // Make sure this path is correct
+import { getInvoiceStatusColor } from '../lib/utils'; // Make sure this path is correct
 
 // ═══════════════════════════════════════════════════════════════
 // TYPES
 // ═══════════════════════════════════════════════════════════════
 
 interface LineItem {
-    id: string; // client-side ID for keying
+    id: string; 
     description: string;
     quantity: number;
     unitPrice: number;
@@ -99,7 +100,6 @@ const AUTOSAVE_KEY = 'supplier-invoice-draft';
 // ═══════════════════════════════════════════════════════════════
 
 export default function SupplierInvoicesPage() {
-    const navigate = useNavigate();
     const { t } = useTranslation();
     const { notify, NotifyBanner } = useNotify();
     const { user } = useAuth();
@@ -109,71 +109,77 @@ export default function SupplierInvoicesPage() {
     // View state
     const [view, setView] = useState<'list' | 'upload' | 'review'>('list');
 
-    // List state
-    const [invoices, setInvoices] = useState<SupplierInvoice[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [search, setSearch] = useState('');
+    // Identical List & Archive State to InvoicesPage.tsx
+    const[viewMode, setViewMode] = useState<'active' | 'archived'>('active');
+    const[invoices, setInvoices] = useState<SupplierInvoice[]>([]);
+    const[archivedInvoices, setArchivedInvoices] = useState<SupplierInvoice[]>([]);
+    
+    const [loadingActive, setLoadingActive] = useState(true);
+    const [loadingArchive, setLoadingArchive] = useState(false);
+    
+    const[search, setSearch] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    const [invoiceNumberSort, setInvoiceNumberSort] = useState<'asc' | 'desc'>('asc');
+
+    // Pagination identical to InvoicesPage
+    const [activePage, setActivePage] = useState(1);
+    const [archivedPage, setArchivedPage] = useState(1);
+    const[pageSize, setPageSize] = useState(20);
+    const [activeTotalCount, setActiveTotalCount] = useState(0);
+    const [archivedTotalCount, setArchivedTotalCount] = useState(0);
+
+    const activeTotalPages = Math.max(1, Math.ceil(activeTotalCount / pageSize));
+    const archivedTotalPages = Math.max(1, Math.ceil(archivedTotalCount / pageSize));
+    const currentPage = viewMode === 'archived' ? archivedPage : activePage;
+    const currentTotalCount = viewMode === 'archived' ? archivedTotalCount : activeTotalCount;
+    const currentTotalPages = viewMode === 'archived' ? archivedTotalPages : activeTotalPages;
+
+    // Archive/Year filter state
+    const [availableYears, setAvailableYears] = useState<number[]>([]);
+    const [selectedYear, setSelectedYear] = useState<number | null>(null);
 
     // Upload state
     const [uploading, setUploading] = useState(false);
-    const [uploadProgress, setUploadProgress] = useState('');
+    const[uploadProgress, setUploadProgress] = useState('');
 
     // Review/Edit state
     const [currentInvoiceId, setCurrentInvoiceId] = useState<number | null>(null);
     const [tempFilePath, setTempFilePath] = useState<string | null>(null);
     const [previewFileUrl, setPreviewFileUrl] = useState<string | null>(null);
-    const [tempFileName, setTempFileName] = useState<string | null>(null);
+    const[tempFileName, setTempFileName] = useState<string | null>(null);
     const [tempFileType, setTempFileType] = useState<string | null>(null);
     const [tempRawText, setTempRawText] = useState<string | null>(null);
     const [showDocPreview, setShowDocPreview] = useState(true);
     const [, setExtractedData] = useState<ExtractedData | null>(null);
     const [lineItems, setLineItems] = useState<LineItem[]>([]);
     const [headerData, setHeaderData] = useState({
-        supplierName: '',
-        invoiceNumber: '',
-        invoiceDate: '',
-        dueDate: '',
-        totalHT: '',
-        totalTTC: '',
-        tva: '',
-        supplierPhone: '',
-        supplierAddress: '',
+        supplierName: '', invoiceNumber: '', invoiceDate: '', dueDate: '',
+        totalHT: '', totalTTC: '', tva: '', supplierPhone: '', supplierAddress: ''
     });
     const [warnings, setWarnings] = useState<string[]>([]);
     const [confidenceScore, setConfidenceScore] = useState<number>(0);
-    const [saving, setSaving] = useState(false);
+    const[saving, setSaving] = useState(false);
     const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
     // Supplier list for linking
-    interface SupplierFull {
-        id: number;
-        name: string;
-        address?: string;
-        phone?: string;
-        taxId?: string;
-        email?: string;
-    }
+    interface SupplierFull { id: number; name: string; address?: string; phone?: string; taxId?: string; email?: string; }
     const [suppliers, setSuppliers] = useState<SupplierFull[]>([]);
-    const [selectedSupplierId, setSelectedSupplierId] = useState<number | null>(null);
+    const[selectedSupplierId, setSelectedSupplierId] = useState<number | null>(null);
 
     // Currency state for supplier invoice
-    const [supplierCurrency, setSupplierCurrency] = useState(DEFAULT_CURRENCY);
-    const [supplierCurrencySymbol, setSupplierCurrencySymbol] = useState(DEFAULT_CURRENCY);
+    const[supplierCurrency, setSupplierCurrency] = useState(DEFAULT_CURRENCY);
+    const[supplierCurrencySymbol, setSupplierCurrencySymbol] = useState(DEFAULT_CURRENCY);
 
     // Payment state
-    const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const[showPaymentModal, setShowPaymentModal] = useState(false);
     const [selectedInvoice, setSelectedInvoice] = useState<SupplierInvoice | null>(null);
     const [paymentAmount, setPaymentAmount] = useState('');
     const [paymentNotes, setPaymentNotes] = useState('');
     const [paymentSaving, setPaymentSaving] = useState(false);
-    const [isScheduledPayment, setIsScheduledPayment] = useState(false);
+    const[isScheduledPayment, setIsScheduledPayment] = useState(false);
     const [scheduledDate, setScheduledDate] = useState('');
 
-    // Payment history modal
-    const [showPaymentHistory, setShowPaymentHistory] = useState(false);
-    const [historyInvoice, setHistoryInvoice] = useState<SupplierInvoice | null>(null);
-
-    // Detail view modal (read-only)
+    // Detail/History Modals
     const [showDetailModal, setShowDetailModal] = useState(false);
     const [detailInvoice, setDetailInvoice] = useState<SupplierInvoice | null>(null);
     const [detailItems, setDetailItems] = useState<LineItem[]>([]);
@@ -182,148 +188,195 @@ export default function SupplierInvoicesPage() {
     const [showConsistencyModal, setShowConsistencyModal] = useState(false);
     const [consistencyLoading, setConsistencyLoading] = useState(false);
     const [consistencyResult, setConsistencyResult] = useState<{
-        totalInvoices: number;
-        invoicesWithIssues: number;
-        cleanInvoices: number;
-        issues: ConsistencyIssue[];
+        totalInvoices: number; invoicesWithIssues: number; cleanInvoices: number; issues: ConsistencyIssue[];
     } | null>(null);
-
-    // List view tab (active vs paid)
-    const [activeTab, setActiveTab] = useState<'active' | 'paid'>('active');
 
     const replacePreviewFileUrl = useCallback((nextUrl: string | null) => {
         setPreviewFileUrl(prev => {
-            if (prev?.startsWith('blob:')) {
-                URL.revokeObjectURL(prev);
-            }
+            if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
             return nextUrl;
         });
-    }, []);
+    },[]);
 
     // ═══════════════════════════════════════════════════════════════
     // FETCH DATA
     // ═══════════════════════════════════════════════════════════════
 
+    // Debounce search
     useEffect(() => {
-        fetchInvoices();
-        fetchSuppliers();
-        const restoreDraft = () => {
+        const timer = setTimeout(() => setDebouncedSearch(search), 500);
+        return () => clearTimeout(timer);
+        
+    }, [search]);
+
+    // Reset pagination
+    useEffect(() => {
+        if (viewMode === 'archived') setArchivedPage(1);
+        else setActivePage(1);
+    },[debouncedSearch, viewMode, selectedYear]);
+
+    // Fast independent count fetcher (using onlyCount=true endpoint)
+    useEffect(() => {
+        const fetchCounts = async () => {
             try {
-                const saved = localStorage.getItem(AUTOSAVE_KEY);
-                if (saved) {
-                    const draft = JSON.parse(saved);
-                    // Only restore if less than 24 hours old
-                    const savedAt = new Date(draft.savedAt);
-                    const hoursOld = (Date.now() - savedAt.getTime()) / (1000 * 60 * 60);
-                    if (hoursOld < 24 && draft.lineItems?.length > 0) {
-                        setCurrentInvoiceId(draft.currentInvoiceId);
-                        setHeaderData(draft.headerData);
-                        setLineItems(draft.lineItems);
-                        setSelectedSupplierId(draft.selectedSupplierId);
-                        setView('review');
-                        setStatus({ type: 'success', message: t('supplierInvoice.draftRestored', 'Restored unsaved draft from previous session') });
-                        setTimeout(() => setStatus(null), 4000);
-                    } else {
-                        localStorage.removeItem(AUTOSAVE_KEY);
-                    }
+                const activeRes = await api.get('/SupplierInvoices', { params: { status: 'Pending', onlyCount: true } });
+                setActiveTotalCount(activeRes.data.totalCount ?? 0);
+                
+                if (selectedYear) {
+                    const paidRes = await api.get('/SupplierInvoices', { params: { status: 'Paid', year: selectedYear, onlyCount: true } });
+                    setArchivedTotalCount(paidRes.data.totalCount ?? 0);
                 }
-            } catch {
-                localStorage.removeItem(AUTOSAVE_KEY);
-            }
+            } catch (error) { logger.error('Error fetching counts:', error); }
         };
-        restoreDraft();
+        fetchCounts();
+    }, [selectedYear]);
+
+    const transformInvoice = (item: any): SupplierInvoice => ({
+        id: item.id,
+        fileName: item.fileName || '',
+        invoiceNumber: item.invoiceNumber || item.reference || '',
+        invoiceDate: item.invoiceDate || item.date ? new Date(item.invoiceDate || item.date).toISOString() : null,
+        dueDate: item.dueDate || null,
+        totalHT: item.totalHT != null ? parseFloat(item.totalHT) : null,
+        totalTTC: item.totalTTC != null ? parseFloat(item.totalTTC) : (item.amount != null ? parseFloat(item.amount) : 0),
+        tva: item.tva != null ? parseFloat(item.tva) : null,
+        amountPaid: item.amountPaid != null ? parseFloat(item.amountPaid) : 0,
+        pendingAmount: item.pendingAmount != null ? parseFloat(item.pendingAmount) : 0,
+        remainingAmount: item.remainingAmount != null ? parseFloat(item.remainingAmount) : 0,
+        extractionStatus: item.extractionStatus || '',
+        confidenceScore: item.confidenceScore || null,
+        createdAt: item.createdAt || item.date || new Date().toISOString(),
+        supplierName: item.supplierName || null,
+        supplierId: item.supplierId || null,
+        itemCount: item.itemCount || 0,
+        paymentStatus: item.paymentStatus || 'Pending',
+        paymentCount: item.paymentCount || 0,
+        filePath: item.filePath || null,
+        payments: item.payments ||[],
+        currency: item.currency || DEFAULT_CURRENCY,
+        currencySymbol: item.currencySymbol || DEFAULT_CURRENCY,
+    });
+
+    const fetchActiveInvoices = useCallback(async () => {
+        setLoadingActive(true);
+        try {
+            const res = await api.get('/SupplierInvoices', {
+                params: { page: activePage, size: pageSize, status: 'Pending', search: debouncedSearch }
+            });
+            const data = Array.isArray(res.data) ? res.data : (res.data.data ||[]);
+            setInvoices(data.map(transformInvoice));
+            setActiveTotalCount(res.data.totalCount ?? res.data.length ?? 0);
+        } catch (error) {
+            logger.error('Error fetching active invoices:', error);
+            notify('error', t('common.errorFetching'));
+        } finally {
+            setLoadingActive(false);
+        }
+    },[activePage, pageSize, debouncedSearch, notify, t]);
+
+    const fetchArchivedInvoices = useCallback(async () => {
+        if (!selectedYear) return;
+        setLoadingArchive(true);
+        try {
+            const res = await api.get('/SupplierInvoices', {
+                params: { page: archivedPage, size: pageSize, status: 'Paid', year: selectedYear, search: debouncedSearch }
+            });
+            const data = Array.isArray(res.data) ? res.data : (res.data.data ||[]);
+            setArchivedInvoices(data.map(transformInvoice));
+            setArchivedTotalCount(res.data.totalCount ?? res.data.length ?? 0);
+        } catch (error) {
+            logger.error('Error fetching archived invoices:', error);
+        } finally {
+            setLoadingArchive(false);
+        }
+    }, [archivedPage, pageSize, selectedYear, debouncedSearch]);
+
+    // Triggers based on viewMode
+    useEffect(() => {
+        if (viewMode === 'active') fetchActiveInvoices();
+        else fetchArchivedInvoices();
+    },[viewMode, fetchActiveInvoices, fetchArchivedInvoices]);
+
+    const fetchAvailableYears = async () => {
+        try {
+            const res = await api.get('/Archive/years');
+            const years = res.data.years ||[];
+            const sortedYears = years.sort((a: number, b: number) => b - a);
+            setAvailableYears(sortedYears);
+            if (sortedYears.length > 0 && !selectedYear) {
+                setSelectedYear(Math.max(...sortedYears));
+            }
+        } catch (error) { logger.error('Error fetching available years', error); }
+    };
+
+    useEffect(() => {
+        fetchAvailableYears();
+        const fetchSuppliers = async () => {
+            try {
+                const res = await api.get('/Suppliers?size=9999');
+                const data = Array.isArray(res.data) ? res.data : (res.data.data ||[]);
+                setSuppliers(data.map((s: any) => ({ id: s.id, name: s.name, address: s.address, phone: s.phone, taxId: s.taxId, email: s.email })));
+            } catch { /* ignore */ }
+        };
+        fetchSuppliers();
+        
+        // Restore Draft
+        try {
+            const saved = localStorage.getItem(AUTOSAVE_KEY);
+            if (saved) {
+                const draft = JSON.parse(saved);
+                const hoursOld = (Date.now() - new Date(draft.savedAt).getTime()) / (1000 * 60 * 60);
+                if (hoursOld < 24 && draft.lineItems?.length > 0) {
+                    setCurrentInvoiceId(draft.currentInvoiceId);
+                    setHeaderData(draft.headerData);
+                    setLineItems(draft.lineItems);
+                    setSelectedSupplierId(draft.selectedSupplierId);
+                    setView('review');
+                    setStatus({ type: 'success', message: t('supplierInvoice.draftRestored', 'Restored unsaved draft from previous session') });
+                    setTimeout(() => setStatus(null), 4000);
+                } else { localStorage.removeItem(AUTOSAVE_KEY); }
+            }
+        } catch { localStorage.removeItem(AUTOSAVE_KEY); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    },[]);
 
     // Refetch when a payment is confirmed/extended via NotificationBell
     useEffect(() => {
-        const handler = () => fetchInvoices();
+        const handler = () => { if (viewMode === 'active') fetchActiveInvoices(); else fetchArchivedInvoices(); };
         window.addEventListener('payment-status-changed', handler);
         return () => window.removeEventListener('payment-status-changed', handler);
-    }, []);
+    },[fetchActiveInvoices, fetchArchivedInvoices, viewMode]);
 
     useEffect(() => {
-        return () => {
-            if (previewFileUrl?.startsWith('blob:')) {
-                URL.revokeObjectURL(previewFileUrl);
-            }
-        };
+        return () => { if (previewFileUrl?.startsWith('blob:')) URL.revokeObjectURL(previewFileUrl); };
     }, [previewFileUrl]);
-
-    const fetchInvoices = async () => {
-        try {
-            const res = await api.get('/SupplierInvoices');
-            const data = res.data.data || [];
-            setInvoices(data);
-        } catch (error) {
-            logger.error('Error fetching supplier invoices:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const fetchSuppliers = async () => {
-        try {
-            const res = await api.get('/Suppliers?size=9999');
-            const data = Array.isArray(res.data) ? res.data : (res.data.data || []);
-            setSuppliers(data.map((s: { id: number; name: string; address?: string; phone?: string; taxId?: string; email?: string }) => ({
-                id: s.id, name: s.name, address: s.address, phone: s.phone,
-                taxId: s.taxId, email: s.email
-            })));
-        } catch {
-            // Non-critical
-        }
-    };
-
-    // ═══════════════════════════════════════════════════════════════
-    // AUTO-SAVE (localStorage)
-    // ═══════════════════════════════════════════════════════════════
 
     const saveDraft = useCallback(() => {
         if (!currentInvoiceId && lineItems.length === 0) return;
-        const draft = {
-            currentInvoiceId,
-            headerData,
-            lineItems,
-            selectedSupplierId,
-            savedAt: new Date().toISOString(),
-        };
-        localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(draft));
+        localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({ currentInvoiceId, headerData, lineItems, selectedSupplierId, savedAt: new Date().toISOString() }));
     }, [currentInvoiceId, headerData, lineItems, selectedSupplierId]);
 
-    const clearDraft = () => {
-        localStorage.removeItem(AUTOSAVE_KEY);
-    };
-
-    // Auto-save on changes (debounced)
     useEffect(() => {
         if (view !== 'review') return;
         const timer = setTimeout(() => saveDraft(), 1000);
         return () => clearTimeout(timer);
-    }, [headerData, lineItems, selectedSupplierId, saveDraft, view]);
+    },[headerData, lineItems, selectedSupplierId, saveDraft, view]);
 
     // ═══════════════════════════════════════════════════════════════
-    // UPLOAD & EXTRACT
+    // UPLOAD & EXTRACT & REVIEW (unchanged robust logic)
     // ═══════════════════════════════════════════════════════════════
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        const allowedExts = ['.pdf', '.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif', '.webp'];
+        const allowedExts =['.pdf', '.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif', '.webp'];
         const ext = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
-        if (!allowedExts.includes(ext)) {
-            setStatus({ type: 'error', message: t('supplierInvoice.supportedFormats', 'Supported formats: PDF, JPG, PNG, BMP, TIFF, WebP') });
-            return;
-        }
-
-        if (file.size > 15 * 1024 * 1024) {
-            setStatus({ type: 'error', message: t('supplierInvoice.fileTooLarge', 'File size exceeds 15MB limit') });
-            return;
-        }
+        if (!allowedExts.includes(ext)) { setStatus({ type: 'error', message: t('supplierInvoice.supportedFormats') }); return; }
+        if (file.size > 15 * 1024 * 1024) { setStatus({ type: 'error', message: t('supplierInvoice.fileTooLarge') }); return; }
 
         setUploading(true);
-        setUploadProgress(t('supplierInvoice.uploading', 'Uploading PDF...'));
+        setUploadProgress(t('supplierInvoice.uploading'));
         setStatus(null);
 
         try {
@@ -332,13 +385,11 @@ export default function SupplierInvoicesPage() {
             formData.append('file', file);
 
             const isImage = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif', '.webp'].includes(ext);
-            setUploadProgress(isImage ? t('supplierInvoice.runningOcr', 'Running OCR on image...') : t('supplierInvoice.extracting', 'Extracting data from PDF...'));
+            setUploadProgress(isImage ? t('supplierInvoice.runningOcr') : t('supplierInvoice.extracting'));
 
-            const res = await api.post('/SupplierInvoices/upload', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            });
-
+            const res = await api.post('/SupplierInvoices/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
             const data = res.data;
+            
             setTempFilePath(data.tempFilePath);
             setTempFileName(data.fileName);
             setTempFileType(data.fileType);
@@ -346,32 +397,21 @@ export default function SupplierInvoicesPage() {
 
             if (data.tempFilePath) {
                 try {
-                    const previewRes = await api.get('/SupplierInvoices/temp-file', {
-                        params: { tempFilePath: data.tempFilePath },
-                        responseType: 'blob',
-                    });
-                    const blobUrl = URL.createObjectURL(new Blob([previewRes.data], { type: data.fileType || 'application/pdf' }));
-                    replacePreviewFileUrl(blobUrl);
-                } catch {
-                    replacePreviewFileUrl(null);
-                }
+                    const previewRes = await api.get('/SupplierInvoices/temp-file', { params: { tempFilePath: data.tempFilePath }, responseType: 'blob' });
+                    replacePreviewFileUrl(URL.createObjectURL(new Blob([previewRes.data], { type: data.fileType || 'application/pdf' })));
+                } catch { replacePreviewFileUrl(null); }
             }
 
-            setCurrentInvoiceId(null); // Not persisted yet
+            setCurrentInvoiceId(null);
             setExtractedData(data.extractedData);
-            setWarnings(data.warnings || []);
+            setWarnings(data.warnings ||[]);
             setConfidenceScore(data.confidenceScore || 0);
 
-            // Populate header data
             setHeaderData({
                 supplierName: data.extractedData.supplierName || '',
                 invoiceNumber: data.extractedData.invoiceNumber || '',
-                invoiceDate: data.extractedData.invoiceDate
-                    ? new Date(data.extractedData.invoiceDate).toISOString().split('T')[0]
-                    : '',
-                dueDate: data.extractedData.dueDate
-                    ? new Date(data.extractedData.dueDate).toISOString().split('T')[0]
-                    : '',
+                invoiceDate: data.extractedData.invoiceDate ? new Date(data.extractedData.invoiceDate).toISOString().split('T')[0] : '',
+                dueDate: data.extractedData.dueDate ? new Date(data.extractedData.dueDate).toISOString().split('T')[0] : '',
                 totalHT: data.extractedData.totalHT?.toString() || '',
                 totalTTC: data.extractedData.totalTTC?.toString() || '',
                 tva: data.extractedData.tva?.toString() || '',
@@ -379,30 +419,17 @@ export default function SupplierInvoicesPage() {
                 supplierAddress: data.extractedData.address || '',
             });
 
-            // Populate line items
-            const items: LineItem[] = (data.extractedData.lineItems || []).map(
-                (item: { description?: string; quantity?: number; unitPrice?: number; taxRate?: number; totalHT?: number }, index: number) => ({
-                    id: `item-${Date.now()}-${index}`,
-                    description: item.description || '',
-                    quantity: item.quantity || 1,
-                    unitPrice: item.unitPrice || 0,
-                    taxRate: item.taxRate ?? 0.19,
-                    totalHT: item.totalHT || 0,
-                })
-            );
-            setLineItems(items);
+            setLineItems((data.extractedData.lineItems ||[]).map((item: any, index: number) => ({
+                id: `item-${Date.now()}-${index}`, description: item.description || '',
+                quantity: item.quantity || 1, unitPrice: item.unitPrice || 0,
+                taxRate: item.taxRate ?? 0.19, totalHT: item.totalHT || 0,
+            })));
 
             setView('review');
-            setStatus({
-                type: data.success ? 'success' : 'error',
-                message: data.message,
-            });
+            setStatus({ type: data.success ? 'success' : 'error', message: data.message });
         } catch (error: unknown) {
             logger.error('Upload error:', error);
-            setStatus({
-                type: 'error',
-                message: getErrorMessage(error, t('supplierInvoice.uploadFailed', 'Failed to upload and extract PDF')),
-            });
+            setStatus({ type: 'error', message: getErrorMessage(error, t('supplierInvoice.uploadFailed')) });
         } finally {
             setUploading(false);
             setUploadProgress('');
@@ -410,367 +437,177 @@ export default function SupplierInvoicesPage() {
         }
     };
 
-    // ═══════════════════════════════════════════════════════════════
-    // LINE ITEM OPERATIONS
-    // ═══════════════════════════════════════════════════════════════
-
-    const addLineItem = () => {
-        setLineItems(prev => [
-            ...prev,
-            {
-                id: `item-${Date.now()}`,
-                description: '',
-                quantity: 1,
-                unitPrice: 0,
-                taxRate: 0.19,
-                totalHT: 0,
-            },
-        ]);
-    };
-
+    const addLineItem = () => { setLineItems(prev =>[...prev, { id: `item-${Date.now()}`, description: '', quantity: 1, unitPrice: 0, taxRate: 0.19, totalHT: 0 }]); };
     const updateLineItem = (id: string, field: keyof LineItem, value: string | number | boolean) => {
-        setLineItems(prev =>
-            prev.map(item => {
-                if (item.id !== id) return item;
-                const updated = { ...item, [field]: value };
-                // Recalculate totalHT
-                if (field === 'quantity' || field === 'unitPrice') {
-                    updated.totalHT = updated.quantity * updated.unitPrice;
-                }
-                return updated;
-            })
-        );
+        setLineItems(prev => prev.map(item => {
+            if (item.id !== id) return item;
+            const updated = { ...item, [field]: value };
+            if (field === 'quantity' || field === 'unitPrice') updated.totalHT = updated.quantity * updated.unitPrice;
+            return updated;
+        }));
     };
-
-    const removeLineItem = (id: string) => {
-        setLineItems(prev => prev.filter(item => item.id !== id));
-    };
-
-    // ═══════════════════════════════════════════════════════════════
-    // CONFIRM & SAVE
-    // ═══════════════════════════════════════════════════════════════
+    const removeLineItem = (id: string) => { setLineItems(prev => prev.filter(item => item.id !== id)); };
 
     const handleConfirm = async () => {
-        if (!currentInvoiceId && !tempFilePath) {
-            setStatus({ type: 'error', message: t('supplierInvoice.noInvoiceToConfirm', 'No invoice to confirm') });
-            return;
-        }
-
+        if (!currentInvoiceId && !tempFilePath) { setStatus({ type: 'error', message: t('supplierInvoice.noInvoiceToConfirm') }); return; }
         setSaving(true);
         setStatus(null);
 
         try {
-            const items = lineItems.map(item => ({
-                description: item.description,
-                quantity: item.quantity,
-                unitPrice: item.unitPrice,
-                taxRate: item.taxRate,
-            }));
-
-            // Always use manually-entered header totals (user is the source of truth for supplier invoices)
+            const items = lineItems.map(item => ({ description: item.description, quantity: item.quantity, unitPrice: item.unitPrice, taxRate: item.taxRate }));
             const finalTotalHT = headerData.totalHT ? parseFloat(headerData.totalHT) : undefined;
             const finalTVA = headerData.tva ? parseFloat(headerData.tva) : undefined;
             const finalTotalTTC = headerData.totalTTC ? parseFloat(headerData.totalTTC) : undefined;
 
+            const payload = {
+                invoiceNumber: headerData.invoiceNumber || undefined,
+                invoiceDate: headerData.invoiceDate || undefined,
+                dueDate: headerData.dueDate || undefined,
+                totalHT: finalTotalHT, totalTTC: finalTotalTTC, tva: finalTVA,
+                supplierId: selectedSupplierId || undefined,
+                supplierName: !selectedSupplierId ? headerData.supplierName : undefined,
+                supplierAddress: headerData.supplierAddress || undefined,
+                supplierPhone: headerData.supplierPhone || undefined,
+                currency: supplierCurrency || undefined,
+                currencySymbol: supplierCurrencySymbol || undefined,
+                items,
+            };
+
             if (tempFilePath && !currentInvoiceId) {
-                // ── NEW upload: create record for the first time ──
-                const payload = {
-                    tempFilePath,
-                    fileName: tempFileName,
-                    fileType: tempFileType,
-                    rawExtractedText: tempRawText,
-                    confidenceScore,
-                    invoiceNumber: headerData.invoiceNumber || undefined,
-                    invoiceDate: headerData.invoiceDate || undefined,
-                    dueDate: headerData.dueDate || undefined,
-                    totalHT: finalTotalHT,
-                    totalTTC: finalTotalTTC,
-                    tva: finalTVA,
-                    supplierId: selectedSupplierId || undefined,
-                    supplierName: !selectedSupplierId ? headerData.supplierName : undefined,
-                    supplierAddress: headerData.supplierAddress || undefined,
-                    supplierPhone: headerData.supplierPhone || undefined,
-                    currency: supplierCurrency || undefined,
-                    currencySymbol: supplierCurrencySymbol || undefined,
-                    items,
-                };
-                await api.post('/SupplierInvoices/confirm-new', payload);
+                await api.post('/SupplierInvoices/confirm-new', { ...payload, tempFilePath, fileName: tempFileName, fileType: tempFileType, rawExtractedText: tempRawText, confidenceScore });
             } else {
-                // ── Existing invoice: update ──
-                const payload = {
-                    invoiceNumber: headerData.invoiceNumber || undefined,
-                    invoiceDate: headerData.invoiceDate || undefined,
-                    dueDate: headerData.dueDate || undefined,
-                    totalHT: finalTotalHT,
-                    totalTTC: finalTotalTTC,
-                    tva: finalTVA,
-                    supplierId: selectedSupplierId || undefined,
-                    supplierName: !selectedSupplierId ? headerData.supplierName : undefined,
-                    supplierAddress: headerData.supplierAddress || undefined,
-                    supplierPhone: headerData.supplierPhone || undefined,
-                    items,
-                };
                 await api.put(`/SupplierInvoices/${currentInvoiceId}/confirm`, payload);
             }
 
-            clearDraft();
-            setStatus({ type: 'success', message: t('supplierInvoice.confirmed', 'Supplier invoice confirmed and saved!') });
-
-            // Refresh and go back to list after delay
-            setTimeout(() => {
-                setView('list');
-                fetchInvoices();
-                resetReviewState();
-            }, 1500);
+            localStorage.removeItem(AUTOSAVE_KEY);
+            setStatus({ type: 'success', message: t('supplierInvoice.confirmed', 'Supplier invoice saved!') });
+            setTimeout(() => { setView('list'); fetchActiveInvoices(); resetReviewState(); }, 1500);
         } catch (error: unknown) {
-            logger.error('Confirm error:', error);
-            setStatus({
-                type: 'error',
-                message: getErrorMessage(error, t('supplierInvoice.saveFailed', 'Failed to save supplier invoice')),
-            });
-        } finally {
-            setSaving(false);
-        }
+            setStatus({ type: 'error', message: getErrorMessage(error, t('supplierInvoice.saveFailed')) });
+        } finally { setSaving(false); }
     };
 
     const handleDiscard = async () => {
-        // If we have a temp file (new upload not yet confirmed), clean it up
-        if (tempFilePath) {
-            try {
-                await api.post('/SupplierInvoices/discard', { tempFilePath });
-            } catch {
-                // Non-critical, file will be orphaned but that's OK
-            }
-        }
+        if (tempFilePath) try { await api.post('/SupplierInvoices/discard', { tempFilePath }); } catch { /* ignore */ }
         setView('list');
         resetReviewState();
-        clearDraft();
+        localStorage.removeItem(AUTOSAVE_KEY);
     };
 
     const handleDelete = async (id: number) => {
-        if (!confirm(t('supplierInvoice.confirmDelete'))) return;
+        if (!window.confirm(t('supplierInvoice.confirmDelete'))) return;
         try {
             await api.delete(`/SupplierInvoices/${id}`);
-            fetchInvoices();
-        } catch (error) {
-            logger.error('Delete error:', error);
-        }
+            notify('success', t('common.deleted'));
+            if (viewMode === 'active') fetchActiveInvoices(); else fetchArchivedInvoices();
+        } catch (error) { notify('error', t('common.deleteError')); }
     };
 
     const resetReviewState = () => {
-        setCurrentInvoiceId(null);
-        setTempFilePath(null);
-        replacePreviewFileUrl(null);
-        setTempFileName(null);
-        setTempFileType(null);
-        setTempRawText(null);
-        setExtractedData(null);
-        setLineItems([]);
-        setHeaderData({
-            supplierName: '',
-            invoiceNumber: '',
-            invoiceDate: '',
-            dueDate: '',
-            totalHT: '',
-            totalTTC: '',
-            tva: '',
-            supplierPhone: '',
-            supplierAddress: '',
-        });
-        setWarnings([]);
-        setConfidenceScore(0);
-        setSelectedSupplierId(null);
-        setStatus(null);
+        setCurrentInvoiceId(null); setTempFilePath(null); replacePreviewFileUrl(null);
+        setTempFileName(null); setTempFileType(null); setTempRawText(null);
+        setExtractedData(null); setLineItems([]); setWarnings([]); setConfidenceScore(0);
+        setSelectedSupplierId(null); setStatus(null);
+        setHeaderData({ supplierName: '', invoiceNumber: '', invoiceDate: '', dueDate: '', totalHT: '', totalTTC: '', tva: '', supplierPhone: '', supplierAddress: '' });
     };
 
     // ═══════════════════════════════════════════════════════════════
-    // PAYMENT HANDLERS
+    // PAYMENTS & MODALS
     // ═══════════════════════════════════════════════════════════════
 
     const openPaymentModal = (inv: SupplierInvoice) => {
         setSelectedInvoice(inv);
         setPaymentAmount(inv.remainingAmount > 0 ? inv.remainingAmount.toFixed(3) : '');
-        setPaymentNotes('');
-        setIsScheduledPayment(false);
-        setScheduledDate('');
-        setShowPaymentModal(true);
+        setPaymentNotes(''); setIsScheduledPayment(false); setScheduledDate(''); setShowPaymentModal(true);
     };
 
     const handleAddPayment = async () => {
-        if (!selectedInvoice) return;
+        if (!selectedInvoice || !paymentAmount || paymentSaving) return;
         const amount = parseFloat(paymentAmount);
-        if (isNaN(amount) || amount <= 0) {
-            setStatus({ type: 'error', message: t('supplierInvoice.invalidPaymentAmount', 'Enter a valid payment amount') });
-            return;
-        }
-
-        if (isScheduledPayment && !scheduledDate) {
-            notify('warning', t('payment.selectScheduledDate'));
-            return;
-        }
+        if (isNaN(amount) || amount <= 0) { notify('warning', t('supplierInvoice.invalidPaymentAmount')); return; }
+        if (isScheduledPayment && !scheduledDate) { notify('warning', t('payment.selectScheduledDate')); return; }
 
         setPaymentSaving(true);
         try {
-            const paymentDate = isScheduledPayment
-                ? new Date(scheduledDate).toISOString()
-                : new Date().toISOString();
-
             await api.post(`/SupplierInvoices/${selectedInvoice.id}/payments`, {
                 amount,
-                paymentDate,
+                paymentDate: isScheduledPayment ? new Date(scheduledDate).toISOString() : new Date().toISOString(),
                 notes: paymentNotes || undefined,
                 status: isScheduledPayment ? 'Pending' : 'Completed',
             });
             setShowPaymentModal(false);
-            setSelectedInvoice(null);
-            setPaymentAmount('');
-            setPaymentNotes('');
-            setIsScheduledPayment(false);
-            setScheduledDate('');
-            fetchInvoices();
-            setStatus({ type: 'success', message: isScheduledPayment ? '⏰ Payment scheduled!' : '💵 Payment recorded!' });
-            setTimeout(() => setStatus(null), 3000);
-        } catch (error: unknown) {
-            setStatus({
-                type: 'error',
-                message: getErrorMessage(error, t('supplierInvoice.paymentFailed', 'Failed to record payment')),
-            });
-        } finally {
-            setPaymentSaving(false);
-        }
+            if (viewMode === 'active') fetchActiveInvoices(); else fetchArchivedInvoices();
+            notify('success', isScheduledPayment ? t('payment.scheduledSuccess') : t('supplierInvoice.recordPayment'));
+        } catch (error: unknown) { notify('error', getErrorMessage(error, t('supplierInvoice.paymentFailed'))); } 
+        finally { setPaymentSaving(false); }
     };
-
-    const openPaymentHistory = (inv: SupplierInvoice) => {
-        setHistoryInvoice(inv);
-        setShowPaymentHistory(true);
-    };
-
-    // ═══════════════════════════════════════════════════════════════
-    // CONSISTENCY CHECK
-    // ═══════════════════════════════════════════════════════════════
 
     const runConsistencyCheck = async () => {
-        setConsistencyLoading(true);
-        setShowConsistencyModal(true);
+        setConsistencyLoading(true); setShowConsistencyModal(true);
         try {
             const res = await api.post('/SupplierInvoices/validate');
             setConsistencyResult(res.data);
         } catch (error: unknown) {
-            setStatus({
-                type: 'error',
-                message: getErrorMessage(error, t('supplierInvoice.consistencyFailed', 'Consistency check failed')),
-            });
-            setShowConsistencyModal(false);
-            setConsistencyResult(null);
-        } finally {
-            setConsistencyLoading(false);
-        }
+            setStatus({ type: 'error', message: getErrorMessage(error, t('supplierInvoice.consistencyFailed')) });
+            setShowConsistencyModal(false); setConsistencyResult(null);
+        } finally { setConsistencyLoading(false); }
     };
 
-    const getPaymentStatusColor = (status: string) => {
-        switch (status) {
-            case 'Paid': return 'bg-emerald-100 text-emerald-700';
-            case 'PartiallyPaid': return 'bg-blue-100 text-blue-700';
-            case 'Pending': return 'bg-amber-100 text-amber-700';
-            default: return 'bg-gray-100 text-gray-600';
-        }
-    };
-
-    const getPaymentStatusEmoji = (status: string) => {
-        switch (status) {
-            case 'Paid': return '✅';
-            case 'PartiallyPaid': return '🔶';
-            case 'Pending': return '🔴';
-            default: return '❔';
-        }
-    };
-
-    const filteredInvoices = invoices.filter(inv => {
-        const matchesSearch = (inv.fileName?.toLowerCase() || '').includes(search.toLowerCase()) ||
-            (inv.invoiceNumber?.toLowerCase() || '').includes(search.toLowerCase()) ||
-            (inv.supplierName?.toLowerCase() || '').includes(search.toLowerCase());
-        const matchesTab = activeTab === 'active'
-            ? inv.paymentStatus !== 'Paid'
-            : inv.paymentStatus === 'Paid';
-        return matchesSearch && matchesTab;
-    });
-
-    // ═══════════════════════════════════════════════════════════════
-    // VIEW EXISTING INVOICE (must be before list view return)
-    // ═══════════════════════════════════════════════════════════════
-    
     const handleViewInvoice = async (id: number) => {
         try {
             const res = await api.get(`/SupplierInvoices/${id}`);
             const data = res.data;
             setCurrentInvoiceId(data.id);
             setHeaderData({
-                supplierName: data.supplierName || '',
-                invoiceNumber: data.invoiceNumber || '',
+                supplierName: data.supplierName || '', invoiceNumber: data.invoiceNumber || '',
                 invoiceDate: data.invoiceDate ? new Date(data.invoiceDate).toISOString().split('T')[0] : '',
                 dueDate: data.dueDate ? new Date(data.dueDate).toISOString().split('T')[0] : '',
-                totalHT: data.totalHT?.toString() || '',
-                totalTTC: data.totalTTC?.toString() || '',
-                tva: data.tva?.toString() || '',
-                supplierPhone: data.supplierPhone || '',
-                supplierAddress: data.supplierAddress || '',
+                totalHT: data.totalHT?.toString() || '', totalTTC: data.totalTTC?.toString() || '', tva: data.tva?.toString() || '',
+                supplierPhone: data.supplierPhone || '', supplierAddress: data.supplierAddress || ''
             });
-            setLineItems((data.items || []).map((item: { description: string; quantity: number; unitPrice: number; taxRate?: number; totalHT: number }, i: number) => ({
-                id: `item-${Date.now()}-${i}`,
-                description: item.description,
-                quantity: item.quantity,
-                unitPrice: item.unitPrice,
-                taxRate: item.taxRate ?? 0.19,
-                totalHT: item.totalHT,
-            })));
-            setSelectedSupplierId(data.supplierId);
-            setConfidenceScore(data.confidenceScore || 0);
-            // Fetch the file via authenticated API and create blob URL for iframe preview
+            setLineItems((data.items ||[]).map((item: any, i: number) => ({ id: `item-${Date.now()}-${i}`, ...item, taxRate: item.taxRate ?? 0.19 })));
+            setSelectedSupplierId(data.supplierId); setConfidenceScore(data.confidenceScore || 0);
+            
             replacePreviewFileUrl(null);
             if (data.filePath || data.fileName) {
                 try {
                     const fileRes = await api.get(`/SupplierInvoices/${data.id}/file`, { responseType: 'blob' });
-                    const blobUrl = URL.createObjectURL(new Blob([fileRes.data], { type: data.fileType || 'application/pdf' }));
-                    replacePreviewFileUrl(blobUrl);
-                    setTempFileName(data.fileName || 'invoice');
-                    setTempFileType(data.fileType || 'application/pdf');
-                } catch {
-                    // File may not exist on disk — skip preview
-                    replacePreviewFileUrl(null);
-                }
+                    replacePreviewFileUrl(URL.createObjectURL(new Blob([fileRes.data], { type: data.fileType || 'application/pdf' })));
+                    setTempFileName(data.fileName || 'invoice'); setTempFileType(data.fileType || 'application/pdf');
+                } catch { replacePreviewFileUrl(null); }
             }
             setView('review');
-        } catch (error) {
-            logger.error('Error loading invoice:', error);
-            setStatus({ type: 'error', message: t('supplierInvoice.loadFailed', 'Failed to load invoice details') });
-        }
+        } catch { notify('error', t('supplierInvoice.loadFailed')); }
     };
 
-    // Read-only detail view
     const handleViewDetail = async (id: number) => {
         try {
             const res = await api.get(`/SupplierInvoices/${id}`);
-            const data = res.data;
-            const inv = invoices.find(i => i.id === id);
-            if (inv) {
-                setDetailInvoice({ ...inv, ...data });
-            } else {
-                setDetailInvoice(data);
-            }
-            setDetailItems((data.items || []).map((item: { description: string; quantity: number; unitPrice: number; taxRate?: number; totalHT: number }, i: number) => ({
-                id: `item-${Date.now()}-${i}`,
-                description: item.description,
-                quantity: item.quantity,
-                unitPrice: item.unitPrice,
-                taxRate: item.taxRate ?? 0.19,
-                totalHT: item.totalHT,
-            })));
+            const inv = viewMode === 'archived' ? archivedInvoices.find(i => i.id === id) : invoices.find(i => i.id === id);
+            setDetailInvoice({ ...inv, ...res.data });
+            setDetailItems((res.data.items ||[]).map((item: any, i: number) => ({ id: `item-${Date.now()}-${i}`, ...item, taxRate: item.taxRate ?? 0.19 })));
             setShowDetailModal(true);
-        } catch (error) {
-            logger.error('Error loading invoice:', error);
-            setStatus({ type: 'error', message: t('supplierInvoice.loadFailed', 'Failed to load invoice details') });
-        }
+        } catch { notify('error', t('supplierInvoice.loadFailed')); }
     };
+
+    // Table Filtering and Sorting Identical to InvoicesPage.tsx
+    const currentList = viewMode === 'archived' ? archivedInvoices : invoices;
+    const currentLoading = viewMode === 'archived' ? loadingArchive : loadingActive;
+
+    const filteredInvoices = currentList.filter(i => {
+        const numMatch = i.invoiceNumber?.toLowerCase().includes(search.toLowerCase()) ?? false;
+        const fileMatch = i.fileName?.toLowerCase().includes(search.toLowerCase()) ?? false;
+        const supplierMatch = i.supplierName?.toLowerCase().includes(search.toLowerCase()) ?? false;
+        return numMatch || fileMatch || supplierMatch;
+    });
+
+    const sortedInvoices = [...filteredInvoices].sort((a, b) => {
+        const aValue = (a.invoiceNumber || a.fileName || '').toLowerCase();
+        const bValue = (b.invoiceNumber || b.fileName || '').toLowerCase();
+        if (aValue === bValue) return 0;
+        if (invoiceNumberSort === 'asc') return aValue > bValue ? 1 : -1;
+        return aValue < bValue ? 1 : -1;
+    });
 
     // ═══════════════════════════════════════════════════════════════
     // RENDER: LIST VIEW
@@ -785,240 +622,226 @@ export default function SupplierInvoicesPage() {
                         <h1 className="text-3xl font-bold text-gray-900">{t('supplierInvoice.title', 'Supplier Invoices')}</h1>
                         <p className="text-gray-500 mt-1">{t('supplierInvoice.subtitle', 'Upload PDFs or photos, extract data via OCR, and manage supplier invoices')}</p>
                     </div>
-                    <div className="flex gap-3">
+                    <div className="flex items-center gap-3">
                         <button
                             onClick={runConsistencyCheck}
                             className="flex items-center px-4 py-2 bg-emerald-600 text-white rounded-xl shadow-md hover:bg-emerald-700 transition-all transform hover:scale-105"
                         >
-                            <ShieldCheck size={18} className="mr-2 text-white" />
+                            <ShieldCheck size={18} className="me-2" />
                             {t('supplierInvoice.consistencyCheck', 'Check')}
-                        </button>
-                        <button
-                            onClick={() => navigate('/suppliers')}
-                            className="flex items-center px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-all"
-                        >
-                            <ArrowLeft size={18} className="mr-2" />
-                            {t('nav.suppliers', 'Suppliers')}
                         </button>
                         <button
                             onClick={() => { resetReviewState(); setView('upload'); }}
                             className="flex items-center px-4 py-2 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all transform hover:scale-105"
                         >
-                            <Upload size={20} className="mr-2" />
+                            <Upload size={20} className="me-2" />
                             {t('supplierInvoice.upload', 'Upload Invoice')}
                         </button>
                     </div>
                 </div>
 
-                {/* Status */}
-                {status && (
-                    <div className={`p-4 rounded-xl flex items-center gap-3 ${
-                        status.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
-                    }`}>
-                        {status.type === 'success' ? <CheckCircle size={20} /> : <AlertTriangle size={20} />}
-                        <span>{status.message}</span>
-                        <button onClick={() => setStatus(null)} className="ml-auto"><X size={16} /></button>
-                    </div>
-                )}
-
-                {/* Active / Archived Tabs */}
-                <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
-                    <button
-                        onClick={() => setActiveTab('active')}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                            activeTab === 'active' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                        }`}
-                    >
-                        {t('supplierInvoice.activeInvoices', 'Active')}
-                        <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-amber-100 text-amber-700">
-                            {invoices.filter(i => i.paymentStatus !== 'Paid').length}
-                        </span>
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('paid')}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                            activeTab === 'paid' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                        }`}
-                    >
-                        {t('quote.archived', 'Archived')}
-                        <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-emerald-100 text-emerald-700">
-                            {invoices.filter(i => i.paymentStatus === 'Paid').length}
-                        </span>
-                    </button>
-                </div>
-
-                {/* Search */}
                 <div className="relative">
-                    <Search className="absolute left-4 top-3.5 h-5 w-5 text-gray-400" />
+                    <Search className="absolute start-4 top-3.5 h-5 w-5 text-gray-400" />
                     <input
                         type="text"
                         placeholder={t('supplierInvoice.searchPlaceholder', 'Search by file name, invoice number, or supplier...')}
                         value={search}
-                        onChange={e => setSearch(e.target.value)}
-                        className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent outline-none transition-all"
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="w-full ps-12 pe-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent outline-none transition-all"
                     />
                 </div>
 
-                {/* Invoices Table */}
-                {loading ? (
+                {/* Active / Archived Toggle Identical to InvoicesPage */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                    <div className="flex p-1 bg-gray-100 rounded-xl">
+                        <button
+                            onClick={() => { setViewMode('active'); setActivePage(1); }}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                viewMode === 'active'
+                                    ? 'bg-white shadow-sm text-[#065F46]'
+                                    : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                        >
+                            <Filter size={16} />
+                            {t('supplierInvoice.activeInvoices', 'Active')} ({activeTotalCount})
+                        </button>
+                        {isManager && (
+                            <button
+                                onClick={() => { setViewMode('archived'); setArchivedPage(1); }}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                    viewMode === 'archived'
+                                        ? 'bg-white shadow-sm text-emerald-600'
+                                        : 'text-gray-500 hover:text-gray-700'
+                                }`}
+                            >
+                                <Archive size={16} />
+                                {t('quote.archived', 'Archived')} ({archivedTotalCount})
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Year filter dropdown */}
+                    {viewMode === 'archived' && availableYears.length > 0 && (
+                        <div className="flex items-center gap-2">
+                            <label htmlFor="year-select" className="text-sm font-medium text-gray-600">
+                                {t('common.year', 'Year')}:
+                            </label>
+                            <select
+                                id="year-select"
+                                value={selectedYear || ''}
+                                onChange={(e) => { setArchivedPage(1); setSelectedYear(parseInt(e.target.value)); }}
+                                className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
+                            >
+                                {availableYears.map(year => (
+                                    <option key={year} value={year}>{year}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+                </div>
+
+                {/* Table View exactly mirroring InvoicesPage.tsx */}
+                {currentLoading ? (
                     <div className="text-center py-20 text-gray-500">
                         <Loader2 className="animate-spin mx-auto mb-3" size={32} />
-                        {t('common.loading', 'Loading...')}
-                    </div>
-                ) : filteredInvoices.length === 0 ? (
-                    <div className="text-center py-20 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
-                        <FileText size={48} className="mx-auto text-gray-300 mb-4" />
-                        <p className="text-gray-500 text-lg">{t('supplierInvoice.noInvoices', 'No supplier invoices yet')}</p>
-                        <p className="text-gray-400 text-sm mt-1">{t('supplierInvoice.uploadToStart', 'Upload a PDF to get started')}</p>
-                        <button
-                            onClick={() => { resetReviewState(); setView('upload'); }}
-                            className="mt-4 px-6 py-2 bg-[#065F46] text-white rounded-xl hover:bg-[#047857] transition-all"
-                        >
-                            {t('supplierInvoice.uploadFirst', 'Upload First Invoice')}
-                        </button>
+                        {t('common.loadingData', 'Loading...')}
                     </div>
                 ) : (
                     <div className="rm-table-card">
                         <table className="rm-table min-w-[850px]">
                             <colgroup>
-                                <col style={{ width: '14%' }} />{/* Invoice # */}
-                                <col style={{ width: '13%' }} />{/* Supplier */}
-                                <col style={{ width: '11%' }} />{/* Date */}
-                                <col style={{ width: '13%' }} />{/* Total TTC */}
-                                <col style={{ width: '13%' }} />{/* Paid */}
-                                <col style={{ width: '13%' }} />{/* Remaining */}
-                                <col style={{ width: '12%' }} />{/* Status */}
-                                <col style={{ width: '11%' }} />{/* Actions */}
+                                <col style={{ width: '12%' }} />
+                                <col style={{ width: '15%' }} />
+                                <col style={{ width: '11%' }} />
+                                <col style={{ width: '13%' }} />
+                                <col style={{ width: '13%' }} />
+                                <col style={{ width: '13%' }} />
+                                <col style={{ width: '12%' }} />
+                                <col style={{ width: '11%' }} />
                             </colgroup>
                             <thead>
                                 <tr>
-                                    <th className="rm-th-id">{t('supplierInvoice.invoiceNumber', 'Invoice #')}</th>
-                                    <th className="rm-th-text">{t('supplierInvoice.supplier', 'Supplier')}</th>
-                                    <th className="rm-th-date">{t('common.date', 'Date')}</th>
-                                    <th className="rm-th-currency">{t('invoice.totalTTC', 'Total TTC')}</th>
-                                    <th className="rm-th-currency">{t('supplierInvoice.paid', 'Paid')}</th>
-                                    <th className="rm-th-currency">{t('supplierInvoice.remaining', 'Remaining')}</th>
-                                    <th className="rm-th-status">{t('common.status', 'Status')}</th>
+                                    <th
+                                        className="rm-th-id cursor-pointer select-none"
+                                        onClick={() => setInvoiceNumberSort(prev => prev === 'asc' ? 'desc' : 'asc')}
+                                    >
+                                        {t('supplierInvoice.invoiceNumber', 'Invoice #')} {invoiceNumberSort === 'asc' ? '↑' : '↓'}
+                                    </th>
+                                    <th>{t('supplierInvoice.supplier', 'Supplier')}</th>
+                                    <th className="rm-th-date">{t('invoice.date', 'Date')}</th>
+                                    <th className="rm-th-number">{t('invoice.total', 'Total TTC')}</th>
+                                    <th className="rm-th-number">{t('invoice.amountPaid', 'Paid')}</th>
+                                    <th className="rm-th-number">{t('invoice.remaining', 'Remaining')}</th>
+                                    <th className="rm-th-status text-center">{t('common.status', 'Status')}</th>
                                     <th className="rm-th-actions">{t('common.actions', 'Actions')}</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredInvoices.map(inv => (
-                                    <tr key={inv.id}>
-                                        <td className="rm-cell-text">
-                                            <div className="font-medium text-gray-900 whitespace-nowrap truncate">{inv.invoiceNumber || '—'}</div>
-                                            <div className="text-xs text-gray-400 truncate">{inv.fileName}</div>
+                                {sortedInvoices.map((inv) => (
+                                    <tr key={inv.id} className="group">
+                                        <td className="rm-cell-text font-semibold text-[#065F46] whitespace-nowrap">
+                                            <span className="inline-block" title={inv.fileName}>
+                                                #{inv.invoiceNumber || t('common.unknown', 'Unknown')}
+                                            </span>
+                                            {inv.fileName && <div className="text-xs text-gray-400 font-normal truncate max-w-[120px]">{inv.fileName}</div>}
                                         </td>
-                                        <td className="rm-cell-text text-sm text-gray-600 truncate">{inv.supplierName || '—'}</td>
+                                        <td className="rm-cell-text">
+                                            <span title={inv.supplierName || undefined}>
+                                                {inv.supplierName || '—'}
+                                            </span>
+                                        </td>
                                         <td className="rm-cell-date">
                                             {inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString() : '—'}
                                         </td>
                                         <td className="rm-cell-currency">
-                                            {inv.totalTTC != null ? formatCurrency(inv.totalTTC, inv.currencySymbol || DEFAULT_CURRENCY) : '—'}
+                                            {formatCurrency(inv.totalTTC || 0, inv.currencySymbol || DEFAULT_CURRENCY)}
                                         </td>
-                                        <td className="rm-cell-currency text-sm">
-                                            {inv.amountPaid > 0 ? (
-                                                <span className="text-emerald-600 font-medium">{formatCurrency(inv.amountPaid, inv.currencySymbol || DEFAULT_CURRENCY)}</span>
-                                            ) : (
-                                                <span className="text-gray-400">—</span>
-                                            )}
-                                            {inv.pendingAmount > 0 && (
-                                                <div className="text-xs text-amber-500 mt-0.5 whitespace-nowrap" title={t('supplierInvoice.pendingPayments', 'Pending payments awaiting confirmation')}>
-                                                    ⏰ {formatCurrency(inv.pendingAmount, inv.currencySymbol || DEFAULT_CURRENCY)}
-                                                </div>
-                                            )}
+                                        <td className="rm-cell-currency">
+                                            <div className="flex flex-col items-end">
+                                                <span className="text-emerald-600 font-medium">
+                                                    {formatCurrency(inv.amountPaid, inv.currencySymbol || DEFAULT_CURRENCY)}
+                                                </span>
+                                                {(inv.pendingAmount || 0) > 0 && (
+                                                    <span className="text-xs text-orange-500 flex items-center gap-1 mt-0.5" title={t('invoice.pending', 'Pending')}>
+                                                        <Clock size={12} />
+                                                        +{formatCurrency(inv.pendingAmount, inv.currencySymbol || DEFAULT_CURRENCY)}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </td>
-                                        <td className="rm-cell-currency text-sm">
-                                            {inv.remainingAmount > 0 ? (
-                                                <span className="text-amber-600 font-medium">{formatCurrency(inv.remainingAmount, inv.currencySymbol || DEFAULT_CURRENCY)}</span>
-                                            ) : inv.totalTTC ? (
-                                                <span className="text-emerald-600 font-medium">0.000</span>
-                                            ) : (
-                                                <span className="text-gray-400">—</span>
-                                            )}
+                                        <td className="rm-cell-currency text-amber-600">
+                                            {inv.remainingAmount > 0 ? formatCurrency(inv.remainingAmount, inv.currencySymbol || DEFAULT_CURRENCY) : '—'}
                                         </td>
                                         <td className="rm-cell-status text-center">
-                                            <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getPaymentStatusColor(inv.paymentStatus)}`}>
-                                                {getPaymentStatusEmoji(inv.paymentStatus)} {t(`supplierInvoice.paymentStatus.${inv.paymentStatus}`, inv.paymentStatus)}
+                                            <span className={`px-3 py-1 text-xs font-semibold rounded-full inline-block ${getInvoiceStatusColor(inv.paymentStatus)}`}>
+                                                {t(`supplierInvoice.paymentStatus.${inv.paymentStatus}`, inv.paymentStatus)}
                                             </span>
-                                            {/* Payment History Indicators */}
-                                            {inv.payments && inv.payments.length > 0 && (
-                                                <div className="flex flex-wrap gap-1 mt-1.5 justify-center">
-                                                    {inv.payments.slice(0, 3).map((p, idx) => (
-                                                        <span key={idx} className="text-xs text-gray-500" title={`${new Date(p.paymentDate).toLocaleDateString()}: ${p.amount.toFixed(3)} ${inv.currencySymbol || DEFAULT_CURRENCY}${p.status === 'Pending' ? ' ⏰' : ''}`}>
-                                                            {p.status === 'Pending' ? '⏰' : '💵'} {p.amount.toLocaleString()}
-                                                        </span>
-                                                    ))}
-                                                    {inv.payments.length > 3 && (
-                                                        <button
-                                                            onClick={() => openPaymentHistory(inv)}
-                                                            className="text-xs text-[#065F46] hover:text-[#065F46]"
-                                                        >
-                                                            +{inv.payments.length - 3} {t('supplierInvoice.morePayments', { count: inv.payments.length - 3, defaultValue: 'more' })}
-                                                        </button>
-                                                    )}
-                                                </div>
-                                            )}
                                             {inv.paymentCount > 0 && (!inv.payments || inv.payments.length === 0) && (
-                                                <div className="mt-1 text-xs text-gray-400">
+                                                <div className="mt-1 text-[10px] text-gray-400 cursor-pointer hover:underline" >
                                                     {inv.paymentCount} {t('supplierInvoice.payments', 'payment(s)')}
                                                 </div>
                                             )}
                                         </td>
                                         <td className="rm-cell-actions">
-                                            <div className="flex justify-end gap-1">
+                                            <div className="flex items-center justify-end gap-0.5">
                                                 {inv.paymentStatus !== 'Paid' && (
                                                     <button
                                                         onClick={() => openPaymentModal(inv)}
-                                                        className="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                                                        className="p-1 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                                                         title={t('supplierInvoice.addPayment', 'Add Payment')}
                                                     >
-                                                        <DollarSign size={18} />
+                                                        <DollarSign size={15} />
                                                     </button>
                                                 )}
                                                 <button
                                                     onClick={() => handleViewDetail(inv.id)}
-                                                    className="p-2 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
+                                                    className="p-1 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
                                                     title={t('common.viewDetails', 'View Details')}
                                                 >
-                                                    <Eye size={18} />
+                                                    <Eye size={15} />
                                                 </button>
                                                 {(inv.paymentStatus === 'Pending' || inv.paymentStatus === 'Unpaid') && (
                                                     <button
                                                         onClick={() => handleViewInvoice(inv.id)}
-                                                        className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                                                        className="p-1 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
                                                         title={t('common.edit', 'Edit')}
                                                     >
-                                                        <Edit2 size={18} />
+                                                        <Edit2 size={15} />
                                                     </button>
                                                 )}
-                                                {/* Delete - manager only */}
                                                 {isManager && (
                                                     <button
                                                         onClick={() => handleDelete(inv.id)}
-                                                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                        className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                                         title={t('common.delete', 'Delete')}
                                                     >
-                                                        <Trash2 size={18} />
+                                                        <Trash2 size={15} />
                                                     </button>
                                                 )}
                                             </div>
                                         </td>
                                     </tr>
                                 ))}
+                                {sortedInvoices.length === 0 && (
+                                    <tr>
+                                        <td colSpan={8} className="px-4 py-12 text-center text-gray-500">
+                                            {t('supplierInvoice.noInvoices', 'No supplier invoices found.')}
+                                        </td>
+                                    </tr>
+                                )}
                             </tbody>
                             <tfoot className="bg-gray-50 border-t-2 border-gray-200">
                                 {(() => {
-                                    // Group totals by currency to avoid mixing
                                     const byCurrency: Record<string, { totalTTC: number; paid: number; remaining: number }> = {};
-                                    filteredInvoices.forEach(inv => {
+                                    currentList.forEach(inv => {
                                         const cur = inv.currencySymbol || DEFAULT_CURRENCY;
                                         if (!byCurrency[cur]) byCurrency[cur] = { totalTTC: 0, paid: 0, remaining: 0 };
-                                        byCurrency[cur].totalTTC += inv.totalTTC || 0;
-                                        byCurrency[cur].paid += inv.amountPaid || 0;
-                                        byCurrency[cur].remaining += inv.remainingAmount || 0;
+                                        byCurrency[cur].totalTTC += (inv.totalTTC || 0);
+                                        byCurrency[cur].paid += (inv.amountPaid || 0);
+                                        byCurrency[cur].remaining += (inv.remainingAmount || 0);
                                     });
                                     const currencies = Object.keys(byCurrency);
+                                    if (currencies.length === 0) return null;
                                     return currencies.map(cur => (
                                         <tr key={cur}>
                                             <td colSpan={3} className="rm-cell-number font-semibold">
@@ -1040,53 +863,56 @@ export default function SupplierInvoicesPage() {
                                 })()}
                             </tfoot>
                         </table>
+                        
+                        {!search && (
+                            <Pagination
+                                page={currentPage}
+                                totalPages={currentTotalPages}
+                                totalCount={currentTotalCount}
+                                size={pageSize}
+                                onPageChange={(p) => {
+                                    if (viewMode === 'archived') setArchivedPage(p);
+                                    else setActivePage(p);
+                                }}
+                                onSizeChange={(s) => {
+                                    setPageSize(s);
+                                    setActivePage(1);
+                                    setArchivedPage(1);
+                                }}
+                            />
+                        )}
                     </div>
                 )}
 
-                {/* Payment Modal */}
+                {/* Identical Payment Modal Structure */}
                 {showPaymentModal && selectedInvoice && (
-                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowPaymentModal(false)}>
-                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-scale-up" onClick={e => e.stopPropagation()}>
-                            <div className="p-6 border-b border-gray-100">
-                                <div className="flex items-center justify-between">
-                                    <h3 className="text-xl font-bold flex items-center">
-                                        💵 {t('supplierInvoice.addPayment', 'Add Payment')}
-                                    </h3>
-                                    <button onClick={() => setShowPaymentModal(false)} className="p-2 hover:bg-gray-100 rounded-full">
-                                        <X size={20} />
-                                    </button>
-                                </div>
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-scale-up">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-xl font-bold">{t('supplierInvoice.addPayment', 'Add Payment')}</h2>
+                                <button onClick={() => setShowPaymentModal(false)} className="p-2 hover:bg-gray-100 rounded-full">
+                                    <X size={20} />
+                                </button>
                             </div>
-                            <div className="p-6 space-y-4">
-                                {/* Invoice summary */}
-                                <div className="bg-gray-50 rounded-xl p-4">
-                                    <p className="text-sm text-gray-600">{t('supplierInvoice.supplier', 'Supplier')}: <span className="font-bold">{selectedInvoice.supplierName}</span></p>
-                                    <p className="text-sm text-gray-600">{t('supplierInvoice.invoiceNumber', 'Invoice')}: <span className="font-bold">{selectedInvoice.invoiceNumber || selectedInvoice.fileName}</span></p>
-                                    <div className="grid grid-cols-3 gap-2 mt-3">
-                                        <div>
-                                            <div className="text-xs text-gray-400">{t('invoice.totalTTC', 'Total')}</div>
-                                            <div className="font-semibold text-gray-900">{formatCurrency(selectedInvoice.totalTTC, selectedInvoice.currencySymbol || DEFAULT_CURRENCY)}</div>
-                                        </div>
-                                        <div>
-                                            <div className="text-xs text-gray-400">{t('supplierInvoice.paid', 'Paid')}</div>
-                                            <div className="font-semibold text-emerald-600">{formatCurrency(selectedInvoice.amountPaid, selectedInvoice.currencySymbol || DEFAULT_CURRENCY)}</div>
-                                        </div>
-                                        <div>
-                                            <div className="text-xs text-gray-400">{t('supplierInvoice.remaining', 'Remaining')}</div>
-                                            <div className="font-semibold text-amber-600">{formatCurrency(selectedInvoice.remainingAmount, selectedInvoice.currencySymbol || DEFAULT_CURRENCY)}</div>
-                                        </div>
-                                    </div>
-                                </div>
+                            
+                            <div className="mb-4 p-4 bg-gray-50 rounded-xl">
+                                <p className="text-sm text-gray-600">{t('supplierInvoice.supplier', 'Supplier')}: <span className="font-bold">{selectedInvoice.supplierName}</span></p>
+                                <p className="text-sm text-gray-600">{t('supplierInvoice.invoiceNumber', 'Invoice #')}: <span className="font-bold">{selectedInvoice.invoiceNumber || selectedInvoice.fileName}</span></p>
+                                <p className="text-sm text-gray-600 mt-2">{t('invoice.total', 'Total')}: <span className="font-bold">{formatCurrency(selectedInvoice.totalTTC || 0, selectedInvoice.currencySymbol || DEFAULT_CURRENCY)}</span></p>
+                                <p className="text-sm text-gray-600">{t('invoice.alreadyPaid', 'Paid')}: <span className="font-bold text-emerald-600">{formatCurrency(selectedInvoice.amountPaid, selectedInvoice.currencySymbol || DEFAULT_CURRENCY)}</span></p>
+                                {(selectedInvoice.pendingAmount || 0) > 0 && (
+                                    <p className="text-sm text-gray-600">{t('invoice.pending', 'Pending')}: <span className="font-bold text-orange-500">{formatCurrency(selectedInvoice.pendingAmount, selectedInvoice.currencySymbol || DEFAULT_CURRENCY)}</span></p>
+                                )}
+                                <p className="text-sm text-gray-600">{t('invoice.remaining', 'Remaining')}: <span className="font-bold text-amber-600">{formatCurrency(selectedInvoice.remainingAmount, selectedInvoice.currencySymbol || DEFAULT_CURRENCY)}</span></p>
+                            </div>
 
-                                {/* Payment Timing Toggle */}
+                            <div className="space-y-4">
                                 <div className="flex gap-2 p-1 bg-gray-100 rounded-xl">
                                     <button
                                         type="button"
                                         onClick={() => setIsScheduledPayment(false)}
                                         className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg transition-all ${
-                                            !isScheduledPayment
-                                                ? 'bg-white shadow-sm text-[#065F46] font-medium'
-                                                : 'text-gray-600 hover:text-gray-800'
+                                            !isScheduledPayment ? 'bg-white shadow-sm text-[#065F46] font-medium' : 'text-gray-600 hover:text-gray-800'
                                         }`}
                                     >
                                         <DollarSign size={16} />
@@ -1096,9 +922,7 @@ export default function SupplierInvoicesPage() {
                                         type="button"
                                         onClick={() => setIsScheduledPayment(true)}
                                         className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg transition-all ${
-                                            isScheduledPayment
-                                                ? 'bg-white shadow-sm text-[#065F46] font-medium'
-                                                : 'text-gray-600 hover:text-gray-800'
+                                            isScheduledPayment ? 'bg-white shadow-sm text-[#065F46] font-medium' : 'text-gray-600 hover:text-gray-800'
                                         }`}
                                     >
                                         <Clock size={16} />
@@ -1106,7 +930,6 @@ export default function SupplierInvoicesPage() {
                                     </button>
                                 </div>
 
-                                {/* Scheduled Date Picker */}
                                 {isScheduledPayment && (
                                     <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
                                         <label className="block text-sm font-medium text-amber-800 mb-2 flex items-center gap-2">
@@ -1120,41 +943,28 @@ export default function SupplierInvoicesPage() {
                                             min={new Date().toISOString().split('T')[0]}
                                             className="w-full px-4 py-3 border border-amber-300 rounded-xl focus:ring-2 focus:ring-amber-500 bg-white outline-none"
                                         />
-                                        <p className="text-xs text-amber-700 mt-2">
-                                            ⏰ {t('payment.scheduledInfo', 'Payment will be recorded with Pending status for the selected date.')}
-                                        </p>
+                                        <p className="text-xs text-amber-700 mt-2">{t('payment.scheduledInfo', 'Payment will be marked as Pending.')}</p>
                                     </div>
                                 )}
 
-                                {/* Amount */}
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('supplierInvoice.paymentAmount', 'Amount')} ({selectedInvoice?.currencySymbol || DEFAULT_CURRENCY})</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('invoice.paymentAmount', 'Amount')} ({selectedInvoice?.currencySymbol || DEFAULT_CURRENCY})</label>
                                     <input
-                                        type="number"
-                                        step="0.001"
-                                        min="0"
-                                        max={selectedInvoice.remainingAmount}
-                                        value={paymentAmount}
-                                        onChange={e => setPaymentAmount(e.target.value)}
-                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
-                                        placeholder="0.000"
-                                        autoFocus
+                                        type="number" step="0.001" min="0" max={selectedInvoice.remainingAmount}
+                                        value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)}
+                                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
                                     />
                                 </div>
-
-                                {/* Notes */}
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('supplierInvoice.paymentNotes', 'Notes')} ({t('common.optional', 'optional')})</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('invoice.notes', 'Notes')} ({t('common.optional', 'optional')})</label>
                                     <input
-                                        type="text"
-                                        value={paymentNotes}
-                                        onChange={e => setPaymentNotes(e.target.value)}
-                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
-                                        placeholder={t('supplierInvoice.paymentNotesPlaceholder', 'Bank transfer ref, cheque number...')}
+                                        type="text" value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)}
+                                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
                                     />
                                 </div>
                             </div>
-                            <div className="p-6 border-t border-gray-100 flex justify-end gap-3">
+
+                            <div className="flex justify-end space-x-3 mt-6">
                                 <button
                                     onClick={() => setShowPaymentModal(false)}
                                     className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
@@ -1163,26 +973,12 @@ export default function SupplierInvoicesPage() {
                                 </button>
                                 <button
                                     onClick={handleAddPayment}
-                                    disabled={paymentSaving || !paymentAmount || parseFloat(paymentAmount) <= 0}
-                                    className={`flex items-center px-6 py-2 text-white rounded-xl transition-colors disabled:opacity-50 ${
-                                        isScheduledPayment
-                                            ? 'bg-amber-600 hover:bg-amber-700'
-                                            : 'bg-emerald-600 hover:bg-emerald-700'
+                                    disabled={paymentSaving}
+                                    className={`px-6 py-2 text-white rounded-xl transition-colors flex items-center gap-2 disabled:opacity-50 ${
+                                        isScheduledPayment ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'
                                     }`}
                                 >
-                                    {paymentSaving ? (
-                                        <Loader2 size={18} className="mr-2 animate-spin" />
-                                    ) : isScheduledPayment ? (
-                                        <>
-                                            <Clock size={16} className="mr-2" />
-                                            {t('payment.schedulePayment', 'Schedule Payment')}
-                                        </>
-                                    ) : (
-                                        <>
-                                            <CheckCircle size={18} className="mr-2" />
-                                            {t('supplierInvoice.recordPayment', 'Record Payment')}
-                                        </>
-                                    )}
+                                    {isScheduledPayment ? <><Clock size={16} />{t('payment.schedulePayment', 'Schedule Payment')}</> : t('invoice.addPayment', 'Add Payment')}
                                 </button>
                             </div>
                         </div>
@@ -1250,14 +1046,14 @@ export default function SupplierInvoicesPage() {
                                 {/* Payment status */}
                                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
                                     <div className="flex items-center gap-3">
-                                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getPaymentStatusColor(detailInvoice.paymentStatus)}`}>
-                                            {getPaymentStatusEmoji(detailInvoice.paymentStatus)} {detailInvoice.paymentStatus}
+                                        <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getInvoiceStatusColor(detailInvoice.paymentStatus)}`}>
+                                            {t(`supplierInvoice.paymentStatus.${detailInvoice.paymentStatus}`, detailInvoice.paymentStatus)}
                                         </span>
                                     </div>
                                     <div className="text-sm text-right">
                                         <span className="text-emerald-600 font-medium">{formatCurrency(detailInvoice.amountPaid, detailInvoice.currencySymbol || DEFAULT_CURRENCY)}</span>
                                         <span className="text-gray-400 mx-1">/</span>
-                                        <span className="text-gray-600">{formatCurrency(detailInvoice.totalTTC, detailInvoice.currencySymbol || DEFAULT_CURRENCY)}</span>
+                                        <span className="text-gray-600">{formatCurrency(detailInvoice.totalTTC || 0, detailInvoice.currencySymbol || DEFAULT_CURRENCY)}</span>
                                     </div>
                                 </div>
                                 {/* Line items */}
@@ -1315,53 +1111,6 @@ export default function SupplierInvoicesPage() {
                         </div>
                     </div>
                 )}
-
-                {/* Payment History Modal */}
-                {showPaymentHistory && historyInvoice && (
-                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowPaymentHistory(false)}>
-                        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4" onClick={e => e.stopPropagation()}>
-                            <div className="p-6 border-b border-gray-100">
-                                <div className="flex items-center justify-between">
-                                    <h3 className="text-lg font-semibold">💳 Payment History — {historyInvoice.invoiceNumber || historyInvoice.fileName}</h3>
-                                    <button onClick={() => setShowPaymentHistory(false)} className="p-1 hover:bg-gray-100 rounded-lg">
-                                        <X size={20} />
-                                    </button>
-                                </div>
-                            </div>
-                            <div className="p-6 space-y-3 max-h-[60vh] overflow-y-auto">
-                                {historyInvoice.payments && historyInvoice.payments.length > 0 ? (
-                                    historyInvoice.payments.map((p, idx) => (
-                                        <div key={idx} className={`flex items-center justify-between p-3 rounded-xl border ${
-                                            p.status === 'Pending' ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'
-                                        }`}>
-                                            <div>
-                                                <div className="text-sm font-medium text-gray-900">
-                                                    {p.status === 'Pending' ? '⏰' : '💵'} {formatCurrency(p.amount, historyInvoice.currencySymbol || DEFAULT_CURRENCY)}
-                                                </div>
-                                                <div className="text-xs text-gray-500">
-                                                    {new Date(p.paymentDate).toLocaleDateString()} {p.notes && `— ${p.notes}`}
-                                                </div>
-                                                {p.ConfirmedBy && <div className="text-[10px] text-gray-500 mt-0.5">{t('common.confirmedBy', 'Confirmed by')} {p.ConfirmedBy}</div>}
-                                            </div>
-                                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                                                p.status === 'Pending' ? 'bg-amber-200 text-amber-800' : 'bg-emerald-200 text-emerald-800'
-                                            }`}>
-                                                {p.status}
-                                            </span>
-                                        </div>
-                                    ))
-                                ) : (
-                                    <p className="text-gray-500 text-center py-4">{t('supplierInvoice.noPaymentsRecorded', 'No payments recorded yet.')}</p>
-                                )}
-                                <div className="pt-3 border-t border-gray-200 flex justify-between text-sm">
-                                    <span className="text-gray-600 font-medium">{t('supplierInvoice.totalPaid', 'Total Paid')}:</span>
-                                    <span className="font-bold text-emerald-600">{formatCurrency(historyInvoice.amountPaid, historyInvoice.currencySymbol || DEFAULT_CURRENCY)}</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
                 {/* Consistency Check Modal */}
                 {showConsistencyModal && (
                     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowConsistencyModal(false)}>
@@ -1385,7 +1134,6 @@ export default function SupplierInvoicesPage() {
                                     </div>
                                 ) : consistencyResult ? (
                                     <div className="space-y-4">
-                                        {/* Summary */}
                                         <div className="grid grid-cols-3 gap-3">
                                             <div className="bg-gray-50 rounded-xl p-4 text-center">
                                                 <div className="text-2xl font-bold text-gray-900">{consistencyResult.totalInvoices}</div>
@@ -1401,7 +1149,6 @@ export default function SupplierInvoicesPage() {
                                             </div>
                                         </div>
 
-                                        {/* Issue list */}
                                         {consistencyResult.issues.length === 0 ? (
                                             <div className="text-center py-8 bg-emerald-50 rounded-xl">
                                                 <CheckCircle size={32} className="mx-auto text-emerald-500 mb-2" />
@@ -1451,10 +1198,7 @@ export default function SupplierInvoicesPage() {
         return (
             <div className="space-y-6">
                 <div className="flex items-center gap-4">
-                    <button
-                        onClick={() => setView('list')}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                    >
+                    <button onClick={() => setView('list')} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                         <ArrowLeft size={20} />
                     </button>
                     <div>
@@ -1463,7 +1207,6 @@ export default function SupplierInvoicesPage() {
                     </div>
                 </div>
 
-                {/* Status */}
                 {status && (
                     <div className={`p-4 rounded-xl flex items-center gap-3 ${
                         status.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
@@ -1473,20 +1216,13 @@ export default function SupplierInvoicesPage() {
                     </div>
                 )}
 
-                {/* Upload Zone */}
                 <div
                     className={`border-2 border-dashed rounded-2xl p-12 text-center transition-all ${
                         uploading ? 'border-[#065F46] bg-[#065F46]/5' : 'border-gray-300 hover:border-[#065F46] hover:bg-[#065F46]/5 cursor-pointer'
                     }`}
                     onClick={() => !uploading && fileInputRef.current?.click()}
                 >
-                    <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png,.bmp,.tiff,.tif,.webp,image/*"
-                        onChange={handleFileUpload}
-                        className="hidden"
-                    />
+                    <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.bmp,.tiff,.tif,.webp,image/*" onChange={handleFileUpload} className="hidden" />
 
                     {uploading ? (
                         <div className="space-y-4">
@@ -1509,7 +1245,6 @@ export default function SupplierInvoicesPage() {
                     )}
                 </div>
 
-                {/* How it works */}
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
                     <h3 className="font-semibold text-blue-800 mb-3">{t('supplierInvoice.howItWorks', 'How Smart Extraction Works')}</h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1546,13 +1281,9 @@ export default function SupplierInvoicesPage() {
 
     return (
         <div className="space-y-6">
-            {/* Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div className="flex items-center gap-4">
-                    <button
-                        onClick={handleDiscard}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                    >
+                    <button onClick={handleDiscard} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
                         <ArrowLeft size={20} />
                     </button>
                     <div>
@@ -1572,33 +1303,15 @@ export default function SupplierInvoicesPage() {
                     </div>
                 </div>
                 <div className="flex gap-3">
-                    <button
-                        onClick={handleDiscard}
-                        className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200"
-                    >
+                    <button onClick={handleDiscard} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200">
                         {t('common.cancel', 'Cancel')}
                     </button>
-                    <button
-                        onClick={handleConfirm}
-                        disabled={saving}
-                        className="flex items-center px-6 py-2 bg-emerald-600 text-white rounded-xl shadow-lg hover:bg-emerald-700 transition-all disabled:opacity-50"
-                    >
-                        {saving ? (
-                            <>
-                                <Loader2 size={18} className="mr-2 animate-spin" />
-                                {t('common.saving', 'Saving...')}
-                            </>
-                        ) : (
-                            <>
-                                <CheckCircle size={18} className="mr-2" />
-                                {t('supplierInvoice.confirmSave', 'Confirm & Save')}
-                            </>
-                        )}
+                    <button onClick={handleConfirm} disabled={saving} className="flex items-center px-6 py-2 bg-emerald-600 text-white rounded-xl shadow-lg hover:bg-emerald-700 transition-all disabled:opacity-50">
+                        {saving ? <><Loader2 size={18} className="me-2 animate-spin" />{t('common.saving', 'Saving...')}</> : <><CheckCircle size={18} className="me-2" />{t('supplierInvoice.confirmSave', 'Confirm & Save')}</>}
                     </button>
                 </div>
             </div>
 
-            {/* Status */}
             {status && (
                 <div className={`p-4 rounded-xl flex items-center gap-3 ${
                     status.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
@@ -1609,7 +1322,6 @@ export default function SupplierInvoicesPage() {
                 </div>
             )}
 
-            {/* Warnings */}
             {warnings.length > 0 && (
                 <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
                     <div className="flex items-start gap-3">
@@ -1624,45 +1336,30 @@ export default function SupplierInvoicesPage() {
                 </div>
             )}
 
-            {/* Auto-save indicator */}
             <div className="text-xs text-gray-400 text-right">
-                <Save size={12} className="inline mr-1" />
+                <Save size={12} className="inline me-1" />
                 {t('supplierInvoice.autoSaved', 'Draft auto-saved to browser')}
             </div>
 
-            {/* Split layout: Document Preview + Form */}
             <div className={`flex gap-6 ${previewFileUrl ? 'flex-col lg:flex-row' : ''}`}>
-                {/* Document Preview Panel */}
                 {previewFileUrl && (
                     <div className={`${showDocPreview ? 'lg:w-1/2' : 'lg:w-auto'} flex-shrink-0`}>
                         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden sticky top-4">
                             <div className="flex items-center justify-between p-3 bg-gray-50 border-b border-gray-100">
                                 <span className="text-sm font-medium text-gray-700 flex items-center">
-                                    <Eye size={16} className="mr-2 text-[#065F46]" />
+                                    <Eye size={16} className="me-2 text-[#065F46]" />
                                     {t('supplierInvoice.documentPreview', 'Document Preview')}
                                 </span>
-                                <button
-                                    onClick={() => setShowDocPreview(!showDocPreview)}
-                                    className="text-xs px-2 py-1 bg-gray-200 text-gray-600 rounded hover:bg-gray-300"
-                                >
+                                <button onClick={() => setShowDocPreview(!showDocPreview)} className="text-xs px-2 py-1 bg-gray-200 text-gray-600 rounded hover:bg-gray-300">
                                     {showDocPreview ? t('common.hide', 'Hide') : t('common.show', 'Show')}
                                 </button>
                             </div>
                             {showDocPreview && (
                                 <div className="p-2">
                                     {tempFileType?.startsWith('image/') ? (
-                                        <img
-                                            src={previewFileUrl || ''}
-                                            alt={tempFileName || 'Uploaded document'}
-                                            className="w-full rounded-lg object-contain max-h-[70vh]"
-                                        />
+                                        <img src={previewFileUrl || ''} alt={tempFileName || 'Uploaded document'} className="w-full rounded-lg object-contain max-h-[70vh]" />
                                     ) : (
-                                        <iframe
-                                            src={previewFileUrl || ''}
-                                            className="w-full rounded-lg border-0"
-                                            style={{ height: '70vh' }}
-                                            title={tempFileName || 'PDF Preview'}
-                                        />
+                                        <iframe src={previewFileUrl || ''} className="w-full rounded-lg border-0" style={{ height: '70vh' }} title={tempFileName || 'PDF Preview'} />
                                     )}
                                 </div>
                             )}
@@ -1670,284 +1367,156 @@ export default function SupplierInvoicesPage() {
                     </div>
                 )}
 
-                {/* Form Fields */}
                 <div className="flex-1 space-y-6">
-
-            {/* Header Fields */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                    <FileText size={20} className="mr-2 text-[#065F46]" />
-                    {t('supplierInvoice.invoiceDetails', 'Invoice Details')}
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {/* Supplier Selection */}
-                    <div className="lg:col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('supplierInvoice.supplier', 'Supplier')}</label>
-                        <div className="flex gap-2">
-                            <select
-                                value={selectedSupplierId || ''}
-                                onChange={e => {
-                                    const val = e.target.value ? parseInt(e.target.value) : null;
-                                    setSelectedSupplierId(val);
-                                    if (val) {
-                                        const s = suppliers.find(sup => sup.id === val);
-                                        if (s) {
-                                            setHeaderData(prev => ({
-                                                ...prev,
-                                                supplierName: s.name,
-                                                supplierAddress: s.address || prev.supplierAddress,
-                                                supplierPhone: s.phone || prev.supplierPhone,
-                                            }));
-                                        }
-                                    }
-                                }}
-                                className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
-                            >
-                                <option value="">-- {t('supplierInvoice.selectSupplier', 'Select existing or create new')} --</option>
-                                {suppliers.map(s => (
-                                    <option key={s.id} value={s.id}>{s.name}</option>
-                                ))}
-                            </select>
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                            <FileText size={20} className="me-2 text-[#065F46]" />
+                            {t('supplierInvoice.invoiceDetails', 'Invoice Details')}
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div className="lg:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">{t('supplierInvoice.supplier', 'Supplier')}</label>
+                                <div className="flex gap-2">
+                                    <select
+                                        value={selectedSupplierId || ''}
+                                        onChange={e => {
+                                            const val = e.target.value ? parseInt(e.target.value) : null;
+                                            setSelectedSupplierId(val);
+                                            if (val) {
+                                                const s = suppliers.find(sup => sup.id === val);
+                                                if (s) setHeaderData(prev => ({ ...prev, supplierName: s.name, supplierAddress: s.address || prev.supplierAddress, supplierPhone: s.phone || prev.supplierPhone }));
+                                            }
+                                        }}
+                                        className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                                    >
+                                        <option value="">-- {t('supplierInvoice.selectSupplier', 'Select existing or create new')} --</option>
+                                        {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                    </select>
+                                </div>
+                                {!selectedSupplierId && (
+                                    <input
+                                        type="text" value={headerData.supplierName} onChange={e => setHeaderData(prev => ({ ...prev, supplierName: e.target.value }))}
+                                        placeholder={t('supplierInvoice.newSupplierName', 'Or type new supplier name')}
+                                        className="w-full mt-2 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                                    />
+                                )}
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">{t('supplierInvoice.invoiceNumber', 'Invoice Number')}</label>
+                                <input type="text" value={headerData.invoiceNumber} onChange={e => setHeaderData(prev => ({ ...prev, invoiceNumber: e.target.value }))} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">{t('supplierInvoice.invoiceDate', 'Invoice Date')}</label>
+                                <input type="date" value={headerData.invoiceDate} onChange={e => setHeaderData(prev => ({ ...prev, invoiceDate: e.target.value }))} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                                    <Calendar size={14} className="me-1 text-gray-400" />
+                                    {t('supplierInvoice.dueDate', 'Due Date')}
+                                </label>
+                                <input type="date" value={headerData.dueDate} onChange={e => setHeaderData(prev => ({ ...prev, dueDate: e.target.value }))} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">📞 {t('common.phone', 'Phone')}</label>
+                                <input type="text" value={headerData.supplierPhone} onChange={e => setHeaderData(prev => ({ ...prev, supplierPhone: e.target.value }))} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">📍 {t('common.address', 'Address')}</label>
+                                <input type="text" value={headerData.supplierAddress} onChange={e => setHeaderData(prev => ({ ...prev, supplierAddress: e.target.value }))} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none" />
+                            </div>
                         </div>
-                        {!selectedSupplierId && (
-                            <input
-                                type="text"
-                                value={headerData.supplierName}
-                                onChange={e => setHeaderData(prev => ({ ...prev, supplierName: e.target.value }))}
-                                placeholder={t('supplierInvoice.newSupplierName', 'Or type new supplier name')}
-                                className="w-full mt-2 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
-                            />
+
+                        <div className="mt-4 pt-4 border-t border-gray-100">
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">{t('supplierInvoice.documentCurrency', 'Document Currency')}</label>
+                                <select
+                                    value={supplierCurrency}
+                                    onChange={e => { setSupplierCurrency(e.target.value); setSupplierCurrencySymbol(getCurrencySymbol(e.target.value)); }}
+                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none transition-all"
+                                >
+                                    {CURRENCY_OPTIONS.map(opt => <option key={opt.code} value={opt.code}>{opt.label}</option>)}
+                                </select>
+                            </div>
+                            <div className="grid grid-cols-3 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-blue-600 mb-1">{t('invoice.totalHT', 'Subtotal HT')}</label>
+                                    <input type="number" step="0.001" value={headerData.totalHT} onChange={e => setHeaderData(prev => ({ ...prev, totalHT: e.target.value }))} className="w-full px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-lg font-bold text-blue-800 text-center" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-amber-600 mb-1">TVA</label>
+                                    <input type="number" step="0.001" value={headerData.tva} onChange={e => setHeaderData(prev => ({ ...prev, tva: e.target.value }))} className="w-full px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none text-lg font-bold text-amber-800 text-center" />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-emerald-600 mb-1">{t('invoice.totalTTC', 'Total TTC')}</label>
+                                    <input type="number" step="0.001" value={headerData.totalTTC} onChange={e => setHeaderData(prev => ({ ...prev, totalTTC: e.target.value }))} className="w-full px-3 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-lg font-bold text-emerald-800 text-center" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                                <Edit2 size={20} className="me-2 text-[#065F46]" />
+                                {t('supplierInvoice.lineItems', 'Line Items')}
+                            </h3>
+                            <button onClick={addLineItem} className="flex items-center px-3 py-1.5 bg-[#065F46]/5 text-[#065F46] rounded-lg hover:bg-[#065F46]/10 transition-colors text-sm font-medium">
+                                <Plus size={16} className="me-1" />
+                                {t('supplierInvoice.addItem', 'Add Item')}
+                            </button>
+                        </div>
+
+                        {lineItems.length === 0 ? (
+                            <div className="text-center py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                                <p className="text-gray-500">{t('supplierInvoice.noLineItems', 'No line items extracted.')}</p>
+                                <button onClick={addLineItem} className="mt-3 px-4 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#047857] text-sm">
+                                    {t('supplierInvoice.addFirstItem', 'Add First Item')}
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full">
+                                    <thead>
+                                        <tr className="bg-gray-50">
+                                            <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase w-2/5">{t('invoice.description', 'Description')}</th>
+                                            <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 uppercase w-16">{t('invoice.qty', 'Qty')}</th>
+                                            <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase w-28">{t('invoice.unitPrice', 'Unit Price')}</th>
+                                            <th className="px-3 py-2 w-10"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {lineItems.map(item => (
+                                            <tr key={item.id} className="group hover:bg-gray-50">
+                                                <td className="px-3 py-2 text-left">
+                                                    <input type="text" value={item.description} onChange={e => updateLineItem(item.id, 'description', e.target.value)} className="w-full px-2 py-1.5 bg-transparent border border-transparent hover:border-gray-300 focus:border-[#065F46] rounded focus:ring-1 focus:ring-[#065F46] outline-none text-sm" />
+                                                </td>
+                                                <td className="px-3 py-2 text-center">
+                                                    <input type="number" min="1" value={item.quantity} onChange={e => updateLineItem(item.id, 'quantity', parseInt(e.target.value) || 1)} className="w-full px-2 py-1.5 bg-transparent border border-transparent hover:border-gray-300 focus:border-[#065F46] rounded focus:ring-1 focus:ring-[#065F46] outline-none text-sm text-center" />
+                                                </td>
+                                                <td className="px-3 py-2 text-right">
+                                                    <input type="number" step="0.001" value={item.unitPrice} onChange={e => updateLineItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1.5 bg-transparent border border-transparent hover:border-gray-300 focus:border-[#065F46] rounded focus:ring-1 focus:ring-[#065F46] outline-none text-sm text-right" />
+                                                </td>
+                                                <td className="px-3 py-2">
+                                                    <button onClick={() => removeLineItem(item.id)} className="p-1 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16} /></button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         )}
                     </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('supplierInvoice.invoiceNumber', 'Invoice Number')}</label>
-                        <input
-                            type="text"
-                            value={headerData.invoiceNumber}
-                            onChange={e => setHeaderData(prev => ({ ...prev, invoiceNumber: e.target.value }))}
-                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
-                            placeholder={t('supplierInvoice.invoiceNumberPlaceholder', 'e.g. FACT-2025-001')}
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('supplierInvoice.invoiceDate', 'Invoice Date')}</label>
-                        <input
-                            type="date"
-                            value={headerData.invoiceDate}
-                            onChange={e => setHeaderData(prev => ({ ...prev, invoiceDate: e.target.value }))}
-                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
-                            <Calendar size={14} className="mr-1 text-gray-400" />
-                            {t('supplierInvoice.dueDate', 'Due Date')}
-                        </label>
-                        <input
-                            type="date"
-                            value={headerData.dueDate}
-                            onChange={e => setHeaderData(prev => ({ ...prev, dueDate: e.target.value }))}
-                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
-                        />
-                    </div>
-                    {/* Supplier Phone */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">📞 {t('common.phone', 'Phone')}</label>
-                        <input
-                            type="text"
-                            value={headerData.supplierPhone}
-                            onChange={e => setHeaderData(prev => ({ ...prev, supplierPhone: e.target.value }))}
-                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
-                            placeholder="+216..."
-                        />
-                    </div>
-                    {/* Supplier Address */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">📍 {t('common.address', 'Address')}</label>
-                        <input
-                            type="text"
-                            value={headerData.supplierAddress}
-                            onChange={e => setHeaderData(prev => ({ ...prev, supplierAddress: e.target.value }))}
-                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
-                            placeholder={t('supplier.addressPlaceholder', 'Supplier address...')}
-                        />
-                    </div>
-                </div>
-
-                {/* Totals - manually editable */}
-                <div className="mt-4 pt-4 border-t border-gray-100">
-                    {/* Currency selection */}
-                    <div className="mb-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">{t('supplierInvoice.documentCurrency', 'Document Currency')}</label>
-                        <select
-                            value={supplierCurrency}
-                            onChange={e => {
-                                setSupplierCurrency(e.target.value);
-                                setSupplierCurrencySymbol(getCurrencySymbol(e.target.value));
-                            }}
-                            className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none transition-all"
-                        >
-                            {CURRENCY_OPTIONS.map(opt => (
-                                <option key={opt.code} value={opt.code}>{opt.label}</option>
-                            ))}
-                        </select>
-                        <p className="text-xs text-gray-500 mt-1">{t('supplierInvoice.currencyOfInvoice', 'Currency of this supplier invoice')}</p>
-                    </div>
-                    <div className="grid grid-cols-3 gap-3">
-                        <div>
-                            <label className="block text-xs font-medium text-blue-600 mb-1">{t('invoice.totalHT', 'Subtotal HT')}</label>
-                            <input
-                                type="number"
-                                step="0.001"
-                                value={headerData.totalHT}
-                                onChange={e => setHeaderData(prev => ({ ...prev, totalHT: e.target.value }))}
-                                className="w-full px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-lg font-bold text-blue-800 text-center"
-                                placeholder="0.000"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-amber-600 mb-1">TVA</label>
-                            <input
-                                type="number"
-                                step="0.001"
-                                value={headerData.tva}
-                                onChange={e => setHeaderData(prev => ({ ...prev, tva: e.target.value }))}
-                                className="w-full px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none text-lg font-bold text-amber-800 text-center"
-                                placeholder="0.000"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-emerald-600 mb-1">{t('invoice.totalTTC', 'Total TTC')}</label>
-                            <input
-                                type="number"
-                                step="0.001"
-                                value={headerData.totalTTC}
-                                onChange={e => setHeaderData(prev => ({ ...prev, totalTTC: e.target.value }))}
-                                className="w-full px-3 py-2.5 bg-emerald-50 border border-emerald-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-lg font-bold text-emerald-800 text-center"
-                                placeholder="0.000"
-                            />
-                        </div>
-                    </div>
                 </div>
             </div>
 
-            {/* Line Items Table */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                        <Edit2 size={20} className="mr-2 text-[#065F46]" />
-                        {t('supplierInvoice.lineItems', 'Line Items')}
-                    </h3>
-                    <button
-                        onClick={addLineItem}
-                        className="flex items-center px-3 py-1.5 bg-[#065F46]/5 text-[#065F46] rounded-lg hover:bg-[#065F46]/10 transition-colors text-sm font-medium"
-                    >
-                        <Plus size={16} className="mr-1" />
-                        {t('supplierInvoice.addItem', 'Add Item')}
-                    </button>
-                </div>
-
-                {lineItems.length === 0 ? (
-                    <div className="text-center py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-                        <p className="text-gray-500">{t('supplierInvoice.noLineItems', 'No line items extracted.')}</p>
-                        <button
-                            onClick={addLineItem}
-                            className="mt-3 px-4 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#047857] text-sm"
-                        >
-                            {t('supplierInvoice.addFirstItem', 'Add First Item')}
-                        </button>
-                    </div>
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full">
-                            <thead>
-                                <tr className="bg-gray-50">
-                                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase w-2/5">{t('invoice.description', 'Description')}</th>
-                                    <th className="px-3 py-2 text-center text-xs font-semibold text-gray-500 uppercase w-16">{t('invoice.qty', 'Qty')}</th>
-                                    <th className="px-3 py-2 text-right text-xs font-semibold text-gray-500 uppercase w-28">{t('invoice.unitPrice', 'Unit Price')}</th>
-                                    <th className="px-3 py-2 w-10"></th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {lineItems.map(item => (
-                                    <tr key={item.id} className="group hover:bg-gray-50">
-                                        <td className="px-3 py-2 text-left">
-                                            <input
-                                                type="text"
-                                                value={item.description}
-                                                onChange={e => updateLineItem(item.id, 'description', e.target.value)}
-                                                className="w-full px-2 py-1.5 bg-transparent border border-transparent hover:border-gray-300 focus:border-[#065F46] rounded focus:ring-1 focus:ring-[#065F46] outline-none text-sm"
-                                                placeholder={t('invoice.itemDescription', 'Item description')}
-                                            />
-                                        </td>
-                                        <td className="px-3 py-2 text-center">
-                                            <input
-                                                type="number"
-                                                min="1"
-                                                value={item.quantity}
-                                                onChange={e => updateLineItem(item.id, 'quantity', parseInt(e.target.value) || 1)}
-                                                className="w-full px-2 py-1.5 bg-transparent border border-transparent hover:border-gray-300 focus:border-[#065F46] rounded focus:ring-1 focus:ring-[#065F46] outline-none text-sm text-center"
-                                            />
-                                        </td>
-                                        <td className="px-3 py-2 text-right">
-                                            <input
-                                                type="number"
-                                                step="0.001"
-                                                value={item.unitPrice}
-                                                onChange={e => updateLineItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)}
-                                                className="w-full px-2 py-1.5 bg-transparent border border-transparent hover:border-gray-300 focus:border-[#065F46] rounded focus:ring-1 focus:ring-[#065F46] outline-none text-sm text-right"
-                                            />
-                                        </td>
-
-                                        <td className="px-3 py-2">
-                                            <button
-                                                onClick={() => removeLineItem(item.id)}
-                                                className="p-1 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-
-
-                    </div>
-                )}
-            </div>
-
-            </div>{/* end form fields */}
-            </div>{/* end split layout */}
-
-            {/* Bottom Action Bar */}
             <div className="sticky bottom-0 bg-white border-t border-gray-200 p-4 -mx-6 px-6 rounded-b-2xl flex justify-between items-center shadow-lg">
                 <div className="text-sm text-gray-500">
                     {lineItems.length} {t('supplierInvoice.itemsCount', 'item(s)')} | {t('common.total', 'Total')}: <span className="font-bold text-[#065F46]">{formatCurrency(parseFloat(headerData.totalTTC) || 0, supplierCurrencySymbol || DEFAULT_CURRENCY)}</span>
                 </div>
                 <div className="flex gap-3">
-                    <button
-                        onClick={handleDiscard}
-                        className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200"
-                    >
-                        {t('common.discard', 'Discard')}
-                    </button>
-                    <button
-                        onClick={handleConfirm}
-                        disabled={saving}
-                        className="flex items-center px-6 py-2 bg-emerald-600 text-white rounded-xl shadow-lg hover:bg-emerald-700 transition-all disabled:opacity-50"
-                    >
-                        {saving ? (
-                            <>
-                                <Loader2 size={18} className="mr-2 animate-spin" />
-                                {t('common.saving', 'Saving...')}
-                            </>
-                        ) : (
-                            <>
-                                <CheckCircle size={18} className="mr-2" />
-                                {t('supplierInvoice.confirmSave', 'Confirm & Save')}
-                            </>
-                        )}
+                    <button onClick={handleDiscard} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200">{t('common.discard', 'Discard')}</button>
+                    <button onClick={handleConfirm} disabled={saving} className="flex items-center px-6 py-2 bg-emerald-600 text-white rounded-xl shadow-lg hover:bg-emerald-700 transition-all disabled:opacity-50">
+                        {saving ? <><Loader2 size={18} className="me-2 animate-spin" />{t('common.saving', 'Saving...')}</> : <><CheckCircle size={18} className="me-2" />{t('supplierInvoice.confirmSave', 'Confirm & Save')}</>}
                     </button>
                 </div>
             </div>

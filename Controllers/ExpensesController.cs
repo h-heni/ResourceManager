@@ -209,14 +209,6 @@ namespace ResourceManager.Controllers
             }
             var allSupplierInvoices = await supplierInvoicesQuery.ToListAsync();
 
-            // Include historical (imported) expenses so totals match the Dashboard
-            var historicalQuery = _context.HistoricalExpenses.AsNoTracking().AsQueryable();
-            if (!isAllYears)
-            {
-                historicalQuery = historicalQuery.Where(h => h.Date.Year == selectedYear);
-            }
-            var allHistoricalExpenses = await historicalQuery.ToListAsync();
-
             // ═══ Per-currency breakdown ═══
             // Local helper: coalesce null/empty/whitespace currency to defaultCurrency before normalization
             string Cur(string? raw) => NormalizeCurrency(string.IsNullOrWhiteSpace(raw) ? defaultCurrency : raw);
@@ -249,23 +241,9 @@ namespace ResourceManager.Controllers
                 })
                 .ToList();
 
-            // Historical expenses per currency
-            var historicalByCurrency = allHistoricalExpenses
-                .GroupBy(h => Cur(h.Currency))
-                .Select(g => new
-                {
-                    Currency = g.Key,
-                    TotalAll = g.Sum(h => h.AmountPaid),
-                    TotalThisMonth = g.Where(h => h.Date >= startOfMonth).Sum(h => h.AmountPaid),
-                    TotalThisYear = g.Where(h => h.Date >= startOfYear).Sum(h => h.AmountPaid),
-                    Count = g.Count()
-                })
-                .ToList();
-
-            // Merge expense + supplier + historical totals per currency
+            // Merge expense + supplier totals per currency
             var allCurrencies = byCurrency.Select(b => b.Currency)
                 .Union(supplierByCurrency.Select(s => s.Currency))
-                .Union(historicalByCurrency.Select(h => h.Currency))
                 .Distinct()
                 .ToList();
 
@@ -273,15 +251,14 @@ namespace ResourceManager.Controllers
             {
                 var exp = byCurrency.FirstOrDefault(b => b.Currency == cur);
                 var sup = supplierByCurrency.FirstOrDefault(s => s.Currency == cur);
-                var hist = historicalByCurrency.FirstOrDefault(h => h.Currency == cur);
                 return new
                 {
                     Currency = cur,
                     CurrencySymbol = exp?.CurrencySymbol ?? cur,
-                    TotalAll = (exp?.TotalAll ?? 0) + (sup?.TotalPaid ?? 0) + (hist?.TotalAll ?? 0),
-                    TotalThisMonth = (exp?.TotalThisMonth ?? 0) + (sup?.TotalThisMonth ?? 0) + (hist?.TotalThisMonth ?? 0),
-                    TotalThisYear = (exp?.TotalThisYear ?? 0) + (sup?.TotalThisYear ?? 0) + (hist?.TotalThisYear ?? 0),
-                    Count = (exp?.Count ?? 0) + (sup?.Count ?? 0) + (hist?.Count ?? 0)
+                    TotalAll = (exp?.TotalAll ?? 0) + (sup?.TotalPaid ?? 0),
+                    TotalThisMonth = (exp?.TotalThisMonth ?? 0) + (sup?.TotalThisMonth ?? 0),
+                    TotalThisYear = (exp?.TotalThisYear ?? 0) + (sup?.TotalThisYear ?? 0),
+                    Count = (exp?.Count ?? 0) + (sup?.Count ?? 0)
                 };
             })
             .OrderByDescending(c => c.TotalAll)
@@ -324,31 +301,13 @@ namespace ResourceManager.Controllers
                 byCategory.Add(sc);
             }
 
-            // Add historical (imported) expenses as a category per currency
-            var historicalByCategory = allHistoricalExpenses
-                .Where(h => h.AmountPaid > 0)
-                .GroupBy(h => Cur(h.Currency))
-                .Select(g => new
-                {
-                    Category = "imported_expenses",
-                    Currency = g.Key,
-                    Total = g.Sum(h => h.AmountPaid),
-                    Count = g.Count()
-                })
-                .ToList();
-
-            foreach (var hc in historicalByCategory)
-            {
-                byCategory.Add(hc);
-            }
-
             return Ok(new
             {
                 TotalAll = totalAll,
                 TotalThisMonth = totalThisMonth,
                 TotalThisYear = totalThisYear,
                 ByCategory = byCategory,
-                Count = allExpenses.Count + allSupplierInvoices.Count(si => si.AmountPaid > 0) + allHistoricalExpenses.Count,
+                Count = allExpenses.Count + allSupplierInvoices.Count(si => si.AmountPaid > 0),
                 CurrencyBreakdowns = currencyBreakdowns,
                 DefaultCurrency = defaultCurrency
             });

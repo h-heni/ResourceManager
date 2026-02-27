@@ -158,7 +158,7 @@ export default function DashboardPage() {
                 api.get(`/Expenses/summary${expenseYearQs}`),
                 api.get(`/Dashboard/revenue-summary${queryParam}`),
                 api.get(`/Invoices/archived/count${archivedYearQs}`),
-                api.get(`/Dashboard/purchases-summary${queryParam}`)
+                api.get(`/SupplierInvoices${queryParam}`)
             ]);
 
             let archivedCountFallback: number | null = null;

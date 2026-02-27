@@ -33,18 +33,55 @@ namespace ResourceManager.Controllers
         // GET: api/SupplierInvoices - List all supplier invoices
         // ═══════════════════════════════════════════════════════════════
         [HttpGet]
-        public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int size = 20)
+        public async Task<IActionResult> GetAll(
+        [FromQuery] int page = 1,
+        [FromQuery] int size = 20,
+        [FromQuery] int? year = null,
+        [FromQuery] string? status = null,
+        [FromQuery] bool onlyCount = false)
         {
             try
             {
                 if (page < 1) page = 1;
                 if (size < 1) size = 20;
 
-                var query = _context.SupplierInvoices
-                    .AsNoTracking()
-                    .Include(f => f.Supplier)
+                var query = _context.SupplierInvoices.AsNoTracking().Include(f => f.Supplier)
                     .Include(f => f.Items)
-                    .Include(f => f.Payments)
+                    .Include(f => f.Payments).AsQueryable();
+
+                // 1. Filter by Year (if provided)
+                if (year.HasValue && year.Value > 0)
+                {
+                    query = query.Where(f => f.InvoiceDate.HasValue && f.InvoiceDate.Value.Year == year.Value);
+                }
+
+                // 2. Filter by Status 
+                // We use AmountPaid and TotalTTC to avoid the EF Core Translation error on 'PaymentStatus'
+                if (!string.IsNullOrEmpty(status))
+                {
+                    if (status == "Paid")
+                    {
+                        // Archived: Bring ONLY Paid
+                        // The AmountPaid covers or is greater than the TotalTTC
+                        query = query.Where(f => f.PaymentStatus == "Paid");
+                    }
+                    else if (status == "Pending")    
+                    {
+                        // Active: Bring ALL NOT PAID
+                        // The AmountPaid is strictly less than TotalTTC, or Total is 0/null
+                        query = query.Where(f => f.PaymentStatus != "Paid");
+                    }
+                }
+
+                // 3. Return Count Only (For the fast badging feature)
+                if (onlyCount)
+                {
+                    var count = await query.CountAsync();
+                    return Ok(new { TotalCount = count });
+                }
+
+                // 4. Return Full Objects
+                query = query
                     .OrderByDescending(f => f.CreatedAt);
 
                 var totalCount = await query.CountAsync();
@@ -53,6 +90,9 @@ namespace ResourceManager.Controllers
                     .Take(size)
                     .ToListAsync();
 
+                // 5. Select Data
+                // Mapping `f.PaymentStatus` here works perfectly because `ToListAsync()` 
+                // has already downloaded the data into memory.
                 var result = list.Select(f => new
                 {
                     f.Id,
@@ -66,22 +106,28 @@ namespace ResourceManager.Controllers
                     f.ExtractionStatus,
                     f.ConfidenceScore,
                     f.CreatedAt,
-                    SupplierName = f.Supplier != null ? f.Supplier.Name : null,
+                    SupplierName = f.Supplier?.Name,
                     f.SupplierId,
-                    ItemCount = f.Items != null ? f.Items.Count : 0,
+                    ItemCount = f.Items?.Count ?? 0,
                     f.AmountPaid,
                     f.PendingAmount,
                     f.RemainingAmount,
                     f.PaymentStatus,
-                    PaymentCount = f.Payments != null ? f.Payments.Count : 0,
+                    PaymentCount = f.Payments?.Count ?? 0,
                     f.FilePath,
                     f.IsDeleted,
                     f.Currency,
                     f.CurrencySymbol,
-                    Payments = f.Payments != null ? f.Payments.OrderByDescending(p => p.PaymentDate).Select(p => new
+                    Payments = f.Payments?.OrderByDescending(p => p.PaymentDate).Select(p => new
                     {
-                        p.Id, p.Amount, p.PaymentDate, p.Notes, p.Status, p.IsScheduled, p.CreatedAt
-                    }) : Enumerable.Empty<object>()
+                        p.Id,
+                        p.Amount,
+                        p.PaymentDate,
+                        p.Notes,
+                        p.Status,
+                        p.IsScheduled,
+                        p.CreatedAt
+                    }) ?? Enumerable.Empty<object>()
                 });
 
                 return Ok(new
@@ -550,19 +596,33 @@ namespace ResourceManager.Controllers
                 var maxAllowed = Math.Max(0, totalAmount - existingPaid - existingPending);
                 return BadRequest(new { message = $"Payment would exceed invoice total. Maximum allowed: {maxAllowed:N3}" });
             }
+            var  TotalPaidAfter = existingPaid + newCompleted + existingPending + newPending;
+            if (TotalPaidAfter >= totalAmount)
+            {
+                invoice.PaymentStatus = "Paid";
+            }
+            else if (TotalPaidAfter > 0 && TotalPaidAfter<= totalAmount)
+            {
+                invoice.PaymentStatus = "PartiallyPaid";
+            }
+            else
+            {
+                invoice.PaymentStatus = "Pending";
+            }
 
             var payment = new SupplierPayment
-            {
-                SupplierInvoiceId = id,
-                Amount = dto.Amount,
-                PaymentDate = dto.PaymentDate ?? DateTime.UtcNow,
-                Notes = dto.Notes,
-                Status = dto.Status ?? "Completed",
-                CreatedByUserId = userId,
-                CreatedAt = DateTime.UtcNow,
-                ConfirmedByUserId = (dto.Status ?? "Completed") == "Completed" ? userId : null,
-                ConfirmedAt = (dto.Status ?? "Completed") == "Completed" ? DateTime.UtcNow : null
-            };
+                {
+                    SupplierInvoiceId = id,
+                    Amount = dto.Amount,
+                    PaymentDate = dto.PaymentDate ?? DateTime.UtcNow,
+                    Notes = dto.Notes,
+                    Status = dto.Status ?? "Completed",
+                    CreatedByUserId = userId,
+                    CreatedAt = DateTime.UtcNow,
+                    ConfirmedByUserId = (dto.Status ?? "Completed") == "Completed" ? userId : null,
+                    ConfirmedAt = (dto.Status ?? "Completed") == "Completed" ? DateTime.UtcNow : null
+                };
+
             _context.SupplierPayments.Add(payment);
             await _context.SaveChangesAsync();
 

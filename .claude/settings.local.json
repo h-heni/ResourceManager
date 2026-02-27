@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd .:*)",
+      "Bash(cd:*)",
+      "Bash(echo Port check failed:*)",
+      "Bash(cd \"C:/Users/hp/OneDrive/Desktop/ResourceManager/ClientApp\" && node scripts/capture-screenshots.mjs 2>&1)",
+      "Bash(cd \"C:/Users/hp/OneDrive/Desktop/ResourceManager/ClientApp\" && node scripts/capture-authenticated.mjs 2>&1)",
+      "Bash(head:*)",
+      "Bash(curl:*)",
+      "Bash(cd \"C:/Users/hp/OneDrive/Desktop/ResourceManager/ClientApp\" && npm run build 2>&1)",
+      "Bash(tail:*)",
+      "Bash(grep:*)",
+      "Bash(echo File restored:*)",
+      "Bash(echo Restored from git:*)",
+      "Bash(echo Restored from backup:*)",
+      "Bash(echo Timed out:*)",
+      "Bash(git status:*)",
+      "Bash(npm run:*)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(dotnet run --no-build)"
+    ]
+  }
+}

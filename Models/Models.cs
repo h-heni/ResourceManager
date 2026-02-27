@@ -69,12 +69,12 @@ namespace ResourceManager.Models
         
         // Per-document currency (overrides company defaults)
         public string? Currency { get; set; }
+        public string? Category { get; set; }
         public string? CurrencySymbol { get; set; }
         
         public int? SupplierId { get; set; }
         public Supplier? Supplier { get; set; } = null!;
-        public int? InvoiceId { get; set; }
-        public Invoice? Invoice { get; set; } = null!;
+
         public DateTime CreatedAt { get; set; }
         public bool IsDeleted { get; set; } = false;
         [Required]
@@ -104,10 +104,9 @@ namespace ResourceManager.Models
         /// </summary>
         [NotMapped]
         public decimal RemainingAmount => Math.Max(0, (TotalTTC ?? 0) - (AmountPaid + PendingAmount));
-        [NotMapped]
-        public string PaymentStatus => AmountPaid >= (TotalTTC ?? 0) && (TotalTTC ?? 0) > 0 ? "Paid"
-            : AmountPaid > 0 ? "PartiallyPaid"
-            : "Pending";
+
+        public string PaymentStatus { get; set; }= "Pending"; // 'Pending', 'PartiallyPaid', 'Paid' 
+            
     }
     
     public class SupplierPayment
@@ -234,6 +233,7 @@ namespace ResourceManager.Models
         
         // Token-based verification signature (Pro Invoice feature)
         public string? VerificationToken { get; set; }
+        public string? Category { get; set; }
         public DateTime? VerificationTokenCreatedAt { get; set; }
 
         public void CalculTotalAmount()
@@ -810,6 +810,9 @@ namespace ResourceManager.Models
 
         [StringLength(200)]
         public string? Reference { get; set; }
+
+        [StringLength(100)]
+        public string? InvoiceNumber { get; set; }
 
         /// <summary>Marks this record as imported historical data</summary>
         public bool IsHistorical { get; set; } = true;
