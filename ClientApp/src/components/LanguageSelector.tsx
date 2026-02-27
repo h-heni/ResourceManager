@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Globe, ChevronDown } from 'lucide-react';
 import { setAppLanguage } from '../i18n/index';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 const languages = [
   { code: 'fr', name: 'Français', flag: '🇫🇷' },
@@ -15,7 +16,8 @@ export default function LanguageSelector() {
   const { i18n, t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  
+  const { isAuthenticated } = useAuth();
+
   const currentLang = languages.find(l => l.code === i18n.language) || languages[0];
 
   // Close dropdown when clicking outside
@@ -32,8 +34,10 @@ export default function LanguageSelector() {
   const changeLanguage = (langCode: string) => {
     // Use the authoritative setter (persists + sets i18n + RTL)
     setAppLanguage(langCode);
-    // Also save to backend so it persists across devices
-    api.put('/Settings', { invoiceLanguage: langCode }).catch(() => {});
+    // Only save to backend if user is authenticated
+    if (isAuthenticated) {
+      api.put('/Settings', { invoiceLanguage: langCode }).catch(() => {});
+    }
     setIsOpen(false);
   };
 

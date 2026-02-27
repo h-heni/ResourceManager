@@ -50,18 +50,6 @@ namespace ResourceManager.Controllers
                     .Distinct()
                     .ToListAsync();
 
-                var historicalRevenueYears = await _context.HistoricalRevenues
-                    .AsNoTracking()
-                    .Select(h => h.Date.Year)
-                    .Distinct()
-                    .ToListAsync();
-
-                var historicalExpenseYears = await _context.HistoricalExpenses
-                    .AsNoTracking()
-                    .Select(h => h.Date.Year)
-                    .Distinct()
-                    .ToListAsync();
-
                 // Include OtherExpenses years so the year picker shows years that only have other expenses
                 var otherExpenseYears = await _context.OtherExpenses
                     .AsNoTracking()
@@ -71,8 +59,6 @@ namespace ResourceManager.Controllers
 
                 var availableYears = clientYears
                     .Union(supplierYears)
-                    .Union(historicalRevenueYears)
-                    .Union(historicalExpenseYears)
                     .Union(otherExpenseYears)
                     .Distinct()
                     .OrderByDescending(y => y)
@@ -111,13 +97,6 @@ namespace ResourceManager.Controllers
                 .Include(i => i.Client)
                 .Include(i => i.Quote)
                 .Include(i => i.InvoiceItems)
-                .ToListAsync();
-
-            // Also load historical revenues (filtered by year at DB)
-            var yearHistoricalRevenues = await _context.HistoricalRevenues
-                .AsNoTracking()
-                .Where(h => h.Date >= startOfYear && h.Date < endOfYear)
-                .Include(h => h.Client)
                 .ToListAsync();
 
             // ═══ Multi-Currency: Determine available currencies ═══
@@ -169,25 +148,15 @@ namespace ResourceManager.Controllers
                 .AsNoTracking()
                 .Where(e => e.Date >= startOfYear && e.Date < endOfYear)
                 .ToListAsync();
-            var yearHistoricalExpenses = await _context.HistoricalExpenses
-                .AsNoTracking()
-                .Where(h => h.Date >= startOfYear && h.Date < endOfYear)
-                .ToListAsync();
 
             var expenseCurrencies = yearOtherExpenses
                 .Select(e => NC(e.Currency))
                 .Distinct()
                 .ToList();
 
-            // Include historical data currencies
-            var histRevCurrencies = yearHistoricalRevenues.Select(h => NC(h.Currency)).Distinct();
-            var histExpCurrencies = yearHistoricalExpenses.Select(h => NC(h.Currency)).Distinct();
-
             var availableCurrencies = invoiceCurrencies
                 .Union(supplierCurrencies)
                 .Union(expenseCurrencies)
-                .Union(histRevCurrencies)
-                .Union(histExpCurrencies)
                 .Union(new[] { defaultCurrency })
                 .Distinct()
                 .OrderBy(c => c == defaultCurrency ? "" : c)
@@ -230,15 +199,6 @@ namespace ResourceManager.Controllers
                         currencyBreakdownRevenue[invCurrency] = 0;
                     currencyBreakdownRevenue[invCurrency] += confirmedPaid;
                 }
-
-                foreach (var h in yearHistoricalRevenues)
-                {
-                    var hCurrency = NC(h.Currency);
-                    totalRevenue += ConvertAmount(h.AmountPaid, hCurrency);
-                    if (!currencyBreakdownRevenue.ContainsKey(hCurrency))
-                        currencyBreakdownRevenue[hCurrency] = 0;
-                    currencyBreakdownRevenue[hCurrency] += h.AmountPaid;
-                }
             }
             else
             {
@@ -251,15 +211,7 @@ namespace ResourceManager.Controllers
                     .ToList();
 
                 totalRevenue = revenueInvoices.Sum(i => i.AmountPaid); // Only confirmed payments count as revenue
-                totalRevenue += yearHistoricalRevenues
-                    .Where(h => NC(h.Currency) == selectedCurrency)
-                    .Sum(h => h.AmountPaid);
             }
-
-            var filteredHistoricalRevenues = isMixedMode
-                ? yearHistoricalRevenues
-                : yearHistoricalRevenues.Where(h => NC(h.Currency) == selectedCurrency).ToList();
-            var importedSalesCount = filteredHistoricalRevenues.Count;
 
             // ═══ Filter expenses ═══
             List<SupplierInvoice> filteredSupplierInvoices;
@@ -291,14 +243,6 @@ namespace ResourceManager.Controllers
                         currencyBreakdownExpense[eCurrency] = 0;
                     currencyBreakdownExpense[eCurrency] += e.Amount;
                 }
-                foreach (var h in yearHistoricalExpenses)
-                {
-                    var hCurrency = NC(h.Currency);
-                    totalExpenses += ConvertAmount(h.AmountPaid, hCurrency);
-                    if (!currencyBreakdownExpense.ContainsKey(hCurrency))
-                        currencyBreakdownExpense[hCurrency] = 0;
-                    currencyBreakdownExpense[hCurrency] += h.AmountPaid;
-                }
             }
             else
             {
@@ -315,10 +259,6 @@ namespace ResourceManager.Controllers
 
                 totalExpenses = filteredOtherExpenses.Sum(e => e.Amount)
                     + supplierPaidAmount;
-
-                totalExpenses += yearHistoricalExpenses
-                    .Where(h => NC(h.Currency) == selectedCurrency)
-                    .Sum(h => h.AmountPaid);
             }
 
             // Pending Invoices Count and Amount (Pending = TotalAmount - AmountPaid)
@@ -345,8 +285,6 @@ namespace ResourceManager.Controllers
 
             // ═══ Revenue Chart — dynamic aggregation ═══
             // In "All Years" mode: group by year. In specific-year mode: group by month.
-            var historicalRevenueForChart = filteredHistoricalRevenues;
-
             object chart;
             if (isAllYearsMode)
             {
@@ -360,31 +298,17 @@ namespace ResourceManager.Controllers
                         count = g.Count()
                     });
 
-                // Merge historical revenue by year
-                var histByYear = historicalRevenueForChart
-                    .GroupBy(h => h.Date.Year)
-                    .ToDictionary(g => g.Key, g => new {
-                        amount = g.Sum(h => isMixedMode ? ConvertAmount(h.AmountPaid, NC(h.Currency)) : h.AmountPaid),
-                        count = g.Count()
-                    });
-
-                var allYearKeys = revenueByYear.Keys.Union(histByYear.Keys).OrderBy(y => y).ToList();
+                var allYearKeys = revenueByYear.Keys.OrderBy(y => y).ToList();
                 chart = allYearKeys.Select(yr => new {
                     year = yr,
                     month = 0,  // unused in All Years mode
                     label = yr.ToString(),
-                    amount = (revenueByYear.GetValueOrDefault(yr)?.amount ?? 0)
-                           + (histByYear.GetValueOrDefault(yr)?.amount ?? 0),
-                    count = (revenueByYear.GetValueOrDefault(yr)?.count ?? 0)
-                          + (histByYear.GetValueOrDefault(yr)?.count ?? 0)
+                    amount = revenueByYear.GetValueOrDefault(yr)?.amount ?? 0,
+                    count = revenueByYear.GetValueOrDefault(yr)?.count ?? 0
                 }).ToList();
             }
             else
             {
-                var historicalCountByMonth = historicalRevenueForChart
-                    .GroupBy(h => h.Date.Month)
-                    .ToDictionary(g => g.Key, g => g.Count());
-
                 var revenueByMonth = revenueInvoices
                     .GroupBy(i => i.Date.Month)
                     .ToDictionary(g => g.Key, g => isMixedMode
@@ -393,16 +317,12 @@ namespace ResourceManager.Controllers
 
                 chart = Enumerable.Range(1, 12).Select(month => {
                     var invoiceAmount = revenueByMonth.GetValueOrDefault(month, 0);
-                    var histAmount = historicalRevenueForChart
-                        .Where(h => h.Date.Month == month && h.Date.Year == chartYear)
-                        .Sum(h => isMixedMode ? ConvertAmount(h.AmountPaid, NC(h.Currency)) : h.AmountPaid);
                     return new {
                         year = chartYear,
                         month,
                         label = "",  // frontend uses month names
-                        amount = invoiceAmount + histAmount,
+                        amount = invoiceAmount,
                         count = revenueInvoices.Count(i => i.Date.Month == month)
-                            + historicalCountByMonth.GetValueOrDefault(month, 0)
                     };
                 }).ToList();
             }
@@ -414,22 +334,13 @@ namespace ResourceManager.Controllers
 
             decimal SumPeriodRevenue(DateTime periodStart, DateTime periodEnd)
             {
-                var regular = yearInvoices
+                return yearInvoices
                     .Where(i => !string.Equals(i.Status, "Draft", StringComparison.OrdinalIgnoreCase)
                              && i.Date >= periodStart
                              && i.Date < periodEnd)
                     .Sum(i => isMixedMode
                         ? ConvertAmount(i.AmountPaid, NC(i.Quote?.Currency))
                         : (NC(i.Quote?.Currency) == selectedCurrency ? i.AmountPaid : 0m));
-
-                // Imported historical revenues are treated as imported invoice totals
-                var imported = yearHistoricalRevenues
-                    .Where(h => h.Date >= periodStart && h.Date < periodEnd)
-                    .Sum(h => isMixedMode
-                        ? ConvertAmount(h.AmountPaid, NC(h.Currency))
-                        : (NC(h.Currency) == selectedCurrency ? h.AmountPaid : 0m));
-
-                return regular + imported;
             }
 
             var thisMonthRevenue = SumPeriodRevenue(currentPeriodStart, nextPeriodStart);
@@ -454,14 +365,34 @@ namespace ResourceManager.Controllers
                 entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
                 return await _context.Suppliers.CountAsync();
             });
-            var supplierInvoicesCount = filteredSupplierInvoices.Count;
+            // Count supplier invoices from the full year/company set (active + paid),
+            // independent from currency filtering used for amount calculations.
+            // Query ALL supplier invoices (not year-filtered) for the total dashboard count
+            // Count supplier invoices from full year/company set (active + paid),
+            // independent from currency filtering used for amount calculations.
+            // Query ALL supplier invoices (not year-filtered) for the total dashboard count
+            // Global filter handles CompanyId and !IsDeleted automatically
+            var allSupplierInvoices = await _context.SupplierInvoices
+                .AsNoTracking()
+                .Include(si => si.Payments)
+                .Include(si => si.Items)
+                .Include(si => si.Supplier)
+                .ToListAsync();
+
+            // Use year-filtered data for charts and breakdowns, but ALL data for total count
+            var supplierInvoicesForCount = isAllYearsMode ? allSupplierInvoices : yearSupplierInvoices;
+            var supplierInvoicesCount = supplierInvoicesForCount.Count;
+            var supplierInvoiceCountByYear = supplierInvoicesForCount
+                .GroupBy(si => (si.InvoiceDate ?? si.CreatedAt).Year)
+                .ToDictionary(g => g.Key, g => g.Count());
+            var supplierInvoiceCountByYearMonth = supplierInvoicesForCount
+                .GroupBy(si => {
+                    var date = si.InvoiceDate ?? si.CreatedAt;
+                    return (Year: date.Year, Month: date.Month);
+                })
+                .ToDictionary(g => g.Key, g => g.Count());
 
             // ═══ PAYMENT-BASED Expense Chart — dynamic aggregation ═══
-            // Historical expenses for chart
-            var historicalExpenseForChart = isMixedMode
-                ? yearHistoricalExpenses.ToList()
-                : yearHistoricalExpenses.Where(h => NC(h.Currency) == selectedCurrency).ToList();
-
             object expenseChart;
             if (isAllYearsMode)
             {
@@ -476,21 +407,15 @@ namespace ResourceManager.Controllers
                     .ToDictionary(g => g.Key, g => isMixedMode
                         ? g.Sum(si => ConvertAmount(si.AmountPaid, NC(si.Currency)))
                         : g.Sum(si => si.AmountPaid));
-                var histByYear = historicalExpenseForChart
-                    .GroupBy(h => h.Date.Year)
-                    .ToDictionary(g => g.Key, g => isMixedMode
-                        ? g.Sum(h => ConvertAmount(h.AmountPaid, NC(h.Currency)))
-                        : g.Sum(h => h.AmountPaid));
 
-                var allExpYears = otherByYear.Keys.Union(supplierByYear.Keys).Union(histByYear.Keys).OrderBy(y => y).ToList();
+                var allExpYears = otherByYear.Keys.Union(supplierByYear.Keys).OrderBy(y => y).ToList();
                 expenseChart = allExpYears.Select(yr => new {
                     year = yr,
                     month = 0,
                     label = yr.ToString(),
                     amount = otherByYear.GetValueOrDefault(yr, 0)
-                           + supplierByYear.GetValueOrDefault(yr, 0)
-                           + histByYear.GetValueOrDefault(yr, 0),
-                    supplierCount = filteredSupplierInvoices.Count(si => (si.InvoiceDate ?? si.CreatedAt).Year == yr)
+                           + supplierByYear.GetValueOrDefault(yr, 0),
+                    supplierCount = supplierInvoiceCountByYear.GetValueOrDefault(yr, 0)
                 }).ToList();
             }
             else
@@ -509,19 +434,13 @@ namespace ResourceManager.Controllers
                 expenseChart = Enumerable.Range(1, 12).Select(month => {
                     var otherAmt = otherExpensesByMonth.GetValueOrDefault(month, 0);
                     var supplierAmt = supplierExpensesByMonth.GetValueOrDefault(month, 0);
-                    var histAmt = historicalExpenseForChart
-                        .Where(h => h.Date.Month == month && h.Date.Year == chartYear)
-                        .Sum(h => isMixedMode ? ConvertAmount(h.AmountPaid, NC(h.Currency)) : h.AmountPaid);
                     return new {
                         year = chartYear,
                         month,
                         label = "",
-                        amount = otherAmt + supplierAmt + histAmt,
-                        supplierCount = filteredSupplierInvoices
-                            .Count(si => {
-                                var date = si.InvoiceDate ?? si.CreatedAt;
-                                return date.Year == chartYear && date.Month == month;
-                            })
+                        amount = otherAmt + supplierAmt,
+                        supplierCount = supplierInvoiceCountByYearMonth
+                            .GetValueOrDefault((chartYear, month), 0)
                     };
                 }).ToList();
             }
@@ -532,11 +451,11 @@ namespace ResourceManager.Controllers
                 .Select(g => new { status = g.Key, count = g.Count(), amount = g.Sum(i => i.TotalAmount ?? 0) })
                 .ToList();
 
-            // Top clients by PAID amount (payment-based + historical) — filtered by selected year
+            // Top clients by PAID amount (payment-based) — filtered by selected year
             decimal NormalizeAmount(decimal amount, string currency) =>
                 isMixedMode ? ConvertAmount(amount, currency) : amount;
 
-            var invoiceClientRevenue = revenueInvoices
+            var topClients = revenueInvoices
                 .Where(i => i.ClientId.HasValue)
                 .GroupBy(i => i.ClientId!.Value)
                 .Select(g => {
@@ -547,31 +466,6 @@ namespace ResourceManager.Controllers
                         totalInvoices = g.Count(),
                         totalAmount,
                         paidAmount = totalAmount
-                    };
-                })
-                .ToDictionary(c => c.clientId);
-
-            // Merge historical revenue into top clients
-            var historicalClientRevenue = historicalRevenueForChart
-                .Where(h => h.ClientId.HasValue)
-                .GroupBy(h => h.ClientId!.Value)
-                .ToDictionary(g => g.Key, g => new {
-                    totalInvoices = g.Count(),
-                    totalAmount = g.Sum(h => NormalizeAmount(h.AmountPaid, NC(h.Currency))),
-                    clientName = g.First().Client?.Name ?? g.First().ClientName ?? "Unknown"
-                });
-
-            var mergedClientIds = invoiceClientRevenue.Keys.Union(historicalClientRevenue.Keys).ToHashSet();
-            var topClients = mergedClientIds
-                .Select(id => {
-                    var inv = invoiceClientRevenue.GetValueOrDefault(id);
-                    var hist = historicalClientRevenue.GetValueOrDefault(id);
-                    return new {
-                        clientId = (int?)id,
-                        clientName = inv?.clientName ?? hist?.clientName ?? "Unknown",
-                        totalInvoices = (inv?.totalInvoices ?? 0) + (hist?.totalInvoices ?? 0),
-                        totalAmount = (inv?.totalAmount ?? 0m) + (hist?.totalAmount ?? 0m),
-                        paidAmount = (inv?.paidAmount ?? 0m) + (hist?.totalAmount ?? 0m)
                     };
                 })
                 .Where(c => c.paidAmount > 0)
@@ -608,9 +502,9 @@ namespace ResourceManager.Controllers
                 .Take(10)
                 .ToList();
 
-            // Currency-filtered archived count: only count Treated invoices matching
-            // the selected currency, plus imported historical revenues (UI treats them as archived).
-            var paidInvoiceCount = filteredInvoices.Count(i => i.Treated) + importedSalesCount;
+            // Count invoices considered archived/legacy in UI: Treated plus imported category.
+            var paidInvoiceCount = filteredInvoices.Count(i =>
+                i.Treated || string.Equals(i.Category, "imported", StringComparison.OrdinalIgnoreCase));
 
             return Ok(new {
                 // Multi-currency metadata
@@ -646,7 +540,7 @@ namespace ResourceManager.Controllers
                 supplierInvoices = supplierInvoicesCount,
                 statusBreakdown,
                 topClients,
-                totalInvoiceCount = filteredInvoices.Count + importedSalesCount,
+                totalInvoiceCount = filteredInvoices.Count,
                 paidInvoiceCount,
                 mostBoughtProducts = allSupplierItems,
                 mostSoldProducts = allSoldItems,
@@ -756,16 +650,6 @@ namespace ResourceManager.Controllers
                         .Sum(p => (decimal?)p.Amount) ?? 0
                 })
                 .ToListAsync();
-            var historicalRevenues = await _context.HistoricalRevenues
-                .AsNoTracking()
-                .Select(h => new
-                {
-                    Year = h.Date.Year,
-                    Currency = h.Currency,
-                    Amount = h.AmountPaid
-                })
-                .ToListAsync();
-
             var invoiceItems = invoices
                 .Select(i => new
                 {
@@ -774,14 +658,7 @@ namespace ResourceManager.Controllers
                     i.Amount
                 });
 
-            var historicalItems = historicalRevenues.Select(h => new
-            {
-                h.Year,
-                Currency = NC(h.Currency),
-                h.Amount
-            });
-
-            var revenueItems = invoiceItems.Concat(historicalItems);
+            var revenueItems = invoiceItems;
 
             if (!isMixedMode)
             {
@@ -883,21 +760,9 @@ namespace ResourceManager.Controllers
                 })
                 .ToListAsync();
 
-            // Historical expenses
-            var historicalExpenses = await _context.HistoricalExpenses
-                .AsNoTracking()
-                .Select(h => new
-                {
-                    Year = h.Date.Year,
-                    Currency = h.Currency,
-                    Amount = h.AmountPaid
-                })
-                .ToListAsync();
-
             var expenseItems = supplierInvoiceItems
                 .Select(si => new { si.Year, Currency = NC(si.Currency), si.Amount })
-                .Concat(otherExpenses.Select(e => new { e.Year, Currency = NC(e.Currency), e.Amount }))
-                .Concat(historicalExpenses.Select(h => new { h.Year, Currency = NC(h.Currency), h.Amount }));
+                .Concat(otherExpenses.Select(e => new { e.Year, Currency = NC(e.Currency), e.Amount }));
 
             if (!isMixedMode)
             {

@@ -81,6 +81,7 @@ namespace ResourceManager.Controllers
                     return new {
                         i.Id,
                         i.Number,
+                        i.Category,
                         InvoiceNumber = i.Number,
                         i.Date,
                         i.DueDate,
@@ -155,27 +156,19 @@ namespace ResourceManager.Controllers
                 var isAllYears = !year.HasValue;
                 var selectedYear = isAllYears ? DateTime.UtcNow.Year : year.GetValueOrDefault(DateTime.UtcNow.Year);
 
-                // Count archived invoices (Treated == true)
+                // Count archived invoices and imported revenue invoices from core table.
                 var archivedQuery = _context.Invoices
                     .IgnoreQueryFilters()
                     .AsNoTracking()
-                    .Where(i => i.Treated == true && i.CompanyId == user.CompanyId);
+                    .Where(i => i.CompanyId == user.CompanyId)
+                    .Where(i => i.Treated == true || i.Category == "imported");
                 if (!isAllYears)
                     archivedQuery = archivedQuery.Where(i => i.Date.Year == selectedYear);
                 var archivedInvoiceCount = await archivedQuery.CountAsync();
 
-                // Count historical (imported) revenues
-                var historicalQuery = _context.HistoricalRevenues
-                    .IgnoreQueryFilters()
-                    .AsNoTracking()
-                    .Where(h => h.CompanyId == user.CompanyId);
-                if (!isAllYears)
-                    historicalQuery = historicalQuery.Where(h => h.Date.Year == selectedYear);
-                var historicalRevenueCount = await historicalQuery.CountAsync();
-
                 return Ok(new
                 {
-                    count = archivedInvoiceCount + historicalRevenueCount,
+                    count = archivedInvoiceCount,
                     year = isAllYears ? (int?)null : selectedYear
                 });
             }
@@ -530,6 +523,7 @@ namespace ResourceManager.Controllers
                 invoice = new Invoice
                 {
                     Number = normalizedNumber,
+                    Category = NormalizeInvoiceCategory(dto.Category),
                     Date = dto.Date.ToUniversalTime(),
                     DueDate = dto.DueDate?.ToUniversalTime(),
                     ClientId = dto.ClientId,
@@ -636,6 +630,7 @@ namespace ResourceManager.Controllers
             return CreatedAtAction(nameof(GetInvoice), new { id = invoice.Id }, new {
                 invoice.Id,
                 invoice.Number,
+                invoice.Category,
                 InvoiceNumber = invoice.Number,
                 invoice.Date,
                 invoice.DueDate,
@@ -700,6 +695,7 @@ namespace ResourceManager.Controllers
              }
 
              invoice.Number = normalizedNumber;
+             invoice.Category = NormalizeInvoiceCategory(dto.Category, invoice.Category);
              invoice.Date = dto.Date.ToUniversalTime();
              invoice.DueDate = dto.DueDate?.ToUniversalTime();
              invoice.ClientId = dto.ClientId;
@@ -773,7 +769,6 @@ namespace ResourceManager.Controllers
                 ConfirmedByUserId = isImmediate ? _userManager.GetUserId(User) : null,
                 ConfirmedAt = isImmediate ? DateTime.UtcNow : null
             };
-
             _context.Payments.Add(payment);
 
             if (totalPaidCompleted >= totalAmount)
@@ -783,7 +778,7 @@ namespace ResourceManager.Controllers
                 invoice.Treated = true;
                 invoice.TreatedByUserId = _userManager.GetUserId(User);
                 invoice.TreatedAt = DateTime.UtcNow;
-                
+
                 // Update linked Quote to Completed
                 if (invoice.Quote != null)
                 {
@@ -1367,6 +1362,18 @@ namespace ResourceManager.Controllers
                    || message.Contains("duplicate", StringComparison.OrdinalIgnoreCase)
                    || message.Contains("2601", StringComparison.OrdinalIgnoreCase)
                    || message.Contains("2627", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizeInvoiceCategory(string? value, string? fallback = "manual")
+        {
+            var normalized = (value ?? string.Empty).Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                var safeFallback = string.IsNullOrWhiteSpace(fallback) ? "manual" : fallback.Trim().ToLowerInvariant();
+                return safeFallback.Length > 50 ? safeFallback[..50] : safeFallback;
+            }
+
+            return normalized.Length > 50 ? normalized[..50] : normalized;
         }
 
         /// <summary>

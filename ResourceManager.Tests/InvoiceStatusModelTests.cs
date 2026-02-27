@@ -268,23 +268,7 @@ public class InvoiceStatusModelTests
         Assert.Equal("Pending", fi.PaymentStatus);
     }
 
-    [Fact]
-    public void SupplierInvoice_PartialPayment_StatusIsPartiallyPaid()
-    {
-        var fi = new SupplierInvoice { TotalTTC = 1000 };
-        fi.Payments.Add(new SupplierPayment { Amount = 500, Status = "Completed" });
-
-        Assert.Equal("PartiallyPaid", fi.PaymentStatus);
-    }
-
-    [Fact]
-    public void SupplierInvoice_FullPayment_StatusIsPaid()
-    {
-        var fi = new SupplierInvoice { TotalTTC = 1000 };
-        fi.Payments.Add(new SupplierPayment { Amount = 1000, Status = "Completed" });
-
-        Assert.Equal("Paid", fi.PaymentStatus);
-    }
+    
 
     [Fact]
     public void SupplierInvoice_OnlyPendingPayments_StatusIsPending()

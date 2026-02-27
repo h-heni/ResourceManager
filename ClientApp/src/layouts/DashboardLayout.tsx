@@ -68,13 +68,15 @@ export default function DashboardLayout() {
         const path = location.pathname;
         const newExpanded: Record<string, boolean> = {};
 
-        if (['/clients', '/invoices', '/quotes', '/delivery-notes', '/products'].some(p => path.startsWith(p))) {
+        const matches = (basePath: string) => path === basePath || path.startsWith(`${basePath}/`);
+
+        if (['/clients', '/invoices', '/quotes', '/delivery-notes', '/products'].some(matches)) {
             newExpanded['sales'] = true;
         }
-        if (['/suppliers', '/supplier-invoices', '/expenses'].some(p => path.startsWith(p))) {
+        if (['/suppliers', '/supplier-invoices', '/expenses'].some(matches)) {
             newExpanded['purchases'] = true;
         }
-        if (path.startsWith('/settings') || path.startsWith('/data-management')) {
+        if (matches('/settings') || matches('/data-management')) {
             newExpanded['settings'] = true;
         }
 
@@ -216,8 +218,16 @@ export default function DashboardLayout() {
     // ════════════════════════════════════════════════════════
 
     const isActivePath = (path: string) => {
-        if (path === '/dashboard') return location.pathname === '/dashboard';
-        return location.pathname.startsWith(path);
+        const normalizedPath = path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
+        const currentPath = location.pathname.length > 1 && location.pathname.endsWith('/')
+            ? location.pathname.slice(0, -1)
+            : location.pathname;
+
+        if (normalizedPath === '/dashboard') {
+            return currentPath === '/dashboard';
+        }
+
+        return currentPath === normalizedPath || currentPath.startsWith(`${normalizedPath}/`);
     };
 
     const renderNavItem = (item: NavItem, indent = false) => {

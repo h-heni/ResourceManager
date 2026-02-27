@@ -306,11 +306,11 @@ public class FullStackIntegrationTests : IAsyncLifetime
     }
 
     // ═══════════════════════════════════════════════════════════
-    // TEST 4: Archived Count with IgnoreQueryFilters + Historical
+    // TEST 4: Archived Count with IgnoreQueryFilters + Imported Invoice
     // ═══════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task ArchivedCount_IncludesTreatedInvoicesAndHistorical()
+    public async Task ArchivedCount_IncludesTreatedAndImportedInvoices()
     {
         using var ctx = CreateScopedContext(_company1.Id, _adminUser.Id);
 
@@ -335,36 +335,34 @@ public class FullStackIntegrationTests : IAsyncLifetime
             ctx.Invoices.Add(inv);
         }
 
-        // Also create a HistoricalRevenue (imported data)
-        var histRev = new HistoricalRevenue
+        // Also create an imported invoice record in the core table
+        var importedInvoice = new Invoice
         {
+            Number = "INV-ARCH-IMP-001",
             Date = new DateTime(2026, 1, 20, 0, 0, 0, DateTimeKind.Utc),
-            ClientName = "Historical Client",
-            AmountPaid = 750m,
-            Currency = "TND",
-            IsHistorical = true,
             CompanyId = _company1.Id,
-            CreatedAt = DateTime.UtcNow
+            Status = "Pending",
+            Category = "imported",
+            CreatedAt = DateTime.UtcNow,
+            InvoiceItems = new List<InvoiceItem>
+            {
+                new InvoiceItem { Description = "Imported Item", Quantity = 1, Price = 750m, Tva = false }
+            },
+            Tfiscal = 0m
         };
-        ctx.HistoricalRevenues.Add(histRev);
+        importedInvoice.CalculTotalAmount();
+        ctx.Invoices.Add(importedInvoice);
         await ctx.SaveChangesAsync();
 
         // ARCHIVED COUNT (same logic as InvoicesController.GetArchivedInvoicesCount):
         var archivedInvoiceCount = await ctx.Invoices
             .IgnoreQueryFilters()
             .AsNoTracking()
-            .Where(i => i.Treated == true && i.CompanyId == _company1.Id && i.Date.Year == 2026)
+            .Where(i => i.CompanyId == _company1.Id
+                     && i.Date.Year == 2026
+                     && (i.Treated == true || i.Category == "imported"))
             .CountAsync();
-        Assert.Equal(2, archivedInvoiceCount);
-
-        var historicalCount = await ctx.HistoricalRevenues
-            .AsNoTracking()
-            .Where(h => h.CompanyId == _company1.Id && h.Date.Year == 2026)
-            .CountAsync();
-        Assert.Equal(1, historicalCount);
-
-        // Total archived = invoices + historical
-        Assert.Equal(3, archivedInvoiceCount + historicalCount);
+        Assert.Equal(3, archivedInvoiceCount);
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -486,32 +484,37 @@ public class FullStackIntegrationTests : IAsyncLifetime
     }
 
     // ═══════════════════════════════════════════════════════════
-    // TEST 7: Historical Revenue isolation
+    // TEST 7: Imported Invoice isolation
     // ═══════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task HistoricalRevenue_ImportSetsCompanyIdAndIsHistorical()
+    public async Task ImportedInvoice_ImportSetsCompanyIdAndIsTenantIsolated()
     {
         using var ctx = CreateScopedContext(_company1.Id, _adminUser.Id);
 
-        var hr = new HistoricalRevenue
+        var importedInvoice = new Invoice
         {
+            Number = "INV-IMP-ISO-001",
             Date = new DateTime(2025, 6, 15, 0, 0, 0, DateTimeKind.Utc),
-            ClientName = "Old Client",
-            AmountPaid = 5000m,
-            Currency = "TND",
-            PaymentMethod = "Bank Transfer",
-            InvoiceNumber = "HIST-001",
-            IsHistorical = true,
             CompanyId = _company1.Id,
-            CreatedAt = DateTime.UtcNow
+            Status = "Paid",
+            Category = "imported",
+            CreatedAt = DateTime.UtcNow,
+            InvoiceItems = new List<InvoiceItem>
+            {
+                new InvoiceItem { Description = "Imported Service", Quantity = 1, Price = 5000m, Tva = false }
+            },
+            Tfiscal = 0m
         };
-        ctx.HistoricalRevenues.Add(hr);
+        importedInvoice.CalculTotalAmount();
+        ctx.Invoices.Add(importedInvoice);
         await ctx.SaveChangesAsync();
 
-        // Company1 sees it
-        var revenues = await ctx.HistoricalRevenues.ToListAsync();
-        Assert.Contains(revenues, r => r.InvoiceNumber == "HIST-001");
+        // Company1 sees it in imported invoices
+        var importedInvoices = await ctx.Invoices
+            .Where(i => i.Category == "imported")
+            .ToListAsync();
+        Assert.Contains(importedInvoices, i => i.Number == "INV-IMP-ISO-001");
 
         // Create Company2 user
         var userManager = _serviceProvider.GetRequiredService<UserManager<ApplicationUser>>();
@@ -523,10 +526,12 @@ public class FullStackIntegrationTests : IAsyncLifetime
         };
         await userManager.CreateAsync(user2, "Password123!");
 
-        // Company2 cannot see Company1's historical revenue
+        // Company2 cannot see Company1's imported invoice
         using var ctx2 = CreateScopedContext(_company2.Id, user2.Id);
-        var otherRevenues = await ctx2.HistoricalRevenues.ToListAsync();
-        Assert.DoesNotContain(otherRevenues, r => r.InvoiceNumber == "HIST-001");
+        var otherImportedInvoices = await ctx2.Invoices
+            .Where(i => i.Category == "imported")
+            .ToListAsync();
+        Assert.DoesNotContain(otherImportedInvoices, i => i.Number == "INV-IMP-ISO-001");
     }
 
     // ═══════════════════════════════════════════════════════════

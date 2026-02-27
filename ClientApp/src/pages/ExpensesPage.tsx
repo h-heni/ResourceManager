@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     Plus, Trash2, Edit2, Search, DollarSign, Calendar, X,
-    TrendingUp, Loader2, FileText, Settings2
+    TrendingUp, Loader2, FileText, Settings2, ChevronDown, ChevronRight
 } from 'lucide-react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -74,6 +74,7 @@ export default function ExpensesPage() {
     const [size, setSize] = useState(20);
     const [totalCount, setTotalCount] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
+    const [collapsedYears, setCollapsedYears] = useState<Set<number>>(new Set());
 
     // Custom categories
     const [customCategories, setCustomCategories] = useState<string[]>(getCustomCategories());
@@ -230,6 +231,31 @@ export default function ExpensesPage() {
         saveCustomCategories(updated);
     };
 
+    const toggleYearCollapse = (year: number) => {
+        setCollapsedYears(prev => {
+            const next = new Set(prev);
+            if (next.has(year)) {
+                next.delete(year);
+            } else {
+                next.add(year);
+            }
+            return next;
+        });
+    };
+
+    const groupedExpenses = filteredExpenses.reduce((acc, expense) => {
+        const year = new Date(expense.date).getFullYear();
+        if (!acc[year]) {
+            acc[year] = [];
+        }
+        acc[year].push(expense);
+        return acc;
+    }, {} as Record<number, Expense[]>);
+
+    const sortedYears = Object.keys(groupedExpenses)
+        .map(Number)
+        .sort((a, b) => b - a); // Newest years first
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-64">
@@ -366,52 +392,110 @@ export default function ExpensesPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredExpenses.map(expense => (
-                                <tr key={expense.id}>
-                                    <td className="rm-cell-text">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm font-medium text-gray-900">{expense.description}</span>
-                                            {expense.isRecurring && (
-                                                <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 text-xs rounded-full font-medium">
-                                                    {t('expense.recurring')}
-                                                </span>
-                                            )}
-                                        </div>
-                                        {expense.notes && (
-                                            <p className="text-xs text-gray-400 mt-0.5">{expense.notes}</p>
+                            {sortedYears.map(year => {
+                                const isCollapsed = collapsedYears.has(year);
+                                const yearExpenses = groupedExpenses[year];
+                                // Calculate total for this year per currency
+                                const yearTotalsByCurrency: Record<string, { total: number; symbol: string }> = {};
+                                yearExpenses.forEach(e => {
+                                    const sym = e.currencySymbol || currencySymbol;
+                                    const cur = e.currency || 'DEFAULT';
+                                    if (!yearTotalsByCurrency[cur]) {
+                                        yearTotalsByCurrency[cur] = { total: 0, symbol: sym };
+                                    }
+                                    yearTotalsByCurrency[cur].total += e.amount;
+                                });
+
+                                return (
+                                    <React.Fragment key={year}>
+                                        {/* Year Header */}
+                                        <tr className="rm-group-header cursor-pointer hover:bg-gray-50" onClick={() => toggleYearCollapse(year)}>
+                                            <td colSpan={5} className="rm-cell-group-header">
+                                                <div className="flex items-center gap-3">
+                                                    <span className="p-1 text-gray-400">
+                                                        {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                                                    </span>
+                                                    <span className="font-semibold text-gray-900">{year}</span>
+                                                    <span className="text-sm text-gray-500">
+                                                        ({yearExpenses.length} {yearExpenses.length === 1 ? t('expense.title') : t('expense.title').toLowerCase()})
+                                                    </span>
+                                                    <div className="ml-auto flex gap-4">
+                                                        {Object.values(yearTotalsByCurrency).map((total, i) => (
+                                                            <span key={i} className="text-sm font-medium text-[#065F46]">
+                                                                {formatCurrency(total.total, total.symbol)}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {/* Year Expenses (only if not collapsed) */}
+                                        {!isCollapsed && yearExpenses.map(expense => (
+                                            <tr key={expense.id}>
+                                                <td className="rm-cell-text">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-sm font-medium text-gray-900">{expense.description}</span>
+                                                        {expense.isRecurring && (
+                                                            <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 text-xs rounded-full font-medium">
+                                                                {t('expense.recurring')}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    {expense.notes && (
+                                                        <p className="text-xs text-gray-400 mt-0.5">{expense.notes}</p>
+                                                    )}
+                                                </td>
+                                                <td className="rm-cell-status">
+                                                    <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getCategoryColor(expense.category)}`}>
+                                                        {t(`expense.categories.${expense.category}`, expense.category)}
+                                                    </span>
+                                                </td>
+                                                <td className="rm-cell-date">
+                                                    {new Date(expense.date).toLocaleDateString()}
+                                                </td>
+                                                <td className="rm-cell-currency">
+                                                    {formatCurrency(expense.amount, expense.currencySymbol || currencySymbol)}
+                                                </td>
+                                                <td className="rm-cell-actions">
+                                                    <div className="flex justify-end gap-2">
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); openEditModal(expense); }}
+                                                            className="p-2 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
+                                                            title={t('common.edit')}
+                                                        >
+                                                            <Edit2 size={16} />
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); handleDelete(expense.id); }}
+                                                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                            title={t('common.delete')}
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {/* Year Footer (only if not collapsed) */}
+                                        {!isCollapsed && (
+                                            <tr className="rm-year-footer bg-[#065F46]/5">
+                                                <td colSpan={3} className="rm-cell-number">
+                                                    <span className="text-xs font-semibold text-gray-500 uppercase">{t('expense.yearTotal', 'Year Total')}</span>
+                                                </td>
+                                                <td colSpan={2}>
+                                                    <div className="flex justify-end gap-4">
+                                                        {Object.values(yearTotalsByCurrency).map((total, i) => (
+                                                            <span key={i} className="text-sm font-bold text-[#065F46]">
+                                                                {formatCurrency(total.total, total.symbol)}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </td>
+                                            </tr>
                                         )}
-                                    </td>
-                                    <td className="rm-cell-status">
-                                        <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getCategoryColor(expense.category)}`}>
-                                            {t(`expense.categories.${expense.category}`, expense.category)}
-                                        </span>
-                                    </td>
-                                    <td className="rm-cell-date">
-                                        {new Date(expense.date).toLocaleDateString()}
-                                    </td>
-                                    <td className="rm-cell-currency">
-                                        {formatCurrency(expense.amount, expense.currencySymbol || currencySymbol)}
-                                    </td>
-                                    <td className="rm-cell-actions">
-                                        <div className="flex justify-end gap-2">
-                                            <button
-                                                onClick={() => openEditModal(expense)}
-                                                className="p-2 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
-                                                title={t('common.edit')}
-                                            >
-                                                <Edit2 size={16} />
-                                            </button>
-                                            <button
-                                                onClick={() => handleDelete(expense.id)}
-                                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                title={t('common.delete')}
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
+                                    </React.Fragment>
+                                );
+                            })}
                         </tbody>
                         <tfoot className="bg-gray-50 border-t-2 border-gray-200">
                             {(() => {

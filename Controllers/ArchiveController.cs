@@ -43,26 +43,15 @@ namespace ResourceManager.Controllers
                 // Get years from archived invoices (Treated == true) using IgnoreQueryFilters
                 var invoiceYears = await _context.Invoices
                     .IgnoreQueryFilters()
-                    .Where(i => i.Treated == true && i.CompanyId == user.CompanyId)
+                    .Where(i => i.CompanyId == user.CompanyId
+                        && (i.Treated == true || i.Category == "imported"))
                     .Select(i => i.Date.Year)
-                    .Distinct()
-                    .ToListAsync();
-
-                // Get years from historical revenues
-                var historicalRevenueYears = await _context.HistoricalRevenues
-                    .Select(h => h.Date.Year)
                     .Distinct()
                     .ToListAsync();
 
                 // Get years from other expenses
                 var expenseYears = await _context.OtherExpenses
                     .Select(e => e.Date.Year)
-                    .Distinct()
-                    .ToListAsync();
-
-                // Get years from historical expenses
-                var historicalExpenseYears = await _context.HistoricalExpenses
-                    .Select(h => h.Date.Year)
                     .Distinct()
                     .ToListAsync();
 
@@ -76,9 +65,7 @@ namespace ResourceManager.Controllers
 
                 // Combine all years and sort (oldest first as per requirement)
                 var allYears = invoiceYears
-                    .Concat(historicalRevenueYears)
                     .Concat(expenseYears)
-                    .Concat(historicalExpenseYears)
                     .Concat(supplierYears)
                     .Distinct()
                     .OrderBy(y => y)
@@ -99,7 +86,7 @@ namespace ResourceManager.Controllers
 
         /// <summary>
         /// GET: api/archive/invoices
-        /// Returns archived invoices combining regular Paid invoices and historical revenues.
+        /// Returns archived invoices from core invoices table.
         /// Supports year filtering.
         /// </summary>
         [HttpGet("invoices")]
@@ -126,7 +113,9 @@ namespace ResourceManager.Controllers
                     .Include(i => i.Client)
                     .Include(i => i.Payments)
                     .Include(i => i.Quote)
-                    .Where(i => i.Treated == true && i.CompanyId == user.CompanyId && i.Date.Year == filterYear)
+                    .Where(i => i.CompanyId == user.CompanyId
+                        && i.Date.Year == filterYear
+                        && (i.Treated == true || i.Category == "imported"))
                     .ToListAsync();
 
                 var regularInvoiceData = regularInvoices.Select(i => {
@@ -155,48 +144,13 @@ namespace ResourceManager.Controllers
                         Status = i.Status ?? "Paid",
                         Reference = i.Number.ToString(),
                         PaymentMethod = "Invoice",
-                        Source = "invoice",
+                        Source = string.Equals(i.Category, "imported", StringComparison.OrdinalIgnoreCase) ? "historical" : "invoice",
                         Year = i.Date.Year,
                         Payments = payments
                     };
                 }).ToList();
 
-                // Get historical revenues
-                var historicalRevenues = await _context.HistoricalRevenues
-                    .AsNoTracking()
-                    .Include(h => h.Client)
-                    .Include(h => h.Invoice)
-                    .Where(h => h.Date.Year == filterYear)
-                    .ToListAsync();
-
-                var historicalRevenueData = historicalRevenues.Select(h => new
-                {
-                    h.Id,
-                    Number = "H" + h.Id.ToString(), // Historical data doesn't have invoice numbers, use H + ID
-                    InvoiceId = h.InvoiceId,
-                    InvoiceNumber = h.Invoice != null ? h.Invoice.Number : h.InvoiceNumber,
-                    Date = h.Date,
-                    TotalAmount = h.AmountPaid,
-                    ClientName = h.ClientName,
-                    ClientId = h.ClientId,
-                    Currency = h.Currency ?? "",
-                    CurrencySymbol = h.Currency ?? "",
-                    AmountPaid = h.AmountPaid,
-                    RemainingAmount = 0m,
-                    Status = "Paid",
-                    Reference = h.Invoice != null ? h.Invoice.Number : h.InvoiceNumber ?? "",
-                    PaymentMethod = h.PaymentMethod ?? "Cash",
-                    Source = "historical",
-                    Year = h.Date.Year,
-                    Payments = (List<object>?)null // Historical data doesn't have payment records
-                }).ToList();
-
-                // Combine both lists by creating a unified response
-                var combinedList = new List<object>();
-                combinedList.AddRange(regularInvoiceData);
-                combinedList.AddRange(historicalRevenueData);
-
-                var sorted = combinedList.OrderByDescending(x => ((dynamic)x).Date).ToList();
+                var sorted = regularInvoiceData.OrderByDescending(x => x.Date).Cast<object>().ToList();
                 var totalCount = sorted.Count;
                 var pagedItems = sorted
                     .Skip((page - 1) * pageSize)
@@ -221,20 +175,16 @@ namespace ResourceManager.Controllers
         }
 
         /// <summary>
-        /// GET: api/archive/expenses
-        /// Returns archived expenses combining regular expenses, supplier invoices, and historical expenses.
-        /// Supports year filtering.
+        /// GET: api/archive/other-expenses
         /// </summary>
-        [HttpGet("expenses")]
-        public async Task<ActionResult> GetArchivedExpenses([FromQuery] int? year)
+        [HttpGet("other-expenses")]
+        public async Task<ActionResult> GetOtherExpenses([FromQuery] int? year)
         {
             try
             {
-                // Determine the year to filter by
                 int filterYear = year ?? DateTime.UtcNow.Year;
 
-                // Get other expenses
-                var otherExpenses = await _context.OtherExpenses
+                var data = await _context.OtherExpenses
                     .AsNoTracking()
                     .Where(e => e.Date.Year == filterYear)
                     .Select(e => new
@@ -250,9 +200,35 @@ namespace ResourceManager.Controllers
                         Source = "expense",
                         Year = e.Date.Year
                     })
+                    .OrderByDescending(x => x.Date)
                     .ToListAsync();
 
-                // Get paid supplier invoices
+                return Ok(new
+                {
+                    year = filterYear,
+                    count = data.Count,
+                    data = data
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to get other expenses for year {Year}", year);
+                return StatusCode(500, new { message = "Failed to retrieve other expenses" });
+            }
+        }
+
+        /// <summary>
+        /// GET: api/archive/supplier-invoices
+        /// Includes paid supplier invoices from core table.
+        /// </summary>
+        [HttpGet("supplier-invoices")]
+        public async Task<ActionResult> GetSupplierInvoices([FromQuery] int? year)
+        {
+            try
+            {
+                int filterYear = year ?? DateTime.UtcNow.Year;
+
+                // 1. Get paid supplier invoices logic
                 var supplierInvoices = await _context.SupplierInvoices
                     .AsNoTracking()
                     .Include(si => si.Supplier)
@@ -274,54 +250,7 @@ namespace ResourceManager.Controllers
                     })
                     .ToListAsync();
 
-                // Get historical expenses
-                var historicalExpenses = await _context.HistoricalExpenses
-                    .AsNoTracking()
-                    .Include(h => h.Supplier)
-                    .Where(h => h.Date.Year == filterYear)
-                    .Select(h => new
-                    {
-                        h.Id,
-                        Date = h.Date,
-                        SupplierName = h.SupplierName ?? "",
-                        Amount = h.AmountPaid,
-                        Currency = h.Currency ?? "",
-                        CurrencySymbol = h.Currency ?? "",
-                        Category = h.Category ?? "",
-                        Reference = h.Reference ?? "",
-                        Source = "historical",
-                        Year = h.Date.Year
-                    })
-                    .ToListAsync();
-
-                // Combine all expenses
-                var combinedData = otherExpenses
-                    .Concat(supplierInvoices.Select(s => new
-                    {
-                        s.Id,
-                        s.Date,
-                        s.SupplierName,
-                        s.Amount,
-                        s.Currency,
-                        s.CurrencySymbol,
-                        s.Category,
-                        s.Reference,
-                        s.Source,
-                        s.Year
-                    }))
-                    .Concat(historicalExpenses.Select(h => new
-                    {
-                        h.Id,
-                        h.Date,
-                        h.SupplierName,
-                        h.Amount,
-                        h.Currency,
-                        h.CurrencySymbol,
-                        h.Category,
-                        h.Reference,
-                        h.Source,
-                        h.Year
-                    }))
+                var combinedData = supplierInvoices
                     .OrderByDescending(x => x.Date)
                     .ToList();
 
@@ -334,8 +263,8 @@ namespace ResourceManager.Controllers
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to get archived expenses for year {Year}", year);
-                return StatusCode(500, new { message = "Failed to retrieve archived expenses" });
+                _logger.LogError(ex, "Failed to get supplier invoices for year {Year}", year);
+                return StatusCode(500, new { message = "Failed to retrieve supplier invoices" });
             }
         }
     }

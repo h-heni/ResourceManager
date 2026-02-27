@@ -158,7 +158,7 @@ export default function DashboardPage() {
                 api.get(`/Expenses/summary${expenseYearQs}`),
                 api.get(`/Dashboard/revenue-summary${queryParam}`),
                 api.get(`/Invoices/archived/count${archivedYearQs}`),
-                api.get(`/Dashboard/purchases-summary${queryParam}`)
+                api.get(`/SupplierInvoices${queryParam}`)
             ]);
 
             let archivedCountFallback: number | null = null;
@@ -706,7 +706,7 @@ export default function DashboardPage() {
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {statCards.map((stat, idx) => (
-                    <div key={idx} className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
+                    <div key={idx} className="bg-white p-4 sm:p-5 rounded-xl border border-gray-100 shadow-sm">
                         <div className="flex items-center justify-between">
                             <div className="min-w-0">
                                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">{stat.title}</p>
@@ -726,7 +726,7 @@ export default function DashboardPage() {
             {/* Financial Summary: Sales vs Purchases */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Sales */}
-                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
+                <div className="bg-white p-4 sm:p-5 rounded-xl border border-gray-100 shadow-sm">
                     <h3 className="text-sm font-semibold text-gray-900 mb-3">{t('dashboard.salesOverview', 'Sales')}</h3>
                     <div className="grid grid-cols-3 gap-3">
                         <div className="text-center">
@@ -749,7 +749,7 @@ export default function DashboardPage() {
                     {revenueSummary?.revenueByYear?.length ? (
                         <div className="mt-3 border-t border-gray-50 pt-2">
                             <p className="text-[11px] text-gray-400 mb-2">{t('dashboard.revenueByYear', 'Revenue by year')}</p>
-                            <div className="rm-table-card border-gray-100 shadow-none">
+                            <div className="rm-table-card border-gray-100 shadow-none overflow-x-auto">
                                 <table className="rm-table">
                                     <colgroup>
                                         <col style={{ width: '40%' }} />
@@ -776,7 +776,7 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Purchases */}
-                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
+                <div className="bg-white p-4 sm:p-5 rounded-xl border border-gray-100 shadow-sm">
                     <h3 className="text-sm font-semibold text-gray-900 mb-3">{t('dashboard.purchasesOverview', 'Purchases')}</h3>
                     <div className="grid grid-cols-3 gap-3">
                         <div className="text-center">
@@ -795,7 +795,7 @@ export default function DashboardPage() {
                     {purchasesSummary?.purchasesByYear?.length ? (
                         <div className="mt-3 border-t border-gray-50 pt-2">
                             <p className="text-[11px] text-gray-400 mb-2">{t('dashboard.expensesByYear', 'Expenses by year')}</p>
-                            <div className="rm-table-card border-gray-100 shadow-none">
+                            <div className="rm-table-card border-gray-100 shadow-none overflow-x-auto">
                                 <table className="rm-table">
                                     <colgroup>
                                         <col style={{ width: '40%' }} />
@@ -833,7 +833,7 @@ export default function DashboardPage() {
             {/* Charts Row: Revenue vs Expenses (merged), Growth */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Merged Revenue vs Expenses Chart */}
-                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
+                <div className="bg-white p-4 sm:p-5 rounded-xl border border-gray-100 shadow-sm">
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-sm font-semibold text-gray-900">{t('dashboard.revenueVsExpenses', 'Revenue vs Expenses')}</h3>
                         <div className="flex items-center gap-3">
@@ -866,7 +866,7 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Growth Trajectory Chart */}
-                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
+                <div className="bg-white p-4 sm:p-5 rounded-xl border border-gray-100 shadow-sm">
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-sm font-semibold text-gray-900">{t('dashboard.growthTrajectory', 'Growth')}</h3>
                         <span className={`text-xs font-semibold ${netResult >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
@@ -904,12 +904,12 @@ export default function DashboardPage() {
             {stats && ((stats.mostSoldProducts?.length > 0) || (stats.mostBoughtProducts?.length > 0)) && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     {/* Top Sold Products (from client invoices) */}
-                    <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
+                    <div className="bg-white p-4 sm:p-5 rounded-xl border border-gray-100 shadow-sm">
                         <h3 className="text-sm font-semibold text-gray-900 mb-4">
                             {t('dashboard.topSoldProducts', 'Top Sold Products')}
                         </h3>
                         {stats.mostSoldProducts?.length > 0 ? (
-                            <div className="rm-table-card border-gray-100 shadow-none">
+                            <div className="rm-table-card border-gray-100 shadow-none overflow-x-auto">
                                 <table className="rm-table">
                                     <colgroup>
                                         <col style={{ width: '8%' }} />
@@ -943,12 +943,12 @@ export default function DashboardPage() {
                     </div>
 
                     {/* Top Purchased Products (from supplier invoices) */}
-                    <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
+                    <div className="bg-white p-4 sm:p-5 rounded-xl border border-gray-100 shadow-sm">
                         <h3 className="text-sm font-semibold text-gray-900 mb-4">
                             {t('dashboard.topPurchasedProducts', 'Top Purchased Products')}
                         </h3>
                         {stats.mostBoughtProducts?.length > 0 ? (
-                            <div className="rm-table-card border-gray-100 shadow-none">
+                            <div className="rm-table-card border-gray-100 shadow-none overflow-x-auto">
                                 <table className="rm-table">
                                     <colgroup>
                                         <col style={{ width: '8%' }} />
@@ -986,7 +986,7 @@ export default function DashboardPage() {
             {/* Bottom Row: Status Breakdown + Top Clients */}
             <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
                 {/* Invoice Status Breakdown */}
-                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
+                <div className="bg-white p-4 sm:p-5 rounded-xl border border-gray-100 shadow-sm">
                     <h3 className="text-sm font-semibold text-gray-900 mb-4">
                         {t('dashboard.statusBreakdown', 'Invoice Status Breakdown')}
                     </h3>
@@ -1021,12 +1021,12 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Top Clients */}
-                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
+                <div className="bg-white p-4 sm:p-5 rounded-xl border border-gray-100 shadow-sm">
                     <h3 className="text-sm font-semibold text-gray-900 mb-4">
                         {t('dashboard.topClients', 'Top Clients by Revenue')}
                     </h3>
                     {stats?.topClients && stats.topClients.length > 0 ? (
-                        <div className="rm-table-card border-gray-100 shadow-none">
+                        <div className="rm-table-card border-gray-100 shadow-none overflow-x-auto">
                             <table className="rm-table">
                                 <colgroup>
                                     <col style={{ width: '6%' }} />
@@ -1075,7 +1075,7 @@ export default function DashboardPage() {
                 const currencyTotal = filtered.reduce((s, c) => s + c.total, 0);
                 if (filtered.length === 0) return null;
                 return (
-                <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
+                <div className="bg-white p-4 sm:p-5 rounded-xl border border-gray-100 shadow-sm">
                     <h3 className="text-sm font-semibold text-gray-900 mb-4">
                         {t('dashboard.expensesByCategory', 'Expenses by Category')}
                     </h3>

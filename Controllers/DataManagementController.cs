@@ -15,12 +15,14 @@ using System.Text.RegularExpressions;
 namespace ResourceManager.Controllers
 {
     /// <summary>
-    /// Data Export (CSV/Excel) and Historical Data Import for Managers.
+    /// Data Export (CSV/Excel) and Data Import into core tables for Managers.
     /// All financial data is PAYMENT-BASED.
     /// </summary>
     [Authorize(Roles = "Manager,SuperAdmin")]
     public class DataManagementController : BaseApiController
     {
+        private const string ImportedCategory = "imported";
+        private const string ImportedRevenueLineDescription = "Imported Revenue";
         private readonly AppDbContext _context;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ILogger<DataManagementController> _logger;
@@ -91,22 +93,8 @@ namespace ResourceManager.Controllers
                 .OrderBy(r => r.Date)
                 .ToList();
 
-            // Include historical revenues
-            var historicalRevenues = await _context.HistoricalRevenues
-                .Include(h => h.Invoice)
-                .Where(h => h.Date >= fromDate && h.Date <= toDate)
-                .OrderBy(h => h.Date)
-                .ToListAsync();
-
             var allRows = paymentRows
                 .Select(r => new ExportRow(r.Date, r.ClientName, r.AmountPaid, r.Currency, r.PaymentMethod, r.InvoiceNumber))
-                .Concat(historicalRevenues.Select(h => new ExportRow(
-                    h.Date,
-                    h.ClientName,
-                    h.AmountPaid,
-                    h.Currency ?? defaultCurrency,
-                    h.PaymentMethod ?? "",
-                    h.Invoice?.Number ?? h.InvoiceNumber ?? "")))
                 .OrderBy(r => r.Date)
                 .ToList();
 
@@ -208,15 +196,8 @@ namespace ResourceManager.Controllers
                 Reference = e.Notes ?? ""
             });
 
-            // Historical expenses
-            var historicalExpenses = await _context.HistoricalExpenses
-                .Where(h => h.Date >= fromDate && h.Date <= toDate)
-                .OrderBy(h => h.Date)
-                .ToListAsync();
-
             var allRows = supplierRows
                 .Concat(otherRows.Select(r => new { r.Date, r.Supplier, r.AmountPaid, r.Currency, r.Category, r.Reference }))
-                .Concat(historicalExpenses.Select(h => new { Date = h.Date, Supplier = h.SupplierName, AmountPaid = h.AmountPaid, Currency = h.Currency ?? defaultCurrency, Category = h.Category ?? "Historical", Reference = h.Reference ?? "" }))
                 .OrderBy(r => r.Date)
                 .ToList();
 
@@ -411,7 +392,7 @@ namespace ResourceManager.Controllers
         }
 
         // ═══════════════════════════════════════════════════════════
-        // HISTORICAL DATA IMPORT — VALIDATE (DRY RUN)
+        // DATA IMPORT - VALIDATE (DRY RUN)
         // ═══════════════════════════════════════════════════════════
 
         /// <summary>
@@ -436,7 +417,7 @@ namespace ResourceManager.Controllers
         }
 
         /// <summary>
-        /// Import validated historical data. Stores in backend with IsHistorical = true.
+        /// Import validated data into core tables.
         /// Crash-proof: wrapped in transaction + try-catch. No partial imports.
         /// Deduplicates based on Date + Amount + Client/Supplier (Upsert behavior).
         /// </summary>
@@ -477,11 +458,10 @@ namespace ResourceManager.Controllers
                     {
                     case "revenues":
                     {
-                        // 1. Pre-load Clients
                         var existingClients = await _context.Clients
                             .Where(c => c.CompanyId == companyId)
                             .ToListAsync();
-                        
+
                         var clientLookup = existingClients
                             .GroupBy(c => c.Name.Trim(), StringComparer.OrdinalIgnoreCase)
                             .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
@@ -493,19 +473,18 @@ namespace ResourceManager.Controllers
                             .Distinct(StringComparer.OrdinalIgnoreCase)
                             .ToList();
 
-                        var invoiceLookup = await _context.Invoices
-                            .Where(i => i.CompanyId == companyId && invoiceNumbers.Contains(i.Number))
-                            .Select(i => new { i.Id, i.Number })
-                            .ToDictionaryAsync(i => i.Number, StringComparer.OrdinalIgnoreCase);
+                        var existingInvoices = invoiceNumbers.Count == 0
+                            ? new List<Invoice>()
+                            : await _context.Invoices
+                                .Include(i => i.Payments)
+                                .Include(i => i.InvoiceItems)
+                                .Where(i => i.CompanyId == companyId && invoiceNumbers.Contains(i.Number))
+                                .ToListAsync();
 
-                        var invoiceIds = invoiceLookup.Values.Select(i => i.Id).ToList();
-
-                        var existingRevenueByInvoiceId = await _context.HistoricalRevenues
-                            .Where(r => r.CompanyId == companyId && r.InvoiceId.HasValue && invoiceIds.Contains(r.InvoiceId.Value))
-                            .GroupBy(r => r.InvoiceId!.Value)
-                            .ToDictionaryAsync(g => g.Key, g => g.OrderByDescending(x => x.UpdatedAt ?? x.CreatedAt).First());
-
-                        var pendingHistoricalByInvoiceId = new Dictionary<int, HistoricalRevenue>();
+                        var invoiceLookup = existingInvoices
+                            .Where(i => !string.IsNullOrWhiteSpace(i.Number))
+                            .GroupBy(i => i.Number.Trim(), StringComparer.OrdinalIgnoreCase)
+                            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
                         foreach (var row in validation.ValidRows)
                         {
@@ -525,14 +504,8 @@ namespace ResourceManager.Controllers
                             if (string.IsNullOrEmpty(currency)) currency = "TND";
                             var paymentMethod = SafeGet(row, "Payment Method");
                             var invoiceNumber = SafeGet(row, "InvoiceNumber");
+                            if (string.IsNullOrWhiteSpace(invoiceNumber)) { skipped++; continue; }
 
-                            if (!invoiceLookup.TryGetValue(invoiceNumber, out var invoice))
-                            {
-                                skipped++;
-                                continue;
-                            }
-
-                            // Get-or-Create Client
                             if (!clientLookup.TryGetValue(clientName, out var client))
                             {
                                 client = new Client
@@ -549,63 +522,117 @@ namespace ResourceManager.Controllers
                                 clientLookup[clientName] = client;
                             }
 
-                            if (existingRevenueByInvoiceId.TryGetValue(invoice.Id, out var existingByInvoice))
+                            if (!invoiceLookup.TryGetValue(invoiceNumber, out var invoice))
                             {
-                                existingByInvoice.Date = utcDate;
-                                existingByInvoice.ClientName = clientName;
-                                existingByInvoice.ClientId = client.Id;
-                                existingByInvoice.AmountPaid = parsedAmount;
-                                existingByInvoice.Currency = currency;
-                                existingByInvoice.PaymentMethod = paymentMethod;
-                                existingByInvoice.InvoiceNumber = invoice.Number;
-                                existingByInvoice.InvoiceId = invoice.Id;
-                                existingByInvoice.UpdatedAt = DateTime.UtcNow;
-
-                                _context.HistoricalRevenues.Update(existingByInvoice);
-                                updated++;
-                            }
-                            else if (pendingHistoricalByInvoiceId.TryGetValue(invoice.Id, out var pendingExisting))
-                            {
-                                pendingExisting.Date = utcDate;
-                                pendingExisting.ClientName = clientName;
-                                pendingExisting.ClientId = client.Id;
-                                pendingExisting.AmountPaid = parsedAmount;
-                                pendingExisting.Currency = currency;
-                                pendingExisting.PaymentMethod = paymentMethod;
-                                pendingExisting.InvoiceNumber = invoice.Number;
-                                pendingExisting.InvoiceId = invoice.Id;
-                                pendingExisting.UpdatedAt = DateTime.UtcNow;
-                                updated++;
-                            }
-                            else
-                            {
-                                var newRevenue = new HistoricalRevenue
+                                invoice = new Invoice
                                 {
+                                    Number = invoiceNumber,
                                     Date = utcDate,
-                                    ClientName = clientName,
                                     Client = client,
-                                    AmountPaid = parsedAmount,
-                                    Currency = currency,
-                                    PaymentMethod = paymentMethod,
-                                    InvoiceNumber = invoice.Number,
-                                    InvoiceId = invoice.Id,
-                                    IsHistorical = true,
+                                    DueDate = utcDate,
+                                    Category = ImportedCategory,
+                                    Status = "Paid",
+                                    Tfiscal = 0m,
                                     CompanyId = companyId,
                                     CreatedByUserId = userId,
                                     CreatedAt = DateTime.UtcNow
                                 };
 
-                                _context.HistoricalRevenues.Add(newRevenue);
-                                pendingHistoricalByInvoiceId[invoice.Id] = newRevenue;
+                                if (client.Id > 0)
+                                    invoice.ClientId = client.Id;
+
+                                invoice.InvoiceItems.Add(new InvoiceItem
+                                {
+                                    Description = ImportedRevenueLineDescription,
+                                    Quantity = 1,
+                                    Price = parsedAmount,
+                                    Tva = false,
+                                    VatRate = 0m
+                                });
+                                invoice.CalculTotalAmount();
+
+                                invoice.Payments.Add(new Payment
+                                {
+                                    Amount = parsedAmount,
+                                    PaymentDate = utcDate,
+                                    Notes = string.IsNullOrWhiteSpace(paymentMethod)
+                                        ? "Imported via Data Management"
+                                        : $"Imported via Data Management ({paymentMethod})",
+                                    Status = "Completed",
+                                    CreatedByUserId = userId,
+                                    ConfirmedByUserId = userId,
+                                    ConfirmedAt = DateTime.UtcNow,
+                                    CreatedAt = DateTime.UtcNow
+                                });
+
+                                _context.Invoices.Add(invoice);
+                                invoiceLookup[invoiceNumber] = invoice;
                                 imported++;
+                                continue;
                             }
+
+                            invoice.Date = utcDate;
+                            invoice.DueDate ??= utcDate;
+                            invoice.Client = client;
+                            if (client.Id > 0)
+                                invoice.ClientId = client.Id;
+                            invoice.Category = ImportedCategory;
+                            invoice.Status = "Paid";
+                            invoice.Tfiscal = 0m;
+
+                            invoice.InvoiceItems ??= new List<InvoiceItem>();
+                            if (!invoice.InvoiceItems.Any())
+                            {
+                                invoice.InvoiceItems.Add(new InvoiceItem
+                                {
+                                    Description = ImportedRevenueLineDescription,
+                                    Quantity = 1,
+                                    Price = parsedAmount,
+                                    Tva = false,
+                                    VatRate = 0m
+                                });
+                            }
+                            else if (invoice.InvoiceItems.Count == 1
+                                && string.Equals(invoice.InvoiceItems.First().Description, ImportedRevenueLineDescription, StringComparison.OrdinalIgnoreCase))
+                            {
+                                var importedItem = invoice.InvoiceItems.First();
+                                importedItem.Quantity = 1;
+                                importedItem.Price = parsedAmount;
+                                importedItem.Tva = false;
+                                importedItem.VatRate = 0m;
+                            }
+                            invoice.CalculTotalAmount();
+
+                            invoice.Payments ??= new List<Payment>();
+                            var completedPaid = invoice.Payments
+                                .Where(p => string.Equals(p.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+                                .Sum(p => p.Amount);
+
+                            if (completedPaid < parsedAmount)
+                            {
+                                var topUpAmount = parsedAmount - completedPaid;
+                                invoice.Payments.Add(new Payment
+                                {
+                                    Amount = topUpAmount,
+                                    PaymentDate = utcDate,
+                                    Notes = string.IsNullOrWhiteSpace(paymentMethod)
+                                        ? "Imported via Data Management"
+                                        : $"Imported via Data Management ({paymentMethod})",
+                                    Status = "Completed",
+                                    CreatedByUserId = userId,
+                                    ConfirmedByUserId = userId,
+                                    ConfirmedAt = DateTime.UtcNow,
+                                    CreatedAt = DateTime.UtcNow
+                                });
+                            }
+
+                            updated++;
                         }
                         break;
                     }
 
                     case "expenses":
                     {
-                        // 1. Pre-load Suppliers
                         var existingSuppliers = await _context.Suppliers
                             .Where(f => f.CompanyId == companyId)
                             .ToListAsync();
@@ -614,23 +641,25 @@ namespace ResourceManager.Controllers
                             .GroupBy(f => f.Name.Trim(), StringComparer.OrdinalIgnoreCase)
                             .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
-                        // 2. Fetch existing for Deduplication
-                        var validDates = validation.ValidRows
-                            .Select(r => TryParseDate(SafeGet(r, "Date"), out var d) ? d : DateTime.MinValue)
-                            .Where(d => d != DateTime.MinValue)
+                        var invoiceNumberKeys = validation.ValidRows
+                            .Select(r => SafeGet(r, "InvoiceNumber"))
+                            .Where(n => !string.IsNullOrWhiteSpace(n))
+                            .Select(n => n.Trim().ToLowerInvariant())
+                            .Distinct()
                             .ToList();
 
-                        var minDate = validDates.Any() ? validDates.Min().AddDays(-1) : DateTime.MinValue;
-                        var maxDate = validDates.Any() ? validDates.Max().AddDays(1) : DateTime.MaxValue;
+                        var existingSupplierInvoices = invoiceNumberKeys.Count == 0
+                            ? new List<SupplierInvoice>()
+                            : await _context.SupplierInvoices
+                                .Include(si => si.Payments)
+                                .Where(si => si.CompanyId == companyId
+                                    && invoiceNumberKeys.Contains((si.InvoiceNumber ?? "").ToLower()))
+                                .ToListAsync();
 
-                        var existingExpenses = await _context.HistoricalExpenses
-                            .Where(e => e.CompanyId == companyId && e.Date >= minDate && e.Date <= maxDate)
-                            .ToListAsync();
-
-                        // Lookup Key: SupplierId + Date + Amount
-                        var expenseLookup = existingExpenses
-                            .GroupBy(e => new { Date = e.Date.Date, e.SupplierId, e.AmountPaid })
-                            .ToDictionary(g => g.Key, g => g.ToList());
+                        var supplierInvoiceLookup = existingSupplierInvoices
+                            .Where(si => !string.IsNullOrWhiteSpace(si.InvoiceNumber))
+                            .GroupBy(si => si.InvoiceNumber.Trim(), StringComparer.OrdinalIgnoreCase)
+                            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
                         foreach (var row in validation.ValidRows)
                         {
@@ -648,10 +677,10 @@ namespace ResourceManager.Controllers
 
                             var currency = CurrencyHelper.NormalizeCurrency(SafeGet(row, "Currency", "TND"));
                             if (string.IsNullOrEmpty(currency)) currency = "TND";
-                            var category = SafeGet(row, "Category");
-                            var reference = SafeGet(row, "Reference");
+                            var category = ImportedCategory;
+                            var invNum = SafeGet(row, "InvoiceNumber");
+                            if (string.IsNullOrWhiteSpace(invNum)) { skipped++; continue; }
 
-                            // Get-or-Create Supplier
                             if (!supplierLookup.TryGetValue(supplierName, out var supplier))
                             {
                                 supplier = new Supplier
@@ -665,46 +694,78 @@ namespace ResourceManager.Controllers
                                     CreatedAt = DateTime.UtcNow
                                 };
                                 _context.Suppliers.Add(supplier);
-                                await _context.SaveChangesAsync();
                                 supplierLookup[supplierName] = supplier;
                             }
 
-                            // Deduplication / Upsert Check
-                            var lookupKey = new { Date = utcDate.Date, SupplierId = (int?)supplier.Id, AmountPaid = parsedAmount };
-
-                            if (expenseLookup.TryGetValue(lookupKey, out var candidates) && candidates.Count > 0)
+                            if (!supplierInvoiceLookup.TryGetValue(invNum, out var supplierInvoice))
                             {
-                                // MATCH FOUND: Update
-                                var existing = candidates[0];
-                                candidates.RemoveAt(0);
-
-                                existing.SupplierName = supplierName;
-                                existing.Currency = currency;
-                                existing.Category = category;
-                                existing.Reference = reference;
-                                existing.UpdatedAt = DateTime.UtcNow;
+                                supplierInvoice = new SupplierInvoice
+                                {
+                                    FileName = $"import-{invNum}.csv",
+                                    FilePath = "imports/data-management",
+                                    FileType = "Import",
+                                    Category = category,
+                                    InvoiceNumber = invNum,
+                                    InvoiceDate = utcDate,
+                                    DueDate = utcDate,
+                                    TotalHT = parsedAmount,
+                                    TotalTTC = parsedAmount,
+                                    TVA = 0m,
+                                    ExtractionStatus = "Confirmed",
+                                    ConfidenceScore = 1.0,
+                                    Currency = currency,
+                                    CurrencySymbol = currency,
+                                    Supplier = supplier,
+                                    CompanyId = companyId,
+                                    UserId = userId,
+                                    PaymentStatus = "Paid",
+                                    CreatedAt = DateTime.UtcNow
+                                };
+                                if (supplier.Id > 0)
+                                    supplierInvoice.SupplierId = supplier.Id;
                                 
-                                _context.HistoricalExpenses.Update(existing);
-                                updated++;
+                                _context.SupplierInvoices.Add(supplierInvoice);
+                                supplierInvoiceLookup[invNum] = supplierInvoice;
+                                imported++;
                             }
                             else
                             {
-                                // NO MATCH: Insert
-                                _context.HistoricalExpenses.Add(new HistoricalExpense
+                                supplierInvoice.Supplier = supplier;
+                                if (supplier.Id > 0)
+                                    supplierInvoice.SupplierId = supplier.Id;
+                                supplierInvoice.InvoiceDate = utcDate;
+                                supplierInvoice.DueDate = utcDate;
+                                supplierInvoice.TotalHT = parsedAmount;
+                                supplierInvoice.TotalTTC = parsedAmount;
+                                supplierInvoice.TVA = 0m;
+                                supplierInvoice.Category = category;
+                                supplierInvoice.ExtractionStatus = "Confirmed";
+                                supplierInvoice.Currency = currency;
+                                supplierInvoice.CurrencySymbol = currency;
+                                if (string.IsNullOrWhiteSpace(supplierInvoice.UserId))
+                                    supplierInvoice.UserId = userId;
+                                updated++;
+                            }
+
+                            supplierInvoice.Payments ??= new List<SupplierPayment>();
+                            var completedPaid = supplierInvoice.Payments
+                                .Where(p => string.Equals(p.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+                                .Sum(p => p.Amount);
+
+                            if (completedPaid < parsedAmount)
+                            {
+                                var topUpAmount = parsedAmount - completedPaid;
+                                supplierInvoice.Payments.Add(new SupplierPayment
                                 {
-                                    Date = utcDate,
-                                    SupplierName = supplierName,
-                                    SupplierId = supplier.Id,
-                                    AmountPaid = parsedAmount,
-                                    Currency = currency,
-                                    Category = category,
-                                    Reference = reference,
-                                    IsHistorical = true,
-                                    CompanyId = companyId,
+                                    Amount = topUpAmount,
+                                    PaymentDate = utcDate,
+                                    Notes = "Imported via Data Management",
+                                    Status = "Completed",
                                     CreatedByUserId = userId,
+                                    ConfirmedByUserId = userId,
+                                    ConfirmedAt = DateTime.UtcNow,
                                     CreatedAt = DateTime.UtcNow
                                 });
-                                imported++;
                             }
                         }
                         break;
@@ -855,7 +916,7 @@ namespace ResourceManager.Controllers
 
                     case "otherexpenses":
                     {
-                        // Import OtherExpense records directly (not historical).
+                        // Import OtherExpense records directly into the core table.
                         // NOTE: NormalizeKeys aliases "Amount" → "Amount Paid" globally,
                         // so we read "Amount Paid" first, then fall back to "Amount".
                         foreach (var row in validation.ValidRows)
@@ -874,7 +935,7 @@ namespace ResourceManager.Controllers
                             var amountStr = SafeGet(row, "Amount Paid") is { Length: > 0 } ap ? ap : SafeGet(row, "Amount");
                             if (!TryParseAmount(amountStr, out var parsedAmount) || parsedAmount <= 0) { skipped++; continue; }
 
-                            var category = ExpensesController.NormalizeCategory(SafeGet(row, "Category", "other"));
+                            var category = ImportedCategory;
                             var currency = ExpensesController.NormalizeCurrency(SafeGet(row, "Currency", "TND"));
                             var notes = SafeGet(row, "Notes");
                             var recurringStr = SafeGet(row, "Recurring");
@@ -914,7 +975,7 @@ namespace ResourceManager.Controllers
                     return BadRequest(new { message = $"Unknown data type: {unknownType}" });
 
                 _logger.LogInformation(
-                    "Historical import: {Imported} new, {Updated} updated {Type} records, {Skipped} skipped, by user {User}",
+                    "Data import: {Imported} new, {Updated} updated {Type} records, {Skipped} skipped, by user {User}",
                     imported, updated, request.DataType, skipped, userId);
 
                 return Ok(new
@@ -946,19 +1007,492 @@ namespace ResourceManager.Controllers
         }
 
         /// <summary>
-        /// Get historical data summary
+        /// Handles user choice for conflicts (Update vs Keep Original).
+        /// </summary>
+        [HttpPost("import/resolve-conflicts")]
+        public async Task<IActionResult> ResolveConflicts([FromBody] ConflictResolutionRequest request)
+        {
+            if (request == null || request.Resolutions == null || request.Resolutions.Count == 0)
+                return BadRequest(new { message = "No resolutions provided" });
+
+            var userId = _userManager.GetUserId(User);
+            if (string.IsNullOrWhiteSpace(userId))
+                return Unauthorized();
+
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null)
+                return Unauthorized();
+
+            var companyId = user.CompanyId;
+            var dataType = request.DataType?.Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(dataType))
+                return BadRequest(new { message = "Data type is required" });
+
+            var strategy = _context.Database.CreateExecutionStrategy();
+            int updated = 0;
+            int skipped = 0;
+            int requestedUpdates = 0;
+            int affectedRows = 0;
+
+            try
+            {
+                await strategy.ExecuteAsync(async () =>
+                {
+                    using var transaction = await _context.Database.BeginTransactionAsync();
+                    var clientLookup = new Dictionary<string, Client>(StringComparer.OrdinalIgnoreCase);
+                    var supplierLookup = new Dictionary<string, Supplier>(StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var resolution in request.Resolutions)
+                    {
+                        var choice = (resolution.Choice ?? string.Empty).Trim().ToLowerInvariant();
+                        if (choice != "update")
+                        {
+                            skipped++;
+                            continue;
+                        }
+                        requestedUpdates++;
+
+                        var row = resolution.NewData ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        var didUpdate = false;
+
+                        switch (dataType)
+                        {
+                            case "revenues":
+                                {
+                                    var invoiceNumber = SafeGet(row, "InvoiceNumber");
+                                    var existing = await _context.Invoices
+                                        .Include(i => i.Payments)
+                                        .Include(i => i.InvoiceItems)
+                                        .FirstOrDefaultAsync(i => i.Id == resolution.ExistingId && i.CompanyId == companyId);
+                                    if (existing == null && !string.IsNullOrWhiteSpace(invoiceNumber))
+                                    {
+                                        existing = await _context.Invoices
+                                            .Include(i => i.Payments)
+                                            .Include(i => i.InvoiceItems)
+                                            .Where(i => i.CompanyId == companyId && i.Number == invoiceNumber)
+                                            .OrderByDescending(i => i.UpdatedAt ?? i.CreatedAt)
+                                            .FirstOrDefaultAsync();
+                                    }
+                                    if (existing == null)
+                                    {
+                                        _logger.LogWarning(
+                                            "Conflict update skipped (revenues): existing record not found. ExistingId={ExistingId}, InvoiceNumber={InvoiceNumber}, CompanyId={CompanyId}",
+                                            resolution.ExistingId, invoiceNumber, companyId);
+                                        skipped++;
+                                        continue;
+                                    }
+
+                                    if (TryParseDate(SafeGet(row, "Date"), out var d)) existing.Date = d.ToUniversalTime();
+
+                                    var clientName = SafeGet(row, "Client Name");
+                                    if (!string.IsNullOrWhiteSpace(clientName))
+                                    {
+                                        if (!clientLookup.TryGetValue(clientName, out var client))
+                                        {
+                                            client = await _context.Clients
+                                                .FirstOrDefaultAsync(c => c.CompanyId == companyId && c.Name == clientName);
+                                            if (client == null)
+                                            {
+                                                client = new Client
+                                                {
+                                                    Name = clientName,
+                                                    Address = "",
+                                                    TaxId = "",
+                                                    Phone = "",
+                                                    CompanyId = companyId,
+                                                    CreatedByUserId = userId,
+                                                    CreatedAt = DateTime.UtcNow
+                                                };
+                                                _context.Clients.Add(client);
+                                            }
+                                            clientLookup[clientName] = client;
+                                        }
+
+                                        existing.ClientId = client.Id > 0 ? client.Id : existing.ClientId;
+                                    }
+
+                                    var amountFromRow = 0m;
+                                    var hasAmount = TryParseAmount(SafeGet(row, "Amount Paid"), out amountFromRow);
+                                    var paymentMethod = SafeGet(row, "Payment Method");
+
+                                    if (!string.IsNullOrWhiteSpace(invoiceNumber))
+                                    {
+                                        existing.Number = invoiceNumber;
+                                    }
+
+                                    existing.Category = ImportedCategory;
+                                    existing.Status = "Paid";
+                                    existing.Tfiscal = 0m;
+
+                                    if (hasAmount)
+                                    {
+                                        existing.InvoiceItems ??= new List<InvoiceItem>();
+                                        if (!existing.InvoiceItems.Any())
+                                        {
+                                            existing.InvoiceItems.Add(new InvoiceItem
+                                            {
+                                                Description = ImportedRevenueLineDescription,
+                                                Quantity = 1,
+                                                Price = amountFromRow,
+                                                Tva = false,
+                                                VatRate = 0m
+                                            });
+                                        }
+                                        else if (existing.InvoiceItems.Count == 1
+                                            && string.Equals(existing.InvoiceItems.First().Description, ImportedRevenueLineDescription, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            var importedItem = existing.InvoiceItems.First();
+                                            importedItem.Quantity = 1;
+                                            importedItem.Price = amountFromRow;
+                                            importedItem.Tva = false;
+                                            importedItem.VatRate = 0m;
+                                        }
+
+                                        existing.CalculTotalAmount();
+
+                                        existing.Payments ??= new List<Payment>();
+                                        var completedPaid = existing.Payments
+                                            .Where(p => string.Equals(p.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+                                            .Sum(p => p.Amount);
+                                        if (completedPaid < amountFromRow)
+                                        {
+                                            existing.Payments.Add(new Payment
+                                            {
+                                                Amount = amountFromRow - completedPaid,
+                                                PaymentDate = existing.Date,
+                                                Notes = string.IsNullOrWhiteSpace(paymentMethod)
+                                                    ? "Imported via Data Management"
+                                                    : $"Imported via Data Management ({paymentMethod})",
+                                                Status = "Completed",
+                                                CreatedByUserId = userId,
+                                                ConfirmedByUserId = userId,
+                                                ConfirmedAt = DateTime.UtcNow,
+                                                CreatedAt = DateTime.UtcNow
+                                            });
+                                        }
+                                    }
+
+                                    existing.UpdatedAt = DateTime.UtcNow;
+                                    _context.Invoices.Update(existing);
+                                    didUpdate = true;
+                                }
+                                break;
+
+                            case "expenses":
+                                {
+                                    var invoiceNumber = SafeGet(row, "InvoiceNumber");
+                                    var existing = await _context.SupplierInvoices
+                                        .Include(si => si.Payments)
+                                        .FirstOrDefaultAsync(si => si.Id == resolution.ExistingId && si.CompanyId == companyId);
+                                    if (existing == null && !string.IsNullOrWhiteSpace(invoiceNumber))
+                                    {
+                                        existing = await _context.SupplierInvoices
+                                            .Include(si => si.Payments)
+                                            .Where(si => si.CompanyId == companyId && si.InvoiceNumber == invoiceNumber)
+                                            .OrderByDescending(si => si.CreatedAt)
+                                            .FirstOrDefaultAsync();
+                                    }
+                                    if (existing == null)
+                                    {
+                                        _logger.LogWarning(
+                                            "Conflict update skipped (expenses): existing record not found. ExistingId={ExistingId}, InvoiceNumber={InvoiceNumber}, CompanyId={CompanyId}",
+                                            resolution.ExistingId, invoiceNumber, companyId);
+                                        skipped++;
+                                        continue;
+                                    }
+
+                                    if (TryParseDate(SafeGet(row, "Date"), out var d))
+                                    {
+                                        existing.InvoiceDate = d.ToUniversalTime();
+                                        existing.DueDate = existing.InvoiceDate;
+                                    }
+
+                                    var supplierName = SafeGet(row, "Supplier");
+                                    if (!string.IsNullOrWhiteSpace(supplierName))
+                                    {
+                                        if (!supplierLookup.TryGetValue(supplierName, out var supplier))
+                                        {
+                                            supplier = await _context.Suppliers
+                                                .FirstOrDefaultAsync(s => s.CompanyId == companyId && s.Name == supplierName);
+                                            if (supplier == null)
+                                            {
+                                                supplier = new Supplier
+                                                {
+                                                    Name = supplierName,
+                                                    Address = "",
+                                                    TaxId = "",
+                                                    Phone = "",
+                                                    CompanyId = companyId,
+                                                    CreatedByUserId = userId,
+                                                    CreatedAt = DateTime.UtcNow
+                                                };
+                                                _context.Suppliers.Add(supplier);
+                                            }
+                                            supplierLookup[supplierName] = supplier;
+                                        }
+
+                                        if (supplier.Id > 0)
+                                            existing.SupplierId = supplier.Id;
+                                    }
+
+                                    decimal? importedAmount = null;
+                                    if (TryParseAmount(SafeGet(row, "Amount Paid"), out var amt))
+                                    {
+                                        importedAmount = amt;
+                                        existing.TotalHT = amt;
+                                        existing.TotalTTC = amt;
+                                        existing.TVA = 0m;
+                                    }
+
+                                    var currency = CurrencyHelper.NormalizeCurrency(SafeGet(row, "Currency", existing.Currency ?? "TND"));
+                                    existing.Currency = string.IsNullOrWhiteSpace(currency) ? (existing.Currency ?? "TND") : currency;
+                                    existing.CurrencySymbol = existing.Currency;
+                                    existing.Category = ImportedCategory;
+                                    existing.ExtractionStatus = "Confirmed";
+                                    if (!string.IsNullOrWhiteSpace(invoiceNumber))
+                                        existing.InvoiceNumber = invoiceNumber;
+                                    if (TryParseDate(SafeGet(row, "Date"), out var date))
+                                    {
+                                        existing.InvoiceDate = date.ToUniversalTime();
+                                        existing.DueDate = existing.InvoiceDate;
+                                    }
+
+                                    if (importedAmount.HasValue && importedAmount.Value > 0)
+                                    {
+                                        existing.Payments ??= new List<SupplierPayment>();
+                                        var completedPaid = existing.Payments
+                                            .Where(p => string.Equals(p.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+                                            .Sum(p => p.Amount);
+                                        if (completedPaid < importedAmount.Value)
+                                        {
+                                            existing.Payments.Add(new SupplierPayment
+                                            {
+                                                Amount = importedAmount.Value - completedPaid,
+                                                PaymentDate = existing.InvoiceDate ?? DateTime.UtcNow,
+                                                Notes = "Imported via Data Management",
+                                                Status = "Completed",
+                                                CreatedByUserId = userId,
+                                                ConfirmedByUserId = userId,
+                                                ConfirmedAt = DateTime.UtcNow,
+                                                CreatedAt = DateTime.UtcNow
+                                            });
+                                        }
+                                    }
+
+                                    _context.SupplierInvoices.Update(existing);
+                                    didUpdate = true;
+                                }
+                                break;
+
+                            case "clients":
+                                {
+                                    var existing = await _context.Clients
+                                        .FirstOrDefaultAsync(c => c.Id == resolution.ExistingId && c.CompanyId == companyId);
+                                    if (existing == null)
+                                    {
+                                        _logger.LogWarning(
+                                            "Conflict update skipped (clients): existing record not found. ExistingId={ExistingId}, CompanyId={CompanyId}",
+                                            resolution.ExistingId, companyId);
+                                        skipped++;
+                                        continue;
+                                    }
+
+                                    var name = SafeGet(row, "Name");
+                                    if (!string.IsNullOrWhiteSpace(name)) existing.Name = name;
+                                    var address = SafeGet(row, "Address");
+                                    if (!string.IsNullOrWhiteSpace(address)) existing.Address = address;
+                                    var phone = SafeGet(row, "Phone Number");
+                                    if (!string.IsNullOrWhiteSpace(phone)) existing.Phone = phone;
+                                    var taxId = SafeGet(row, "Matricule Fiscal");
+                                    if (!string.IsNullOrWhiteSpace(taxId)) existing.TaxId = taxId;
+                                    var email = SafeGet(row, "Email");
+                                    if (!string.IsNullOrWhiteSpace(email)) existing.Email = email;
+                                    existing.UpdatedAt = DateTime.UtcNow;
+                                    _context.Clients.Update(existing);
+                                    didUpdate = true;
+                                }
+                                break;
+
+                            case "suppliers":
+                                {
+                                    var existing = await _context.Suppliers
+                                        .FirstOrDefaultAsync(s => s.Id == resolution.ExistingId && s.CompanyId == companyId);
+                                    if (existing == null)
+                                    {
+                                        _logger.LogWarning(
+                                            "Conflict update skipped (suppliers): existing record not found. ExistingId={ExistingId}, CompanyId={CompanyId}",
+                                            resolution.ExistingId, companyId);
+                                        skipped++;
+                                        continue;
+                                    }
+
+                                    var name = SafeGet(row, "Name");
+                                    if (!string.IsNullOrWhiteSpace(name)) existing.Name = name;
+                                    var address = SafeGet(row, "Address");
+                                    if (!string.IsNullOrWhiteSpace(address)) existing.Address = address;
+                                    var phone = SafeGet(row, "Phone Number");
+                                    if (!string.IsNullOrWhiteSpace(phone)) existing.Phone = phone;
+                                    var taxId = SafeGet(row, "Matricule Fiscal");
+                                    if (!string.IsNullOrWhiteSpace(taxId)) existing.TaxId = taxId;
+                                    existing.UpdatedAt = DateTime.UtcNow;
+                                    _context.Suppliers.Update(existing);
+                                    didUpdate = true;
+                                }
+                                break;
+
+                            case "products":
+                                {
+                                    var existing = await _context.ProductServices
+                                        .FirstOrDefaultAsync(p => p.Id == resolution.ExistingId && p.CompanyId == companyId);
+                                    if (existing == null)
+                                    {
+                                        _logger.LogWarning(
+                                            "Conflict update skipped (products): existing record not found. ExistingId={ExistingId}, CompanyId={CompanyId}",
+                                            resolution.ExistingId, companyId);
+                                        skipped++;
+                                        continue;
+                                    }
+
+                                    var name = SafeGet(row, "Name");
+                                    if (!string.IsNullOrWhiteSpace(name)) existing.Name = name;
+                                    if (TryParseAmount(SafeGet(row, "Price"), out var price)) existing.DefaultUnitPrice = price;
+                                    if (TryParseAmount(SafeGet(row, "TVA Rate"), out var tva)) existing.TvaRate = tva;
+                                    existing.Description = SafeGet(row, "Description");
+                                    existing.UpdatedAt = DateTime.UtcNow;
+                                    _context.ProductServices.Update(existing);
+                                    didUpdate = true;
+                                }
+                                break;
+
+                            case "otherexpenses":
+                                {
+                                    var existing = await _context.OtherExpenses
+                                        .FirstOrDefaultAsync(e => e.Id == resolution.ExistingId && e.CompanyId == companyId);
+                                    if (existing == null)
+                                    {
+                                        var amountProbeRaw = SafeGet(row, "Amount");
+                                        if (string.IsNullOrWhiteSpace(amountProbeRaw))
+                                            amountProbeRaw = SafeGet(row, "Amount Paid");
+
+                                        var descProbe = SafeGet(row, "Description");
+                                        if (TryParseDate(SafeGet(row, "Date"), out var dateProbe)
+                                            && TryParseAmount(amountProbeRaw, out var amountProbe)
+                                            && !string.IsNullOrWhiteSpace(descProbe))
+                                        {
+                                            var utcProbe = DateTime.SpecifyKind(dateProbe, DateTimeKind.Utc);
+                                            existing = await _context.OtherExpenses
+                                                .Where(e => e.CompanyId == companyId
+                                                            && e.Date.Date == utcProbe.Date
+                                                            && e.Amount == amountProbe
+                                                            && e.Description == descProbe)
+                                                .OrderByDescending(e => e.UpdatedAt ?? e.CreatedAt)
+                                                .FirstOrDefaultAsync();
+                                        }
+                                    }
+                                    if (existing == null)
+                                    {
+                                        _logger.LogWarning(
+                                            "Conflict update skipped (otherexpenses): existing record not found. ExistingId={ExistingId}, CompanyId={CompanyId}",
+                                            resolution.ExistingId, companyId);
+                                        skipped++;
+                                        continue;
+                                    }
+
+                                    if (TryParseDate(SafeGet(row, "Date"), out var d))
+                                        existing.Date = DateTime.SpecifyKind(d, DateTimeKind.Utc);
+
+                                    var description = SafeGet(row, "Description");
+                                    if (!string.IsNullOrWhiteSpace(description))
+                                        existing.Description = description;
+
+                                    var amountRaw = SafeGet(row, "Amount");
+                                    if (string.IsNullOrWhiteSpace(amountRaw))
+                                        amountRaw = SafeGet(row, "Amount Paid");
+                                    if (TryParseAmount(amountRaw, out var amt))
+                                        existing.Amount = amt;
+
+                                    existing.Category = ImportedCategory;
+                                    var currency = ExpensesController.NormalizeCurrency(SafeGet(row, "Currency", existing.Currency ?? "TND"));
+                                    existing.Currency = string.IsNullOrWhiteSpace(currency) ? "TND" : currency;
+                                    existing.CurrencySymbol = existing.Currency;
+
+                                    var notes = SafeGet(row, "Notes");
+                                    existing.Notes = string.IsNullOrWhiteSpace(notes) ? null : notes;
+
+                                    var recurring = SafeGet(row, "Recurring");
+                                    if (!string.IsNullOrWhiteSpace(recurring))
+                                    {
+                                        existing.IsRecurring = recurring.Equals("yes", StringComparison.OrdinalIgnoreCase)
+                                            || recurring.Equals("true", StringComparison.OrdinalIgnoreCase)
+                                            || recurring == "1";
+                                    }
+
+                                    existing.UpdatedAt = DateTime.UtcNow;
+                                    _context.OtherExpenses.Update(existing);
+                                    didUpdate = true;
+                                }
+                                break;
+
+                            default:
+                                skipped++;
+                                continue;
+                        }
+
+                        if (didUpdate)
+                            updated++;
+                        else
+                            skipped++;
+                    }
+
+                    affectedRows = await _context.SaveChangesAsync();
+                    if (requestedUpdates > 0 && affectedRows == 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"Conflict resolution requested {requestedUpdates} updates but no database rows were written.");
+                    }
+                    await transaction.CommitAsync();
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error resolving conflicts for {Type}", request.DataType);
+                return StatusCode(500, new { message = "Failed to resolve conflicts" });
+            }
+
+            if (affectedRows > 0)
+            {
+                var successLog =
+                    $"[ConflictResolution] DB write confirmed for {dataType}. affectedRows={affectedRows}, requestedUpdates={requestedUpdates}, updated={updated}, skipped={skipped}.";
+                _logger.LogInformation(successLog);
+                Console.WriteLine(successLog);
+            }
+
+            return Ok(new
+            {
+                success = true,
+                updated,
+                skipped,
+                affectedRows,
+                message = $"Conflict resolution completed: {updated} updated, {skipped} skipped."
+            });
+        }
+
+        /// <summary>
+        /// Get imported data summary from core tables.
         /// </summary>
         [HttpGet("import/summary")]
         public async Task<IActionResult> GetImportSummary()
         {
-            var revenues = await _context.HistoricalRevenues.CountAsync();
-            var expenses = await _context.HistoricalExpenses.CountAsync();
+            var importedRevenues = await _context.Invoices.CountAsync(i => i.Category == ImportedCategory);
+            var importedExpenses = await _context.SupplierInvoices.CountAsync(si => si.Category == ImportedCategory);
+            var importedOtherExpenses = await _context.OtherExpenses.CountAsync(e => e.Category == ImportedCategory);
 
             return Ok(new
             {
-                historicalRevenues = revenues,
-                historicalExpenses = expenses,
-                totalHistorical = revenues + expenses
+                importedRevenues,
+                importedExpenses,
+                importedOtherExpenses,
+                totalImported = importedRevenues + importedExpenses + importedOtherExpenses
             });
         }
 
@@ -970,6 +1504,7 @@ namespace ResourceManager.Controllers
         /// GET: api/DataManagement/template/{type}
         /// Returns a semicolon-separated CSV file with the correct headers + one example row.
         /// CRITICAL: Uses ';' separator to match our MiniExcel/CSV parser configuration.
+        /// Supports 'lang' query parameter (en, fr, ar, de).
         /// </summary>
         [HttpGet("template/{type}")]
         public IActionResult DownloadTemplate(string type, [FromQuery] string lang = "en")
@@ -984,12 +1519,12 @@ namespace ResourceManager.Controllers
                     if (lang == "fr")
                     {
                         headers = "Date;Nom Client;Montant Payé;Devise;Mode de paiement;Numéro de facture";
-                        exampleRow = "31/10/2024;Nom du client;1500,50;TND;Virement bancaire;FA26-001";
+                        exampleRow = "31/10/2024;Nom du Client;1500,50;TND;Virement bancaire;FA26-001";
                     }
                     else if (lang == "ar")
                     {
                         headers = "التاريخ;اسم العميل;المبلغ المدفوع;العملة;طريقة الدفع;رقم الفاتورة";
-                        exampleRow = "31/10/2024;اسم العميل;1500.50;TND;تحويل بنكي;FA26-001";
+                        exampleRow = "31/10/2024;اسم العميل;1500,50;TND;تحويل بنكي;FA26-001";
                     }
                     else if (lang == "de")
                     {
@@ -999,128 +1534,147 @@ namespace ResourceManager.Controllers
                     else
                     {
                         headers = "Date;Client Name;Amount Paid;Currency;Payment Method;InvoiceNumber";
-                        exampleRow = "10/31/2024;Client Name;1500.50;TND;Bank Transfer;FA26-001";
+                        exampleRow = "31/10/2024;Client Name;1500,50;TND;Bank Transfer;FA26-001";
                     }
                     break;
+
                 case "expenses":
                     if (lang == "fr")
                     {
-                        headers = "Date;Fournisseur;Montant Payé;Devise;Catégorie";
-                        exampleRow = "31/10/2024;Nom fournisseur;500,00;TND;Fournitures de bureau";
+                        headers = "Date;Fournisseur;Montant Payé;Devise;Catégorie;Numéro de facture";
+                        exampleRow = "31/10/2024;Nom du Fournisseur;500,00;TND;Fournitures de bureau;SUP-2024-001";
                     }
                     else if (lang == "ar")
                     {
-                        headers = "التاريخ;المزود;المبلغ المدفوع;العملة;الفئة";
-                        exampleRow = "31/10/2024;اسم المزود;500.50;TND;لوازم مكتبية";
+                        headers = "التاريخ;المزود;المبلغ المدفوع;العملة;الفئة;رقم الفاتورة";
+                        exampleRow = "31/10/2024;اسم المزود;500,00;TND;لوازم مكتبية;SUP-2024-001";
                     }
                     else if (lang == "de")
                     {
-                        headers = "Datum;Lieferant;Gezahlter Betrag;Währung;Kategorie";
-                        exampleRow = "31.10.2024;Lieferant Name;500,00;TND;Bürobedarf";
+                        headers = "Datum;Lieferant;Gezahlter Betrag;Währung;Kategorie;Rechnungsnummer";
+                        exampleRow = "31.10.2024;Lieferantenname;500,00;TND;Büromaterial;SUP-2024-001";
                     }
                     else
                     {
-                        headers = "Date;Supplier;Amount Paid;Currency;Category";
-                        exampleRow = "10/31/2024;Supplier Name;500.00;TND;Office Supplies";
+                        headers = "Date;Supplier;Amount Paid;Currency;Category;InvoiceNumber";
+                        exampleRow = "31/10/2024;Supplier Name;500,00;TND;Office Supplies;SUP-2024-001";
                     }
                     break;
+
                 case "clients":
                     if (lang == "fr")
                     {
-                        headers = "Nom;Matricule Fiscal;Numéro de téléphone;Adresse;Email";
-                        exampleRow = "Nom Client;MF123456;+21699123456;Tunis;client@email.com";
+                        headers = "Nom;Matricule Fiscal;Téléphone;Adresse;Email";
+                        exampleRow = "Nom du Client;MF123456;+21699123456;Tunis;client@email.com";
                     }
                     else if (lang == "ar")
                     {
-                        headers = "الاسم;المعرف الجبائي;رقم الهاتف;العنوان;البريد الإلكتروني";
+                        headers = "الاسم;المعرف الجبائي;الهاتف;العنوان;البريد الإلكتروني";
                         exampleRow = "اسم العميل;MF123456;+21699123456;تونس;client@email.com";
                     }
                     else if (lang == "de")
                     {
-                        headers = "Name;Steuernummer;Telefonnummer;Adresse;E-Mail";
+                        headers = "Name;Steuernummer;Telefon;Adresse;E-Mail";
                         exampleRow = "Kundenname;MF123456;+21699123456;Berlin;client@email.com";
                     }
                     else
                     {
                         headers = "Name;Matricule Fiscal;Phone Number;Address;Email";
-                        exampleRow = "Client Name;MF123456;+21699123456;City;client@email.com";
+                        exampleRow = "Client Name;MF123456;+21699123456;Tunis;client@email.com";
                     }
                     break;
+
                 case "suppliers":
                     if (lang == "fr")
                     {
-                        headers = "Nom;Matricule Fiscal;Numéro de téléphone;Adresse";
-                        exampleRow = "Nom Fournisseur;MF654321;+21699654321;Tunis";
+                        headers = "Nom;Matricule Fiscal;Téléphone;Adresse";
+                        exampleRow = "Nom du Fournisseur;MF654321;+21699654321;Tunis";
                     }
                     else if (lang == "ar")
                     {
-                        headers = "الاسم;المعرف الجبائي;رقم الهاتف;العنوان";
+                        headers = "الاسم;المعرف الجبائي;الهاتف;العنوان";
                         exampleRow = "اسم المزود;MF654321;+21699654321;تونس";
                     }
                     else if (lang == "de")
                     {
-                        headers = "Name;Steuernummer;Telefonnummer;Adresse";
-                        exampleRow = "Lieferantenname;MF654321;+21699654321;Hamburg";
+                        headers = "Name;Steuernummer;Telefon;Adresse";
+                        exampleRow = "Lieferantenname;MF654321;+21699654321;Berlin";
                     }
                     else
                     {
                         headers = "Name;Matricule Fiscal;Phone Number;Address";
-                        exampleRow = "Supplier Name;MF654321;+21699654321;City";
+                        exampleRow = "Supplier Name;MF654321;+21699654321;Tunis";
                     }
                     break;
+
                 case "products":
                     if (lang == "fr")
                     {
                         headers = "Nom;Prix;Devise;Taux TVA;Description";
-                        exampleRow = "Nom Produit;100,00;TND;19;Abonnement annuel";
+                        exampleRow = "Nom du Produit;100,00;TND;19;Abonnement annuel";
                     }
                     else if (lang == "ar")
                     {
                         headers = "الاسم;السعر;العملة;نسبة الأداء;الوصف";
-                        exampleRow = "اسم المنتج;100.00;TND;19;اشتراك سنوي";
+                        exampleRow = "اسم المنتج;100,00;TND;19;اشتراك سنوي";
                     }
                     else if (lang == "de")
                     {
-                        headers = "Name;Preis;Währung;MwSt-Satz;Beschreibung";
+                        headers = "Name;Preis;Währung;USt-Satz;Beschreibung";
                         exampleRow = "Produktname;100,00;TND;19;Jahresabonnement";
                     }
                     else
                     {
                         headers = "Name;Price;Currency;TVA Rate;Description";
-                        exampleRow = "Product Name;100.00;TND;19;Annual subscription";
+                        exampleRow = "Product Name;100,00;TND;19;Annual subscription";
                     }
                     break;
+
                 case "otherexpenses":
                     if (lang == "fr")
                     {
                         headers = "Description;Montant;Date;Catégorie;Devise;Notes;Récurrent";
-                        exampleRow = "Fournitures de bureau;150,00;31/01/2025;bureau;TND;Papeterie mensuelle;Non";
+                        exampleRow = "Fournitures bureau;150,00;31/01/2025;office;TND;Papeterie mensuelle;Non";
                     }
                     else if (lang == "ar")
                     {
                         headers = "الوصف;المبلغ;التاريخ;الفئة;العملة;ملاحظات;متكرر";
-                        exampleRow = "لوازم مكتبية;150.00;31/01/2025;office;TND;قرطاسية شهرية;لا";
+                        exampleRow = "لوازم مكتبية;150,00;31/01/2025;office;TND;قرطاسية شهرية;لا";
                     }
                     else if (lang == "de")
                     {
                         headers = "Beschreibung;Betrag;Datum;Kategorie;Währung;Notizen;Wiederkehrend";
-                        exampleRow = "Büromaterial;150,00;31.01.2025;office;TND;Monatlicher Schreibwarenbedarf;Nein";
+                        exampleRow = "Büromaterial;150,00;31.01.2025;office;TND;Monatliche Schreibwaren;Nein";
                     }
                     else
                     {
                         headers = "Description;Amount;Date;Category;Currency;Notes;Recurring";
-                        exampleRow = "Office Supplies;150.00;01/31/2025;office;TND;Monthly stationery;No";
+                        exampleRow = "Office Supplies;150,00;31/01/2025;office;TND;Monthly stationery;No";
                     }
                     break;
+
                 default:
                     return BadRequest(new { message = $"Unknown template type: {type}" });
+            }
+
+            // Category is hardcoded as "imported" during backend import mapping.
+            // Keep localized templates but remove category columns for import files.
+            if (type.Equals("expenses", StringComparison.OrdinalIgnoreCase))
+            {
+                headers = RemoveSemicolonColumn(headers, 4);
+                exampleRow = RemoveSemicolonColumn(exampleRow, 4);
+            }
+            else if (type.Equals("otherexpenses", StringComparison.OrdinalIgnoreCase))
+            {
+                headers = RemoveSemicolonColumn(headers, 3);
+                exampleRow = RemoveSemicolonColumn(exampleRow, 3);
             }
 
             // BOM + semicolon-separated CSV
             var csv = $"{headers}\n{exampleRow}\n";
             var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray();
 
-            return File(bytes, "text/csv; charset=utf-8", $"{type}_template.csv");
+            return File(bytes, "text/csv; charset=utf-8", $"{type}_template_{lang}.csv");
         }
 
         // ═══════════════════════════════════════════════════════════
@@ -1140,6 +1694,19 @@ namespace ResourceManager.Controllers
             return string.IsNullOrWhiteSpace(trimmed) ? fallback : trimmed;
         }
 
+        private static string RemoveSemicolonColumn(string line, int columnIndex)
+        {
+            if (string.IsNullOrWhiteSpace(line) || columnIndex < 0)
+                return line;
+
+            var columns = line.Split(';').ToList();
+            if (columnIndex >= columns.Count)
+                return line;
+
+            columns.RemoveAt(columnIndex);
+            return string.Join(';', columns);
+        }
+
         private async Task<ValidationResult> ValidateRowsAsync(string dataType, List<Dictionary<string, string>> rows, int companyId)
         {
             var errors = new List<ValidationError>();
@@ -1152,7 +1719,7 @@ namespace ResourceManager.Controllers
                     requiredColumns = new[] { "Date", "Client Name", "Amount Paid", "Currency", "InvoiceNumber" };
                     break;
                 case "expenses":
-                    requiredColumns = new[] { "Date", "Supplier", "Amount Paid", "Currency" };
+                    requiredColumns = new[] { "Date", "Supplier", "Amount Paid", "Currency", "InvoiceNumber" };
                     break;
                 case "clients":
                     requiredColumns = new[] { "Name" };
@@ -1208,8 +1775,12 @@ namespace ResourceManager.Controllers
                     row["Amount"] = row["Amount Paid"];
                 }
 
-                // Use i + 2 to map to Excel row number (Row 1 = Headers, Row 2 = Data Row 0)
+                // Prefer source row metadata when available so reported row numbers stay exact.
                 var rowNum = i + 2;
+                if (int.TryParse(SafeGet(row, "__SourceRowNumber"), out var sourceRowNum) && sourceRowNum > 0)
+                    rowNum = sourceRowNum;
+                else if (int.TryParse(SafeGet(row, "__RowNumber"), out var existingRowNum) && existingRowNum > 0)
+                    rowNum = existingRowNum;
                 var rowErrors = new List<string>();
 
                 // Validate required fields are non-empty
@@ -1256,6 +1827,36 @@ namespace ResourceManager.Controllers
                             rowErrors.Add("'Amount Paid' must be a valid positive number");
                         }
                     }
+
+                    // String length checks for Revenues and Expenses
+                    if (dataType.ToLower() == "revenues")
+                    {
+                        var invNum = SafeGet(row, "InvoiceNumber");
+                        if (!string.IsNullOrWhiteSpace(invNum) && invNum.Length > 100) rowErrors.Add("'InvoiceNumber' cannot exceed 100 characters");
+
+                        var clientName = SafeGet(row, "Client Name");
+                        if (!string.IsNullOrWhiteSpace(clientName) && clientName.Length > 200) rowErrors.Add("'Client Name' cannot exceed 200 characters");
+
+                        var reference = SafeGet(row, "Reference");
+                        if (!string.IsNullOrWhiteSpace(reference) && reference.Length > 200) rowErrors.Add("'Reference' cannot exceed 200 characters");
+
+                        var payMethod = SafeGet(row, "Payment Method");
+                        if (!string.IsNullOrWhiteSpace(payMethod) && payMethod.Length > 100) rowErrors.Add("'Payment Method' cannot exceed 100 characters");
+                    }
+                    else if (dataType.ToLower() == "expenses")
+                    {
+                        var invNum = SafeGet(row, "InvoiceNumber");
+                        if (!string.IsNullOrWhiteSpace(invNum) && invNum.Length > 100) rowErrors.Add("'InvoiceNumber' cannot exceed 100 characters");
+
+                        var supplierName = SafeGet(row, "Supplier");
+                        if (!string.IsNullOrWhiteSpace(supplierName) && supplierName.Length > 200) rowErrors.Add("'Supplier' name cannot exceed 200 characters");
+
+                        var reference = SafeGet(row, "Reference");
+                        if (!string.IsNullOrWhiteSpace(reference) && reference.Length > 200) rowErrors.Add("'Reference' cannot exceed 200 characters");
+
+                        var category = SafeGet(row, "Category");
+                        if (!string.IsNullOrWhiteSpace(category) && category.Length > 50) rowErrors.Add("'Category' cannot exceed 50 characters");
+                    }
                     // otherExpenses uses "Amount" column instead of "Amount Paid"
                     if (row.ContainsKey("Amount") && !string.IsNullOrWhiteSpace(row["Amount"]))
                     {
@@ -1266,8 +1867,35 @@ namespace ResourceManager.Controllers
                     }
                 }
 
+                if (dataType.ToLower() == "clients" || dataType.ToLower() == "suppliers")
+                {
+                    var name = SafeGet(row, "Name");
+                    if (!string.IsNullOrWhiteSpace(name) && name.Length > 200) rowErrors.Add("'Name' cannot exceed 200 characters");
+
+                    var taxId = SafeGet(row, "Matricule Fiscal");
+                    if (!string.IsNullOrWhiteSpace(taxId) && taxId.Length > 100) rowErrors.Add("'Matricule Fiscal' cannot exceed 100 characters");
+
+                    var phone = SafeGet(row, "Phone Number");
+                    if (!string.IsNullOrWhiteSpace(phone) && phone.Length > 50) rowErrors.Add("'Phone Number' cannot exceed 50 characters");
+
+                    var address = SafeGet(row, "Address");
+                    if (!string.IsNullOrWhiteSpace(address) && address.Length > 500) rowErrors.Add("'Address' cannot exceed 500 characters");
+                    
+                    if (dataType.ToLower() == "clients")
+                    {
+                        var email = SafeGet(row, "Email");
+                        if (!string.IsNullOrWhiteSpace(email) && email.Length > 200) rowErrors.Add("'Email' cannot exceed 200 characters");
+                    }
+                }
+
                 if (dataType.ToLower() == "products")
                 {
+                    var name = SafeGet(row, "Name");
+                    if (!string.IsNullOrWhiteSpace(name) && name.Length > 200) rowErrors.Add("'Name' cannot exceed 200 characters");
+
+                    var description = SafeGet(row, "Description");
+                    if (!string.IsNullOrWhiteSpace(description) && description.Length > 500) rowErrors.Add("'Description' cannot exceed 500 characters");
+
                     if (row.ContainsKey("Price") && !string.IsNullOrWhiteSpace(row["Price"]))
                     {
                         if (TryParseAmount(row["Price"], out var price) && price >= 0)
@@ -1296,45 +1924,217 @@ namespace ResourceManager.Controllers
                 }
             }
 
-            if (dataType.ToLower() == "revenues" && validRows.Count > 0)
+            if (validRows.Count > 0)
             {
-                var invoiceNumbers = validRows
-                    .Select(r => SafeGet(r, "InvoiceNumber"))
-                    .Where(n => !string.IsNullOrWhiteSpace(n))
-                    .Select(n => n.Trim())
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList();
+                var conflicts = new List<ImportConflict>();
 
-                var validInvoices = await _context.Invoices
-                    .Where(i => i.CompanyId == companyId && invoiceNumbers.Contains(i.Number))
-                    .Select(i => i.Number)
-                    .ToListAsync();
-
-                var invoiceSet = new HashSet<string>(validInvoices, StringComparer.OrdinalIgnoreCase);
-                var filteredValidRows = new List<Dictionary<string, string>>(validRows.Count);
-
-                foreach (var row in validRows)
+                if (dataType.ToLower() == "revenues")
                 {
-                    var invoiceNumber = SafeGet(row, "InvoiceNumber");
-                    if (!invoiceSet.Contains(invoiceNumber))
+                    var invoiceNumbers = validRows
+                        .Select(r => SafeGet(r, "InvoiceNumber"))
+                        .Where(n => !string.IsNullOrWhiteSpace(n))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+
+                    var existingInvoices = await _context.Invoices
+                        .AsNoTracking()
+                        .Include(i => i.Client)
+                        .Include(i => i.Quote)
+                        .Include(i => i.Payments)
+                        .Where(i => i.CompanyId == companyId && invoiceNumbers.Contains(i.Number))
+                        .ToListAsync();
+
+                    var invoiceLookup = existingInvoices
+                        .GroupBy(i => i.Number, StringComparer.OrdinalIgnoreCase)
+                        .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.UpdatedAt ?? x.CreatedAt).First(), StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var row in validRows)
                     {
-                        var sourceRow = int.TryParse(SafeGet(row, "__RowNumber"), out var parsedSourceRow)
-                            ? parsedSourceRow
-                            : 0;
-                        errors.Add(new ValidationError(sourceRow, $"Invoice number '{invoiceNumber}' was not found for your company."));
-                        continue;
+                        var invNum = SafeGet(row, "InvoiceNumber");
+                        if (invoiceLookup.TryGetValue(invNum, out var existing))
+                        {
+                            var amountPaid = existing.Payments?.Where(p => p.Status == "Completed").Sum(p => p.Amount) ?? 0m;
+                            var sourceRow = int.TryParse(SafeGet(row, "__RowNumber"), out var parsedSourceRow) ? parsedSourceRow : 0;
+                            conflicts.Add(new ImportConflict
+                            {
+                                Identifier = invNum,
+                                ExistingId = existing.Id,
+                                ExistingData = new Dictionary<string, string>
+                                {
+                                    { "Date", existing.Date.ToString("yyyy-MM-dd") },
+                                    { "Client Name", existing.Client?.Name ?? "" },
+                                    { "Amount Paid", amountPaid.ToString(CultureInfo.InvariantCulture) },
+                                    { "Currency", existing.Quote?.Currency ?? "" },
+                                    { "Payment Method", "" }
+                                },
+                                NewData = new Dictionary<string, string>(row),
+                                RowIndex = sourceRow
+                            });
+                        }
                     }
-
-                    row.Remove("__RowNumber");
-                    filteredValidRows.Add(row);
                 }
+                else if (dataType.ToLower() == "clients" || dataType.ToLower() == "suppliers")
+                {
+                    var names = validRows.Select(r => SafeGet(r, "Name")).Where(n => !string.IsNullOrWhiteSpace(n)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    
+                    if (dataType.ToLower() == "clients")
+                    {
+                        var existingClients = await _context.Clients
+                            .Where(c => c.CompanyId == companyId && names.Contains(c.Name))
+                            .ToDictionaryAsync(c => c.Name, c => c, StringComparer.OrdinalIgnoreCase);
 
-                validRows = filteredValidRows;
-            }
-            else
-            {
-                foreach (var row in validRows)
-                    row.Remove("__RowNumber");
+                        foreach (var row in validRows)
+                        {
+                            var name = SafeGet(row, "Name");
+                            if (existingClients.TryGetValue(name, out var existing))
+                            {
+                                var sourceRow = int.TryParse(SafeGet(row, "__RowNumber"), out var pr) ? pr : 0;
+                                conflicts.Add(new ImportConflict
+                                {
+                                    Identifier = name,
+                                    ExistingId = existing.Id,
+                                    ExistingData = new Dictionary<string, string>
+                                    {
+                                        { "Name", existing.Name },
+                                        { "Address", existing.Address ?? "" },
+                                        { "Phone Number", existing.Phone ?? "" },
+                                        { "Matricule Fiscal", existing.TaxId ?? "" }
+                                    },
+                                    NewData = new Dictionary<string, string>(row),
+                                    RowIndex = sourceRow
+                                });
+                            }
+                        }
+                    }
+                    else
+                    {
+                        var existingSuppliers = await _context.Suppliers
+                            .Where(s => s.CompanyId == companyId && names.Contains(s.Name))
+                            .ToDictionaryAsync(s => s.Name, s => s, StringComparer.OrdinalIgnoreCase);
+
+                        foreach (var row in validRows)
+                        {
+                            var name = SafeGet(row, "Name");
+                            if (existingSuppliers.TryGetValue(name, out var existing))
+                            {
+                                var sourceRow = int.TryParse(SafeGet(row, "__RowNumber"), out var pr) ? pr : 0;
+                                conflicts.Add(new ImportConflict
+                                {
+                                    Identifier = name,
+                                    ExistingId = existing.Id,
+                                    ExistingData = new Dictionary<string, string>
+                                    {
+                                        { "Name", existing.Name },
+                                        { "Address", existing.Address ?? "" },
+                                        { "Phone Number", existing.Phone ?? "" },
+                                        { "Matricule Fiscal", existing.TaxId ?? "" }
+                                    },
+                                    NewData = new Dictionary<string, string>(row),
+                                    RowIndex = sourceRow
+                                });
+                            }
+                        }
+                    }
+                }
+                else if (dataType.ToLower() == "products")
+                {
+                    var names = validRows.Select(r => SafeGet(r, "Name")).Where(n => !string.IsNullOrWhiteSpace(n)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    var existingProducts = await _context.ProductServices
+                        .Where(p => p.CompanyId == companyId && names.Contains(p.Name))
+                        .ToDictionaryAsync(p => p.Name, p => p, StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var row in validRows)
+                    {
+                        var name = SafeGet(row, "Name");
+                        if (existingProducts.TryGetValue(name, out var existing))
+                        {
+                            var sourceRow = int.TryParse(SafeGet(row, "__RowNumber"), out var pr) ? pr : 0;
+                            conflicts.Add(new ImportConflict
+                            {
+                                Identifier = name,
+                                ExistingId = existing.Id,
+                                ExistingData = new Dictionary<string, string>
+                                {
+                                    { "Name", existing.Name },
+                                    { "Price", existing.DefaultUnitPrice.ToString(CultureInfo.InvariantCulture) },
+                                    { "TVA Rate", existing.TvaRate.ToString(CultureInfo.InvariantCulture) }
+                                },
+                                NewData = new Dictionary<string, string>(row),
+                                RowIndex = sourceRow
+                            });
+                        }
+                    }
+                }
+                else if (dataType.ToLower() == "expenses")
+                {
+                    var invNums = validRows.Select(r => SafeGet(r, "InvoiceNumber")).Where(n => !string.IsNullOrWhiteSpace(n)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    var existingExpenses = await _context.SupplierInvoices
+                        .AsNoTracking()
+                        .Include(e => e.Supplier)
+                        .Include(e => e.Payments)
+                        .Where(e => e.CompanyId == companyId && invNums.Contains(e.InvoiceNumber ?? ""))
+                        .ToDictionaryAsync(e => e.InvoiceNumber ?? "", e => e, StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var row in validRows)
+                    {
+                        var invNum = SafeGet(row, "InvoiceNumber");
+                        if (existingExpenses.TryGetValue(invNum, out var existing))
+                        {
+                            var amountPaid = existing.Payments?.Where(p => p.Status == "Completed").Sum(p => p.Amount) ?? 0m;
+                            var sourceRow = int.TryParse(SafeGet(row, "__RowNumber"), out var pr) ? pr : 0;
+                            conflicts.Add(new ImportConflict
+                            {
+                                Identifier = invNum,
+                                ExistingId = existing.Id,
+                                ExistingData = new Dictionary<string, string>
+                                {
+                                    { "Date", (existing.InvoiceDate ?? existing.CreatedAt).ToString("yyyy-MM-dd") },
+                                    { "Supplier", existing.Supplier?.Name ?? "" },
+                                    { "Amount Paid", amountPaid.ToString(CultureInfo.InvariantCulture) },
+                                    { "Currency", existing.Currency ?? "TND" },
+                                    { "InvoiceNumber", existing.InvoiceNumber ?? "" }
+                                },
+                                NewData = new Dictionary<string, string>(row),
+                                RowIndex = sourceRow
+                            });
+                        }
+                    }
+                }
+                else if (dataType.ToLower() == "otherexpenses")
+                {
+                    foreach (var row in validRows)
+                    {
+                        if (TryParseDate(SafeGet(row, "Date"), out var d) && TryParseAmount(SafeGet(row, "Amount"), out var amt))
+                        {
+                            var utcDate = d.ToUniversalTime();
+                            var desc = SafeGet(row, "Description");
+                            var existing = await _context.OtherExpenses
+                                .Where(e => e.CompanyId == companyId && e.Date.Date == utcDate.Date && e.Amount == amt && e.Description == desc)
+                                .OrderByDescending(e => e.UpdatedAt ?? e.CreatedAt)
+                                .FirstOrDefaultAsync();
+
+                            if (existing != null)
+                            {
+                                var sourceRow = int.TryParse(SafeGet(row, "__RowNumber"), out var pr) ? pr : 0;
+                                conflicts.Add(new ImportConflict
+                                {
+                                    Identifier = $"{desc} / {d:yyyy-MM-dd} / {amt}",
+                                    ExistingId = existing.Id,
+                                    ExistingData = new Dictionary<string, string>
+                                    {
+                                        { "Date", existing.Date.ToString("yyyy-MM-dd") },
+                                        { "Description", existing.Description },
+                                        { "Amount", existing.Amount.ToString(CultureInfo.InvariantCulture) },
+                                        { "Category", existing.Category ?? "" }
+                                    },
+                                    NewData = new Dictionary<string, string>(row),
+                                    RowIndex = sourceRow
+                                });
+                            }
+                        }
+                    }
+                }
+                return new ValidationResult(errors, validRows, conflicts);
             }
 
             return new ValidationResult(errors, validRows);
@@ -1346,102 +2146,74 @@ namespace ResourceManager.Controllers
         /// </summary>
         private static readonly Dictionary<string, string> ColumnAliases = new(StringComparer.OrdinalIgnoreCase)
         {
-            // Revenue / Expense shared
-            { "Date", "Date" },
-            { "Datum", "Date" },                      // German
-            { "التاريخ", "Date" },                    // Arabic
-            
             // Revenue aliases
             { "Payment", "Payment Method" },
             { "Method", "Payment Method" },
             { "Paiement", "Payment Method" },        // French
             { "Mode de paiement", "Payment Method" }, // French
             { "طريقة الدفع", "Payment Method" },      // Arabic
-            { "Zahlungsmethode", "Payment Method" },  // German
-            
+            { "Zahlungsmethode", "Payment Method" }, // German
             { "Client", "Client Name" },
-            { "Client Name", "Client Name" },
             { "Nom Client", "Client Name" },          // French
-            { "Nom du client", "Client Name" },       // French
             { "اسم العميل", "Client Name" },          // Arabic
             { "Kundenname", "Client Name" },          // German
-            
-            { "Amount Paid", "Amount Paid" },
-            { "Montant", "Amount Paid" },             // French
+            { "Montant", "Amount Paid" },
             { "Montant Payé", "Amount Paid" },        // French
-            { "Amount", "Amount Paid" },
             { "المبلغ المدفوع", "Amount Paid" },      // Arabic
             { "Gezahlter Betrag", "Amount Paid" },    // German
-            { "Betrag", "Amount Paid" },              // German
-            
+            { "Amount", "Amount Paid" },
             { "Devise", "Currency" },                 // French
-            { "العملة", "Currency" },                  // Arabic
+            { "العملة", "Currency" },                 // Arabic
             { "Währung", "Currency" },                // German
-            
             { "Invoice Number", "InvoiceNumber" },
             { "InvoiceNumber", "InvoiceNumber" },
             { "Invoice No", "InvoiceNumber" },
             { "Ref", "InvoiceNumber" },
             { "Référence", "InvoiceNumber" },         // French
-            { "Numéro de facture", "InvoiceNumber" }, // French
             { "رقم الفاتورة", "InvoiceNumber" },      // Arabic
-            { "Rechnungsnummer", "InvoiceNumber" },   // German
-            
+            { "Rechnungsnummer", "InvoiceNumber" },    // German
+            { "Numéro de facture", "InvoiceNumber" }, // French
             // Expense aliases
             { "Fournisseur", "Supplier" },            // French
             { "Supplier Name", "Supplier" },
             { "المزود", "Supplier" },                 // Arabic
-            { "اسم المزود", "Supplier" },              // Arabic
             { "Lieferant", "Supplier" },              // German
-            { "Lieferant Name", "Supplier" },         // German
-            
             { "Catégorie", "Category" },              // French
             { "الفئة", "Category" },                  // Arabic
             { "Kategorie", "Category" },              // German
-            
-            // Client / Supplier aliases
+            // Client aliases
             { "Nom", "Name" },                        // French
             { "الاسم", "Name" },                      // Arabic
             { "Téléphone", "Phone Number" },          // French
-            { "Numéro de téléphone", "Phone Number" }, // French
             { "Phone", "Phone Number" },
             { "Tel", "Phone Number" },
-            { "رقم الهاتف", "Phone Number" },         // Arabic
-            { "Telefonnummer", "Phone Number" },      // German
-            
-            { "Adresse", "Address" },                 // French/German
+            { "الهاتف", "Phone Number" },             // Arabic
+            { "Telefon", "Phone Number" },            // German
+            { "Adresse", "Address" },                 // French
             { "العنوان", "Address" },                 // Arabic
-            
-            { "Matricule", "Matricule Fiscal" },      // French
-            { "Matricule Fiscal", "Matricule Fiscal" },
+            { "Matricule", "Matricule Fiscal" },
             { "المعرف الجبائي", "Matricule Fiscal" }, // Arabic
             { "Steuernummer", "Matricule Fiscal" },   // German
-            
+            { "البريد الإلكتروني", "Email" },         // Arabic
+            { "E-Mail", "Email" },                    // German
             // Product aliases
             { "Prix", "Price" },                      // French
             { "السعر", "Price" },                     // Arabic
             { "Preis", "Price" },                     // German
-            
             { "Taux TVA", "TVA Rate" },               // French
             { "TVA", "TVA Rate" },
             { "VAT Rate", "TVA Rate" },
             { "VAT", "TVA Rate" },
             { "نسبة الأداء", "TVA Rate" },            // Arabic
-            { "MwSt-Satz", "TVA Rate" },              // German
-            { "MwSt", "TVA Rate" },                   // German
-
-            // Other Expenses
+            { "USt-Satz", "TVA Rate" },               // German
             { "الوصف", "Description" },               // Arabic
-            { "Beschreibung", "Description" },        // German
-            { "المبلغ", "Amount" },                   // Arabic
-            { "Betrag_Direct", "Amount" },
-            { "Notes", "Notes" },
-            { "ملاحظات", "Notes" },                   // Arabic
-            { "Notizen", "Notizen" },                 // German
-            { "Recurring", "Recurring" },
+            // Other Expenses
             { "Récurrent", "Recurring" },             // French
             { "متكرر", "Recurring" },                 // Arabic
             { "Wiederkehrend", "Recurring" },         // German
+            { "Notizen", "Notes" },                   // German
+            { "ملاحظات", "Notes" },                   // Arabic
+            { "Betrag", "Amount" }                    // German
         };
 
         private static Dictionary<string, string> NormalizeKeys(Dictionary<string, string> row)
@@ -1768,7 +2540,11 @@ namespace ResourceManager.Controllers
                         if (!string.IsNullOrWhiteSpace(value)) hasData = true;
                     }
 
-                    if (hasData) rows.Add(rowData);
+                    if (hasData)
+                    {
+                        rowData["__SourceRowNumber"] = row.ToString(CultureInfo.InvariantCulture);
+                        rows.Add(rowData);
+                    }
                 }
 
                 return Ok(new { headers, rows, rowCount = rows.Count });
@@ -1817,7 +2593,7 @@ namespace ResourceManager.Controllers
                 });
             }
 
-            // 2. Persist as HistoricalRevenue records with Client linkage
+            // 2. Persist into core Invoice records with Client linkage
             var userId = _userManager.GetUserId(User);
             var user = await _userManager.FindByIdAsync(userId ?? string.Empty);
             if (user == null)
@@ -1862,43 +2638,97 @@ namespace ResourceManager.Controllers
                         clientLookup[clientName] = client;
                     }
 
-                    int? invoiceId = null;
-                    string? normalizedInvoiceNumber = null;
-                    if (!string.IsNullOrWhiteSpace(dto.InvoiceNumber))
-                    {
-                        normalizedInvoiceNumber = dto.InvoiceNumber.Trim();
-                        var invoice = await _context.Invoices
-                            .AsNoTracking()
-                            .FirstOrDefaultAsync(i => i.CompanyId == companyId && i.Number == normalizedInvoiceNumber);
+                    var normalizedInvoiceNumber = !string.IsNullOrWhiteSpace(dto.InvoiceNumber)
+                        ? dto.InvoiceNumber.Trim()
+                        : $"IMP-{DateTime.UtcNow:yyyyMMddHHmmssfff}-{imported + 1}";
 
-                        if (invoice == null)
+                    var invoice = await _context.Invoices
+                        .Include(i => i.Payments)
+                        .Include(i => i.InvoiceItems)
+                        .FirstOrDefaultAsync(i => i.CompanyId == companyId && i.Number == normalizedInvoiceNumber);
+
+                    if (invoice == null)
+                    {
+                        invoice = new Invoice
                         {
-                            await transaction.RollbackAsync();
-                            return BadRequest(new
+                            Number = normalizedInvoiceNumber,
+                            Date = dto.Date.ToUniversalTime(),
+                            DueDate = dto.Date.ToUniversalTime(),
+                            Client = client,
+                            Category = ImportedCategory,
+                            Status = "Paid",
+                            Tfiscal = 0m,
+                            CompanyId = companyId,
+                            CreatedByUserId = userId,
+                            CreatedAt = DateTime.UtcNow
+                        };
+                        if (client.Id > 0)
+                            invoice.ClientId = client.Id;
+
+                        invoice.InvoiceItems.Add(new InvoiceItem
+                        {
+                            Description = ImportedRevenueLineDescription,
+                            Quantity = 1,
+                            Price = dto.AmountPaid,
+                            Tva = false,
+                            VatRate = 0m
+                        });
+                        invoice.CalculTotalAmount();
+
+                        _context.Invoices.Add(invoice);
+                    }
+                    else
+                    {
+                        invoice.Date = dto.Date.ToUniversalTime();
+                        invoice.DueDate ??= dto.Date.ToUniversalTime();
+                        invoice.ClientId = client.Id > 0 ? client.Id : invoice.ClientId;
+                        invoice.Category = ImportedCategory;
+                        invoice.Status = "Paid";
+                        invoice.Tfiscal = 0m;
+
+                        invoice.InvoiceItems ??= new List<InvoiceItem>();
+                        if (!invoice.InvoiceItems.Any())
+                        {
+                            invoice.InvoiceItems.Add(new InvoiceItem
                             {
-                                message = $"Invoice number '{normalizedInvoiceNumber}' was not found for your company.",
-                                row = imported + 2,
-                                column = "InvoiceNumber"
+                                Description = ImportedRevenueLineDescription,
+                                Quantity = 1,
+                                Price = dto.AmountPaid,
+                                Tva = false,
+                                VatRate = 0m
                             });
                         }
-
-                        invoiceId = invoice.Id;
-                        normalizedInvoiceNumber = invoice.Number;
+                        else if (invoice.InvoiceItems.Count == 1
+                            && string.Equals(invoice.InvoiceItems.First().Description, ImportedRevenueLineDescription, StringComparison.OrdinalIgnoreCase))
+                        {
+                            var importedItem = invoice.InvoiceItems.First();
+                            importedItem.Quantity = 1;
+                            importedItem.Price = dto.AmountPaid;
+                            importedItem.Tva = false;
+                            importedItem.VatRate = 0m;
+                        }
+                        invoice.CalculTotalAmount();
                     }
 
-                    _context.HistoricalRevenues.Add(new HistoricalRevenue
+                    invoice.Payments ??= new List<Payment>();
+                    var completedPaid = invoice.Payments
+                        .Where(p => string.Equals(p.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+                        .Sum(p => p.Amount);
+                    if (completedPaid < dto.AmountPaid)
                     {
-                        Date = dto.Date.ToUniversalTime(),
-                        ClientName = clientName,
-                        Client = client,
-                        AmountPaid = dto.AmountPaid,
-                        Currency = CurrencyHelper.NormalizeCurrency(dto.Currency) is { Length: > 0 } nc ? nc : "TND",
-                        PaymentMethod = dto.PaymentMethod?.Trim(),
-                        InvoiceId = invoiceId,
-                        InvoiceNumber = normalizedInvoiceNumber,
-                        IsHistorical = true,
-                        CreatedAt = DateTime.UtcNow
-                    });
+                        invoice.Payments.Add(new Payment
+                        {
+                            Amount = dto.AmountPaid - completedPaid,
+                            PaymentDate = dto.Date.ToUniversalTime(),
+                            Notes = string.IsNullOrWhiteSpace(dto.PaymentMethod) ? "Imported via Data Management" : $"Imported via Data Management ({dto.PaymentMethod})",
+                            Status = "Completed",
+                            CreatedByUserId = userId,
+                            ConfirmedByUserId = userId,
+                            ConfirmedAt = DateTime.UtcNow,
+                            CreatedAt = DateTime.UtcNow
+                        });
+                    }
+
                     imported++;
                 }
 
@@ -1958,15 +2788,40 @@ namespace ResourceManager.Controllers
         {
             public List<ValidationError> Errors { get; set; }
             public List<Dictionary<string, string>> ValidRows { get; set; }
+            public List<ImportConflict> Conflicts { get; set; } = new();
             public int TotalRows => Errors.Count + ValidRows.Count;
             public int ValidCount => ValidRows.Count;
             public int ErrorCount => Errors.Count;
+            public int ConflictCount => Conflicts.Count;
 
-            public ValidationResult(List<ValidationError> errors, List<Dictionary<string, string>> validRows)
+            public ValidationResult(List<ValidationError> errors, List<Dictionary<string, string>> validRows, List<ImportConflict>? conflicts = null)
             {
                 Errors = errors;
                 ValidRows = validRows;
+                Conflicts = conflicts ?? new List<ImportConflict>();
             }
+        }
+
+        public class ImportConflict
+        {
+            public string Identifier { get; set; } = string.Empty;
+            public int ExistingId { get; set; }
+            public Dictionary<string, string> ExistingData { get; set; } = new();
+            public Dictionary<string, string> NewData { get; set; } = new();
+            public int RowIndex { get; set; }
+        }
+
+        public class ConflictResolutionRequest
+        {
+            public string DataType { get; set; } = string.Empty;
+            public List<ConflictResolution> Resolutions { get; set; } = new();
+        }
+
+        public class ConflictResolution
+        {
+            public int ExistingId { get; set; }
+            public string Choice { get; set; } = "skip"; // update, keep_original
+            public Dictionary<string, string> NewData { get; set; } = new();
         }
 
         private record ExportRow(DateTime Date, string ClientName, decimal AmountPaid, string Currency, string PaymentMethod, string InvoiceNumber);

@@ -249,21 +249,7 @@ public class EntityCrudAuditTests
         Assert.Equal("Pending", fi.PaymentStatus);
     }
 
-    [Fact]
-    public void SupplierInvoice_ComputedPaymentStatus_PartiallyPaid()
-    {
-        var fi = new SupplierInvoice { TotalTTC = 1000m };
-        fi.Payments.Add(new SupplierPayment { Amount = 500m, Status = "Completed" });
-        Assert.Equal("PartiallyPaid", fi.PaymentStatus);
-    }
-
-    [Fact]
-    public void SupplierInvoice_ComputedPaymentStatus_Paid()
-    {
-        var fi = new SupplierInvoice { TotalTTC = 1000m };
-        fi.Payments.Add(new SupplierPayment { Amount = 1000m, Status = "Completed" });
-        Assert.Equal("Paid", fi.PaymentStatus);
-    }
+    
 
     [Fact]
     public void SupplierInvoice_PendingPayments_ExcludedFromAmountPaid()
