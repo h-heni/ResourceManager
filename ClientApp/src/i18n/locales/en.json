@@ -1,5 +1,6 @@
 {
   "common": {
+    "product": "Product",
     "loading": "Loading...",
     "save": "Save",
     "cancel": "Cancel",

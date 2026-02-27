@@ -1,5 +1,6 @@
 {
   "common": {
+    "product": "Produit",
     "loading": "Chargement...",
     "save": "Enregistrer",
     "cancel": "Annuler",

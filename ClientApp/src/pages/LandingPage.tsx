@@ -109,7 +109,7 @@ const DashboardPreview = ({ t }: { t: TFunction }) => {
         <div className="w-3 h-3 rounded-full bg-yellow-400" />
         <div className="w-3 h-3 rounded-full bg-green-400" />
       </div>
-      <span className="text-xs text-white ml-2 font-mono">dashboard.resourcemanager.com</span>
+      <span className="text-xs text-white ml-2 font-mono">dashboard.rscmanager.com</span>
     </div>
 
     {/* Dashboard Content */}
@@ -122,12 +122,12 @@ const DashboardPreview = ({ t }: { t: TFunction }) => {
           { label: t('landing.dashboardPreview.pendingPayments'), value: '$12,400', change: '-5%', color: 'orange' },
           { label: t('landing.dashboardPreview.activeCustomers'), value: '89', change: '+15%', color: 'purple' },
         ].map((stat, i) => (
-          <div key={i} className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
-            <p className="text-xs text-gray-500 font-medium mb-1">{stat.label}</p>
+          <div key={i} className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm overflow-hidden">
+            <p className="text-xs text-gray-500 font-medium mb-1 truncate">{stat.label}</p>
             <p className="text-lg font-bold text-gray-900 mb-1">{stat.value}</p>
             <div className={`inline-flex items-center gap-1 text-xs font-medium ${stat.change.startsWith('+') ? 'text-emerald-600' : 'text-red-500'}`}>
-              {stat.change.startsWith('+') ? <TrendingUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-              {stat.change} {t('landing.stats.changeFromLastMonth')}
+              {stat.change.startsWith('+') ? <TrendingUp className="w-3 h-3 flex-shrink-0" /> : <ChevronDown className="w-3 h-3 flex-shrink-0" />}
+              <span className="truncate">{stat.change} {t('landing.stats.changeFromLastMonth')}</span>
             </div>
           </div>
         ))}
@@ -135,7 +135,7 @@ const DashboardPreview = ({ t }: { t: TFunction }) => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-wrap items-center justify-between mb-4 gap-2">
             <h3 className="text-sm font-semibold text-gray-900">{t('dashboard.revenueVsExpenses', 'Revenue vs Expenses')}</h3>
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1.5">
@@ -148,7 +148,7 @@ const DashboardPreview = ({ t }: { t: TFunction }) => {
               </div>
             </div>
           </div>
-          <div className="h-[280px] w-full">
+          <div className="h-[280px] w-full min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={revenueExpenseChartData} barGap={4}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
@@ -168,7 +168,7 @@ const DashboardPreview = ({ t }: { t: TFunction }) => {
               {netResult >= 0 ? '+' : ''}{fmt(netResult)}
             </span>
           </div>
-          <div className="h-[280px] w-full">
+          <div className="h-[280px] w-full min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={growthTrajectoryData}>
                 <defs>
@@ -189,9 +189,9 @@ const DashboardPreview = ({ t }: { t: TFunction }) => {
       </div>
 
       {/* Recent Activity */}
-      <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+      <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm overflow-x-auto">
         <h3 className="text-sm font-semibold text-gray-900 mb-3">{t('landing.dashboardPreview.recentInvoices')}</h3>
-        <div className="space-y-2">
+        <div className="space-y-2 min-w-[300px]">
           {[
             { client: 'Acme Corp', amount: '$2,500', status: t('landing.invoicesPreview.paid'), date: t('landing.dashboardPreview.today') },
             { client: 'Tech Solutions', amount: '$4,200', status: t('landing.invoicesPreview.pending'), date: t('landing.dashboardPreview.yesterday') },
@@ -204,7 +204,7 @@ const DashboardPreview = ({ t }: { t: TFunction }) => {
               </div>
               <div className="text-right">
                 <p className="text-sm font-semibold text-gray-900">{invoice.amount}</p>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                <span className={`text-xs px-2 py-0.5 rounded-full whitespace-nowrap ${
                   invoice.status === t('landing.invoicesPreview.paid') ? 'bg-emerald-100 text-emerald-700' : 'bg-orange-100 text-orange-700'
                 }`}>
                   {invoice.status}
@@ -228,15 +228,15 @@ const InvoicesPreview = ({ t }: { t: TFunction }) => (
         <div className="w-3 h-3 rounded-full bg-yellow-400" />
         <div className="w-3 h-3 rounded-full bg-green-400" />
       </div>
-      <span className="text-xs text-white ml-2 font-mono">invoices.resourcemanager.com</span>
+      <span className="text-xs text-white ml-2 font-mono truncate">invoices.rscmanager.com</span>
     </div>
 
     {/* Invoices Content */}
-    <div className="bg-gray-50">
+    <div className="bg-gray-50 w-full overflow-hidden">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+      <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between gap-4 overflow-x-auto">
         <div className="flex items-center gap-3">
-          <Search className="w-4 h-4 text-gray-400" />
+          <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
           <input
             type="text"
             placeholder={t('landing.invoicesPreview.searchInvoices')}
@@ -245,8 +245,8 @@ const InvoicesPreview = ({ t }: { t: TFunction }) => (
           />
         </div>
         <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-gray-400" />
-          <span className="text-xs bg-[#065F46] text-white px-3 py-1.5 rounded-lg font-medium">
+          <Filter className="w-4 h-4 text-gray-400 flex-shrink-0" />
+          <span className="text-xs bg-[#065F46] text-white px-3 py-1.5 rounded-lg font-medium whitespace-nowrap">
             {t('landing.invoicesPreview.newInvoice')}
           </span>
         </div>
@@ -262,8 +262,8 @@ const InvoicesPreview = ({ t }: { t: TFunction }) => (
       </div>
 
       {/* Invoice Table */}
-      <div className="bg-white">
-        <table className="w-full">
+      <div className="bg-white overflow-x-auto">
+        <table className="w-full min-w-[500px]">
           <thead>
             <tr className="border-b border-gray-200">
               <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500 uppercase">{t('landing.invoicesPreview.invoice')}</th>
@@ -281,11 +281,11 @@ const InvoicesPreview = ({ t }: { t: TFunction }) => (
               { id: 'INV-005', client: 'Digital Ventures', amount: '$5,750.00', status: t('landing.invoicesPreview.paid') },
             ].map((invoice, i) => (
               <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
-                <td className="px-4 py-3 text-sm text-gray-900 font-medium">{invoice.id}</td>
-                <td className="px-4 py-3 text-sm text-gray-700">{invoice.client}</td>
-                <td className="px-4 py-3 text-sm text-gray-900 font-semibold text-right">{invoice.amount}</td>
+                <td className="px-4 py-3 text-sm text-gray-900 font-medium whitespace-nowrap">{invoice.id}</td>
+                <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{invoice.client}</td>
+                <td className="px-4 py-3 text-sm text-gray-900 font-semibold text-right whitespace-nowrap">{invoice.amount}</td>
                 <td className="px-4 py-3 text-right">
-                  <span className={`inline-flex items-center text-xs px-2.5 py-1 rounded-full font-medium ${
+                  <span className={`inline-flex items-center text-xs px-2.5 py-1 rounded-full font-medium whitespace-nowrap ${
                     invoice.status === t('landing.invoicesPreview.paid') ? 'bg-emerald-100 text-emerald-700' :
                     invoice.status === t('landing.invoicesPreview.pending') ? 'bg-blue-100 text-blue-700' :
                     'bg-red-100 text-red-700'
@@ -328,20 +328,20 @@ const DataManagementPreview = ({ t }: { t: TFunction }) => (
         <div className="w-3 h-3 rounded-full bg-yellow-400" />
         <div className="w-3 h-3 rounded-full bg-green-400" />
       </div>
-      <span className="text-xs text-white ml-2 font-mono">data.resourcemanager.com</span>
+      <span className="text-xs text-white ml-2 font-mono truncate">data.resourcemanager.com</span>
     </div>
 
     {/* Data Management Content */}
-    <div className="bg-gray-50 p-4 space-y-4">
+    <div className="bg-gray-50 p-4 space-y-4 overflow-x-hidden">
       {/* Import Section */}
       <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+          <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center flex-shrink-0">
             <Download className="w-5 h-5 text-emerald-600" />
           </div>
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900">{t('landing.dataManagementPreview.importData')}</h3>
-            <p className="text-xs text-gray-500">{t('landing.dataManagementPreview.importDesc')}</p>
+          <div className="overflow-hidden">
+            <h3 className="text-sm font-semibold text-gray-900 truncate">{t('landing.dataManagementPreview.importData')}</h3>
+            <p className="text-xs text-gray-500 truncate">{t('landing.dataManagementPreview.importDesc')}</p>
           </div>
         </div>
         <div className="grid grid-cols-3 gap-3">
@@ -354,26 +354,26 @@ const DataManagementPreview = ({ t }: { t: TFunction }) => (
               <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center text-gray-600">
                 {item.icon}
               </div>
-              <span className="text-xs font-medium text-gray-700">{item.label}</span>
+              <span className="text-[10px] sm:text-xs font-medium text-gray-700 truncate w-full text-center">{item.label}</span>
               <span className="text-xs text-gray-400">{item.count}</span>
             </div>
           ))}
         </div>
         <span className="w-full mt-4 flex items-center justify-center gap-2 bg-[#065F46] text-white py-2.5 rounded-lg text-sm font-medium">
-          <FileSpreadsheet className="w-4 h-4" />
-          {t('landing.dataManagementPreview.importFromExcel')}
+          <FileSpreadsheet className="w-4 h-4 flex-shrink-0" />
+          <span className="truncate">{t('landing.dataManagementPreview.importFromExcel')}</span>
         </span>
       </div>
 
       {/* Export Section */}
       <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+          <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
             <Upload className="w-5 h-5 text-blue-600" />
           </div>
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900">{t('landing.dataManagementPreview.exportData')}</h3>
-            <p className="text-xs text-gray-500">{t('landing.dataManagementPreview.exportDesc')}</p>
+          <div className="overflow-hidden">
+            <h3 className="text-sm font-semibold text-gray-900 truncate">{t('landing.dataManagementPreview.exportData')}</h3>
+            <p className="text-xs text-gray-500 truncate">{t('landing.dataManagementPreview.exportDesc')}</p>
           </div>
         </div>
         <div className="space-y-2">
@@ -383,14 +383,14 @@ const DataManagementPreview = ({ t }: { t: TFunction }) => (
             { label: t('landing.dataManagementPreview.financialReport'), date: `${t('landing.dataManagementPreview.lastExport')} 3 ${t('landing.dataManagementPreview.daysAgo')}` },
           ].map((export_, i) => (
             <div key={i} className="flex items-center justify-between py-2.5 px-3 rounded-lg border border-gray-200">
-              <div className="flex items-center gap-3">
-                <FileSpreadsheet className="w-4 h-4 text-gray-400" />
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{export_.label}</p>
-                  <p className="text-xs text-gray-500">{export_.date}</p>
+              <div className="flex items-center gap-3 overflow-hidden">
+                <FileSpreadsheet className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                <div className="overflow-hidden">
+                  <p className="text-sm font-medium text-gray-900 truncate">{export_.label}</p>
+                  <p className="text-xs text-gray-500 truncate">{export_.date}</p>
                 </div>
               </div>
-              <span className="text-xs text-blue-600 font-medium">{t('landing.dataManagementPreview.export')}</span>
+              <span className="text-xs text-blue-600 font-medium ml-2">{t('landing.dataManagementPreview.export')}</span>
             </div>
           ))}
         </div>
@@ -399,12 +399,12 @@ const DataManagementPreview = ({ t }: { t: TFunction }) => (
       {/* Archive Section */}
       <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+          <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
             <HardDrive className="w-5 h-5 text-orange-600" />
           </div>
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900">{t('landing.dataManagementPreview.dataArchive')}</h3>
-            <p className="text-xs text-gray-500">{t('landing.dataManagementPreview.archiveDesc')}</p>
+          <div className="overflow-hidden">
+            <h3 className="text-sm font-semibold text-gray-900 truncate">{t('landing.dataManagementPreview.dataArchive')}</h3>
+            <p className="text-xs text-gray-500 truncate">{t('landing.dataManagementPreview.archiveDesc')}</p>
           </div>
         </div>
         <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
@@ -621,7 +621,7 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white font-sans" dir={direction}>
+    <div className="min-h-screen bg-white font-sans overflow-x-hidden w-full" dir={direction}>
 
       {/* ========================================
           NAVBAR
@@ -654,19 +654,20 @@ export default function LandingPage() {
 
           {/* Right Side */}
           <div className="flex items-center gap-2 sm:gap-3">
-            <LanguageSelector />
+            <Link
+              to="/signup"
+              className="hidden rounded-lg px-3 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-100 sm:inline-flex"
+              >
+              {t('auth.signup')}
+            </Link>
             <Link
               to="/login"
-              className="hidden rounded-lg px-3 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-100 sm:inline-flex"
+              className="rounded-lg bg-gradient-to-r from-[#065F46] to-[#10B981] px-3 py-2 text-sm font-semibold text-white transition-all hover:shadow-lg hover:shadow-emerald-200 sm:px-4"
             >
               {t('auth.login')}
             </Link>
-            <Link
-              to="/signup"
-              className="rounded-lg bg-gradient-to-r from-[#065F46] to-[#10B981] px-3 py-2 text-sm font-semibold text-white transition-all hover:shadow-lg hover:shadow-emerald-200 sm:px-4"
-            >
-              {t('auth.signup')}
-            </Link>
+            <LanguageSelector />
+            
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="md:hidden p-2 rounded-lg hover:bg-gray-100"
@@ -853,28 +854,7 @@ export default function LandingPage() {
             <div className="grid lg:grid-cols-2 gap-12 items-center">
               <div className="order-2 lg:order-1 relative">
                 <div className="absolute inset-0 bg-gradient-to-l from-purple-200 to-transparent rounded-3xl blur-2xl opacity-30" />
-                <div className="bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-200 p-8">
-                  <div className="flex items-center gap-4 mb-6">
-                    <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                      <ShoppingCart className="w-6 h-6 text-purple-600" />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-gray-900">{t('landing.purchaseManagement')}</h4>
-                      <p className="text-sm text-gray-500">{t('landing.streamlinedPurchasing')}</p>
-                    </div>
-                  </div>
-                  <div className="space-y-3">
-                    {purchaseFeatures.map((feature, index) => (
-                      <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                        {feature.icon}
-                        <div>
-                          <h5 className="font-semibold text-gray-900 text-sm">{t(`landing.${feature.titleKey}`)}</h5>
-                          <p className="text-xs text-gray-600">{t(`landing.${feature.descriptionKey}`)}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <DataManagementPreview t={t} />
               </div>
               <div className="order-1 lg:order-2">
                 <div className="inline-flex items-center gap-2 bg-purple-100 text-purple-700 px-3 py-1 rounded-full text-sm font-medium mb-4">
@@ -1186,12 +1166,12 @@ export default function LandingPage() {
                 key={index}
                 className={`relative bg-white rounded-2xl p-8 border ${
                   plan.popular
-                    ? 'border-[#065F46] shadow-xl shadow-emerald-100 scale-105'
+                    ? 'border-[#065F46] shadow-xl shadow-emerald-100 md:scale-105'
                     : 'border-gray-200 shadow-sm'
                 }`}
               >
                 {plan.popular && (
-                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-gradient-to-r from-[#065F46] to-[#10B981] text-white px-4 py-1 rounded-full text-sm font-semibold">
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-gradient-to-r from-[#065F46] to-[#10B981] text-white px-4 py-1 rounded-full text-sm font-semibold whitespace-nowrap">
                     {t('landing.mostPopular')}
                   </div>
                 )}
@@ -1272,14 +1252,14 @@ export default function LandingPage() {
                 >
                   <span className="font-semibold text-gray-900">{t(`landing.${faq.questionKey}`)}</span>
                   {openFaq === index ? (
-                    <ChevronUp className="w-5 h-5 text-gray-400" />
+                    <ChevronUp className="w-5 h-5 text-gray-400 flex-shrink-0" />
                   ) : (
-                    <ChevronDown className="w-5 h-5 text-gray-400" />
+                    <ChevronDown className="w-5 h-5 text-gray-400 flex-shrink-0" />
                   )}
                 </button>
                 {openFaq === index && (
                   <div className="px-6 pb-6 pt-0 border-t border-gray-100">
-                    <p className="text-gray-600">{t(`landing.${faq.answerKey}`)}</p>
+                    <p className="text-gray-600 mt-4">{t(`landing.${faq.answerKey}`)}</p>
                   </div>
                 )}
               </div>
@@ -1290,7 +1270,7 @@ export default function LandingPage() {
           <div className="mt-12 text-center">
             <p className="text-gray-600 mb-4">{t('landing.stillHaveQuestions')}</p>
             <a
-              href="mailto:support@resourcemanager.com"
+              href="mailto:support@rscmanager.com"
               className="inline-flex items-center gap-2 text-[#065F46] font-semibold hover:underline"
             >
               <Mail className="w-4 h-4" />
@@ -1410,17 +1390,17 @@ export default function LandingPage() {
               <h4 className="font-semibold mb-4">{t('landing.contact')}</h4>
               <ul className="space-y-3 text-gray-400 text-sm">
                 <li className="flex items-center gap-2">
-                  <Mail className="w-4 h-4" />
-                  <a href={`mailto:${t('landing.supportEmail')}`} className="hover:text-white transition-colors">
+                  <Mail className="w-4 h-4 flex-shrink-0" />
+                  <a href={`mailto:${t('landing.supportEmail')}`} className="hover:text-white transition-colors break-all">
                     {t('landing.supportEmail')}
                   </a>
                 </li>
                 <li className="flex items-center gap-2">
-                  <Phone className="w-4 h-4" />
+                  <Phone className="w-4 h-4 flex-shrink-0" />
                   <span>{t('landing.phone')}</span>
                 </li>
                 <li className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4" />
+                  <MapPin className="w-4 h-4 flex-shrink-0" />
                   <span>{t('landing.location')}</span>
                 </li>
               </ul>
@@ -1430,7 +1410,7 @@ export default function LandingPage() {
           {/* Bottom Bar */}
           <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-gray-500">
             <p>© 2024 {t('common.appName')}. {t('landing.allRightsReserved')}</p>
-            <div className="flex gap-6">
+            <div className="flex gap-6 flex-wrap justify-center">
               <a href="#" className="hover:text-white transition-colors">{t('landing.privacyPolicy')}</a>
               <a href="#" className="hover:text-white transition-colors">{t('landing.termsOfService')}</a>
               <a href="#" className="hover:text-white transition-colors">{t('landing.cookiePolicy')}</a>
