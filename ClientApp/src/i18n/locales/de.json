@@ -1052,7 +1052,29 @@
     "invalidRows": "{{count}} ungültig",
     "importMore": "Weitere Daten importieren",
     "applyAllNew": "Alle neuen Informationen übernehmen",
-    "importDetailedSummary": "Import erfolgreich: {{new}} erstellt, {{updated}} aktualisiert, {{skipped}} übersprungen."
+    "importDetailedSummary": "Import erfolgreich: {{new}} erstellt, {{updated}} aktualisiert, {{skipped}} übersprungen.",
+    "unknownCategory": "Unbekannte Kategorie '{{category}}' in Zeile {{row}}. Bitte fügen Sie diese Kategorie auf der Ausgabenseite hinzu, bevor Sie importieren.",
+    "columns": {
+      "Date": "Datum",
+      "ClientName": "Kundenname",
+      "AmountPaid": "Gezahlter Betrag",
+      "Currency": "Währung",
+      "InvoiceNumber": "Rechnungsnummer",
+      "PaymentMethod": "Zahlungsmethode",
+      "Supplier": "Lieferant",
+      "Name": "Name",
+      "MatriculeFiscal": "Steuernummer",
+      "PhoneNumber": "Telefon",
+      "Address": "Adresse",
+      "Email": "E-Mail",
+      "Description": "Beschreibung",
+      "Price": "Preis",
+      "TVARate": "USt-Satz",
+      "Amount": "Betrag",
+      "Category": "Kategorie",
+      "Notes": "Notizen",
+      "Recurring": "Wiederkehrend"
+    }
   },
   "devis": {
     "descriptionPlaceholder": "Beschreibung des Angebots..."

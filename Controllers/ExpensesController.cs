@@ -90,6 +90,42 @@ namespace ResourceManager.Controllers
             return trimmed.ToLowerInvariant();
         }
 
+        /// <summary>
+        /// Returns the set of valid built-in expense category keys
+        /// (e.g. "rent", "utilities", "office", etc.) loaded from the i18n locale files.
+        /// </summary>
+        internal static HashSet<string> GetValidCategoryKeys()
+        {
+            var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            var localesDir = Path.Combine(AppContext.BaseDirectory, "locales");
+            if (!Directory.Exists(localesDir))
+                localesDir = Path.Combine(Directory.GetCurrentDirectory(), "ClientApp", "src", "i18n", "locales");
+
+            if (!Directory.Exists(localesDir))
+                return keys;
+
+            // Read the first locale file that has expense.categories to extract the keys
+            foreach (var file in Directory.GetFiles(localesDir, "*.json"))
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(System.IO.File.ReadAllText(file));
+                    if (doc.RootElement.TryGetProperty("expense", out var expense)
+                        && expense.TryGetProperty("categories", out var categories))
+                    {
+                        foreach (var prop in categories.EnumerateObject())
+                        {
+                            keys.Add(prop.Name);
+                        }
+                        if (keys.Count > 0) break; // all locale files share the same keys
+                    }
+                }
+                catch { /* skip malformed locale files */ }
+            }
+            return keys;
+        }
+
         public ExpensesController(AppDbContext context, TimeProvider time, ILogger<ExpensesController> logger)
         {
             _context = context;

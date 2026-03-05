@@ -1052,7 +1052,29 @@
     "invalidRows": "{{count}} invalide(s)",
     "importMore": "Importer plus de données",
     "applyAllNew": "Appliquer toutes les nouvelles informations",
-    "importDetailedSummary": "Importation réussie : {{new}} créés, {{updated}} mis à jour, {{skipped}} ignorés."
+    "importDetailedSummary": "Importation réussie : {{new}} créés, {{updated}} mis à jour, {{skipped}} ignorés.",
+    "unknownCategory": "Catégorie inconnue '{{category}}' à la ligne {{row}}. Veuillez ajouter cette catégorie dans la page Dépenses avant d'importer.",
+    "columns": {
+      "Date": "Date",
+      "ClientName": "Nom du client",
+      "AmountPaid": "Montant payé",
+      "Currency": "Devise",
+      "InvoiceNumber": "N° de facture",
+      "PaymentMethod": "Mode de paiement",
+      "Supplier": "Fournisseur",
+      "Name": "Nom",
+      "MatriculeFiscal": "Matricule fiscal",
+      "PhoneNumber": "Téléphone",
+      "Address": "Adresse",
+      "Email": "Email",
+      "Description": "Description",
+      "Price": "Prix",
+      "TVARate": "Taux TVA",
+      "Amount": "Montant",
+      "Category": "Catégorie",
+      "Notes": "Notes",
+      "Recurring": "Récurrent"
+    }
   },
   "devis": {
     "descriptionPlaceholder": "Description..."

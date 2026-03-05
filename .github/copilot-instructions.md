@@ -226,3 +226,71 @@ cd ClientApp && npm run build       # Production build
 | PDF generation | [Services/Document.cs](Services/Document.cs) |
 | React auth | [ClientApp/src/context/AuthContext.tsx](ClientApp/src/context/AuthContext.tsx) |
 | API client | [ClientApp/src/services/api.ts](ClientApp/src/services/api.ts) |
+
+
+## AI Agent Meta-Workflow
+
+As GitHub Copilot, follow this workflow **exactly** for every task:
+
+### Workflow Steps
+
+1. **Translate Prompt** → Read `.ai/prompt-translator.md` and convert the user's message into a structured engineering prompt with TASK, IMPLEMENTATION PLAN, FILES AFFECTED, and VERIFICATION STEPS. Show the translated prompt to the user and wait for approval.
+
+2. **Plan Task** → Read `.ai/agents/planner.md` and break the approved prompt into sequenced, dependency-ordered steps. Separate backend and frontend work. Define test scenarios.
+
+3. **Implement Code** → Read `.ai/agents/coder.md` and implement each step following existing repository patterns. Search before writing. Follow the codebase architecture. Check for compile errors after each change.
+
+4. **Run Browser Tests** → Read `.ai/agents/tester.md` and create Playwright e2e tests in `ClientApp/e2e/`. Run them:
+   ```bash
+   cd ClientApp && npx playwright test [test-file] --reporter=list
+   ```
+
+5. **Debug Automatically** → If tests fail, read `.ai/agents/debugger.md`. Analyze failures, inspect screenshots in `ClientApp/test-results/`, identify root cause, apply fix, and rerun. Maximum 3 retry cycles.
+
+6. **Request Verification** → Present results with two actions:
+   - **[✅ Verify]** — User confirms the feature works → mark task complete
+   - **[🔍 Reinvestigate]** — Run deeper analysis → return to step 5
+
+### Agent Files Reference
+
+| Agent | File | Purpose |
+|-------|------|---------|
+| Prompt Translator | `.ai/prompt-translator.md` | Convert user message → structured prompt |
+| Planner | `.ai/agents/planner.md` | Break prompt → implementation plan |
+| Coder | `.ai/agents/coder.md` | Implement code following patterns |
+| Tester | `.ai/agents/tester.md` | Write and run Playwright e2e tests |
+| Debugger | `.ai/agents/debugger.md` | Analyze failures and auto-fix |
+
+### Workflow Files
+
+| Workflow | File | Purpose |
+|----------|------|---------|
+| Feature | `.ai/workflows/feature-workflow.md` | Full feature implementation lifecycle |
+| Bugfix | `.ai/workflows/bugfix-workflow.md` | Bug diagnosis and fix lifecycle |
+
+### Skill Files
+
+| Skill | File | Purpose |
+|-------|------|---------|
+| Create Feature | `.ai/skills/create-feature.md` | Step-by-step feature creation |
+| Debug Feature | `.ai/skills/debug-feature.md` | Systematic debugging guide |
+| Verify Feature | `.ai/skills/verify-feature.md` | Comprehensive verification checklist |
+
+### Automation Scripts
+
+| Script | Command | Purpose |
+|--------|---------|---------|
+| AI Workflow | `cd ClientApp && npm run ai` | Full workflow orchestrator |
+| Verify | `cd ClientApp && npm run verify` | Run all verification checks |
+| Review | `cd ClientApp && npm run review` | Verify/Reinvestigate interface |
+
+### E2E Test Infrastructure
+
+| File | Purpose |
+|------|---------|
+| `ClientApp/e2e/helpers/auth.ts` | Shared authentication helpers |
+| `ClientApp/e2e/helpers/test-utils.ts` | Common test utilities |
+| `ClientApp/e2e/smoke.spec.ts` | Application health check tests |
+| `ClientApp/playwright.config.ts` | Playwright configuration |
+
+**NEVER stop the task before providing the user the final Verification step.**

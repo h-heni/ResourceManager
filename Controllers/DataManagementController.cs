@@ -935,7 +935,10 @@ namespace ResourceManager.Controllers
                             var amountStr = SafeGet(row, "Amount Paid") is { Length: > 0 } ap ? ap : SafeGet(row, "Amount");
                             if (!TryParseAmount(amountStr, out var parsedAmount) || parsedAmount <= 0) { skipped++; continue; }
 
-                            var category = ImportedCategory;
+                            var rawCategory = SafeGet(row, "Category");
+                            var category = string.IsNullOrWhiteSpace(rawCategory)
+                                ? ImportedCategory
+                                : ExpensesController.NormalizeCategory(rawCategory);
                             var currency = ExpensesController.NormalizeCurrency(SafeGet(row, "Currency", "TND"));
                             var notes = SafeGet(row, "Notes");
                             var recurringStr = SafeGet(row, "Recurring");
@@ -1411,7 +1414,10 @@ namespace ResourceManager.Controllers
                                     if (TryParseAmount(amountRaw, out var amt))
                                         existing.Amount = amt;
 
-                                    existing.Category = ImportedCategory;
+                                    var rawCat = SafeGet(row, "Category");
+                                    existing.Category = string.IsNullOrWhiteSpace(rawCat)
+                                        ? ImportedCategory
+                                        : ExpensesController.NormalizeCategory(rawCat);
                                     var currency = ExpensesController.NormalizeCurrency(SafeGet(row, "Currency", existing.Currency ?? "TND"));
                                     existing.Currency = string.IsNullOrWhiteSpace(currency) ? "TND" : currency;
                                     existing.CurrencySymbol = existing.Currency;
@@ -1610,46 +1616,46 @@ namespace ResourceManager.Controllers
                 case "products":
                     if (lang == "fr")
                     {
-                        headers = "Nom;Prix;Devise;Taux TVA;Description";
-                        exampleRow = "Nom du Produit;100,00;TND;19;Abonnement annuel";
+                        headers = "Nom;Description;Prix;Devise;Taux TVA";
+                        exampleRow = "Nom du Produit;Abonnement annuel;100,00;TND;19";
                     }
                     else if (lang == "ar")
                     {
-                        headers = "الاسم;السعر;العملة;نسبة الأداء;الوصف";
-                        exampleRow = "اسم المنتج;100,00;TND;19;اشتراك سنوي";
+                        headers = "الاسم;الوصف;السعر;العملة;نسبة الأداء";
+                        exampleRow = "اسم المنتج;اشتراك سنوي;100,00;TND;19";
                     }
                     else if (lang == "de")
                     {
-                        headers = "Name;Preis;Währung;USt-Satz;Beschreibung";
-                        exampleRow = "Produktname;100,00;TND;19;Jahresabonnement";
+                        headers = "Name;Beschreibung;Preis;Währung;USt-Satz";
+                        exampleRow = "Produktname;Jahresabonnement;100,00;TND;19";
                     }
                     else
                     {
-                        headers = "Name;Price;Currency;TVA Rate;Description";
-                        exampleRow = "Product Name;100,00;TND;19;Annual subscription";
+                        headers = "Name;Description;Price;Currency;TVA Rate";
+                        exampleRow = "Product Name;Annual subscription;100,00;TND;19";
                     }
                     break;
 
                 case "otherexpenses":
                     if (lang == "fr")
                     {
-                        headers = "Description;Montant;Date;Catégorie;Devise;Notes;Récurrent";
-                        exampleRow = "Fournitures bureau;150,00;31/01/2025;office;TND;Papeterie mensuelle;Non";
+                        headers = "Date;Description;Montant;Catégorie;Devise;Notes;Récurrent";
+                        exampleRow = "31/01/2025;Fournitures bureau;150,00;office;TND;Papeterie mensuelle;Non";
                     }
                     else if (lang == "ar")
                     {
-                        headers = "الوصف;المبلغ;التاريخ;الفئة;العملة;ملاحظات;متكرر";
-                        exampleRow = "لوازم مكتبية;150,00;31/01/2025;office;TND;قرطاسية شهرية;لا";
+                        headers = "التاريخ;الوصف;المبلغ;الفئة;العملة;ملاحظات;متكرر";
+                        exampleRow = "31/01/2025;لوازم مكتبية;150,00;office;TND;قرطاسية شهرية;لا";
                     }
                     else if (lang == "de")
                     {
-                        headers = "Beschreibung;Betrag;Datum;Kategorie;Währung;Notizen;Wiederkehrend";
-                        exampleRow = "Büromaterial;150,00;31.01.2025;office;TND;Monatliche Schreibwaren;Nein";
+                        headers = "Datum;Beschreibung;Betrag;Kategorie;Währung;Notizen;Wiederkehrend";
+                        exampleRow = "31.01.2025;Büromaterial;150,00;office;TND;Monatliche Schreibwaren;Nein";
                     }
                     else
                     {
-                        headers = "Description;Amount;Date;Category;Currency;Notes;Recurring";
-                        exampleRow = "Office Supplies;150,00;31/01/2025;office;TND;Monthly stationery;No";
+                        headers = "Date;Description;Amount;Category;Currency;Notes;Recurring";
+                        exampleRow = "31/01/2025;Office Supplies;150,00;office;TND;Monthly stationery;No";
                     }
                     break;
 
@@ -1657,17 +1663,13 @@ namespace ResourceManager.Controllers
                     return BadRequest(new { message = $"Unknown template type: {type}" });
             }
 
-            // Category is hardcoded as "imported" during backend import mapping.
-            // Keep localized templates but remove category columns for import files.
+            // Category is hardcoded as "imported" during backend import mapping for expenses.
+            // Keep localized templates but remove category columns for expense import files.
+            // Note: otherExpenses KEEPS the Category column so users can specify it.
             if (type.Equals("expenses", StringComparison.OrdinalIgnoreCase))
             {
                 headers = RemoveSemicolonColumn(headers, 4);
                 exampleRow = RemoveSemicolonColumn(exampleRow, 4);
-            }
-            else if (type.Equals("otherexpenses", StringComparison.OrdinalIgnoreCase))
-            {
-                headers = RemoveSemicolonColumn(headers, 3);
-                exampleRow = RemoveSemicolonColumn(exampleRow, 3);
             }
 
             // BOM + semicolon-separated CSV
@@ -1731,7 +1733,7 @@ namespace ResourceManager.Controllers
                     requiredColumns = new[] { "Name" };
                     break;
                 case "otherexpenses":
-                    requiredColumns = new[] { "Description", "Amount", "Date" };
+                    requiredColumns = new[] { "Date", "Description", "Amount", "Category" };
                     break;
                 default:
                     errors.Add(new ValidationError(0, $"Unknown data type: {dataType}"));
@@ -1856,6 +1858,25 @@ namespace ResourceManager.Controllers
 
                         var category = SafeGet(row, "Category");
                         if (!string.IsNullOrWhiteSpace(category) && category.Length > 50) rowErrors.Add("'Category' cannot exceed 50 characters");
+                    }
+                    // otherExpenses: validate Category against known built-in categories
+                    if (dataType.ToLower() == "otherexpenses")
+                    {
+                        var catRaw = SafeGet(row, "Category");
+                        if (!string.IsNullOrWhiteSpace(catRaw))
+                        {
+                            var normalized = ExpensesController.NormalizeCategory(catRaw);
+                            var validKeys = ExpensesController.GetValidCategoryKeys();
+                            if (validKeys.Count > 0 && !validKeys.Contains(normalized))
+                            {
+                                rowErrors.Add($"Unknown category '{catRaw}'. Please add this category in the Expenses page before importing.");
+                            }
+                            else
+                            {
+                                // Store normalized value back so ConfirmImport gets the canonical key
+                                row["Category"] = normalized;
+                            }
+                        }
                     }
                     // otherExpenses uses "Amount" column instead of "Amount Paid"
                     if (row.ContainsKey("Amount") && !string.IsNullOrWhiteSpace(row["Amount"]))
