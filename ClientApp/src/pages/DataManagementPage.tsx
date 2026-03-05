@@ -38,6 +38,29 @@ interface ValidationResult {
 
 const SOURCE_ROW_NUMBER_KEY = '__SourceRowNumber';
 
+/** Map raw column name → i18n key under dataManagement.columns.* */
+const COLUMN_I18N_KEY: Record<string, string> = {
+    'Date': 'Date',
+    'Client Name': 'ClientName',
+    'Amount Paid': 'AmountPaid',
+    'Currency': 'Currency',
+    'InvoiceNumber': 'InvoiceNumber',
+    'Payment Method': 'PaymentMethod',
+    'Supplier': 'Supplier',
+    'Name': 'Name',
+    'Matricule Fiscal': 'MatriculeFiscal',
+    'Phone Number': 'PhoneNumber',
+    'Address': 'Address',
+    'Email': 'Email',
+    'Description': 'Description',
+    'Price': 'Price',
+    'TVA Rate': 'TVARate',
+    'Amount': 'Amount',
+    'Category': 'Category',
+    'Notes': 'Notes',
+    'Recurring': 'Recurring',
+};
+
 const DATA_TYPE_CONFIG: Record<DataType, {
     labelKey: string;
     icon: typeof DollarSign;
@@ -56,8 +79,8 @@ const DATA_TYPE_CONFIG: Record<DataType, {
         labelKey: 'dataManagement.exportExpenses',
         icon: FileText,
         requiredColumns: ['Date', 'Supplier', 'Amount Paid', 'Currency', 'InvoiceNumber'],
-        optionalColumns: ['Reference'],
-        exampleRow: { Date: '2023-04-02', Supplier: 'Supplier X', 'Amount Paid': '500', Currency: 'USD', Reference: 'EXP-001', InvoiceNumber: 'SUP-2024-001' },
+        optionalColumns: [],
+        exampleRow: { Date: '2023-04-02', Supplier: 'Supplier X', 'Amount Paid': '500', Currency: 'USD', InvoiceNumber: 'SUP-2024-001' },
     },
     clients: {
         labelKey: 'dataManagement.exportClients',
@@ -83,9 +106,9 @@ const DATA_TYPE_CONFIG: Record<DataType, {
     otherExpenses: {
         labelKey: 'dataManagement.exportOtherExpenses',
         icon: Receipt,
-        requiredColumns: ['Description', 'Amount', 'Date'],
+        requiredColumns: ['Date', 'Description', 'Amount', 'Category'],
         optionalColumns: ['Currency', 'Notes', 'Recurring'],
-        exampleRow: { Description: 'Office Supplies', Amount: '150.00', Date: '2025-01-15', Currency: 'TND', Notes: 'Monthly stationery', Recurring: 'No' },
+        exampleRow: { Date: '2025-01-15', Description: 'Office Supplies', Amount: '150.00', Category: 'office', Currency: 'TND', Notes: 'Monthly stationery', Recurring: 'No' },
     },
 };
 
@@ -593,7 +616,7 @@ export default function DataManagementPage() {
                         <p className="text-xs font-semibold text-blue-800 mb-1">{t('dataManagement.requiredColumns')}</p>
                         <div className="flex flex-wrap gap-1">
                             {config.requiredColumns.map(col => (
-                                <span key={col} className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">{col}</span>
+                                <span key={col} className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full font-medium">{t(`dataManagement.columns.${COLUMN_I18N_KEY[col] ?? col}`)}</span>
                             ))}
                         </div>
                         {config.optionalColumns.length > 0 && (
@@ -601,7 +624,7 @@ export default function DataManagementPage() {
                                 <p className="text-xs font-semibold text-blue-800 mt-2 mb-1">{t('dataManagement.optionalColumns')}</p>
                                 <div className="flex flex-wrap gap-1">
                                     {config.optionalColumns.map(col => (
-                                        <span key={col} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">{col}</span>
+                                        <span key={col} className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full">{t(`dataManagement.columns.${COLUMN_I18N_KEY[col] ?? col}`)}</span>
                                     ))}
                                 </div>
                             </>

@@ -1052,7 +1052,29 @@
     "invalidRows": "{{count}} غير صالحة",
     "importMore": "استيراد المزيد من البيانات",
     "applyAllNew": "تطبيق كافة المعلومات الجديدة",
-    "importDetailedSummary": "تم الاستيراد بنجاح: تم إنشاء {{new}}، وتحديث {{updated}}، وتخطي {{skipped}}."
+    "importDetailedSummary": "تم الاستيراد بنجاح: تم إنشاء {{new}}، وتحديث {{updated}}، وتخطي {{skipped}}.",
+    "unknownCategory": "فئة غير معروفة '{{category}}' في الصف {{row}}. يرجى إضافة هذه الفئة في صفحة المصاريف قبل الاستيراد.",
+    "columns": {
+      "Date": "التاريخ",
+      "ClientName": "اسم العميل",
+      "AmountPaid": "المبلغ المدفوع",
+      "Currency": "العملة",
+      "InvoiceNumber": "رقم الفاتورة",
+      "PaymentMethod": "طريقة الدفع",
+      "Supplier": "المزود",
+      "Name": "الاسم",
+      "MatriculeFiscal": "المعرف الجبائي",
+      "PhoneNumber": "الهاتف",
+      "Address": "العنوان",
+      "Email": "البريد الإلكتروني",
+      "Description": "الوصف",
+      "Price": "السعر",
+      "TVARate": "نسبة الأداء",
+      "Amount": "المبلغ",
+      "Category": "الفئة",
+      "Notes": "ملاحظات",
+      "Recurring": "متكرر"
+    }
   },
   "devis": {
     "descriptionPlaceholder": "وصف الاقتباس"

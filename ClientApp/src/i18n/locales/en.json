@@ -1052,7 +1052,29 @@
     "invalidRows": "{{count}} invalid",
     "importMore": "Import more data",
     "applyAllNew": "Apply All New Information",
-    "importDetailedSummary": "Import successful: {{new}} created, {{updated}} updated, {{skipped}} skipped."
+    "importDetailedSummary": "Import successful: {{new}} created, {{updated}} updated, {{skipped}} skipped.",
+    "unknownCategory": "Unknown category '{{category}}' in row {{row}}. Please add this category in the Expenses page before importing.",
+    "columns": {
+      "Date": "Date",
+      "ClientName": "Client Name",
+      "AmountPaid": "Amount Paid",
+      "Currency": "Currency",
+      "InvoiceNumber": "Invoice Number",
+      "PaymentMethod": "Payment Method",
+      "Supplier": "Supplier",
+      "Name": "Name",
+      "MatriculeFiscal": "Tax ID",
+      "PhoneNumber": "Phone Number",
+      "Address": "Address",
+      "Email": "Email",
+      "Description": "Description",
+      "Price": "Price",
+      "TVARate": "VAT Rate",
+      "Amount": "Amount",
+      "Category": "Category",
+      "Notes": "Notes",
+      "Recurring": "Recurring"
+    }
   },
   "devis": {
     "descriptionPlaceholder": "Description Placeholder"
