@@ -32,6 +32,10 @@ const SetupAccountPage = lazy(() => import('./pages/SetupAccountPage'));
 const SubscriptionManagementPage = lazy(() => import('./pages/SubscriptionManagementPage'));
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
+const InventoryPage = lazy(() => import('./pages/InventoryPage'));
+const PurchaseOrdersPage = lazy(() => import('./pages/PurchaseOrdersPage'));
+const StockAlertsPage = lazy(() => import('./pages/StockAlertsPage'));
+const InventoryReportsPage = lazy(() => import('./pages/InventoryReportsPage'));
 
 // Loading fallback for lazy-loaded pages
 const PageLoader = () => (
@@ -77,6 +81,10 @@ function App() {
               <Route path="/delivery-notes/edit/:id" element={<Suspense fallback={<PageLoader />}><DeliveryNoteCreatePage /></Suspense>} />
               <Route path="/expenses" element={<Suspense fallback={<PageLoader />}><ExpensesPage /></Suspense>} />
               <Route path="/products" element={<Suspense fallback={<PageLoader />}><ProductServicesPage /></Suspense>} />
+              <Route path="/inventory" element={<Suspense fallback={<PageLoader />}><InventoryPage /></Suspense>} />
+              <Route path="/inventory/purchase-orders" element={<Suspense fallback={<PageLoader />}><PurchaseOrdersPage /></Suspense>} />
+              <Route path="/inventory/alerts" element={<Suspense fallback={<PageLoader />}><StockAlertsPage /></Suspense>} />
+              <Route path="/inventory/reports" element={<Suspense fallback={<PageLoader />}><InventoryReportsPage /></Suspense>} />
               <Route path="/data-management" element={<Suspense fallback={<PageLoader />}><DataManagementPage /></Suspense>} />
               <Route path="/upload-supplier" element={<Suspense fallback={<PageLoader />}><SupplierInvoiceUploadPage /></Suspense>} />
               <Route path="/users" element={<Suspense fallback={<PageLoader />}><UsersPage /></Suspense>} />

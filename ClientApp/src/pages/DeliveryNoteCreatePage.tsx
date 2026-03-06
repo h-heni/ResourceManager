@@ -12,6 +12,7 @@ interface QuoteItem {
     quantity: number;
     price: number;
     tva?: boolean;
+    productServiceId?: number;
 }
 
 interface QuoteData {
@@ -58,6 +59,7 @@ interface DeliveryItem {
     quotedQuantity: number; // Original quoted amount
     remainingQuantity: number; // What's left to deliver
     fromCatalog: boolean; // true when from quote, product catalog, or inline-created
+    productServiceId?: number; // link to catalog product for inventory tracking
 }
 
 // Validation errors interface
@@ -329,7 +331,8 @@ export default function DeliveryNoteCreatePage() {
                     quantity: remaining, // Default to remaining quantity
                     quotedQuantity: item.quantity || 0,
                     remainingQuantity: remaining,
-                    fromCatalog: true // Items from the linked quote are trusted
+                    fromCatalog: true, // Items from the linked quote are trusted
+                    productServiceId: item.productServiceId
                 };
             });
 
@@ -380,6 +383,7 @@ export default function DeliveryNoteCreatePage() {
             ...newItems[itemIndex],
             description: product.name + (product.description ? ` - ${product.description}` : ''),
             fromCatalog: true,
+            productServiceId: product.id,
         };
         setItems(newItems);
         setSuggestions([]);
@@ -457,7 +461,8 @@ export default function DeliveryNoteCreatePage() {
                     .filter(item => item.description.trim() !== '')
                     .map(item => ({
                         description: item.description.trim(),
-                        quantity: item.quantity
+                        quantity: item.quantity,
+                        productServiceId: item.productServiceId || null
                     }))
             };
 

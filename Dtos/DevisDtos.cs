@@ -26,6 +26,10 @@ namespace ResourceManager.DTOs
         public decimal Price { get; set; }
         public bool Tva { get; set; }
         public decimal? VatRate { get; set; } // Rate as decimal, e.g. 0.19
+        /// <summary>
+        /// Optional link to catalog product for inventory tracking
+        /// </summary>
+        public int? ProductServiceId { get; set; }
     }
 
     public class UpdateQuoteDto : CreateQuoteDto { }

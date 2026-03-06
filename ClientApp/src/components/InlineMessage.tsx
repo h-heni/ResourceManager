@@ -84,7 +84,7 @@ export default function InlineMessage({
             <Icon className={cn('size-5 shrink-0 mt-0.5', c.iconColor)} />
             <div className="flex-1 min-w-0">
                 {title && <p className="font-semibold mb-0.5">{title}</p>}
-                <div>{children}</div>
+                <div className="whitespace-pre-line">{children}</div>
             </div>
             {onDismiss && (
                 <button

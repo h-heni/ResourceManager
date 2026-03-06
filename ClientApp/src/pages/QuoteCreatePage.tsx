@@ -19,6 +19,7 @@ interface QuoteItem {
     tva: boolean;
     vatRate: number; // actual rate as percentage (e.g. 19, 7, 0)
     fromCatalog?: boolean; // true when selected from product catalog or created inline
+    productServiceId?: number; // link to catalog product for inventory tracking
 }
 
 // Validation errors interface
@@ -154,13 +155,14 @@ export default function QuoteCreatePage() {
                 if (q.pdfLanguage) setPdfLanguage(q.pdfLanguage);
                 setItems(
                     q.quoteItems && q.quoteItems.length > 0
-                        ? q.quoteItems.map((item: { description?: string; quantity?: number; price?: number; tva?: boolean; vatRate?: number }) => ({
+                        ? q.quoteItems.map((item: { description?: string; quantity?: number; price?: number; tva?: boolean; vatRate?: number; productServiceId?: number }) => ({
                             description: item.description || '',
                             quantity: item.quantity || 1,
                             price: item.price || 0,
                             tva: item.tva ?? true,
                             vatRate: item.vatRate != null ? Math.round(item.vatRate * 100) : 19,
-                            fromCatalog: true
+                            fromCatalog: true,
+                            productServiceId: item.productServiceId
                         }))
                         : [{ description: '', quantity: 1, price: 0, tva: true, vatRate: 19, fromCatalog: false }]
                 );
@@ -268,6 +270,7 @@ export default function QuoteCreatePage() {
             tva: product.vatApplicable,
             vatRate: product.vatApplicable ? productRate : 0,
             fromCatalog: true,
+            productServiceId: product.id,
         };
         setItems(newItems);
         setSuggestions([]);
@@ -418,7 +421,8 @@ export default function QuoteCreatePage() {
                         quantity: item.quantity,
                         price: item.price,
                         tva: item.tva,
-                        vatRate: item.tva ? item.vatRate / 100 : 0
+                        vatRate: item.tva ? item.vatRate / 100 : 0,
+                        productServiceId: item.productServiceId || null
                     }))
             };
 

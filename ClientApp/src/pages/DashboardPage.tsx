@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { DollarSign, FileText, Users, TrendingUp, AlertTriangle, CheckCircle, RefreshCw, X, Globe } from 'lucide-react';
+import { DollarSign, FileText, Users, TrendingUp, AlertTriangle, CheckCircle, RefreshCw, X, Globe, Package } from 'lucide-react';
 import {
     BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid,
     Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -11,6 +11,7 @@ import { CHART_COLORS, DEFAULT_CURRENCY } from '../lib/currencyUtils';
 import { formatCurrency, formatNumber } from '../lib/formatNumber';
 import SuperAdminDashboard from '../components/SuperAdminDashboard';
 import ErrorBoundary from '../components/ErrorBoundary';
+import { useInventoryReport, useStockAlerts } from '../hooks/useInventory';
 
 /* ─── Types ─── */
 interface StatusBreakdown {
@@ -111,6 +112,11 @@ interface PurchasesSummary {
 export default function DashboardPage() {
     const { t } = useTranslation();
     const { isManager, isSuperAdmin } = useAuth();
+
+    // Inventory hooks
+    const { data: inventoryReport } = useInventoryReport();
+    const { data: stockAlerts } = useStockAlerts();
+    const activeAlertCount = stockAlerts?.filter(a => !a.isResolved).length || 0;
 
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [expenseSummary, setExpenseSummary] = useState<ExpenseSummary | null>(null);
@@ -1101,6 +1107,42 @@ export default function DashboardPage() {
                 </div>
                 );
             })()}
+
+            {/* Inventory Summary Widget */}
+            {inventoryReport && (
+                <div className="bg-white p-4 sm:p-5 rounded-xl border border-gray-100 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                            <Package size={16} className="text-[#065F46]" />
+                            {t('inventory.title', 'Inventory Management')}
+                        </h3>
+                        {activeAlertCount > 0 && (
+                            <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1">
+                                <AlertTriangle size={12} />
+                                {activeAlertCount} {t('inventory.stockAlerts', 'alerts')}
+                            </span>
+                        )}
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div className="text-center p-3 bg-gray-50 rounded-lg">
+                            <p className="text-lg font-bold text-gray-900">{inventoryReport.totalProducts}</p>
+                            <p className="text-[11px] text-gray-500">{t('inventory.totalProducts', 'Products')}</p>
+                        </div>
+                        <div className="text-center p-3 bg-gray-50 rounded-lg">
+                            <p className="text-lg font-bold text-amber-600">{inventoryReport.lowStockCount}</p>
+                            <p className="text-[11px] text-gray-500">{t('inventory.lowStockItems', 'Low Stock')}</p>
+                        </div>
+                        <div className="text-center p-3 bg-gray-50 rounded-lg">
+                            <p className="text-lg font-bold text-red-600">{inventoryReport.outOfStockCount}</p>
+                            <p className="text-[11px] text-gray-500">{t('inventory.outOfStockItems', 'Out of Stock')}</p>
+                        </div>
+                        <div className="text-center p-3 bg-gray-50 rounded-lg">
+                            <p className="text-lg font-bold text-gray-900">{inventoryReport.recentMovements?.reduce((sum: number, m: { count: number }) => sum + m.count, 0) ?? 0}</p>
+                            <p className="text-[11px] text-gray-500">{t('inventory.recentMovements', 'Recent (30d)')}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

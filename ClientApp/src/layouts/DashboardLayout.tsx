@@ -23,7 +23,11 @@ import {
     ChevronRight,
     Building2,
     Database,
-    Shield
+    Shield,
+    Boxes,
+    ShoppingCart,
+    AlertTriangle,
+    BarChart3
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { logger } from '../lib/logger';
@@ -75,6 +79,9 @@ export default function DashboardLayout() {
         }
         if (['/suppliers', '/supplier-invoices', '/expenses'].some(matches)) {
             newExpanded['purchases'] = true;
+        }
+        if (matches('/inventory')) {
+            newExpanded['inventory'] = true;
         }
         if (matches('/settings') || matches('/data-management')) {
             newExpanded['settings'] = true;
@@ -204,6 +211,17 @@ export default function DashboardLayout() {
                 { icon: DollarSign, label: t('nav.expenses'), path: '/expenses' },
             ]
         },
+        {
+            icon: Boxes,
+            label: t('nav.inventorySection', 'Inventory'),
+            key: 'inventory',
+            children: [
+                { icon: Package, label: t('nav.stockLevels', 'Stock Levels'), path: '/inventory' },
+                { icon: ShoppingCart, label: t('nav.purchaseOrders', 'Purchase Orders'), path: '/inventory/purchase-orders' },
+                { icon: AlertTriangle, label: t('nav.stockAlerts', 'Stock Alerts'), path: '/inventory/alerts' },
+                { icon: BarChart3, label: t('nav.inventoryReports', 'Reports'), path: '/inventory/reports' },
+            ]
+        },
     ];
 
     const bottomNavItems: NavItem[] = [
@@ -223,8 +241,8 @@ export default function DashboardLayout() {
             ? location.pathname.slice(0, -1)
             : location.pathname;
 
-        if (normalizedPath === '/dashboard') {
-            return currentPath === '/dashboard';
+        if (normalizedPath === '/dashboard' || normalizedPath === '/inventory') {
+            return currentPath === normalizedPath;
         }
 
         return currentPath === normalizedPath || currentPath.startsWith(`${normalizedPath}/`);
