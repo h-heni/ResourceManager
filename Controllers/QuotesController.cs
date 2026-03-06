@@ -178,7 +178,8 @@ namespace ResourceManager.Controllers
                     i.Tva,
                     i.VatRate,
                     i.TotalItemHT,
-                    i.ItemTaxAmount
+                    i.ItemTaxAmount,
+                    i.ProductServiceId
                 }),
                 CreatedByUser = devis.CreatedByUser != null ? new {
                     devis.CreatedByUser.Email,
@@ -260,7 +261,8 @@ namespace ResourceManager.Controllers
                             Quantity = itemDto.Quantity,
                             Price = itemDto.Price,
                             Tva = itemDto.Tva,
-                            VatRate = itemDto.VatRate
+                            VatRate = itemDto.VatRate,
+                            ProductServiceId = itemDto.ProductServiceId
                         });
                     }
 
@@ -315,7 +317,8 @@ namespace ResourceManager.Controllers
                     i.Tva,
                     i.VatRate,
                     i.TotalItemHT,
-                    i.ItemTaxAmount
+                    i.ItemTaxAmount,
+                    i.ProductServiceId
                 })
             });
         }
@@ -359,6 +362,7 @@ namespace ResourceManager.Controllers
                 Price = i.Price,
                 Tva = i.Tva,
                 VatRate = i.VatRate,
+                ProductServiceId = i.ProductServiceId,
                 QuoteId = devis.Id
             }).ToList();
 

@@ -25,6 +25,10 @@ namespace ResourceManager.Dtos
         public string? Category { get; set; }
 
         public bool VatApplicable { get; set; } = true;
+        public bool IsStockTracked { get; set; } = false;
+
+        [Range(0, 999999999)]
+        public decimal? ReorderPoint { get; set; }
     }
 
     public class UpdateProductServiceDto
@@ -50,5 +54,9 @@ namespace ResourceManager.Dtos
         public string? Category { get; set; }
 
         public bool VatApplicable { get; set; } = true;
+        public bool IsStockTracked { get; set; } = false;
+
+        [Range(0, 999999999)]
+        public decimal? ReorderPoint { get; set; }
     }
 }

@@ -48,7 +48,10 @@ namespace ResourceManager.Controllers
                         p.Category,
                         p.VatApplicable,
                         p.CreatedAt,
-                        p.TvaRate
+                        p.TvaRate,
+                        p.IsStockTracked,
+                        p.CurrentStock,
+                        p.ReorderPoint
                     })
                     .ToListAsync();
 
@@ -77,7 +80,9 @@ namespace ResourceManager.Controllers
                 item.Type,
                 item.Category,
                 item.VatApplicable,
-                item.TvaRate
+                item.TvaRate,
+                item.IsStockTracked,
+                item.ReorderPoint
             });
         }
 
@@ -104,7 +109,10 @@ namespace ResourceManager.Controllers
                     p.Type,
                     p.Category,
                     p.VatApplicable,
-                    p.TvaRate
+                    p.TvaRate,
+                    p.IsStockTracked,
+                    p.CurrentStock,
+                    p.ReorderPoint
                 })
                 .ToListAsync();
 
@@ -123,7 +131,9 @@ namespace ResourceManager.Controllers
                 TvaRate = dto.TvaRate,
                 Type = dto.Type,
                 Category = dto.Category,
-                VatApplicable = dto.VatApplicable
+                VatApplicable = dto.VatApplicable,
+                IsStockTracked = dto.IsStockTracked,
+                ReorderPoint = dto.ReorderPoint
             };
 
             _context.ProductServices.Add(item);
@@ -158,6 +168,8 @@ namespace ResourceManager.Controllers
             item.Type = dto.Type;
             item.Category = dto.Category;
             item.VatApplicable = dto.VatApplicable;
+            item.IsStockTracked = dto.IsStockTracked;
+            item.ReorderPoint = dto.ReorderPoint;
             item.UpdatedAt = _time.GetUtcNow().DateTime;
 
             await _context.SaveChangesAsync();

@@ -136,6 +136,13 @@ namespace ResourceManager.Models
         public decimal UnitPrice { get; set; }
         public decimal? TaxRate { get; set; } = 0.19m;
         
+        /// <summary>
+        /// Optional link to catalog product for inventory tracking
+        /// </summary>
+        public int? ProductServiceId { get; set; }
+        [ForeignKey("ProductServiceId")]
+        public ProductService? ProductService { get; set; }
+        
         [NotMapped]
         public decimal TotalHT => UnitPrice * Quantity;
         [NotMapped]
@@ -284,6 +291,14 @@ namespace ResourceManager.Models
         public decimal? Price { get; set; }
         public int? InvoiceId { get; set; }
         public Invoice? Invoice { get; set; } = null!;
+        
+        /// <summary>
+        /// Optional link to catalog product for inventory tracking
+        /// </summary>
+        public int? ProductServiceId { get; set; }
+        [ForeignKey("ProductServiceId")]
+        public ProductService? ProductService { get; set; }
+        
         [NotMapped]
         public decimal ItemTaxAmount => (Price ?? 0m) * (Quantity ?? 0) * (TaxRate ?? 0);
         [NotMapped]
@@ -345,8 +360,13 @@ namespace ResourceManager.Models
         public decimal? TaxRate { get; set; } = null;
         public decimal TotalItemHT { get;  } =0;
         public decimal ItemTaxAmount { get; set; } = 0;
-
-
+        
+        /// <summary>
+        /// Optional link to catalog product for inventory tracking
+        /// </summary>
+        public int? ProductServiceId { get; set; }
+        [ForeignKey("ProductServiceId")]
+        public ProductService? ProductService { get; set; }
     }
     public class Quote: Shared, IPdfDocumentData
     {
@@ -414,11 +434,16 @@ namespace ResourceManager.Models
         public decimal? Price { get; set; }
         public int? QuoteId { get; set; }
         public Quote? Quote { get; set; } = null!;
+        
+        /// <summary>
+        /// Optional link to catalog product for inventory tracking
+        /// </summary>
+        public int? ProductServiceId { get; set; }
+        [ForeignKey("ProductServiceId")]
+        public ProductService? ProductService { get; set; }
+        
         public decimal ItemTaxAmount => (Price ?? 0m) * (Quantity ?? 0) * (TaxRate ?? 0);
         public decimal TotalItemHT => (Price ?? 0m) * (Quantity ?? 0);
-
-
-
     }
     public interface IPdfDocumentData
     {
@@ -637,7 +662,8 @@ namespace ResourceManager.Models
     }
 
     /// <summary>
-    /// Saved products & services catalog for quick selection in quotes/invoices
+    /// Saved products & services catalog for quick selection in quotes/invoices.
+    /// Also serves as the master record for inventory tracking.
     /// </summary>
     public class ProductService : Shared
     {
@@ -647,7 +673,7 @@ namespace ResourceManager.Models
         public string? Description { get; set; }
         
         /// <summary>
-        /// Default unit price
+        /// Default unit price (selling price)
         /// </summary>
         public decimal DefaultUnitPrice { get; set; }
         // <summary>
@@ -668,6 +694,327 @@ namespace ResourceManager.Models
         /// Whether VAT applies to this item by default
         /// </summary>
         public bool VatApplicable { get; set; } = true;
+        
+        // ═══════════════════════════════════════════════════════════════
+        // INVENTORY FIELDS (Phase B)
+        // ═══════════════════════════════════════════════════════════════
+        
+        /// <summary>
+        /// Unique stock-keeping unit code
+        /// </summary>
+        [StringLength(100)]
+        public string? SKU { get; set; }
+        
+        /// <summary>
+        /// EAN/UPC barcode
+        /// </summary>
+        [StringLength(100)]
+        public string? Barcode { get; set; }
+        
+        /// <summary>
+        /// Denormalized current stock quantity (updated by stock movements)
+        /// </summary>
+        public decimal CurrentStock { get; set; } = 0;
+        
+        /// <summary>
+        /// When stock falls at or below this level, trigger a reorder alert
+        /// </summary>
+        public decimal? ReorderPoint { get; set; }
+        
+        /// <summary>
+        /// Safety stock — minimum stock to keep on hand
+        /// </summary>
+        public decimal? MinimumStock { get; set; }
+        
+        /// <summary>
+        /// Maximum storage capacity
+        /// </summary>
+        public decimal? MaximumStock { get; set; }
+        
+        /// <summary>
+        /// Unit of measure: "unit", "kg", "liter", "meter", "hour", "box", "piece"
+        /// </summary>
+        [StringLength(30)]
+        public string UnitOfMeasure { get; set; } = "unit";
+        
+        /// <summary>
+        /// Whether this product tracks inventory (false for services)
+        /// </summary>
+        public bool IsStockTracked { get; set; } = false;
+        
+        /// <summary>
+        /// Acquisition/manufacturing cost price (for margin calculations)
+        /// </summary>
+        public decimal? CostPrice { get; set; }
+        
+        /// <summary>
+        /// Default/preferred supplier
+        /// </summary>
+        public int? SupplierId { get; set; }
+        [ForeignKey("SupplierId")]
+        public Supplier? Supplier { get; set; }
+        
+        /// <summary>
+        /// Weight for shipping (in kg)
+        /// </summary>
+        public decimal? Weight { get; set; }
+        
+        /// <summary>
+        /// Default storage location / warehouse
+        /// </summary>
+        public int? WarehouseId { get; set; }
+        [ForeignKey("WarehouseId")]
+        public Warehouse? Warehouse { get; set; }
+        
+        // Navigation properties
+        public ICollection<StockMovement> StockMovements { get; set; } = new List<StockMovement>();
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // INVENTORY MANAGEMENT ENTITIES (Phases B-G)
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Physical or logical storage location for inventory
+    /// </summary>
+    public class Warehouse : Shared
+    {
+        [Required]
+        [StringLength(200)]
+        public string Name { get; set; } = string.Empty;
+        
+        [StringLength(500)]
+        public string? Address { get; set; }
+        
+        [StringLength(500)]
+        public string? Description { get; set; }
+        
+        /// <summary>
+        /// Whether this is the default warehouse for new products
+        /// </summary>
+        public bool IsDefault { get; set; } = false;
+        
+        /// <summary>
+        /// Whether this warehouse is active and accepting stock
+        /// </summary>
+        public bool IsActive { get; set; } = true;
+        
+        // Navigation
+        public ICollection<ProductService> Products { get; set; } = new List<ProductService>();
+        public ICollection<StockMovement> StockMovements { get; set; } = new List<StockMovement>();
+    }
+
+    /// <summary>
+    /// Audit log of every stock change (in, out, adjustment, transfer)
+    /// </summary>
+    public class StockMovement : Shared
+    {
+        [Required]
+        public int ProductServiceId { get; set; }
+        [ForeignKey("ProductServiceId")]
+        public ProductService? ProductService { get; set; }
+        
+        /// <summary>
+        /// Type of movement: "In", "Out", "Adjustment", "TransferIn", "TransferOut", "Return", "Initial"
+        /// </summary>
+        [Required]
+        [StringLength(30)]
+        public string MovementType { get; set; } = string.Empty;
+        
+        /// <summary>
+        /// Quantity moved (always positive — direction is determined by MovementType)
+        /// </summary>
+        public decimal Quantity { get; set; }
+        
+        /// <summary>
+        /// Unit cost at time of movement (for FIFO/weighted average)
+        /// </summary>
+        public decimal? UnitCost { get; set; }
+        
+        /// <summary>
+        /// Stock level AFTER this movement was applied
+        /// </summary>
+        public decimal StockAfter { get; set; }
+        
+        /// <summary>
+        /// Type of document that triggered this movement: "Invoice", "DeliveryNote", "SupplierInvoice", "Manual", "PurchaseOrder", "Return", "Initial"
+        /// </summary>
+        [StringLength(50)]
+        public string? ReferenceType { get; set; }
+        
+        /// <summary>
+        /// ID of the triggering document (InvoiceId, DeliveryNoteId, etc.)
+        /// </summary>
+        public int? ReferenceId { get; set; }
+        
+        /// <summary>
+        /// Human-readable reference number (e.g., "INV-2025-001")
+        /// </summary>
+        [StringLength(100)]
+        public string? ReferenceNumber { get; set; }
+        
+        /// <summary>
+        /// Date of the stock movement
+        /// </summary>
+        public DateTime Date { get; set; } = DateTime.UtcNow;
+        
+        /// <summary>
+        /// Notes/reason for the movement
+        /// </summary>
+        [StringLength(500)]
+        public string? Notes { get; set; }
+        
+        /// <summary>
+        /// Warehouse where this movement occurred
+        /// </summary>
+        public int? WarehouseId { get; set; }
+        [ForeignKey("WarehouseId")]
+        public Warehouse? Warehouse { get; set; }
+    }
+
+    /// <summary>
+    /// Low-stock / out-of-stock notification
+    /// </summary>
+    public class StockAlert : Shared
+    {
+        [Required]
+        public int ProductServiceId { get; set; }
+        [ForeignKey("ProductServiceId")]
+        public ProductService? ProductService { get; set; }
+        
+        /// <summary>
+        /// Alert type: "LowStock", "OutOfStock", "Overstock"
+        /// </summary>
+        [Required]
+        [StringLength(30)]
+        public string AlertType { get; set; } = "LowStock";
+        
+        /// <summary>
+        /// The threshold that was breached
+        /// </summary>
+        public decimal Threshold { get; set; }
+        
+        /// <summary>
+        /// The stock level when the alert was triggered
+        /// </summary>
+        public decimal CurrentQuantity { get; set; }
+        
+        /// <summary>
+        /// Whether the alert has been read/acknowledged
+        /// </summary>
+        public bool IsRead { get; set; } = false;
+        
+        /// <summary>
+        /// Whether the alert has been resolved (stock replenished)
+        /// </summary>
+        public bool IsResolved { get; set; } = false;
+        
+        public DateTime? ResolvedAt { get; set; }
+    }
+
+    /// <summary>
+    /// Purchase order placed to a supplier for stock replenishment
+    /// </summary>
+    public class PurchaseOrder : Shared
+    {
+        [Required]
+        [StringLength(100)]
+        public string Number { get; set; } = string.Empty;
+        
+        [Required]
+        public DateTime Date { get; set; }
+        
+        public DateTime? ExpectedDeliveryDate { get; set; }
+        
+        [Required]
+        public int SupplierId { get; set; }
+        [ForeignKey("SupplierId")]
+        public Supplier? Supplier { get; set; }
+        
+        /// <summary>
+        /// Status: "Draft", "Sent", "PartiallyReceived", "Received", "Cancelled"
+        /// </summary>
+        [StringLength(30)]
+        public string Status { get; set; } = "Draft";
+        
+        public string? Notes { get; set; }
+        
+        /// <summary>
+        /// Per-PO currency (overrides company defaults)
+        /// </summary>
+        [StringLength(10)]
+        public string? Currency { get; set; }
+        [StringLength(10)]
+        public string? CurrencySymbol { get; set; }
+        
+        /// <summary>
+        /// Language for PDF generation: "fr", "en", "de", "ar"
+        /// </summary>
+        [StringLength(5)]
+        public string? PdfLanguage { get; set; }
+        
+        // Calculated totals
+        public decimal? SubTotal { get; set; }
+        public decimal? TaxAmount { get; set; }
+        public decimal? TotalAmount { get; set; }
+        
+        /// <summary>
+        /// Optional link to supplier invoice created when goods are received
+        /// </summary>
+        public int? SupplierInvoiceId { get; set; }
+        [ForeignKey("SupplierInvoiceId")]
+        public SupplierInvoice? SupplierInvoice { get; set; }
+        
+        public ICollection<PurchaseOrderItem> Items { get; set; } = new List<PurchaseOrderItem>();
+        
+        public void CalculateTotals()
+        {
+            SubTotal = Items.Sum(i => i.TotalHT);
+            TaxAmount = Items.Sum(i => i.TaxAmount);
+            TotalAmount = SubTotal + TaxAmount;
+        }
+    }
+
+    /// <summary>
+    /// Line item on a purchase order
+    /// </summary>
+    public class PurchaseOrderItem
+    {
+        public int Id { get; set; }
+        
+        [Required]
+        public int ProductServiceId { get; set; }
+        [ForeignKey("ProductServiceId")]
+        public ProductService? ProductService { get; set; }
+        
+        public string Description { get; set; } = string.Empty;
+        
+        /// <summary>
+        /// Quantity ordered
+        /// </summary>
+        public decimal Quantity { get; set; }
+        
+        /// <summary>
+        /// Quantity actually received so far
+        /// </summary>
+        public decimal ReceivedQuantity { get; set; } = 0;
+        
+        public decimal UnitPrice { get; set; }
+        
+        public decimal? TaxRate { get; set; } = 0.19m;
+        
+        [NotMapped]
+        public decimal TotalHT => UnitPrice * Quantity;
+        [NotMapped]
+        public decimal TaxAmount => TotalHT * (TaxRate ?? 0);
+        [NotMapped]
+        public decimal TotalTTC => TotalHT + TaxAmount;
+        
+        [NotMapped]
+        public decimal RemainingQuantity => Quantity - ReceivedQuantity;
+        
+        public int PurchaseOrderId { get; set; }
+        public PurchaseOrder? PurchaseOrder { get; set; }
     }
 
     // ═══════════════════════════════════════════════════════════════

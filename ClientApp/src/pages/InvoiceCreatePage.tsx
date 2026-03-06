@@ -16,6 +16,7 @@ interface DeliveryNoteItem {
     id: number;
     description: string;
     quantity: number;
+    productServiceId?: number;
 }
 
 interface DeliveryNote {
@@ -37,6 +38,7 @@ interface InvoiceItem {
     tva: boolean;
     vatRate: number; // actual rate as percentage (e.g. 19, 7, 0)
     fromCatalog?: boolean; // true when selected from product catalog, quote, or delivery note
+    productServiceId?: number; // link to catalog product for inventory tracking
 }
 
 interface QuoteItem {
@@ -45,6 +47,7 @@ interface QuoteItem {
     price: number;
     tva: boolean;
     vatRate?: number;
+    productServiceId?: number;
 }
 
 interface QuoteData {
@@ -188,13 +191,14 @@ export default function InvoiceCreatePage() {
                 if (inv.pdfLanguage) setPdfLanguage(inv.pdfLanguage);
                 setItems(
                     inv.items && inv.items.length > 0
-                        ? inv.items.map((item: { description?: string; quantity?: number; unitPrice?: number; vat?: number; vatRate?: number }) => ({
+                        ? inv.items.map((item: { description?: string; quantity?: number; unitPrice?: number; vat?: number; vatRate?: number; productServiceId?: number }) => ({
                             description: item.description || '',
                             quantity: item.quantity || 1,
                             price: item.unitPrice || 0,
                             tva: (item.vat ?? 0) > 0,
                             vatRate: (item.vat ?? 0) > 0 ? Math.round((item.vatRate ?? item.vat ?? 0.19) * 100) : 0,
-                            fromCatalog: true
+                            fromCatalog: true,
+                            productServiceId: item.productServiceId
                     }))
                     : [{ description: '', quantity: 1, price: 0, tva: true, vatRate: Math.round((taxSettings.defaultVatRate) * 100), fromCatalog: false }]
             );
@@ -376,10 +380,10 @@ export default function InvoiceCreatePage() {
         const quoteData = selectedQuoteData;
 
         // Build a price map from quote items (key: lowercase trimmed description)
-        const quotePriceMap: Record<string, { price: number; tva: boolean; vatRate?: number }> = {};
+        const quotePriceMap: Record<string, { price: number; tva: boolean; vatRate?: number; productServiceId?: number }> = {};
         quoteData.quoteItems?.forEach(qi => {
             const key = qi.description.toLowerCase().trim();
-            quotePriceMap[key] = { price: qi.price, tva: qi.tva, vatRate: qi.vatRate };
+            quotePriceMap[key] = { price: qi.price, tva: qi.tva, vatRate: qi.vatRate, productServiceId: qi.productServiceId };
         });
 
         // Check if we have selected delivery notes
@@ -388,12 +392,12 @@ export default function InvoiceCreatePage() {
         if (selectedDNs.length > 0) {
             // Delivery notes exist: use description & quantity from delivery notes, price from quote
             // Aggregate quantities by description across all selected delivery notes
-            const deliveredItems: Record<string, { description: string; quantity: number }> = {};
+            const deliveredItems: Record<string, { description: string; quantity: number; productServiceId?: number }> = {};
             selectedDNs.forEach(dn => {
                 dn.deliveryNoteItems?.forEach(item => {
                     const key = item.description.toLowerCase().trim();
                     if (!deliveredItems[key]) {
-                        deliveredItems[key] = { description: item.description, quantity: 0 };
+                        deliveredItems[key] = { description: item.description, quantity: 0, productServiceId: item.productServiceId };
                     }
                     deliveredItems[key].quantity += item.quantity || 0;
                 });
@@ -411,7 +415,8 @@ export default function InvoiceCreatePage() {
                         price: quoteInfo?.price ?? 0, // Price ALWAYS from quote
                         tva: quoteInfo?.tva ?? true,
                         vatRate: quoteInfo?.tva ? Math.round((quoteInfo?.vatRate ?? taxSettings.defaultVatRate) * 100) : 0,
-                        fromCatalog: true
+                        fromCatalog: true,
+                        productServiceId: di.productServiceId || quoteInfo?.productServiceId
                     };
                 });
 
@@ -426,7 +431,8 @@ export default function InvoiceCreatePage() {
                 price: qi.price,
                 tva: qi.tva,
                 vatRate: qi.tva ? Math.round((qi.vatRate ?? taxSettings.defaultVatRate) * 100) : 0,
-                fromCatalog: true
+                fromCatalog: true,
+                productServiceId: qi.productServiceId
             }));
 
             if (newItems.length > 0) {
@@ -497,6 +503,7 @@ export default function InvoiceCreatePage() {
             tva: product.vatApplicable,
             vatRate: product.vatApplicable ? productRate : 0,
             fromCatalog: true,
+            productServiceId: product.id,
         };
         setItems(newItems);
         setProdSuggestions([]);
@@ -573,24 +580,38 @@ export default function InvoiceCreatePage() {
                         quantity: item.quantity,
                         price: item.price,
                         tva: item.tva,
-                        vatRate: item.tva ? item.vatRate : 0
+                        vatRate: item.tva ? item.vatRate : 0,
+                        productServiceId: item.productServiceId || null
                     }))
             };
 
             if (isEditMode && editId) {
                 await api.put(`/Invoices/${editId}`, payload);
             } else {
-                await api.post('/Invoices', payload);
+                const res = await api.post('/Invoices', payload);
+                if (res.data?.stockDeducted === false) {
+                    logger.warn('Stock deduction failed:', res.data.stockError);
+                }
             }
             navigate('/invoices');
         } catch (error: unknown) {
             logger.error("Error creating invoice", error);
-            const axErr = error as { response?: { data?: { message?: string; detail?: string; title?: string; errors?: Record<string, string[]> } } };
-            const serverMsg = axErr?.response?.data?.message
-                || axErr?.response?.data?.detail
-                || axErr?.response?.data?.title
-                || (axErr?.response?.data?.errors ? Object.values(axErr.response.data.errors).flat().join('; ') : null);
-            notify('error', serverMsg || t('createPage.createFailed'));
+            const axErr = error as { response?: { data?: { message?: string; detail?: string; title?: string; errors?: Record<string, string[]>; insufficientProducts?: { productName: string; requested: number; available: number }[] } } };
+
+            // Build detailed stock error message if insufficient stock
+            const insufficientProducts = axErr?.response?.data?.insufficientProducts;
+            if (insufficientProducts?.length) {
+                const productDetails = insufficientProducts
+                    .map(p => `${p.productName}: ${t('inventory.requested', 'requested')} ${p.requested}, ${t('inventory.available', 'available')} ${p.available}`)
+                    .join('\n');
+                notify('error', `${t('inventory.insufficientStock', 'Insufficient stock. Please purchase more inventory.')}\n${productDetails}`);
+            } else {
+                const serverMsg = axErr?.response?.data?.message
+                    || axErr?.response?.data?.detail
+                    || axErr?.response?.data?.title
+                    || (axErr?.response?.data?.errors ? Object.values(axErr.response.data.errors).flat().join('; ') : null);
+                notify('error', serverMsg || t('createPage.createFailed'));
+            }
         } finally {
             setLoading(false);
         }

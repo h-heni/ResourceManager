@@ -16,17 +16,20 @@ namespace ResourceManager.Controllers
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ILogger<SupplierInvoicesController> _logger;
         private readonly ILocalPdfStorageService _pdfStorage;
+        private readonly InventoryService _inventoryService;
 
         public SupplierInvoicesController(
             AppDbContext context,
             UserManager<ApplicationUser> userManager,
             ILogger<SupplierInvoicesController> logger,
-            ILocalPdfStorageService pdfStorage)
+            ILocalPdfStorageService pdfStorage,
+            InventoryService inventoryService)
         {
             _context = context;
             _userManager = userManager;
             _logger = logger;
             _pdfStorage = pdfStorage;
+            _inventoryService = inventoryService;
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -90,7 +93,15 @@ namespace ResourceManager.Controllers
                     .Take(size)
                     .ToListAsync();
 
-                // 5. Select Data
+                // 5. Fetch linked PO numbers for these invoices
+                var invoiceIds = list.Select(f => f.Id).ToList();
+                var linkedPOs = await _context.PurchaseOrders.AsNoTracking()
+                    .Where(po => po.SupplierInvoiceId.HasValue && invoiceIds.Contains(po.SupplierInvoiceId.Value))
+                    .Select(po => new { po.SupplierInvoiceId, po.Id, po.Number })
+                    .ToListAsync();
+                var poLookup = linkedPOs.ToDictionary(po => po.SupplierInvoiceId!.Value, po => new { po.Id, po.Number });
+
+                // 6. Select Data
                 // Mapping `f.PaymentStatus` here works perfectly because `ToListAsync()` 
                 // has already downloaded the data into memory.
                 var result = list.Select(f => new
@@ -118,6 +129,8 @@ namespace ResourceManager.Controllers
                     f.IsDeleted,
                     f.Currency,
                     f.CurrencySymbol,
+                    PurchaseOrderId = poLookup.ContainsKey(f.Id) ? (int?)poLookup[f.Id].Id : null,
+                    PurchaseOrderNumber = poLookup.ContainsKey(f.Id) ? poLookup[f.Id].Number : null,
                     Payments = f.Payments?.OrderByDescending(p => p.PaymentDate).Select(p => new
                     {
                         p.Id,
@@ -185,6 +198,12 @@ namespace ResourceManager.Controllers
                 foreach (var u in users) userMap[u.Id] = u.Name ?? "Unknown";
             }
 
+            // Look up linked Purchase Order
+            var linkedPO = await _context.PurchaseOrders.AsNoTracking()
+                .Where(po => po.SupplierInvoiceId == invoice.Id)
+                .Select(po => new { po.Id, po.Number })
+                .FirstOrDefaultAsync();
+
             return Ok(new
             {
                 invoice.Id,
@@ -209,6 +228,8 @@ namespace ResourceManager.Controllers
                 invoice.PendingAmount,
                 invoice.RemainingAmount,
                 invoice.PaymentStatus,
+                PurchaseOrderId = linkedPO?.Id,
+                PurchaseOrderNumber = linkedPO?.Number,
                 Items = invoice.Items.Select(i => new
                 {
                     i.Id, i.Description, i.Quantity, i.UnitPrice, i.TaxRate,
@@ -494,11 +515,34 @@ namespace ResourceManager.Controllers
                         Description = item.Description,
                         Quantity = item.Quantity,
                         UnitPrice = item.UnitPrice,
-                        TaxRate = item.TaxRate ?? 0.19m
+                        TaxRate = item.TaxRate ?? 0.19m,
+                        ProductServiceId = item.ProductServiceId
                     });
                 }
             }
             await _context.SaveChangesAsync();
+
+            // Auto-add stock for stock-tracked items (supplier invoice = goods received)
+            try
+            {
+                await _inventoryService.AddStockForSupplierInvoiceAsync(invoice.Id, invoice.InvoiceNumber ?? $"SI-{invoice.Id}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Stock update failed for supplier invoice {Id}, continuing", invoice.Id);
+            }
+
+            // Link to purchase order if specified
+            if (dto.PurchaseOrderId.HasValue)
+            {
+                var po = await _context.PurchaseOrders.FindAsync(dto.PurchaseOrderId.Value);
+                if (po != null)
+                {
+                    po.SupplierInvoiceId = invoice.Id;
+                    po.UpdatedAt = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                }
+            }
 
             return Ok(new { message = "Supplier invoice confirmed and saved", invoiceId = invoice.Id, supplierId });
         }
@@ -567,6 +611,38 @@ namespace ResourceManager.Controllers
                 }
             }
             await _context.SaveChangesAsync();
+
+            // Handle purchase order linking/unlinking
+            var previousPO = await _context.PurchaseOrders
+                .FirstOrDefaultAsync(po => po.SupplierInvoiceId == invoice.Id);
+
+            if (dto.PurchaseOrderId.HasValue)
+            {
+                // Unlink previous PO if it's different
+                if (previousPO != null && previousPO.Id != dto.PurchaseOrderId.Value)
+                {
+                    previousPO.SupplierInvoiceId = null;
+                    previousPO.UpdatedAt = DateTime.UtcNow;
+                }
+                // Link new PO
+                var newPO = dto.PurchaseOrderId.Value == previousPO?.Id
+                    ? previousPO
+                    : await _context.PurchaseOrders.FindAsync(dto.PurchaseOrderId.Value);
+                if (newPO != null)
+                {
+                    newPO.SupplierInvoiceId = invoice.Id;
+                    newPO.UpdatedAt = DateTime.UtcNow;
+                }
+                await _context.SaveChangesAsync();
+            }
+            else if (previousPO != null)
+            {
+                // PurchaseOrderId is null — unlink the previous PO
+                previousPO.SupplierInvoiceId = null;
+                previousPO.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+            }
+
             return Ok(new { message = "Supplier invoice updated", invoiceId = invoice.Id, supplierId = invoice.SupplierId });
         }
 

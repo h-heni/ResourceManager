@@ -82,6 +82,8 @@ interface SupplierInvoice {
     payments: SupplierPayment[];
     currency?: string;
     currencySymbol?: string;
+    purchaseOrderId?: number | null;
+    purchaseOrderNumber?: string | null;
 }
 
 interface ConsistencyIssue {
@@ -165,6 +167,9 @@ export default function SupplierInvoicesPage() {
     interface SupplierFull { id: number; name: string; address?: string; phone?: string; taxId?: string; email?: string; }
     const [suppliers, setSuppliers] = useState<SupplierFull[]>([]);
     const[selectedSupplierId, setSelectedSupplierId] = useState<number | null>(null);
+    const[selectedPurchaseOrderId, setSelectedPurchaseOrderId] = useState<number | null>(null);
+    interface PurchaseOrderOption { id: number; number: string; supplierName: string | null; supplierInvoiceId: number | null; }
+    const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrderOption[]>([]);
 
     // Currency state for supplier invoice
     const[supplierCurrency, setSupplierCurrency] = useState(DEFAULT_CURRENCY);
@@ -321,6 +326,15 @@ export default function SupplierInvoicesPage() {
             } catch { /* ignore */ }
         };
         fetchSuppliers();
+        const fetchPurchaseOrders = async () => {
+            try {
+                const res = await api.get('/Inventory/purchase-orders?size=9999');
+                const data = res.data?.data || [];
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                setPurchaseOrders(data.map((po: any) => ({ id: po.id, number: po.number, supplierName: po.supplierName, supplierInvoiceId: po.supplierInvoiceId || null })));
+            } catch { /* ignore */ }
+        };
+        fetchPurchaseOrders();
         
         // Restore Draft
         try {
@@ -473,6 +487,7 @@ export default function SupplierInvoicesPage() {
                 supplierPhone: headerData.supplierPhone || undefined,
                 currency: supplierCurrency || undefined,
                 currencySymbol: supplierCurrencySymbol || undefined,
+                purchaseOrderId: selectedPurchaseOrderId || undefined,
                 items,
             };
 
@@ -510,7 +525,7 @@ export default function SupplierInvoicesPage() {
         setCurrentInvoiceId(null); setTempFilePath(null); replacePreviewFileUrl(null);
         setTempFileName(null); setTempFileType(null); setTempRawText(null);
         setExtractedData(null); setLineItems([]); setWarnings([]); setConfidenceScore(0);
-        setSelectedSupplierId(null); setStatus(null);
+        setSelectedSupplierId(null); setSelectedPurchaseOrderId(null); setStatus(null);
         setHeaderData({ supplierName: '', invoiceNumber: '', invoiceDate: '', dueDate: '', totalHT: '', totalTTC: '', tva: '', supplierPhone: '', supplierAddress: '' });
     };
 
@@ -571,6 +586,7 @@ export default function SupplierInvoicesPage() {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             setLineItems((data.items ||[]).map((item: any, i: number) => ({ id: `item-${Date.now()}-${i}`, ...item, taxRate: item.taxRate ?? 0.19 })));
             setSelectedSupplierId(data.supplierId); setConfidenceScore(data.confidenceScore || 0);
+            setSelectedPurchaseOrderId(data.purchaseOrderId || null);
             
             replacePreviewFileUrl(null);
             if (data.filePath || data.fileName) {
@@ -1061,6 +1077,16 @@ export default function SupplierInvoicesPage() {
                                         <span className="text-gray-600">{formatCurrency(detailInvoice.totalTTC || 0, detailInvoice.currencySymbol || DEFAULT_CURRENCY)}</span>
                                     </div>
                                 </div>
+                                {/* Linked Purchase Order */}
+                                {detailInvoice.purchaseOrderNumber && (
+                                    <div className="flex items-center justify-between p-3 bg-blue-50 rounded-xl">
+                                        <div className="flex items-center gap-2">
+                                            <FileText size={16} className="text-blue-600" />
+                                            <span className="text-sm font-medium text-blue-800">{t('inventory.linkedPurchaseOrder', 'Linked Purchase Order')}</span>
+                                        </div>
+                                        <span className="text-sm font-semibold text-blue-700">{detailInvoice.purchaseOrderNumber}</span>
+                                    </div>
+                                )}
                                 {/* Line items */}
                                 {detailItems.length > 0 && (
                                     <div>
@@ -1387,6 +1413,7 @@ export default function SupplierInvoicesPage() {
                                         onChange={e => {
                                             const val = e.target.value ? parseInt(e.target.value) : null;
                                             setSelectedSupplierId(val);
+                                            setSelectedPurchaseOrderId(null);
                                             if (val) {
                                                 const s = suppliers.find(sup => sup.id === val);
                                                 if (s) setHeaderData(prev => ({ ...prev, supplierName: s.name, supplierAddress: s.address || prev.supplierAddress, supplierPhone: s.phone || prev.supplierPhone }));
@@ -1405,6 +1432,26 @@ export default function SupplierInvoicesPage() {
                                         className="w-full mt-2 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
                                     />
                                 )}
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">{t('inventory.linkPurchaseOrder', 'Link Purchase Order')}</label>
+                                <select
+                                    value={selectedPurchaseOrderId || ''}
+                                    onChange={e => setSelectedPurchaseOrderId(e.target.value ? parseInt(e.target.value) : null)}
+                                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                                >
+                                    <option value="">— {t('inventory.nonePO', 'None')} —</option>
+                                    {purchaseOrders.filter(po => {
+                                        // Always show the PO currently linked to this invoice
+                                        if (currentInvoiceId && po.supplierInvoiceId === currentInvoiceId) return true;
+                                        // Hide POs linked to other invoices
+                                        if (po.supplierInvoiceId) return false;
+                                        // Filter by selected supplier
+                                        if (!selectedSupplierId) return true;
+                                        const supplier = suppliers.find(s => s.id === selectedSupplierId);
+                                        return supplier && po.supplierName === supplier.name;
+                                    }).map(po => <option key={po.id} value={po.id}>{po.number} ({po.supplierName})</option>)}
+                                </select>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('supplierInvoice.invoiceNumber', 'Invoice Number')}</label>

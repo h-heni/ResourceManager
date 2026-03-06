@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     Plus, Trash2, Edit2, Search, Package, X,
-    Loader2, Check, AlertCircle, PackagePlus
+    Loader2, Check, AlertCircle, PackagePlus, BarChart3
 } from 'lucide-react';
 import api from '../services/api';
 import { useSettings } from '../hooks/useSettings';
@@ -19,6 +19,9 @@ interface ProductServiceItem {
     vatApplicable: boolean;
     createdAt: string;
     tvaRate?: number;
+    isStockTracked?: boolean;
+    currentStock?: number;
+    reorderPoint?: number;
 }
 
 interface TaxSettings {
@@ -49,7 +52,9 @@ export default function ProductServicesPage() {
         type: 'product',
         category: '',
         vatApplicable: true,
-        vatRate: 0
+        vatRate: 0,
+        isStockTracked: false,
+        reorderPoint: ''
     });
 
 
@@ -96,7 +101,7 @@ export default function ProductServicesPage() {
     const openCreateModal = () => {
         setEditingItem(null);
         const defaultVatInt = Math.round(taxSettings.defaultVatRate * 100);
-        setForm({ name: '', description: '', defaultUnitPrice: '', type: 'product', category: '', vatApplicable: true, vatRate: defaultVatInt });
+        setForm({ name: '', description: '', defaultUnitPrice: '', type: 'product', category: '', vatApplicable: true, vatRate: defaultVatInt, isStockTracked: false, reorderPoint: '' });
         setSaveError('');
         setShowModal(true);
     };
@@ -111,8 +116,9 @@ export default function ProductServicesPage() {
             type: item.type,
             category: item.category || '',
             vatApplicable: item.vatApplicable,
-            vatRate: item.vatApplicable ? storedRate : 0
-
+            vatRate: item.vatApplicable ? storedRate : 0,
+            isStockTracked: item.isStockTracked ?? false,
+            reorderPoint: item.reorderPoint != null ? item.reorderPoint.toString() : ''
         });
         setSaveError('');
         setShowModal(true);
@@ -136,7 +142,9 @@ export default function ProductServicesPage() {
                 tvaRate: form.vatRate,
                 type: form.type,
                 category: form.category || undefined,
-                vatApplicable: form.vatApplicable
+                vatApplicable: form.vatApplicable,
+                isStockTracked: form.isStockTracked,
+                reorderPoint: form.isStockTracked && form.reorderPoint !== '' ? parseFloat(form.reorderPoint) : null
             };
 
             if (editingItem) {
@@ -232,6 +240,12 @@ export default function ProductServicesPage() {
                                 )}
                             </div>
                             <div className="flex items-center gap-3 shrink-0">
+                                {item.isStockTracked && (
+                                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full font-medium flex items-center gap-1">
+                                        <BarChart3 size={12} />
+                                        {item.currentStock ?? 0} {t('product.inStock', 'in stock')}
+                                    </span>
+                                )}
                                 {item.vatApplicable && (
                                     <span className="px-2 py-0.5 bg-green-50 text-green-600 text-xs rounded-full font-medium">{item.tvaRate}%</span>
                                 )}
@@ -360,6 +374,51 @@ export default function ProductServicesPage() {
                                     </select>
                                 </div>
                             </div>
+
+                            {/* Inventory Management Toggle */}
+                            <div className={`flex items-center justify-between p-3 rounded-xl border ${editingItem ? 'bg-gray-100 border-gray-300' : 'bg-gray-50 border-gray-200'}`}>
+                                <div className="flex items-center gap-2">
+                                    <BarChart3 size={16} className={editingItem ? 'text-gray-400' : 'text-blue-600'} />
+                                    <div>
+                                        <span className={`text-sm font-medium ${editingItem ? 'text-gray-500' : 'text-gray-700'}`}>{t('product.inventoryManaged', 'Inventory Managed')}</span>
+                                        <p className="text-xs text-gray-400">
+                                            {editingItem
+                                                ? t('product.inventoryManagedLocked', 'This setting cannot be changed after creation')
+                                                : t('product.inventoryManagedDesc', 'Enable to track stock levels — this choice is permanent')}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (editingItem) return;
+                                        setForm(prev => ({ ...prev, isStockTracked: !prev.isStockTracked }));
+                                    }}
+                                    disabled={!!editingItem}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form.isStockTracked ? 'bg-emerald-600' : 'bg-gray-300'} ${editingItem ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                >
+                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${form.isStockTracked ? 'translate-x-6' : 'translate-x-1'}`} />
+                                </button>
+                            </div>
+
+                            {/* Reorder Point — only shown when stock tracking is enabled */}
+                            {form.isStockTracked && (
+                                <div className="mt-3">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        {t('product.reorderPoint', 'Reorder Point (Low Stock Alert)')}
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        value={form.reorderPoint}
+                                        onChange={e => setForm(prev => ({ ...prev, reorderPoint: e.target.value }))}
+                                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                                        placeholder={t('product.reorderPointPlaceholder', 'e.g. 10 — alert when stock reaches this level')}
+                                    />
+                                    <p className="text-xs text-gray-400 mt-1">{t('product.reorderPointDesc', 'You will be notified when stock falls to or below this level')}</p>
+                                </div>
+                            )}
                         </div>
                         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
                             <button

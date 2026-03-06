@@ -16,13 +16,15 @@ namespace ResourceManager.Controllers
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ILocalPdfStorageService _pdfStorageService;
         private readonly ILogger<DeliveryNotesController> _logger;
+        private readonly InventoryService _inventoryService;
 
-        public DeliveryNotesController(AppDbContext context, UserManager<ApplicationUser> userManager, ILocalPdfStorageService pdfStorageService, ILogger<DeliveryNotesController> logger)
+        public DeliveryNotesController(AppDbContext context, UserManager<ApplicationUser> userManager, ILocalPdfStorageService pdfStorageService, ILogger<DeliveryNotesController> logger, InventoryService inventoryService)
         {
             _context = context;
             _userManager = userManager;
             _pdfStorageService = pdfStorageService;
             _logger = logger;
+            _inventoryService = inventoryService;
         }
 
         // GET: api/deliverynotes
@@ -70,7 +72,7 @@ namespace ResourceManager.Controllers
                         QuoteNumber = dn.Quote != null ? dn.Quote.Number : null,
                         InvoiceNumber = dn.Invoice != null ? dn.Invoice.Number : null,
                         ItemsCount = dn.DeliveryNoteItems != null ? dn.DeliveryNoteItems.Count : 0,
-                        DeliveryNoteItems = dn.DeliveryNoteItems != null ? dn.DeliveryNoteItems.Select(i => new { i.Description, i.Quantity }).ToList() : null,
+                        DeliveryNoteItems = dn.DeliveryNoteItems != null ? dn.DeliveryNoteItems.Select(i => new { i.Description, i.Quantity, i.ProductServiceId }).ToList() : null,
                         CreatedBy = dn.CreatedByUser != null && dn.CreatedByUser.Profile != null
                             ? (dn.CreatedByUser.Profile.FirstName + " " + dn.CreatedByUser.Profile.LastName).Trim()
                             : (dn.CreatedByUser != null ? dn.CreatedByUser.Email : null)
@@ -138,7 +140,8 @@ namespace ResourceManager.Controllers
                 DeliveryNoteItems = note.DeliveryNoteItems.Select(i => new {
                     i.Id,
                     i.Description,
-                    i.Quantity
+                    i.Quantity,
+                    i.ProductServiceId
                 }),
                 CreatedByUser = note.CreatedByUser != null ? new {
                     note.CreatedByUser.Email,
@@ -191,7 +194,8 @@ namespace ResourceManager.Controllers
                         {
                             Description = item.Description,
                             Quantity = item.Quantity,
-                            TotalEstimated = item.Quantity * 0
+                            TotalEstimated = item.Quantity * 0,
+                            ProductServiceId = item.ProductServiceId
                         });
                     }
                 }
@@ -239,6 +243,16 @@ namespace ResourceManager.Controllers
             if (note == null || note.Id == 0)
             {
                 return Conflict(new { message = "Failed to generate a unique delivery note number. Please retry." });
+            }
+
+            // ═══ INVENTORY: Auto-deduct stock for tracked products ═══
+            try
+            {
+                await _inventoryService.DeductStockForDeliveryNoteAsync(note.Id, note.Number);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Stock deduction failed for delivery note {Number} — note was still created.", note.Number);
             }
 
             return CreatedAtAction(nameof(GetDeliveryNote), new { id = note.Id }, note);

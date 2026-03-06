@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Bell, Check, X, Clock, DollarSign, CalendarPlus, Banknote } from 'lucide-react';
+import { Bell, Check, X, Clock, DollarSign, CalendarPlus, Banknote, AlertTriangle } from 'lucide-react';
 import api from '../services/api';
 import { DEFAULT_CURRENCY } from '../lib/currencyUtils';
 import { useAuth } from '../context/AuthContext';
@@ -40,6 +40,17 @@ interface DueSupplierPayment {
     invoiceCurrencySymbol?: string;
 }
 
+interface StockAlertItem {
+    id: number;
+    productServiceId: number;
+    productName: string;
+    alertType: string;
+    threshold: number;
+    currentQuantity: number;
+    isRead: boolean;
+    createdAt: string;
+}
+
 import { useTranslation } from 'react-i18next';
 
 export default function NotificationBell() {
@@ -48,10 +59,11 @@ export default function NotificationBell() {
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [duePayments, setDuePayments] = useState<DuePayment[]>([]);
     const [dueSupplierPayments, setDueSupplierPayments] = useState<DueSupplierPayment[]>([]);
+    const [stockAlerts, setStockAlerts] = useState<StockAlertItem[]>([]);
     const [unreadCount, setUnreadCount] = useState(0);
     const [isOpen, setIsOpen] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [activeTab, setActiveTab] = useState<'notifications' | 'due'>('notifications');
+    const [activeTab, setActiveTab] = useState<'notifications' | 'due' | 'stock'>('notifications');
     const [extendingPaymentId, setExtendingPaymentId] = useState<number | null>(null);
     const [extendDate, setExtendDate] = useState('');
     const [extendNotes, setExtendNotes] = useState('');
@@ -63,6 +75,7 @@ export default function NotificationBell() {
         setNotifications([]);
         setDuePayments([]);
         setDueSupplierPayments([]);
+        setStockAlerts([]);
         setUnreadCount(0);
         setIsOpen(false);
         setLoading(false);
@@ -105,19 +118,21 @@ export default function NotificationBell() {
 
     const fetchNotificationCount = async () => {
         try {
-            const [countRes, dueRes, dueSupplierRes] = await Promise.allSettled([
+            const [countRes, dueRes, dueSupplierRes, stockAlertCountRes] = await Promise.allSettled([
                 api.get('/Notifications/count'),
                 api.get('/Notifications/due-payments'),
-                api.get('/Notifications/due-supplier-payments')
+                api.get('/Notifications/due-supplier-payments'),
+                api.get('/Inventory/alerts/count')
             ]);
 
             const notifCount = countRes.status === 'fulfilled' ? (countRes.value.data.count || 0) : 0;
             const duePaymentsList: DuePayment[] = dueRes.status === 'fulfilled' ? (dueRes.value.data || []) : [];
             const dueSupplierList: DueSupplierPayment[] = dueSupplierRes.status === 'fulfilled' ? (dueSupplierRes.value.data || []) : [];
+            const stockAlertCount = stockAlertCountRes.status === 'fulfilled' ? (stockAlertCountRes.value.data.count || 0) : 0;
 
-            // Count = unread notifications + due payments (backend count may overlap, use actual lists)
+            // Count = unread notifications + due payments + stock alerts
             const dueTotal = duePaymentsList.length + dueSupplierList.length;
-            setUnreadCount(notifCount + dueTotal);
+            setUnreadCount(notifCount + dueTotal + stockAlertCount);
             setDuePayments(duePaymentsList);
             setDueSupplierPayments(dueSupplierList);
         } catch (error) {
@@ -128,15 +143,17 @@ export default function NotificationBell() {
     const fetchNotifications = async () => {
         setLoading(true);
         try {
-            const [notifRes, dueRes, dueSupplierRes] = await Promise.allSettled([
+            const [notifRes, dueRes, dueSupplierRes, stockAlertRes] = await Promise.allSettled([
                 api.get('/Notifications'),
                 api.get('/Notifications/due-payments'),
-                api.get('/Notifications/due-supplier-payments')
+                api.get('/Notifications/due-supplier-payments'),
+                api.get('/Inventory/alerts?unreadOnly=true&unresolvedOnly=true')
             ]);
 
             setNotifications(notifRes.status === 'fulfilled' ? (notifRes.value.data || []) : []);
             setDuePayments(dueRes.status === 'fulfilled' ? (dueRes.value.data || []) : []);
             setDueSupplierPayments(dueSupplierRes.status === 'fulfilled' ? (dueSupplierRes.value.data || []) : []);
+            setStockAlerts(stockAlertRes.status === 'fulfilled' ? (stockAlertRes.value.data || []) : []);
         } catch (error) {
             logger.error('Error fetching notifications:', error);
         } finally {
@@ -182,6 +199,16 @@ export default function NotificationBell() {
             await fetchNotificationCount();
         } catch (error) {
             logger.error('Error deleting notification:', error);
+        }
+    };
+
+    const markStockAlertRead = async (id: number) => {
+        try {
+            await api.put(`/Inventory/alerts/${id}/read`);
+            setStockAlerts(prev => prev.filter(a => a.id !== id));
+            await fetchNotificationCount();
+        } catch (error) {
+            logger.error('Error marking stock alert as read:', error);
         }
     };
 
@@ -361,6 +388,18 @@ export default function NotificationBell() {
                                 <span className="ml-1 w-2 h-2 bg-amber-500 rounded-full inline-block animate-pulse" />
                             )}
                         </button>
+                        <button
+                            onClick={() => setActiveTab('stock')}
+                            className={`flex-1 py-2 text-sm font-medium transition-colors relative ${activeTab === 'stock'
+                                ? 'text-red-600 border-b-2 border-red-600'
+                                : 'text-gray-500 hover:text-gray-700'
+                                }`}
+                        >
+                            {t('notifications.stockAlerts', 'Stock')} ({stockAlerts.length})
+                            {stockAlerts.length > 0 && (
+                                <span className="ml-1 w-2 h-2 bg-red-500 rounded-full inline-block animate-pulse" />
+                            )}
+                        </button>
                     </div>
 
                     {/* Content */}
@@ -370,6 +409,41 @@ export default function NotificationBell() {
                                 <div className="animate-spin w-6 h-6 border-2 border-[#065F46] border-t-transparent rounded-full mx-auto mb-2"></div>
                                 {t('notifications.loading')}
                             </div>
+                        ) : activeTab === 'stock' ? (
+                            stockAlerts.length === 0 ? (
+                                <div className="p-6 text-center text-gray-500">
+                                    <AlertTriangle size={32} className="mx-auto mb-2 opacity-30" />
+                                    <p className="text-sm">{t('notifications.noStockAlerts', 'No stock alerts')}</p>
+                                </div>
+                            ) : (
+                                stockAlerts.map(alert => (
+                                    <div key={alert.id} className={`px-4 py-3 border-b border-gray-100 ${alert.alertType === 'OutOfStock' ? 'bg-red-50/50' : 'bg-amber-50/50'}`}>
+                                        <div className="flex items-start gap-3">
+                                            <div className={`p-2 rounded-full ${alert.alertType === 'OutOfStock' ? 'bg-red-100' : 'bg-amber-100'}`}>
+                                                <AlertTriangle size={16} className={alert.alertType === 'OutOfStock' ? 'text-red-600' : 'text-amber-600'} />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-medium text-gray-900">{alert.productName}</p>
+                                                <p className={`text-xs font-semibold mt-0.5 ${alert.alertType === 'OutOfStock' ? 'text-red-600' : 'text-amber-600'}`}>
+                                                    {alert.alertType === 'OutOfStock'
+                                                        ? t('notifications.outOfStock', 'Out of stock — purchase required')
+                                                        : t('notifications.lowStock', 'Low stock — {{current}} remaining (threshold: {{threshold}})', { current: alert.currentQuantity, threshold: alert.threshold })}
+                                                </p>
+                                                <p className="text-xs text-gray-500 mt-0.5">
+                                                    {new Date(alert.createdAt).toLocaleDateString()}
+                                                </p>
+                                            </div>
+                                            <button
+                                                onClick={() => markStockAlertRead(alert.id)}
+                                                className="p-1 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
+                                                title={t('notifications.dismiss', 'Dismiss')}
+                                            >
+                                                <Check size={14} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))
+                            )
                         ) : activeTab === 'due' ? (
                             (duePayments.length === 0 && dueSupplierPayments.length === 0) ? (
                                 <div className="p-6 text-center text-gray-500">
@@ -660,7 +734,7 @@ export default function NotificationBell() {
                     </div>
 
                     {/* Footer */}
-                    {(notifications.length > 0 || duePayments.length > 0 || dueSupplierPayments.length > 0) && (
+                    {(notifications.length > 0 || duePayments.length > 0 || dueSupplierPayments.length > 0 || stockAlerts.length > 0) && (
                         <div className="px-4 py-2 bg-gray-50 border-t border-gray-100 text-center">
                             <span className="text-xs text-gray-500">
                                 {t('notifications.summary', { unread: notifications.filter(n => !isDuePaymentNotification(n) && !n.isRead).length, due: duePayments.length + dueSupplierPayments.length })}

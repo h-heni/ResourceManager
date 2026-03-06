@@ -21,5 +21,9 @@ namespace ResourceManager.DTOs // Namespace consistency
     {
         public string Description { get; set; } = string.Empty;
         public int Quantity { get; set; }
+        /// <summary>
+        /// Optional link to catalog product for inventory tracking
+        /// </summary>
+        public int? ProductServiceId { get; set; }
     }
 }

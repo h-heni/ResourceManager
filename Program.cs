@@ -176,6 +176,9 @@ builder.Services.AddScoped<ResourceManager.Services.ILocalPdfStorageService, Res
 // Supplier PDF Scanner Service (Part 4: PDF Upload + Data Extraction)
 builder.Services.AddScoped<ResourceManager.Services.ISupplierPdfScannerService, ResourceManager.Services.SupplierPdfScannerService>();
 
+// Inventory Management Service
+builder.Services.AddScoped<ResourceManager.Services.InventoryService>();
+
 // Due Payment Processor — DISABLED: payments stay Pending until manually approved
 // builder.Services.AddScoped<ResourceManager.Services.IDuePaymentProcessor, ResourceManager.Services.DuePaymentProcessorService>();
 

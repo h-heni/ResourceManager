@@ -20,19 +20,22 @@ namespace ResourceManager.Controllers
         private readonly ILogger<InvoicesController> _logger;
         private readonly IEmailService _emailService;
         private readonly ILocalPdfStorageService _pdfStorageService;
+        private readonly InventoryService _inventoryService;
         
         public InvoicesController(
             AppDbContext context, 
             UserManager<ApplicationUser> userManager, 
             ILogger<InvoicesController> logger,
             IEmailService emailService,
-            ILocalPdfStorageService pdfStorageService)
+            ILocalPdfStorageService pdfStorageService,
+            InventoryService inventoryService)
         {
             _context = context;
             _userManager = userManager;
             _logger = logger;
             _emailService = emailService;
             _pdfStorageService = pdfStorageService;
+            _inventoryService = inventoryService;
         }
 
         // GET: api/invoices
@@ -448,7 +451,8 @@ namespace ResourceManager.Controllers
                     i.Quantity,
                     unitPrice = i.Price,
                     totalPrice = i.TotalItemHT,
-                    vat = i.TaxRate
+                    vat = i.TaxRate,
+                    i.ProductServiceId
                 }).ToList(),
                 quoteId = invoice.QuoteId,
                 sourceQuoteNumber = invoice.SourceQuoteNumber,
@@ -480,6 +484,33 @@ namespace ResourceManager.Controllers
             // Get company settings for custom tax
             var companySettings = await _context.CompanySettings
                 .FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
+
+            // ═══ INVENTORY: Validate stock availability before creating invoice ═══
+            var itemsToValidate = dto.Items
+                .Where(i => i.ProductServiceId.HasValue && i.Quantity > 0)
+                .Select(i => (i.ProductServiceId, i.Quantity))
+                .ToList();
+
+            if (itemsToValidate.Any())
+            {
+                var insufficientStock = await _inventoryService.ValidateStockForInvoiceAsync(itemsToValidate);
+                if (insufficientStock.Any())
+                {
+                    var details = insufficientStock.Select(s =>
+                        $"{s.ProductName}: requested {s.Requested}, available {s.Available}");
+                    return BadRequest(new
+                    {
+                        message = "Insufficient stock. Please purchase more inventory before creating this invoice.",
+                        insufficientProducts = insufficientStock.Select(s => new
+                        {
+                            productId = s.ProductId,
+                            productName = s.ProductName,
+                            requested = s.Requested,
+                            available = s.Available
+                        })
+                    });
+                }
+            }
 
             var userProvidedNumber = dto.Number?.Trim() ?? string.Empty;
             var isAutoNumber = string.IsNullOrWhiteSpace(userProvidedNumber);
@@ -545,7 +576,8 @@ namespace ResourceManager.Controllers
                         Quantity = itemDto.Quantity,
                         Price = itemDto.Price,
                         Tva = itemDto.Tva,
-                        VatRate = itemDto.Tva && itemDto.VatRate.HasValue ? itemDto.VatRate.Value / 100m : null
+                        VatRate = itemDto.Tva && itemDto.VatRate.HasValue ? itemDto.VatRate.Value / 100m : null,
+                        ProductServiceId = itemDto.ProductServiceId
                     });
                 }
 
@@ -626,6 +658,21 @@ namespace ResourceManager.Controllers
                 return Conflict(new { message = "Failed to generate a unique invoice number. Please retry." });
             }
 
+            // ═══ INVENTORY: Auto-deduct stock for tracked products ═══
+            bool stockDeducted = false;
+            string? stockError = null;
+            try
+            {
+                await _inventoryService.DeductStockForInvoiceAsync(invoice.Id, invoice.Number);
+                stockDeducted = true;
+            }
+            catch (Exception ex)
+            {
+                stockError = ex.Message;
+                _logger.LogError(ex, "Stock deduction FAILED for invoice {Number} (Id={Id}). Exception: {Message}",
+                    invoice.Number, invoice.Id, ex.Message);
+            }
+
             // Return safe projection without sensitive user data
             return CreatedAtAction(nameof(GetInvoice), new { id = invoice.Id }, new {
                 invoice.Id,
@@ -650,6 +697,8 @@ namespace ResourceManager.Controllers
                 Currency = invoice.Quote?.Currency,
                 CurrencySymbol = invoice.Quote?.CurrencySymbol,
                 PdfLanguage = invoice.Quote?.PdfLanguage,
+                StockDeducted = stockDeducted,
+                StockError = stockError,
                 InvoiceItems = invoice.InvoiceItems.Select(i => new {
                     i.Id,
                     i.Description,
@@ -657,7 +706,8 @@ namespace ResourceManager.Controllers
                     i.Price,
                     i.Tva,
                     i.TotalItemHT,
-                    i.ItemTaxAmount
+                    i.ItemTaxAmount,
+                    i.ProductServiceId
                 })
             });
         }
@@ -711,7 +761,8 @@ namespace ResourceManager.Controllers
                  Price = i.Price,
                  Tva = i.Tva,
                  VatRate = i.Tva && i.VatRate.HasValue ? i.VatRate.Value / 100m : null,
-                 InvoiceId = invoice.Id
+                 InvoiceId = invoice.Id,
+                 ProductServiceId = i.ProductServiceId
              }).ToList();
 
              invoice.CalculTotalAmount();

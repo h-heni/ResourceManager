@@ -22,6 +22,11 @@ namespace ResourceManager.DTOs
         public string? Currency { get; set; }
         public string? CurrencySymbol { get; set; }
         
+        /// <summary>
+        /// Optional link to a Purchase Order
+        /// </summary>
+        public int? PurchaseOrderId { get; set; }
+        
         public List<ConfirmSupplierItemDto>? Items { get; set; }
     }
 
@@ -37,6 +42,7 @@ namespace ResourceManager.DTOs
         public string? SupplierName { get; set; }
         public string? SupplierAddress { get; set; }
         public string? SupplierPhone { get; set; }
+        public int? PurchaseOrderId { get; set; }
         public List<ConfirmSupplierItemDto>? Items { get; set; }
     }
 
@@ -47,6 +53,7 @@ namespace ResourceManager.DTOs
         public decimal UnitPrice { get; set; }
         public decimal? TaxRate { get; set; }
         public decimal TotalHT { get; set; }
+        public int? ProductServiceId { get; set; }
     }
 
     public class DiscardSupplierInvoiceDto

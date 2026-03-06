@@ -66,6 +66,13 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<PendingInvoice> PendingInvoices { get; set; }
     public DbSet<EmailAuditLog> EmailAuditLogs { get; set; }
     public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
+    
+    // Inventory Management
+    public DbSet<Warehouse> Warehouses { get; set; }
+    public DbSet<StockMovement> StockMovements { get; set; }
+    public DbSet<StockAlert> StockAlerts { get; set; }
+    public DbSet<PurchaseOrder> PurchaseOrders { get; set; }
+    public DbSet<PurchaseOrderItem> PurchaseOrderItems { get; set; }
 
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -96,6 +103,13 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<ProductService>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
         builder.Entity<CompanySettings>().HasQueryFilter(e => _isSuperAdmin || e.CompanyId == _currentCompanyId);
         builder.Entity<PendingInvoice>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
+
+        // Inventory management query filters
+        builder.Entity<Warehouse>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
+        builder.Entity<StockMovement>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
+        builder.Entity<StockAlert>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
+        builder.Entity<PurchaseOrder>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
+        builder.Entity<PurchaseOrderItem>().HasQueryFilter(i => _isSuperAdmin || i.PurchaseOrder!.CompanyId == _currentCompanyId);
 
         // Matching query filters for dependent entities with required FK to a filtered parent
         // (prevents EF Core warning about required-end relationship with global-filtered entity)
