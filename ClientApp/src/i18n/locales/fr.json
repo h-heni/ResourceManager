@@ -1783,6 +1783,7 @@
     "noActiveAlerts": "Aucune alerte active",
     "allGood": "Tous les produits sont bien approvisionnés",
     "insufficientStock": "Stock insuffisant. Veuillez acheter plus de stock.",
+    "stockWarning": "Stock faible : {{available}} disponible",
     "requested": "demandé",
     "available": "disponible",
     "resolved": "Résolues",

@@ -486,6 +486,7 @@ namespace ResourceManager.Controllers
                 .FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
 
             // ═══ INVENTORY: Validate stock availability before creating invoice ═══
+            // Smart validation: only validate the EXTRA quantity beyond what linked delivery notes already deducted
             var itemsToValidate = dto.Items
                 .Where(i => i.ProductServiceId.HasValue && i.Quantity > 0)
                 .Select(i => (i.ProductServiceId, i.Quantity))
@@ -493,22 +494,56 @@ namespace ResourceManager.Controllers
 
             if (itemsToValidate.Any())
             {
-                var insufficientStock = await _inventoryService.ValidateStockForInvoiceAsync(itemsToValidate);
-                if (insufficientStock.Any())
+                // Calculate quantities already deducted by linked delivery notes
+                var alreadyDelivered = new Dictionary<int, decimal>();
+                if (dto.DeliveryNoteIds != null && dto.DeliveryNoteIds.Any())
                 {
-                    var details = insufficientStock.Select(s =>
-                        $"{s.ProductName}: requested {s.Requested}, available {s.Available}");
-                    return BadRequest(new
+                    alreadyDelivered = await _context.DeliveryNoteItems
+                        .Where(dni => dni.DeliveryNote != null
+                            && dto.DeliveryNoteIds.Contains(dni.DeliveryNote.Id)
+                            && dni.ProductServiceId != null)
+                        .GroupBy(dni => dni.ProductServiceId!.Value)
+                        .Select(g => new { ProductServiceId = g.Key, TotalDelivered = g.Sum(x => x.Quantity ?? 0) })
+                        .ToDictionaryAsync(g => g.ProductServiceId, g => (decimal)g.TotalDelivered);
+                }
+
+                // Adjust quantities: only validate the extra amount not covered by delivery notes
+                var adjustedItems = new List<(int? ProductServiceId, int Quantity)>();
+                var tempDelivered = new Dictionary<int, decimal>(alreadyDelivered);
+                foreach (var item in itemsToValidate)
+                {
+                    if (!item.ProductServiceId.HasValue) continue;
+                    var delivered = tempDelivered.GetValueOrDefault(item.ProductServiceId.Value, 0m);
+                    var extra = Math.Max(0, item.Quantity - (int)delivered);
+                    if (delivered > 0)
                     {
-                        message = "Insufficient stock. Please purchase more inventory before creating this invoice.",
-                        insufficientProducts = insufficientStock.Select(s => new
+                        tempDelivered[item.ProductServiceId.Value] = Math.Max(0, delivered - item.Quantity);
+                    }
+                    if (extra > 0)
+                    {
+                        adjustedItems.Add((item.ProductServiceId, extra));
+                    }
+                }
+
+                if (adjustedItems.Any())
+                {
+                    var insufficientStock = await _inventoryService.ValidateStockForInvoiceAsync(adjustedItems);
+                    if (insufficientStock.Any())
+                    {
+                        var details = insufficientStock.Select(s =>
+                            $"{s.ProductName}: requested {s.Requested}, available {s.Available}");
+                        return BadRequest(new
                         {
-                            productId = s.ProductId,
-                            productName = s.ProductName,
-                            requested = s.Requested,
-                            available = s.Available
-                        })
-                    });
+                            message = "Insufficient stock. Please purchase more inventory before creating this invoice.",
+                            insufficientProducts = insufficientStock.Select(s => new
+                            {
+                                productId = s.ProductId,
+                                productName = s.ProductName,
+                                requested = s.Requested,
+                                available = s.Available
+                            })
+                        });
+                    }
                 }
             }
 
@@ -997,53 +1032,47 @@ namespace ResourceManager.Controllers
                 return BadRequest("Only invoices with 'Pending' status can be deleted.");
             }
 
-            // Soft-delete the invoice
-            invoice.IsDeleted = true;
-            invoice.DeletedAt = DateTime.UtcNow;
+            // Hard-delete: remove invoice items
+            var invoiceItems = await _context.InvoiceItems
+                .Where(ii => ii.InvoiceId == id)
+                .ToListAsync();
+            _context.InvoiceItems.RemoveRange(invoiceItems);
 
-            // Cascade: soft-delete linked delivery notes
+            // Cascade: unlink delivery notes (don't delete them, just remove the FK)
             var linkedDeliveryNotes = await _context.DeliveryNotes
-                .Where(dn => dn.InvoiceId == id || (dn.QuoteId == invoice.QuoteId && invoice.QuoteId != null))
+                .Where(dn => dn.InvoiceId == id)
                 .ToListAsync();
             foreach (var dn in linkedDeliveryNotes)
             {
-                dn.IsDeleted = true;
-                dn.DeletedAt = DateTime.UtcNow;
+                dn.InvoiceId = null;
             }
 
-            // Cascade: remove payments (no soft-delete on Payment entity)
+            // Cascade: remove payments
             if (invoice.Payments.Any())
             {
                 _context.Payments.RemoveRange(invoice.Payments);
             }
 
-            // Cascade: soft-delete linked quote
-            if (invoice.QuoteId != null)
-            {
-                var linkedQuote = await _context.Quotes
-                    .FirstOrDefaultAsync(q => q.Id == invoice.QuoteId);
-                if (linkedQuote != null)
-                {
-                    linkedQuote.IsDeleted = true;
-                    linkedQuote.DeletedAt = DateTime.UtcNow;
-                }
-            }
-
-            // Cascade: soft-delete PDF records (invoice + quote + delivery notes)
-            var pdfEntityIds = new List<int> { id };
-            if (invoice.QuoteId != null)
-                pdfEntityIds.Add(invoice.QuoteId.Value);
-            foreach (var dn in linkedDeliveryNotes)
-                pdfEntityIds.Add(dn.Id);
-
-            var pdfRecords = await _context.PdfFileRecords
-                .Where(f => pdfEntityIds.Contains(f.RelatedEntityId))
+            // Cascade: remove invoice email records
+            var emailRecords = await _context.InvoiceEmails
+                .Where(e => e.InvoiceId == id)
                 .ToListAsync();
-            foreach (var pdf in pdfRecords)
-            {
-                pdf.IsDeleted = true;
-                pdf.DeletedAt = DateTime.UtcNow;
-            }
+            _context.InvoiceEmails.RemoveRange(emailRecords);
+
+            // Cascade: remove PDF records for this invoice
+            var pdfRecords = await _context.PdfFileRecords
+                .Where(f => f.RelatedEntityId == id)
+                .ToListAsync();
+            _context.PdfFileRecords.RemoveRange(pdfRecords);
+
+            // Cascade: remove stock movements referencing this invoice
+            var stockMovements = await _context.StockMovements
+                .Where(sm => sm.ReferenceType == "Invoice" && sm.ReferenceId == id)
+                .ToListAsync();
+            _context.StockMovements.RemoveRange(stockMovements);
+
+            // Hard-delete the invoice itself
+            _context.Invoices.Remove(invoice);
 
             await _context.SaveChangesAsync();
 

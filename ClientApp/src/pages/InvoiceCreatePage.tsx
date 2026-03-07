@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Plus, Trash2, Save, FileText, Truck, User, Calendar, Package, AlertCircle } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import { logger } from '../lib/logger';
 import { useNotify } from '../hooks/useNotify';
@@ -91,6 +92,7 @@ interface ProductSuggestion {
 
 export default function InvoiceCreatePage() {
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const { t } = useTranslation();
     const { notify, NotifyBanner } = useNotify();
     const { id: editId } = useParams<{ id: string }>();
@@ -593,6 +595,8 @@ export default function InvoiceCreatePage() {
                     logger.warn('Stock deduction failed:', res.data.stockError);
                 }
             }
+            await queryClient.invalidateQueries({ queryKey: ['invoices'] });
+            await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
             navigate('/invoices');
         } catch (error: unknown) {
             logger.error("Error creating invoice", error);

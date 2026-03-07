@@ -164,6 +164,31 @@ namespace ResourceManager.Controllers
             var user = await _userManager.FindByIdAsync(userId);
             if (user == null) return Unauthorized();
 
+            // ═══ INVENTORY: Validate stock before creating delivery note ═══
+            var stockItems = dto.DeliveryNoteItems?
+                .Where(i => i.ProductServiceId.HasValue && i.Quantity > 0)
+                .Select(i => (i.ProductServiceId, i.Quantity))
+                .ToList() ?? new List<(int? ProductServiceId, int Quantity)>();
+
+            if (stockItems.Any())
+            {
+                var insufficientStock = await _inventoryService.ValidateStockForInvoiceAsync(stockItems);
+                if (insufficientStock.Any())
+                {
+                    return BadRequest(new
+                    {
+                        message = "Insufficient stock. Please update your inventory before creating this delivery note.",
+                        insufficientProducts = insufficientStock.Select(s => new
+                        {
+                            productId = s.ProductId,
+                            productName = s.ProductName,
+                            requested = s.Requested,
+                            available = s.Available
+                        })
+                    });
+                }
+            }
+
             var userProvidedNumber = dto.Number?.Trim() ?? string.Empty;
             var isAutoNumber = string.IsNullOrWhiteSpace(userProvidedNumber);
             var maxAttempts = isAutoNumber ? 5 : 1;

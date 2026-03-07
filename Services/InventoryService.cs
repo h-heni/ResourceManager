@@ -60,7 +60,10 @@ namespace ResourceManager.Services
 
         /// <summary>
         /// Deduct stock for all stock-tracked items in an invoice.
-        /// Called when an invoice is created (stock-out on sale).
+        /// Smart logic: subtracts quantities already deducted by linked delivery notes.
+        /// - Invoice with linked DNs and same products/qty → no additional deduction.
+        /// - Invoice with linked DNs but more products/qty → deduct only the extra.
+        /// - Invoice with no linked DNs → deduct full invoice quantities.
         /// </summary>
         public async Task DeductStockForInvoiceAsync(int invoiceId, string invoiceNumber)
         {
@@ -72,6 +75,15 @@ namespace ResourceManager.Services
             _logger.LogInformation("DeductStockForInvoice: Invoice {Id} ({Number}) — found {Count} items with ProductServiceId",
                 invoiceId, invoiceNumber, items.Count);
 
+            // Find quantities already deducted via linked delivery notes
+            var alreadyDelivered = await _context.DeliveryNoteItems
+                .Where(dni => dni.DeliveryNote != null
+                    && dni.DeliveryNote.InvoiceId == invoiceId
+                    && dni.ProductServiceId != null)
+                .GroupBy(dni => dni.ProductServiceId!.Value)
+                .Select(g => new { ProductServiceId = g.Key, TotalDelivered = g.Sum(x => x.Quantity ?? 0) })
+                .ToDictionaryAsync(g => g.ProductServiceId, g => (decimal)g.TotalDelivered);
+
             foreach (var item in items)
             {
                 if (item.ProductService == null) continue;
@@ -79,28 +91,49 @@ namespace ResourceManager.Services
                 // Skip products that are not inventory-tracked
                 if (!item.ProductService.IsStockTracked) continue;
 
-                var qty = item.Quantity ?? 0;
-                if (qty <= 0) continue;
+                var invoiceQty = (decimal)(item.Quantity ?? 0);
+                if (invoiceQty <= 0) continue;
 
-                item.ProductService.CurrentStock -= qty;
+                // Subtract what was already deducted by linked delivery notes
+                var deliveredQty = alreadyDelivered.GetValueOrDefault(item.ProductServiceId!.Value, 0m);
+                var qtyToDeduct = Math.Max(0, invoiceQty - deliveredQty);
+
+                // Reduce the "already delivered" pool so it's not double-counted
+                // when multiple invoice lines reference the same product
+                if (deliveredQty > 0)
+                {
+                    alreadyDelivered[item.ProductServiceId!.Value] = Math.Max(0, deliveredQty - invoiceQty);
+                }
+
+                if (qtyToDeduct <= 0)
+                {
+                    _logger.LogInformation(
+                        "Stock skip: Product {ProductId} ({Name}) — invoice qty {InvQty} already covered by delivery notes ({DelQty}) for invoice {Number}",
+                        item.ProductServiceId, item.ProductService.Name, invoiceQty, deliveredQty, invoiceNumber);
+                    continue;
+                }
+
+                item.ProductService.CurrentStock -= qtyToDeduct;
 
                 _context.StockMovements.Add(new StockMovement
                 {
                     ProductServiceId = item.ProductServiceId!.Value,
                     MovementType = "Out",
-                    Quantity = qty,
+                    Quantity = qtyToDeduct,
                     UnitCost = item.Price,
                     StockAfter = item.ProductService.CurrentStock,
                     ReferenceType = "Invoice",
                     ReferenceId = invoiceId,
                     ReferenceNumber = invoiceNumber,
                     Date = DateTime.UtcNow,
-                    Notes = $"Auto-deducted on invoice {invoiceNumber}",
+                    Notes = deliveredQty > 0
+                        ? $"Auto-deducted on invoice {invoiceNumber} (partial — {deliveredQty} already deducted via delivery notes)"
+                        : $"Auto-deducted on invoice {invoiceNumber}",
                     WarehouseId = item.ProductService.WarehouseId
                 });
 
                 _logger.LogInformation("Stock deducted: Product {ProductId} ({Name}) -{Qty} for invoice {Number}. New stock: {Stock}",
-                    item.ProductServiceId, item.ProductService.Name, qty, invoiceNumber, item.ProductService.CurrentStock);
+                    item.ProductServiceId, item.ProductService.Name, qtyToDeduct, invoiceNumber, item.ProductService.CurrentStock);
 
                 try
                 {

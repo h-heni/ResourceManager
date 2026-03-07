@@ -1773,6 +1773,7 @@
     "noActiveAlerts": "لا توجد تنبيهات نشطة",
     "allGood": "جميع المنتجات متوفرة بشكل جيد",
     "insufficientStock": "المخزون غير كافٍ. يرجى شراء المزيد من المخزون.",
+    "stockWarning": "مخزون منخفض: {{available}} متوفر",
     "requested": "المطلوب",
     "available": "المتوفر",
     "resolved": "تم حلها",
