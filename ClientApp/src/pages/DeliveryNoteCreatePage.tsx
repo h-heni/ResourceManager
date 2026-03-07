@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Plus, Trash2, Save, Package, FileText, History, User, Calendar, AlertCircle, CheckCircle, PackagePlus, X, Check } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import { logger } from '../lib/logger';
 import { useNotify } from '../hooks/useNotify';
@@ -71,6 +72,7 @@ interface ValidationErrors {
 
 export default function DeliveryNoteCreatePage() {
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const { t } = useTranslation();
     const { notify, NotifyBanner } = useNotify();
     const { id: editId } = useParams<{ id: string }>();
@@ -471,15 +473,26 @@ export default function DeliveryNoteCreatePage() {
             } else {
                 await api.post('/DeliveryNotes', payload);
             }
+            await queryClient.invalidateQueries({ queryKey: ['deliveryNotes'] });
+            await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
             navigate('/delivery-notes');
         } catch (error: unknown) {
             logger.error("Error creating BL", error);
-            const axErr = error as { response?: { data?: { message?: string; detail?: string; title?: string; errors?: Record<string, string[]> } } };
-            const serverMsg = axErr?.response?.data?.message
-                || axErr?.response?.data?.detail
-                || axErr?.response?.data?.title
-                || (axErr?.response?.data?.errors ? Object.values(axErr.response.data.errors).flat().join('; ') : null);
-            notify('error', serverMsg || t('deliveryNote.messages.createFailed'));
+            const axErr = error as { response?: { data?: { message?: string; detail?: string; title?: string; errors?: Record<string, string[]>; insufficientProducts?: { productName: string; requested: number; available: number }[] } } };
+
+            const insufficientProducts = axErr?.response?.data?.insufficientProducts;
+            if (insufficientProducts?.length) {
+                const productDetails = insufficientProducts
+                    .map(p => `${p.productName}: ${t('inventory.requested', 'requested')} ${p.requested}, ${t('inventory.available', 'available')} ${p.available}`)
+                    .join('\n');
+                notify('error', `${t('inventory.insufficientStock', 'Insufficient stock. Please purchase more inventory.')}\n${productDetails}`);
+            } else {
+                const serverMsg = axErr?.response?.data?.message
+                    || axErr?.response?.data?.detail
+                    || axErr?.response?.data?.title
+                    || (axErr?.response?.data?.errors ? Object.values(axErr.response.data.errors).flat().join('; ') : null);
+                notify('error', serverMsg || t('deliveryNote.messages.createFailed'));
+            }
         } finally {
             setLoading(false);
         }

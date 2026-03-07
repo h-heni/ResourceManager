@@ -1773,6 +1773,7 @@
     "noActiveAlerts": "Keine aktiven Warnungen",
     "allGood": "Alle Produkte sind gut bevorratet",
     "insufficientStock": "Unzureichender Bestand. Bitte kaufen Sie mehr Bestand ein.",
+    "stockWarning": "Niedriger Bestand: {{available}} verfügbar",
     "requested": "angefordert",
     "available": "verfügbar",
     "resolved": "Gelöst",

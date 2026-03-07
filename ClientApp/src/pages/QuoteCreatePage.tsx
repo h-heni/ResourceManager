@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, Plus, Trash2, Save, FileText, AlertCircle, PackagePlus, X, Check } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import { logger } from '../lib/logger';
 import { useNotify } from '../hooks/useNotify';
@@ -20,6 +21,8 @@ interface QuoteItem {
     vatRate: number; // actual rate as percentage (e.g. 19, 7, 0)
     fromCatalog?: boolean; // true when selected from product catalog or created inline
     productServiceId?: number; // link to catalog product for inventory tracking
+    isStockTracked?: boolean;
+    currentStock?: number;
 }
 
 // Validation errors interface
@@ -45,10 +48,13 @@ interface ProductSuggestion {
     defaultUnitPrice: number;
     vatApplicable: boolean;
     tvaRate?: number;
+    isStockTracked?: boolean;
+    currentStock?: number;
 }
 
 export default function QuoteCreatePage() {
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const { t } = useTranslation();
     const { notify, NotifyBanner } = useNotify();
     const { id: editId } = useParams<{ id: string }>();
@@ -271,6 +277,8 @@ export default function QuoteCreatePage() {
             vatRate: product.vatApplicable ? productRate : 0,
             fromCatalog: true,
             productServiceId: product.id,
+            isStockTracked: product.isStockTracked,
+            currentStock: product.currentStock,
         };
         setItems(newItems);
         setSuggestions([]);
@@ -431,6 +439,8 @@ export default function QuoteCreatePage() {
             } else {
                 await api.post('/Quotes', payload);
             }
+            await queryClient.invalidateQueries({ queryKey: ['quotes'] });
+            await queryClient.invalidateQueries({ queryKey: ['dashboard'] });
             navigate('/quotes');
         } catch (error: unknown) {
             logger.error("Error creating quote", error);
@@ -628,9 +638,16 @@ export default function QuoteCreatePage() {
                                                             <span className="text-gray-400 ml-1 text-xs">— {product.description}</span>
                                                         )}
                                                     </div>
-                                                    <span className="text-[#065F46] font-medium text-xs whitespace-nowrap ml-2">
-                                                        {product.defaultUnitPrice.toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}
-                                                    </span>
+                                                    <div className="text-right ml-2">
+                                                        <span className="text-[#065F46] font-medium text-xs whitespace-nowrap">
+                                                            {product.defaultUnitPrice.toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}
+                                                        </span>
+                                                        {product.isStockTracked && (
+                                                            <span className={`block text-[10px] ${(product.currentStock ?? 0) <= 0 ? 'text-red-500' : 'text-gray-400'}`}>
+                                                                {t('inventory.currentStock', 'Stock')}: {product.currentStock ?? 0}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </button>
                                             ))}
                                             {/* Create new product option */}
@@ -668,6 +685,11 @@ export default function QuoteCreatePage() {
                                         className={`w-full px-3 py-2 border rounded-lg text-right focus:ring-2 focus:ring-[#065F46] outline-none ${item.quantity <= 0 && item.description.trim() ? 'border-red-500 bg-red-50' : 'border-gray-200'
                                             }`}
                                     />
+                                    {item.isStockTracked && item.quantity > (item.currentStock ?? 0) && (
+                                        <p className="text-[10px] text-amber-600 mt-0.5">
+                                            {t('inventory.stockWarning', 'Low stock: {{available}} available', { available: item.currentStock ?? 0 })}
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="col-span-1 md:col-span-2">
                                     <label className="text-xs font-semibold text-gray-500 mb-1 block">{t('invoice.price')}</label>
