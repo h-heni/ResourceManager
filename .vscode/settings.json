@@ -1,3 +1,9 @@
 {
-  "css.lint.unknownAtRules": "ignore"
+  "css.lint.unknownAtRules": "ignore",
+  "github.copilot.chat.codeGeneration.instructions": [
+    { "file": ".github/copilot-instructions.md" }
+  ],
+  "chat.instructions.enabled": true,
+  "github.copilot.chat.commitMessageGeneration.instructions": [],
+  "chat.promptFiles": true
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     Upload, FileText, Loader2, CheckCircle, AlertTriangle, Trash2,
@@ -6,6 +6,9 @@ import {
     Clock, Filter, Archive
 } from 'lucide-react';
 import api from '../services/api';
+import { queryClient } from '../lib/queryClient';
+import { useSupplierInvoices, useDeleteSupplierInvoice } from '../hooks/useSupplierInvoices';
+import { useAvailableYears } from '../hooks/useInvoices';
 import { useAuth } from '../context/AuthContext';
 import { formatCurrency } from '../lib/formatNumber';
 import { DEFAULT_CURRENCY, CURRENCY_OPTIONS, getCurrencySymbol } from '../lib/currencyUtils';
@@ -113,11 +116,6 @@ export default function SupplierInvoicesPage() {
 
     // Identical List & Archive State to InvoicesPage.tsx
     const[viewMode, setViewMode] = useState<'active' | 'archived'>('active');
-    const[invoices, setInvoices] = useState<SupplierInvoice[]>([]);
-    const[archivedInvoices, setArchivedInvoices] = useState<SupplierInvoice[]>([]);
-    
-    const [loadingActive, setLoadingActive] = useState(true);
-    const [loadingArchive, setLoadingArchive] = useState(false);
     
     const[search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -127,18 +125,27 @@ export default function SupplierInvoicesPage() {
     const [activePage, setActivePage] = useState(1);
     const [archivedPage, setArchivedPage] = useState(1);
     const[pageSize, setPageSize] = useState(20);
-    const [activeTotalCount, setActiveTotalCount] = useState(0);
-    const [archivedTotalCount, setArchivedTotalCount] = useState(0);
+
+    // Archive/Year filter state
+    const [selectedYear, setSelectedYear] = useState<number | null>(null);
+
+    // React Query hooks for data fetching
+    const { data: yearsData } = useAvailableYears();
+    const availableYears = yearsData?.years || [];
+    const activeQuery = useSupplierInvoices(activePage, pageSize, 'Pending', debouncedSearch);
+    const archivedQuery = useSupplierInvoices(archivedPage, pageSize, 'Paid', debouncedSearch, selectedYear, !!selectedYear);
+    const deleteMutation = useDeleteSupplierInvoice();
+
+    const loadingActive = activeQuery.isLoading;
+    const loadingArchive = archivedQuery.isLoading;
+    const activeTotalCount = activeQuery.data?.totalCount || 0;
+    const archivedTotalCount = archivedQuery.data?.totalCount || 0;
 
     const activeTotalPages = Math.max(1, Math.ceil(activeTotalCount / pageSize));
     const archivedTotalPages = Math.max(1, Math.ceil(archivedTotalCount / pageSize));
     const currentPage = viewMode === 'archived' ? archivedPage : activePage;
     const currentTotalCount = viewMode === 'archived' ? archivedTotalCount : activeTotalCount;
     const currentTotalPages = viewMode === 'archived' ? archivedTotalPages : activeTotalPages;
-
-    // Archive/Year filter state
-    const [availableYears, setAvailableYears] = useState<number[]>([]);
-    const [selectedYear, setSelectedYear] = useState<number | null>(null);
 
     // Upload state
     const [uploading, setUploading] = useState(false);
@@ -220,21 +227,7 @@ export default function SupplierInvoicesPage() {
         else setActivePage(1);
     },[debouncedSearch, viewMode, selectedYear]);
 
-    // Fast independent count fetcher (using onlyCount=true endpoint)
-    useEffect(() => {
-        const fetchCounts = async () => {
-            try {
-                const activeRes = await api.get('/SupplierInvoices', { params: { status: 'Pending', onlyCount: true } });
-                setActiveTotalCount(activeRes.data.totalCount ?? 0);
-                
-                if (selectedYear) {
-                    const paidRes = await api.get('/SupplierInvoices', { params: { status: 'Paid', year: selectedYear, onlyCount: true } });
-                    setArchivedTotalCount(paidRes.data.totalCount ?? 0);
-                }
-            } catch (error) { logger.error('Error fetching counts:', error); }
-        };
-        fetchCounts();
-    }, [selectedYear]);
+    // Counts are returned inline with the main fetch — no separate count request needed
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const transformInvoice = (item: any): SupplierInvoice => ({
@@ -263,78 +256,33 @@ export default function SupplierInvoicesPage() {
         currencySymbol: item.currencySymbol || DEFAULT_CURRENCY,
     });
 
-    const fetchActiveInvoices = useCallback(async () => {
-        setLoadingActive(true);
-        try {
-            const res = await api.get('/SupplierInvoices', {
-                params: { page: activePage, size: pageSize, status: 'Pending', search: debouncedSearch }
-            });
-            const data = Array.isArray(res.data) ? res.data : (res.data.data ||[]);
-            setInvoices(data.map(transformInvoice));
-            setActiveTotalCount(res.data.totalCount ?? res.data.length ?? 0);
-        } catch (error) {
-            logger.error('Error fetching active invoices:', error);
-            notify('error', t('common.errorFetching'));
-        } finally {
-            setLoadingActive(false);
-        }
-    },[activePage, pageSize, debouncedSearch, notify, t]);
+    // Derive transformed data from React Query
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const invoices = useMemo(() => (activeQuery.data?.data as any[] || []).map(transformInvoice), [activeQuery.data]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const archivedInvoices = useMemo(() => (archivedQuery.data?.data as any[] || []).map(transformInvoice), [archivedQuery.data]);
 
-    const fetchArchivedInvoices = useCallback(async () => {
-        if (!selectedYear) return;
-        setLoadingArchive(true);
-        try {
-            const res = await api.get('/SupplierInvoices', {
-                params: { page: archivedPage, size: pageSize, status: 'Paid', year: selectedYear, search: debouncedSearch }
-            });
-            const data = Array.isArray(res.data) ? res.data : (res.data.data ||[]);
-            setArchivedInvoices(data.map(transformInvoice));
-            setArchivedTotalCount(res.data.totalCount ?? res.data.length ?? 0);
-        } catch (error) {
-            logger.error('Error fetching archived invoices:', error);
-        } finally {
-            setLoadingArchive(false);
-        }
-    }, [archivedPage, pageSize, selectedYear, debouncedSearch]);
-
-    // Triggers based on viewMode
+    // Auto-select latest year when years data loads
     useEffect(() => {
-        if (viewMode === 'active') fetchActiveInvoices();
-        else fetchArchivedInvoices();
-    },[viewMode, fetchActiveInvoices, fetchArchivedInvoices]);
-
-    const fetchAvailableYears = async () => {
-        try {
-            const res = await api.get('/Archive/years');
-            const years = res.data.years ||[];
-            const sortedYears = years.sort((a: number, b: number) => b - a);
-            setAvailableYears(sortedYears);
-            if (sortedYears.length > 0 && !selectedYear) {
-                setSelectedYear(Math.max(...sortedYears));
-            }
-        } catch (error) { logger.error('Error fetching available years', error); }
-    };
+        if (availableYears.length > 0 && !selectedYear) {
+            setSelectedYear(Math.max(...availableYears));
+        }
+    }, [availableYears, selectedYear]);
 
     useEffect(() => {
-        fetchAvailableYears();
-        const fetchSuppliers = async () => {
-            try {
-                const res = await api.get('/Suppliers?size=9999');
+        // Fetch lookup data on mount (suppliers + purchase orders)
+        Promise.all([
+            api.get('/Suppliers?size=9999').then(res => {
                 const data = Array.isArray(res.data) ? res.data : (res.data.data ||[]);
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 setSuppliers(data.map((s: any) => ({ id: s.id, name: s.name, address: s.address, phone: s.phone, taxId: s.taxId, email: s.email })));
-            } catch { /* ignore */ }
-        };
-        fetchSuppliers();
-        const fetchPurchaseOrders = async () => {
-            try {
-                const res = await api.get('/Inventory/purchase-orders?size=9999');
+            }).catch(() => { /* ignore */ }),
+            api.get('/Inventory/purchase-orders?size=9999').then(res => {
                 const data = res.data?.data || [];
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 setPurchaseOrders(data.map((po: any) => ({ id: po.id, number: po.number, supplierName: po.supplierName, supplierInvoiceId: po.supplierInvoiceId || null })));
-            } catch { /* ignore */ }
-        };
-        fetchPurchaseOrders();
+            }).catch(() => { /* ignore */ })
+        ]);
         
         // Restore Draft
         try {
@@ -358,10 +306,10 @@ export default function SupplierInvoicesPage() {
 
     // Refetch when a payment is confirmed/extended via NotificationBell
     useEffect(() => {
-        const handler = () => { if (viewMode === 'active') fetchActiveInvoices(); else fetchArchivedInvoices(); };
+        const handler = () => { queryClient.invalidateQueries({ queryKey: ['supplierInvoices'] }); };
         window.addEventListener('payment-status-changed', handler);
         return () => window.removeEventListener('payment-status-changed', handler);
-    },[fetchActiveInvoices, fetchArchivedInvoices, viewMode]);
+    },[]);
 
     useEffect(() => {
         return () => { if (previewFileUrl?.startsWith('blob:')) URL.revokeObjectURL(previewFileUrl); };
@@ -499,7 +447,9 @@ export default function SupplierInvoicesPage() {
 
             localStorage.removeItem(AUTOSAVE_KEY);
             setStatus({ type: 'success', message: t('supplierInvoice.confirmed', 'Supplier invoice saved!') });
-            setTimeout(() => { setView('list'); fetchActiveInvoices(); resetReviewState(); }, 1500);
+            setTimeout(() => { setView('list'); resetReviewState(); }, 1500);
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+            queryClient.invalidateQueries({ queryKey: ['supplierInvoices'] });
         } catch (error: unknown) {
             setStatus({ type: 'error', message: getErrorMessage(error, t('supplierInvoice.saveFailed')) });
         } finally { setSaving(false); }
@@ -515,9 +465,8 @@ export default function SupplierInvoicesPage() {
     const handleDelete = async (id: number) => {
         if (!window.confirm(t('supplierInvoice.confirmDelete'))) return;
         try {
-            await api.delete(`/SupplierInvoices/${id}`);
+            await deleteMutation.mutateAsync(id);
             notify('success', t('common.deleted'));
-            if (viewMode === 'active') fetchActiveInvoices(); else fetchArchivedInvoices();
         } catch { notify('error', t('common.deleteError')); }
     };
 
@@ -554,7 +503,7 @@ export default function SupplierInvoicesPage() {
                 status: isScheduledPayment ? 'Pending' : 'Completed',
             });
             setShowPaymentModal(false);
-            if (viewMode === 'active') fetchActiveInvoices(); else fetchArchivedInvoices();
+            queryClient.invalidateQueries({ queryKey: ['supplierInvoices'] });
             notify('success', isScheduledPayment ? t('payment.scheduledSuccess') : t('supplierInvoice.recordPayment'));
         } catch (error: unknown) { notify('error', getErrorMessage(error, t('supplierInvoice.paymentFailed'))); } 
         finally { setPaymentSaving(false); }

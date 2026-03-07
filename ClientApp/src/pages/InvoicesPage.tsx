@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Search, Download, Eye, DollarSign, X, Mail, Send, Calendar, Clock, Edit2, Archive, Filter, CheckCircle, FileWarning } from 'lucide-react';
+import { Plus, Search, Download, Eye, DollarSign, X, Mail, Send, Calendar, Clock, Edit2, Archive, Filter, CheckCircle, FileWarning, AlertTriangle, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { getErrorMessage, getAxiosResponseData } from '../utils/errorUtils';
 import { useAuth } from '../context/AuthContext';
+import { useInvoices as useInvoicesQuery, useArchivedInvoices, useAvailableYears, useDeleteInvoice } from '../hooks/useInvoices';
+import { useQueryClient } from '@tanstack/react-query';
 import InvoiceDetailView from '../components/InvoiceDetailView';
 import Pagination from '../components/Pagination';
 import { formatCurrency } from '../lib/formatNumber';
@@ -49,8 +51,6 @@ interface Invoice {
 
 export default function InvoicesPage() {
     const { t } = useTranslation();
-    const [invoices, setInvoices] = useState<Invoice[]>([]);
-    const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
@@ -75,21 +75,53 @@ export default function InvoicesPage() {
     
     // Archive filter state
     const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
-    const [availableYears, setAvailableYears] = useState<number[]>([]);
     const [selectedYear, setSelectedYear] = useState<number | null>(null);
-    const [archivedInvoices, setArchivedInvoices] = useState<Invoice[]>([]);
-    const [loadingArchive, setLoadingArchive] = useState(false);
     const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<number | null>(null);
     const [activePage, setActivePage] = useState(1);
     const [archivedPage, setArchivedPage] = useState(1);
     const [pageSize, setPageSize] = useState(20);
-    const [activeTotalCount, setActiveTotalCount] = useState(0);
-    const [archivedTotalCount, setArchivedTotalCount] = useState(0);
     const [invoiceNumberSort, setInvoiceNumberSort] = useState<'asc' | 'desc'>('asc');
     
+    // Cascade delete warning state
+    const [showDeleteWarning, setShowDeleteWarning] = useState(false);
+    const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+    const [linkedDocuments, setLinkedDocuments] = useState<{
+        invoiceNumber?: string;
+        linkedQuote?: { id: number; number: string; status: string } | null;
+        linkedDeliveryNotes?: { id: number; number: string }[];
+        payments?: { id: number; amount: number; status: string }[];
+        pdfFileCount?: number;
+        hasLinkedDocuments?: boolean;
+    } | null>(null);
+    const [loadingLinkedDocs, setLoadingLinkedDocs] = useState(false);
+
     const navigate = useNavigate();
     const { notify, NotifyBanner } = useNotify();
     const { user } = useAuth();
+    const queryClient = useQueryClient();
+    const deleteMutation = useDeleteInvoice();
+
+    // React Query: active invoices
+    const { data: activeData, isLoading: loading } = useInvoicesQuery(activePage, pageSize, viewMode === 'active');
+    const invoices = (activeData?.items ?? []) as Invoice[];
+    const activeTotalCount = activeData?.totalCount ?? 0;
+
+    // React Query: available years
+    const { data: yearsData } = useAvailableYears();
+    const availableYears = yearsData?.years ?? [];
+
+    // Set default year when years load
+    useEffect(() => {
+        if (yearsData?.latestYear && selectedYear === null) {
+            setSelectedYear(yearsData.latestYear);
+        }
+    }, [yearsData?.latestYear, selectedYear]);
+
+    // React Query: archived invoices
+    const { data: archivedData, isLoading: loadingArchive } = useArchivedInvoices(selectedYear, archivedPage, pageSize);
+    const archivedInvoices = (archivedData?.items ?? []) as Invoice[];
+    const archivedTotalCount = archivedData?.totalCount ?? 0;
+
     const activeTotalPages = Math.max(1, Math.ceil(activeTotalCount / pageSize));
     const archivedTotalPages = Math.max(1, Math.ceil(archivedTotalCount / pageSize));
     const currentPage = viewMode === 'archived' ? archivedPage : activePage;
@@ -98,89 +130,43 @@ export default function InvoicesPage() {
 
     const isManager = user?.roles?.includes('Manager') || user?.roles?.includes('SuperAdmin') || user?.roles?.includes('FreeUser');
 
-    useEffect(() => {
-        fetchInvoices(1, pageSize);
-        fetchAvailableYears();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
     // Refetch when a payment is confirmed/extended via NotificationBell
     useEffect(() => {
-        const handler = () => fetchInvoices(activePage, pageSize);
+        const handler = () => {
+            queryClient.invalidateQueries({ queryKey: ['invoices'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+        };
         window.addEventListener('payment-status-changed', handler);
         return () => window.removeEventListener('payment-status-changed', handler);
-    }, [activePage, pageSize]);
-
-    // Fetch archived invoices when year changes or switching to archived view
-    useEffect(() => {
-        if (selectedYear) {
-            fetchArchivedInvoices(selectedYear, archivedPage, pageSize);
-        }
-    }, [viewMode, selectedYear, archivedPage, pageSize]);
-
-    // Fetch active invoices when active page/pageSize changes
-    useEffect(() => {
-        if (viewMode === 'active') {
-            fetchInvoices(activePage, pageSize);
-        }
-    }, [viewMode, activePage, pageSize]);
-
-    const fetchInvoices = async (page: number, size: number) => {
-        try {
-            const res = await api.get(`/Invoices?page=${page}&size=${size}&includePaid=false`);
-            const payload = res.data || {};
-            const items = payload.items || payload.data || [];
-            const totalCount = payload.totalCount ?? payload.TotalCount ?? 0;
-
-            setInvoices(items);
-            setActiveTotalCount(totalCount);
-        } catch (error) {
-            logger.error("Error fetching invoices", error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const fetchAvailableYears = async () => {
-        try {
-            const res = await api.get('/Archive/years');
-            const years = res.data.years || [];
-            setAvailableYears(years);
-            // Set default to latest year
-            if (years.length > 0 && res.data.latestYear) {
-                setSelectedYear(res.data.latestYear);
-            }
-        } catch (error) {
-            logger.error("Error fetching available years", error);
-        }
-    };
-
-    const fetchArchivedInvoices = async (year: number, page: number, size: number) => {
-        setLoadingArchive(true);
-        try {
-            const res = await api.get(`/Archive/invoices?year=${year}&page=${page}&pageSize=${size}`);
-            const payload = res.data || {};
-            const items = payload.items || [];
-            const totalCount = payload.totalCount ?? 0;
-
-            setArchivedInvoices(items);
-            setArchivedTotalCount(totalCount);
-        } catch (error) {
-            logger.error("Error fetching archived invoices", error);
-        } finally {
-            setLoadingArchive(false);
-        }
-    };
+    }, [queryClient]);
 
     const handleDelete = async (id: number) => {
         if (!isManager) {
             notify('warning', t('common.managerOnly'));
             return;
         }
-        if (!confirm(t('invoice.messages.confirmDelete'))) return;
+        // Fetch linked documents first to show cascade warning
+        setDeleteTargetId(id);
+        setLoadingLinkedDocs(true);
         try {
-            await api.delete(`/Invoices/${id}`);
-            fetchInvoices(activePage, pageSize);
+            const res = await api.get(`/Invoices/${id}/linked-documents`);
+            setLinkedDocuments(res.data);
+            setShowDeleteWarning(true);
+        } catch {
+            // If endpoint fails, fall back to simple confirm
+            if (!confirm(t('invoice.messages.confirmDelete'))) return;
+            await executeDelete(id);
+        } finally {
+            setLoadingLinkedDocs(false);
+        }
+    };
+
+    const executeDelete = async (id: number) => {
+        try {
+            await deleteMutation.mutateAsync(id);
+            setShowDeleteWarning(false);
+            setDeleteTargetId(null);
+            setLinkedDocuments(null);
         } catch (error: unknown) {
             logger.error("Error deleting invoice", error);
             notify('error', getErrorMessage(error, t('invoice.messages.deleteFailed')));
@@ -395,7 +381,9 @@ export default function InvoicesPage() {
                 status: isScheduledPayment ? 'Pending' : 'Completed'
             });
             setShowPaymentModal(false);
-            fetchInvoices(activePage, pageSize);
+            queryClient.invalidateQueries({ queryKey: ['invoices'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+            queryClient.invalidateQueries({ queryKey: ['notifications'] });
             
             if (isScheduledPayment) {
                 notify('success', t('payment.scheduledSuccess'));
@@ -975,6 +963,93 @@ export default function InvoicesPage() {
                     }}
                     isManager={isManager}
                 />
+            )}
+
+            {/* Cascade Delete Warning Modal */}
+            {showDeleteWarning && deleteTargetId && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="p-2 bg-red-100 rounded-full">
+                                <AlertTriangle className="text-red-600" size={24} />
+                            </div>
+                            <h3 className="text-lg font-bold text-gray-900">{t('invoice.cascadeDelete.title')}</h3>
+                        </div>
+
+                        {loadingLinkedDocs ? (
+                            <div className="flex justify-center py-6">
+                                <Loader2 className="animate-spin text-gray-400" size={24} />
+                            </div>
+                        ) : (
+                            <>
+                                <p className="text-sm text-gray-600 mb-4">
+                                    {t('invoice.cascadeDelete.warning', { number: linkedDocuments?.invoiceNumber || deleteTargetId })}
+                                </p>
+
+                                {linkedDocuments?.hasLinkedDocuments && (
+                                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 space-y-2">
+                                        {linkedDocuments.linkedQuote && (
+                                            <div className="flex items-center gap-2 text-sm text-amber-800">
+                                                <FileWarning size={14} />
+                                                <span>{t('invoice.cascadeDelete.linkedQuote', { number: linkedDocuments.linkedQuote.number })}</span>
+                                                {linkedDocuments.linkedQuote.status === 'Accepted' && (
+                                                    <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">{linkedDocuments.linkedQuote.status}</span>
+                                                )}
+                                            </div>
+                                        )}
+                                        {linkedDocuments.linkedDeliveryNotes && linkedDocuments.linkedDeliveryNotes.length > 0 && (
+                                            <div className="text-sm text-amber-800">
+                                                <div className="flex items-center gap-2">
+                                                    <FileWarning size={14} />
+                                                    <span>{t('invoice.cascadeDelete.linkedDeliveryNotes', { count: linkedDocuments.linkedDeliveryNotes.length })}</span>
+                                                </div>
+                                                <ul className="ml-6 mt-1 space-y-0.5">
+                                                    {linkedDocuments.linkedDeliveryNotes.map(dn => (
+                                                        <li key={dn.id} className="text-xs">
+                                                            {dn.number}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )}
+                                        {linkedDocuments.payments && linkedDocuments.payments.length > 0 && (
+                                            <div className="flex items-center gap-2 text-sm text-amber-800">
+                                                <DollarSign size={14} />
+                                                <span>{t('invoice.cascadeDelete.linkedPayments', { count: linkedDocuments.payments.length })}</span>
+                                            </div>
+                                        )}
+                                        {(linkedDocuments.pdfFileCount ?? 0) > 0 && (
+                                            <div className="flex items-center gap-2 text-sm text-amber-800">
+                                                <Download size={14} />
+                                                <span>{t('invoice.cascadeDelete.linkedPdfs', { count: linkedDocuments.pdfFileCount })}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                <p className="text-sm text-red-600 font-medium mb-4">
+                                    {t('invoice.cascadeDelete.confirmation')}
+                                </p>
+                            </>
+                        )}
+
+                        <div className="flex justify-end gap-3">
+                            <button
+                                onClick={() => { setShowDeleteWarning(false); setDeleteTargetId(null); setLinkedDocuments(null); }}
+                                className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                            >
+                                {t('common.cancel')}
+                            </button>
+                            <button
+                                onClick={() => executeDelete(deleteTargetId)}
+                                disabled={loadingLinkedDocs}
+                                className="px-4 py-2 text-sm text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
+                            >
+                                {t('invoice.cascadeDelete.confirmButton')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Plus, Search, Edit2, Trash2, Upload } from 'lucide-react';
+import { useSuppliers, useSaveSupplier, useDeleteSupplier } from '../hooks/useSuppliers';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import Modal from '../components/Modal';
@@ -20,8 +21,6 @@ export default function SuppliersPage() {
     const { notify, NotifyBanner } = useNotify();
     const { user } = useAuth();
     const isManager = user?.roles?.includes('Manager') || user?.roles?.includes('SuperAdmin') || user?.roles?.includes('FreeUser');
-    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-    const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
@@ -32,24 +31,12 @@ export default function SuppliersPage() {
         taxId: '',
         phone: ''
     });
-    const [saving, setSaving] = useState(false);
 
-    useEffect(() => {
-        fetchSuppliers();
-    }, []);
-
-    const fetchSuppliers = async () => {
-        try {
-            const res = await api.get('/Suppliers');
-            // Handle both pagination and raw list
-            const data = Array.isArray(res.data) ? res.data : (res.data.data || []);
-            setSuppliers(data);
-        } catch (error) {
-            logger.error("Error fetching suppliers", error);
-        } finally {
-            setLoading(false);
-        }
-    };
+    // React Query hooks
+    const { data: suppliersData, isLoading: loading } = useSuppliers();
+    const saveMutation = useSaveSupplier();
+    const deleteMutation = useDeleteSupplier();
+    const suppliers = (suppliersData || []) as Supplier[];
 
     const handleOpenModal = (supplier?: Supplier) => {
         if (supplier) {
@@ -69,29 +56,20 @@ export default function SuppliersPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (saving) return;
-        setSaving(true);
+        if (saveMutation.isPending) return;
         try {
-            if (editingSupplier) {
-                await api.put(`/Suppliers/${editingSupplier.id}`, { ...formData, id: editingSupplier.id });
-            } else {
-                await api.post('/Suppliers', formData);
-            }
+            await saveMutation.mutateAsync({ id: editingSupplier?.id, data: formData });
             setIsModalOpen(false);
-            fetchSuppliers();
         } catch (error) {
             logger.error("Error saving supplier", error);
             notify('error', t('supplier.messages.saveFailed'));
-        } finally {
-            setSaving(false);
         }
     };
 
     const handleDelete = async (id: number) => {
         if (!confirm(t('supplier.messages.confirmDelete'))) return;
         try {
-            await api.delete(`/Suppliers/${id}`);
-            fetchSuppliers();
+            await deleteMutation.mutateAsync(id);
         } catch (error) {
             logger.error("Error deleting supplier", error);
         }
@@ -268,7 +246,7 @@ export default function SuppliersPage() {
                         </button>
                         <button
                             type="submit"
-                            disabled={saving}
+                            disabled={saveMutation.isPending}
                             className="px-4 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#047857] transition-colors shadow-lg disabled:opacity-50"
                         >
                             {editingSupplier ? t('supplier.messages.saveChanges') : t('supplier.messages.create')}

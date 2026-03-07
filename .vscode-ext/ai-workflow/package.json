@@ -1,0 +1,57 @@
+{
+  "name": "ai-workflow-panel",
+  "displayName": "AI Workflow — Verify / Reinvestigate",
+  "description": "Minimal VS Code panel with Next and Reinvestigate buttons for the AI development workflow.",
+  "version": "1.0.0",
+  "publisher": "resourcemanager",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "aiWorkflow.showPanel",
+        "title": "AI Workflow: Show Verify / Reinvestigate Panel"
+      },
+      {
+        "command": "aiWorkflow.next",
+        "title": "AI Workflow: Next (Verify & Complete)"
+      },
+      {
+        "command": "aiWorkflow.reinvestigate",
+        "title": "AI Workflow: Reinvestigate (Re-run Debugging)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ai-workflow",
+          "title": "AI Workflow",
+          "icon": "$(beaker)"
+        }
+      ]
+    },
+    "views": {
+      "ai-workflow": [
+        {
+          "type": "webview",
+          "id": "aiWorkflow.panel",
+          "name": "Verify / Reinvestigate"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  }
+}

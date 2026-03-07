@@ -65,4 +65,13 @@ export function useSettings(): CompanySettings {
  */
 export function invalidateSettingsCache(): void {
     cached = null;
+    sessionStorage.removeItem('company_branding');
+}
+
+/**
+ * Seed the cache from external data (e.g. branding response) to avoid a separate /Settings call.
+ */
+export function seedSettingsCache(currency: string, currencySymbol: string): void {
+    if (cached) return; // Don't overwrite if already loaded from /Settings
+    cached = { currency: currency || defaults.currency, currencySymbol: currencySymbol || defaults.currencySymbol };
 }
