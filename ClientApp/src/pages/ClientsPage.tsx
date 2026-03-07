@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Plus, Search, Edit2, Trash2 } from 'lucide-react';
-import api from '../services/api';
 import { getErrorMessage } from '../utils/errorUtils';
 import Modal from '../components/Modal';
 import Pagination from '../components/Pagination';
