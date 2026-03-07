@@ -12,6 +12,7 @@ import { formatCurrency, formatNumber } from '../lib/formatNumber';
 import SuperAdminDashboard from '../components/SuperAdminDashboard';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { useInventoryReport, useStockAlerts } from '../hooks/useInventory';
+import { useQuery } from '@tanstack/react-query';
 
 /* ─── Types ─── */
 interface StatusBreakdown {
@@ -270,6 +271,23 @@ export default function DashboardPage() {
         fetchStats();
     }, [isSuperAdmin]);
     /* eslint-enable react-hooks/exhaustive-deps */
+
+    // React Query bridge: when other pages invalidate ['dashboard'], refetch data
+    const dashboardSignal = useQuery({
+        queryKey: ['dashboard'],
+        queryFn: () => Date.now(),
+        enabled: !isSuperAdmin,
+        staleTime: Infinity,
+        refetchOnMount: false,
+        refetchOnWindowFocus: false,
+    });
+    const dashboardSignalRef = useRef(0);
+    useEffect(() => {
+        if (dashboardSignal.dataUpdatedAt > 0 && dashboardSignalRef.current > 0) {
+            fetchStats(activeCurrency || undefined, dashboardMode === 'mixed');
+        }
+        dashboardSignalRef.current = dashboardSignal.dataUpdatedAt;
+    }, [dashboardSignal.dataUpdatedAt]);
 
     /* Re-fetch when year changes */
     const handleYearChange = (rawValue: string) => {

@@ -112,7 +112,7 @@ export default function NotificationBell() {
         api.post('/Notifications/process-due').catch(() => { });
 
         fetchNotificationCount();
-        const interval = setInterval(fetchNotificationCount, 15000); // Check every 15s for fast feedback
+        const interval = setInterval(fetchNotificationCount, 60000); // Check every 60s (reduced from 15s to lower server load)
         return () => clearInterval(interval);
     }, [isAuthenticated]);
 

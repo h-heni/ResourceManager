@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     Plus, Trash2, Edit2, Search, DollarSign, Calendar, X,
     TrendingUp, Loader2, FileText, Settings2, ChevronDown, ChevronRight
 } from 'lucide-react';
-import api from '../services/api';
+import { useExpenses, useExpenseSummary, useSaveExpense, useDeleteExpense } from '../hooks/useExpenses';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../hooks/useSettings';
 import { formatCurrency } from '../lib/formatNumber';
@@ -65,16 +65,21 @@ export default function ExpensesPage() {
     const { t } = useTranslation();
     const { isManager } = useAuth();
     const { currencySymbol } = useSettings();
-    const [expenses, setExpenses] = useState<Expense[]>([]);
-    const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [filterCategory, setFilterCategory] = useState<string>('all');
-    const [summary, setSummary] = useState<ExpenseSummary | null>(null);
     const [page, setPage] = useState(1);
     const [size, setSize] = useState(20);
-    const [totalCount, setTotalCount] = useState(0);
-    const [totalPages, setTotalPages] = useState(0);
     const [collapsedYears, setCollapsedYears] = useState<Set<number>>(new Set());
+
+    // React Query hooks
+    const { data: expensesData, isLoading: loading } = useExpenses(page, size);
+    const { data: summaryRaw } = useExpenseSummary();
+    const summary = summaryRaw as ExpenseSummary | undefined;
+    const saveMutation = useSaveExpense();
+    const deleteMutation = useDeleteExpense();
+    const expenses = (expensesData?.data || []) as Expense[];
+    const totalCount = expensesData?.totalCount || 0;
+    const totalPages = expensesData?.totalPages || 0;
 
     // Custom categories
     const [customCategories, setCustomCategories] = useState<string[]>(getCustomCategories());
@@ -85,7 +90,6 @@ export default function ExpensesPage() {
     // Modal state
     const [showModal, setShowModal] = useState(false);
     const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
-    const [saving, setSaving] = useState(false);
     const [form, setForm] = useState({
         description: '',
         amount: '',
@@ -96,27 +100,6 @@ export default function ExpensesPage() {
         currency: '',
         currencySymbol: ''
     });
-
-    const fetchExpenses = useCallback(async () => {
-        try {
-            setLoading(true);
-            const [expRes, sumRes] = await Promise.all([
-                api.get(`/Expenses?page=${page}&size=${size}`),
-                api.get('/Expenses/summary')
-            ]);
-            const data = expRes.data;
-            setExpenses(data.data || []);
-            setTotalCount(data.totalCount || 0);
-            setTotalPages(data.totalPages || 0);
-            setSummary(sumRes.data);
-        } catch (err) {
-            logger.error('Failed to fetch expenses:', err);
-        } finally {
-            setLoading(false);
-        }
-    }, [page, size]);
-
-    useEffect(() => { fetchExpenses(); }, [fetchExpenses]);
 
     const filteredExpenses = expenses.filter(e => {
         const matchesSearch = !search ||
@@ -158,7 +141,6 @@ export default function ExpensesPage() {
 
     const handleSave = async () => {
         if (!form.description.trim() || !form.amount) return;
-        setSaving(true);
         try {
             const payload = {
                 description: form.description,
@@ -171,30 +153,19 @@ export default function ExpensesPage() {
                 currencySymbol: form.currencySymbol || undefined
             };
 
-            if (editingExpense) {
-                await api.put(`/Expenses/${editingExpense.id}`, payload);
-            } else {
-                await api.post('/Expenses', payload);
-            }
+            await saveMutation.mutateAsync({ id: editingExpense?.id, data: payload });
             setShowModal(false);
-            await fetchExpenses();
         } catch (err) {
             logger.error('Failed to save expense:', err);
-        } finally {
-            setSaving(false);
         }
     };
 
     const handleDelete = async (id: number) => {
         if (!window.confirm(t('expense.confirmDelete'))) return;
         try {
-            // Optimistic removal from UI
-            setExpenses(prev => prev.filter(e => e.id !== id));
-            await api.delete(`/Expenses/${id}`);
-            await fetchExpenses();
+            await deleteMutation.mutateAsync(id);
         } catch (err) {
             logger.error('Failed to delete expense:', err);
-            await fetchExpenses(); // revert on error
         }
     };
 
@@ -654,10 +625,10 @@ export default function ExpensesPage() {
                             </button>
                             <button
                                 onClick={handleSave}
-                                disabled={saving || !form.description.trim() || !form.amount}
+                                disabled={saveMutation.isPending || !form.description.trim() || !form.amount}
                                 className="px-6 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#047857] disabled:opacity-50 font-medium flex items-center gap-2 transition-all"
                             >
-                                {saving && <Loader2 size={16} className="animate-spin" />}
+                                {saveMutation.isPending && <Loader2 size={16} className="animate-spin" />}
                                 {t('common.save')}
                             </button>
                         </div>

@@ -1,5 +1,61 @@
 # ResourceManager Invoice Management System - AI Agent Guide
 
+---
+
+## ⚡ MANDATORY WORKFLOW — APPLIES TO EVERY MESSAGE
+
+> **This is the #1 rule. It overrides everything else. Every Copilot session MUST follow this workflow. No exceptions.**
+
+### The Workflow
+
+```
+USER MESSAGE → TRANSLATE → APPROVE → IMPLEMENT → VERIFY → USER DECISION
+```
+
+### Step-by-step
+
+1. **TRANSLATE FIRST** — Before writing ANY code, convert the user's message into a structured engineering prompt using the format in `.ai/prompt-translation.md`. Show It to the user. The format:
+   - **TASK** — one-sentence summary
+   - **IMPLEMENTATION PLAN** — ordered backend + frontend steps
+   - **FILES AFFECTED** — modified / created / tests
+   - **VERIFICATION STEPS** — how to confirm it works
+
+2. **WAIT FOR APPROVAL** — Do NOT proceed until the user says "yes", "approved", "go", or similar. If they say "revise", update the plan and show it again.
+
+3. **IMPLEMENT** — Follow `.ai/agents/coder.md`. Search before writing. Follow existing patterns. Check for errors after each change.
+
+4. **VERIFY** — Run browser tests per `.ai/agents/tester.md`. If tests fail, debug per `.ai/agents/debugger.md` (max 3 retries).
+
+5. **REQUEST USER DECISION** — Present:
+   - **[✅ Next]** — User confirms → mark task complete
+   - **[🔍 Reinvestigate]** — Run deeper analysis → return to step 4
+
+**NEVER skip the translation step. NEVER start coding before approval.**
+
+### Quick Reference — Agent Files
+
+| File | Purpose |
+|------|---------|
+| `.ai/prompt-translation.md` | How to translate user messages |
+| `.ai/workflow.md` | Full workflow reference |
+| `.ai/agents/planner.md` | Break prompts into plans |
+| `.ai/agents/coder.md` | Implementation rules |
+| `.ai/agents/tester.md` | Playwright e2e testing |
+| `.ai/agents/debugger.md` | Failure analysis |
+| `.ai/skills/create-feature.md` | Feature creation checklist |
+| `.ai/skills/debug-feature.md` | Debugging guide |
+| `.ai/skills/verify-feature.md` | Verification checklist |
+
+### Automation Scripts
+
+```bash
+cd ClientApp && npm run ai          # Full workflow orchestrator
+cd ClientApp && npm run verify      # Run all verification checks
+cd ClientApp && npm run review      # Verify/Reinvestigate interface
+```
+
+---
+
 > **⚠️ CRITICAL**: This is an **ongoing refactor/migration**, NOT a greenfield project. Before creating anything, search for existing implementations and reuse/refactor them.
 
 ## Current State Assessment
@@ -230,32 +286,14 @@ cd ClientApp && npm run build       # Production build
 
 ## AI Agent Meta-Workflow
 
-As GitHub Copilot, follow this workflow **exactly** for every task:
-
-### Workflow Steps
-
-1. **Translate Prompt** → Read `.ai/prompt-translator.md` and convert the user's message into a structured engineering prompt with TASK, IMPLEMENTATION PLAN, FILES AFFECTED, and VERIFICATION STEPS. Show the translated prompt to the user and wait for approval.
-
-2. **Plan Task** → Read `.ai/agents/planner.md` and break the approved prompt into sequenced, dependency-ordered steps. Separate backend and frontend work. Define test scenarios.
-
-3. **Implement Code** → Read `.ai/agents/coder.md` and implement each step following existing repository patterns. Search before writing. Follow the codebase architecture. Check for compile errors after each change.
-
-4. **Run Browser Tests** → Read `.ai/agents/tester.md` and create Playwright e2e tests in `ClientApp/e2e/`. Run them:
-   ```bash
-   cd ClientApp && npx playwright test [test-file] --reporter=list
-   ```
-
-5. **Debug Automatically** → If tests fail, read `.ai/agents/debugger.md`. Analyze failures, inspect screenshots in `ClientApp/test-results/`, identify root cause, apply fix, and rerun. Maximum 3 retry cycles.
-
-6. **Request Verification** → Present results with two actions:
-   - **[✅ Verify]** — User confirms the feature works → mark task complete
-   - **[🔍 Reinvestigate]** — Run deeper analysis → return to step 5
+> **See the ⚡ MANDATORY WORKFLOW section at the top of this file. That is the authoritative workflow definition.**
+> **Below is the reference table only — do NOT treat it as separate instructions.**
 
 ### Agent Files Reference
 
 | Agent | File | Purpose |
 |-------|------|---------|
-| Prompt Translator | `.ai/prompt-translator.md` | Convert user message → structured prompt |
+| Prompt Translator | `.ai/prompt-translation.md` | Convert user message → structured prompt |
 | Planner | `.ai/agents/planner.md` | Break prompt → implementation plan |
 | Coder | `.ai/agents/coder.md` | Implement code following patterns |
 | Tester | `.ai/agents/tester.md` | Write and run Playwright e2e tests |
@@ -265,6 +303,7 @@ As GitHub Copilot, follow this workflow **exactly** for every task:
 
 | Workflow | File | Purpose |
 |----------|------|---------|
+| Master | `.ai/workflow.md` | Single workflow entry point |
 | Feature | `.ai/workflows/feature-workflow.md` | Full feature implementation lifecycle |
 | Bugfix | `.ai/workflows/bugfix-workflow.md` | Bug diagnosis and fix lifecycle |
 
@@ -275,14 +314,6 @@ As GitHub Copilot, follow this workflow **exactly** for every task:
 | Create Feature | `.ai/skills/create-feature.md` | Step-by-step feature creation |
 | Debug Feature | `.ai/skills/debug-feature.md` | Systematic debugging guide |
 | Verify Feature | `.ai/skills/verify-feature.md` | Comprehensive verification checklist |
-
-### Automation Scripts
-
-| Script | Command | Purpose |
-|--------|---------|---------|
-| AI Workflow | `cd ClientApp && npm run ai` | Full workflow orchestrator |
-| Verify | `cd ClientApp && npm run verify` | Run all verification checks |
-| Review | `cd ClientApp && npm run review` | Verify/Reinvestigate interface |
 
 ### E2E Test Infrastructure
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, Search, Trash2, Download, Eye, FileText, Package, Calendar, Filter, Archive, Edit, User, X, MapPin, Hash } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -7,6 +7,7 @@ import { getErrorMessage } from '../utils/errorUtils';
 import { logger } from '../lib/logger';
 import { useNotify } from '../hooks/useNotify';
 import { useAuth } from '../context/AuthContext';
+import { useDeliveryNotes, useDeleteDeliveryNote } from '../hooks/useDeliveryNotes';
 
 interface DeliveryNoteItemData {
     description: string;
@@ -35,8 +36,6 @@ interface DeliveryNote {
 export default function DeliveryNotesPage() {
     const { t } = useTranslation();
     const { notify, NotifyBanner } = useNotify();
-    const [notes, setNotes] = useState<DeliveryNote[]>([]);
-    const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
     const [detailNote, setDetailNote] = useState<DeliveryNote | null>(null);
@@ -45,28 +44,10 @@ export default function DeliveryNotesPage() {
 
     const isManager = user?.roles?.includes('Manager') || user?.roles?.includes('SuperAdmin') || user?.roles?.includes('FreeUser');
 
-    useEffect(() => {
-        fetchNotes();
-    }, []);
-
-    // Refetch when a payment is confirmed/extended via NotificationBell (cascade changes treated status)
-    useEffect(() => {
-        const handler = () => fetchNotes();
-        window.addEventListener('payment-status-changed', handler);
-        return () => window.removeEventListener('payment-status-changed', handler);
-    }, []);
-
-    const fetchNotes = async () => {
-        try {
-            const res = await api.get('/DeliveryNotes');
-            const data = Array.isArray(res.data) ? res.data : (res.data.data || []);
-            setNotes(data);
-        } catch (error) {
-            logger.error("Error fetching delivery notes", error);
-        } finally {
-            setLoading(false);
-        }
-    };
+    // React Query
+    const { data: rawNotes, isLoading: loading } = useDeliveryNotes();
+    const notes = (rawNotes ?? []) as DeliveryNote[];
+    const deleteNoteMutation = useDeleteDeliveryNote();
 
     const openDetail = async (note: DeliveryNote) => {
         try {
@@ -95,8 +76,7 @@ export default function DeliveryNotesPage() {
         }
         if (!confirm(t('deliveryNote.confirmDelete'))) return;
         try {
-            await api.delete(`/DeliveryNotes/${id}`);
-            fetchNotes();
+            await deleteNoteMutation.mutateAsync(id);
         } catch (error: unknown) {
             logger.error("Error deleting delivery note", error);
             notify('error', getErrorMessage(error, t('deliveryNote.deleteFailed')));

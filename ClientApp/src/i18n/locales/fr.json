@@ -349,7 +349,17 @@
     "draft": "Brouillon",
     "viewDetails": "Voir les détails",
     "price": "Prix",
-    "save": "Enregistrer"
+    "save": "Enregistrer",
+    "cascadeDelete": {
+      "title": "Supprimer la facture",
+      "warning": "Vous êtes sur le point de supprimer la facture {{number}}. Cette action est irréversible.",
+      "linkedQuote": "Devis lié : {{number}}",
+      "linkedDeliveryNotes": "{{count}} bon(s) de livraison lié(s)",
+      "linkedPayments": "{{count}} paiement(s) enregistré(s)",
+      "linkedPdfs": "{{count}} fichier(s) PDF stocké(s)",
+      "confirmation": "Êtes-vous sûr de vouloir continuer ? Tous les enregistrements liés seront affectés.",
+      "confirmButton": "Supprimer la facture"
+    }
   },
   "quote": {
     "title": "Devis",

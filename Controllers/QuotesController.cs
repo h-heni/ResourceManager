@@ -66,7 +66,7 @@ namespace ResourceManager.Controllers
 
         // GET: api/devis
         [HttpGet]
-        public async Task<IActionResult> GetDevis([FromQuery] int page = 1, [FromQuery] int size = 20)
+        public async Task<IActionResult> GetDevis([FromQuery] int page = 1, [FromQuery] int size = 20, [FromQuery] bool includeItems = false)
         {
             try
             {
@@ -77,6 +77,11 @@ namespace ResourceManager.Controllers
                     .AsNoTracking()
                     .Include(d => d.Client)
                     .AsQueryable();
+
+                if (includeItems)
+                {
+                    query = query.Include(d => d.QuoteItems);
+                }
 
                 // Employee role: hide archived (Treated) records
                 if (User.IsInRole("Employee"))
@@ -89,23 +94,45 @@ namespace ResourceManager.Controllers
                 var totalCount = await query.CountAsync();
                 var totalPages = (int)Math.Ceiling(totalCount / (double)size);
 
-                var devisList = await query
+                var paged = await query
                     .Skip((page - 1) * size)
                     .Take(size)
-                    .Select(d => new {
-                        d.Id,
-                        d.Number,
-                        d.Date,
-                        ClientName = d.Client != null ? d.Client.Name : "Unknown",
-                        d.TotalAmount,
-                        d.Status,
-                        d.Treated,
-                        d.CreatedByUserId,
-                        d.ClientId,
-                        d.Currency,
-                        d.CurrencySymbol
-                    })
                     .ToListAsync();
+
+                var devisList = paged.Select(d => new {
+                    d.Id,
+                    d.Number,
+                    d.Date,
+                    ClientName = d.Client != null ? d.Client.Name : "Unknown",
+                    ClientId = d.ClientId,
+                    ClientAddress = d.Client?.Address,
+                    ClientTaxId = d.Client?.TaxId,
+                    ClientPhone = d.Client?.Phone,
+                    ClientEmail = d.Client?.Email,
+                    d.SubTotal,
+                    d.TaxAmount,
+                    d.TotalAmount,
+                    d.Tfiscal,
+                    d.TfiscalName,
+                    d.Status,
+                    d.Treated,
+                    d.CreatedByUserId,
+                    d.CreatedBy,
+                    d.ModifiedBy,
+                    d.Currency,
+                    d.CurrencySymbol,
+                    QuoteItems = includeItems ? d.QuoteItems.Select(i => new {
+                        i.Id,
+                        i.Description,
+                        i.Quantity,
+                        i.Price,
+                        i.Tva,
+                        i.VatRate,
+                        i.TotalItemHT,
+                        i.ItemTaxAmount,
+                        i.ProductServiceId
+                    }).ToList() : null
+                }).ToList();
 
                 return Ok(new {
                     Data = devisList,

@@ -942,21 +942,109 @@ namespace ResourceManager.Controllers
             });
         }
 
+        // GET: api/invoices/{id}/linked-documents - Check what documents are linked before deletion
+        [HttpGet("{id}/linked-documents")]
+        [Authorize(Roles = "SuperAdmin,Manager,FreeUser")]
+        public async Task<IActionResult> GetLinkedDocuments(int id)
+        {
+            var invoice = await _context.Invoices
+                .Include(i => i.Payments)
+                .Include(i => i.Quote)
+                .FirstOrDefaultAsync(i => i.Id == id);
+            if (invoice == null) return NotFound();
+
+            var linkedQuote = invoice.QuoteId != null
+                ? await _context.Quotes.Where(q => q.Id == invoice.QuoteId).Select(q => new { q.Id, q.Number, q.Status }).FirstOrDefaultAsync()
+                : null;
+
+            var linkedDeliveryNotes = await _context.DeliveryNotes
+                .Where(dn => dn.InvoiceId == id || (dn.QuoteId == invoice.QuoteId && invoice.QuoteId != null))
+                .Select(dn => new { dn.Id, dn.Number })
+                .ToListAsync();
+
+            var payments = invoice.Payments.Select(p => new { p.Id, p.Amount, p.Status, p.PaymentDate }).ToList();
+
+            var pdfFiles = await _context.PdfFileRecords
+                .Where(f => f.DocumentType == PdfDocumentType.Invoice && f.RelatedEntityId == id)
+                .CountAsync();
+
+            return Ok(new
+            {
+                invoiceId = id,
+                invoiceNumber = invoice.Number,
+                isLocked = invoice.IsLocked,
+                status = invoice.Status,
+                linkedQuote,
+                linkedDeliveryNotes,
+                payments,
+                pdfFileCount = pdfFiles,
+                hasLinkedDocuments = linkedQuote != null || linkedDeliveryNotes.Any() || payments.Any()
+            });
+        }
+
         // DELETE: api/invoices/{id} - Manager/FreeUser only
         [HttpDelete("{id}")]
         [Authorize(Roles = "SuperAdmin,Manager,FreeUser")]
         public async Task<IActionResult> DeleteInvoice(int id)
         {
-            var invoice = await _context.Invoices.FindAsync(id);
+            var invoice = await _context.Invoices
+                .Include(i => i.Payments)
+                .FirstOrDefaultAsync(i => i.Id == id);
             if (invoice == null) return NotFound();
 
-            if (invoice.IsLocked || invoice.Status == "Paid")
+            if (invoice.Status != "Pending")
             {
-                return BadRequest("Cannot delete a locked or paid invoice.");
+                return BadRequest("Only invoices with 'Pending' status can be deleted.");
             }
 
+            // Soft-delete the invoice
             invoice.IsDeleted = true;
             invoice.DeletedAt = DateTime.UtcNow;
+
+            // Cascade: soft-delete linked delivery notes
+            var linkedDeliveryNotes = await _context.DeliveryNotes
+                .Where(dn => dn.InvoiceId == id || (dn.QuoteId == invoice.QuoteId && invoice.QuoteId != null))
+                .ToListAsync();
+            foreach (var dn in linkedDeliveryNotes)
+            {
+                dn.IsDeleted = true;
+                dn.DeletedAt = DateTime.UtcNow;
+            }
+
+            // Cascade: remove payments (no soft-delete on Payment entity)
+            if (invoice.Payments.Any())
+            {
+                _context.Payments.RemoveRange(invoice.Payments);
+            }
+
+            // Cascade: soft-delete linked quote
+            if (invoice.QuoteId != null)
+            {
+                var linkedQuote = await _context.Quotes
+                    .FirstOrDefaultAsync(q => q.Id == invoice.QuoteId);
+                if (linkedQuote != null)
+                {
+                    linkedQuote.IsDeleted = true;
+                    linkedQuote.DeletedAt = DateTime.UtcNow;
+                }
+            }
+
+            // Cascade: soft-delete PDF records (invoice + quote + delivery notes)
+            var pdfEntityIds = new List<int> { id };
+            if (invoice.QuoteId != null)
+                pdfEntityIds.Add(invoice.QuoteId.Value);
+            foreach (var dn in linkedDeliveryNotes)
+                pdfEntityIds.Add(dn.Id);
+
+            var pdfRecords = await _context.PdfFileRecords
+                .Where(f => pdfEntityIds.Contains(f.RelatedEntityId))
+                .ToListAsync();
+            foreach (var pdf in pdfRecords)
+            {
+                pdf.IsDeleted = true;
+                pdf.DeletedAt = DateTime.UtcNow;
+            }
+
             await _context.SaveChangesAsync();
 
             return Ok(new { message = "Invoice deleted successfully." });

@@ -349,7 +349,17 @@
     "draft": "Draft",
     "viewDetails": "View Details",
     "price": "Price",
-    "save": "Save"
+    "save": "Save",
+    "cascadeDelete": {
+      "title": "Delete Invoice",
+      "warning": "You are about to delete invoice {{number}}. This action cannot be undone.",
+      "linkedQuote": "Linked quote: {{number}}",
+      "linkedDeliveryNotes": "{{count}} linked delivery note(s)",
+      "linkedPayments": "{{count}} recorded payment(s)",
+      "linkedPdfs": "{{count}} stored PDF file(s)",
+      "confirmation": "Are you sure you want to proceed? All linked records will be affected.",
+      "confirmButton": "Delete Invoice"
+    }
   },
   "quote": {
     "title": "Quotes",

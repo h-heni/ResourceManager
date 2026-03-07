@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, Search, FileText, Calendar, Download, Trash2, Filter, Archive, Eye, Edit, X, User, MapPin, Hash } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -8,6 +8,7 @@ import { formatCurrency } from '../lib/formatNumber';
 import { logger } from '../lib/logger';
 import { useNotify } from '../hooks/useNotify';
 import { DEFAULT_CURRENCY } from '../lib/currencyUtils';
+import { useQuotes, useDeleteQuote } from '../hooks/useQuotes';
 
 interface QuoteItem {
     id: number;
@@ -51,53 +52,16 @@ const getQuoteNumber = (quote: QuoteData & { Number?: string }) => quote.number 
 export default function QuotesPage() {
     const { t } = useTranslation();
     const { notify, NotifyBanner } = useNotify();
-    const [quotes, setQuotes] = useState<QuoteData[]>([]);
-    const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
     const [detailQuote, setDetailQuote] = useState<QuoteData | null>(null);
     const navigate = useNavigate();
     const { isManager } = useAuth();
 
-    /* eslint-disable react-hooks/exhaustive-deps */
-    useEffect(() => {
-        fetchQuotes();
-    }, []);
-    /* eslint-enable react-hooks/exhaustive-deps */
-
-    // Refetch when a payment is confirmed/extended via NotificationBell (cascade changes quote status)
-    /* eslint-disable react-hooks/exhaustive-deps */
-    useEffect(() => {
-        const handler = () => fetchQuotes();
-        window.addEventListener('payment-status-changed', handler);
-        return () => window.removeEventListener('payment-status-changed', handler);
-    }, []);
-    /* eslint-enable react-hooks/exhaustive-deps */
-
-    const fetchQuotes = async () => {
-        try {
-            const res = await api.get('/Quotes');
-            const data = Array.isArray(res.data) ? res.data : (res.data.data || []);
-            
-            // Fetch full details for each quote to get items
-            const quotesWithDetails = await Promise.all(
-                data.filter((q: QuoteData) => q.status !== 'Rejected').map(async (q: QuoteData) => {
-                    try {
-                        const detailRes = await api.get(`/Quotes/${q.id}`);
-                        return { ...detailRes.data, clientName: q.clientName };
-                    } catch {
-                        return q;
-                    }
-                })
-            );
-            
-            setQuotes(quotesWithDetails);
-        } catch (error) {
-            logger.error(t('quote.messages.fetchErrorLog'), error);
-        } finally {
-            setLoading(false);
-        }
-    };
+    // React Query
+    const { data: rawQuotes, isLoading: loading } = useQuotes();
+    const quotes = ((rawQuotes ?? []) as QuoteData[]).filter(q => q.status !== 'Rejected');
+    const deleteQuoteMutation = useDeleteQuote();
 
     const handleDownloadPdf = async (id: number, number: string | number) => {
         try {
@@ -118,8 +82,7 @@ export default function QuotesPage() {
     const handleDeleteQuote = async (id: number) => {
         if (!confirm(t('quote.confirmDelete'))) return;
         try {
-            await api.delete(`/Quotes/${id}`);
-            fetchQuotes();
+            await deleteQuoteMutation.mutateAsync(id);
         } catch (error) {
             logger.error(t('quote.messages.deleteErrorLog'), error);
             notify('error', t('quote.deleteError'));

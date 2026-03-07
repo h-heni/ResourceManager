@@ -3,7 +3,6 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { useNavigate } from 'react-router-dom';
 import { setAccessToken, setLoggingOut, broadcastLogout } from '../services/api';
 import api from '../services/api';
-import { setAppLanguage } from '../i18n/index';
 
 interface User {
     email: string;
@@ -57,17 +56,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [accountLocked, setAccountLocked] = useState<{ reason: 'suspended' | 'expired'; expiryDate?: string } | null>(null);
     const navigate = useNavigate();
     const isRestoringRef = useRef(false); // Guard against concurrent restoreSession calls
-
-    // Fetch company language from backend and apply it
-    const syncLanguageFromSettings = useCallback(async () => {
-        try {
-            const res = await api.get('/Settings');
-            const lang = res.data?.invoiceLanguage;
-            if (lang) setAppLanguage(lang);
-        } catch {
-            // Non-critical — keep whatever language is persisted
-        }
-    }, []);
 
     // On mount: try to restore session via silent refresh
     useEffect(() => {
@@ -123,8 +111,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     baseStoragePath: baseStoragePath || undefined
                 });
 
-                // Sync language from company settings (authoritative source)
-                syncLanguageFromSettings();
+                // Language sync is handled by DashboardLayout via /Settings/branding
             } catch {
                 if (cancelled) { isRestoringRef.current = false; return; }
                 // Refresh failed — session expired, clear local data
@@ -196,12 +183,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Clear any stale account-locked state from a previous session
         setAccountLocked(null);
 
-        // Sync language from company settings after login
-        syncLanguageFromSettings();
+        // Language sync is handled by DashboardLayout via /Settings/branding
 
         // NOTE: Navigation is handled by the caller (LoginPage, CompanyInitPage, etc.)
         // Do NOT navigate here — it causes double-navigation and race conditions.
-    }, [syncLanguageFromSettings]);
+    }, []);
 
     const logout = useCallback(async () => {
         // Set guard FIRST — prevents interceptor from redirecting during logout
@@ -224,6 +210,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.removeItem('user_lastName');
         localStorage.removeItem('user_isProfileComplete');
         localStorage.removeItem('user_baseStoragePath');
+        sessionStorage.removeItem('company_branding');
         setUser(null);
 
         // Clear account-locked state so the next user isn't affected

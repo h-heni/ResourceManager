@@ -71,7 +71,10 @@ namespace ResourceManager.Controllers
                 CompanyName = company?.Name ?? "Resource Manager",
                 HasLogoData = company?.LogoData != null && company.LogoData.Length > 0,
                 PrimaryColor = settings?.PrimaryColor ?? "#667eea",
-                SecondaryColor = settings?.SecondaryColor ?? "#764ba2"
+                SecondaryColor = settings?.SecondaryColor ?? "#764ba2",
+                Currency = settings?.Currency ?? "TND",
+                CurrencySymbol = settings?.CurrencySymbol ?? "TND",
+                InvoiceLanguage = settings?.InvoiceLanguage ?? "fr"
             });
         }
 

@@ -8,6 +8,7 @@ import api from '../services/api';
 import { useSettings } from '../hooks/useSettings';
 import { logger } from '../lib/logger';
 import Pagination from '../components/Pagination';
+import { useProductServices, useSaveProductService, useDeleteProductService } from '../hooks/useProductServices';
 
 interface ProductServiceItem {
     id: number;
@@ -32,18 +33,21 @@ interface TaxSettings {
 export default function ProductServicesPage() {
     const { t } = useTranslation();
     const { currencySymbol } = useSettings();
-    const [items, setItems] = useState<ProductServiceItem[]>([]);
-    const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [page, setPage] = useState(1);
     const [size, setSize] = useState(20);
-    const [totalCount, setTotalCount] = useState(0);
-    const [totalPages, setTotalPages] = useState(0);
+
+    // React Query hooks
+    const { data: itemsData, isLoading: loading } = useProductServices(page, size);
+    const saveMutation = useSaveProductService();
+    const deleteMutation = useDeleteProductService();
+    const items = (itemsData?.data || []) as ProductServiceItem[];
+    const totalCount = itemsData?.totalCount || 0;
+    const totalPages = itemsData?.totalPages || 0;
 
     // Modal state
     const [showModal, setShowModal] = useState(false);
     const [editingItem, setEditingItem] = useState<ProductServiceItem | null>(null);
-    const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState('');
     const [form, setForm] = useState({
         name: '',
@@ -61,21 +65,6 @@ export default function ProductServicesPage() {
     // Tax settings
     const [taxSettings, setTaxSettings] = useState<TaxSettings>({ defaultVatRate: 0.19, availableVatRates: [0, 7, 13, 19] });
 
-    const fetchItems = useCallback(async () => {
-        try {
-            setLoading(true);
-            const res = await api.get(`/ProductServices?page=${page}&size=${size}`);
-            const data = res.data;
-            setItems(data.data || []);
-            setTotalCount(data.totalCount || 0);
-            setTotalPages(data.totalPages || 0);
-        } catch (err) {
-            logger.error('Failed to fetch products:', err);
-        } finally {
-            setLoading(false);
-        }
-    }, [page, size]);
-
     const fetchTaxSettings = useCallback(async () => {
         try {
             const res = await api.get('/Settings');
@@ -86,7 +75,7 @@ export default function ProductServicesPage() {
         } catch { /* ignore */ }
     }, []);
 
-    useEffect(() => { fetchItems(); fetchTaxSettings(); }, [fetchItems, fetchTaxSettings]);
+    useEffect(() => { fetchTaxSettings(); }, [fetchTaxSettings]);
 
     // Sort alphabetically A→Z
     const sortedItems = [...items].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
@@ -132,7 +121,6 @@ export default function ProductServicesPage() {
 
         // Google search is optional — user can type a name directly
 
-        setSaving(true);
         setSaveError('');
         try {
             const payload = {
@@ -147,26 +135,18 @@ export default function ProductServicesPage() {
                 reorderPoint: form.isStockTracked && form.reorderPoint !== '' ? parseFloat(form.reorderPoint) : null
             };
 
-            if (editingItem) {
-                await api.put(`/ProductServices/${editingItem.id}`, payload);
-            } else {
-                await api.post('/ProductServices', payload);
-            }
+            await saveMutation.mutateAsync({ id: editingItem?.id, data: payload });
             setShowModal(false);
-            fetchItems();
         } catch (err) {
             logger.error('Failed to save:', err);
             setSaveError(t('product.saveFailed', 'Failed to save product. Please try again.'));
-        } finally {
-            setSaving(false);
         }
     };
 
     const handleDelete = async (id: number) => {
         if (!window.confirm(t('product.confirmDelete'))) return;
         try {
-            await api.delete(`/ProductServices/${id}`);
-            fetchItems();
+            await deleteMutation.mutateAsync(id);
         } catch (err) {
             logger.error('Failed to delete:', err);
         }
@@ -429,11 +409,11 @@ export default function ProductServicesPage() {
                             </button>
                             <button
                                 onClick={handleSave}
-                                disabled={saving || !form.name.trim()}
+                                disabled={saveMutation.isPending || !form.name.trim()}
                                 className="px-5 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                                {saving ? <Loader2 size={16} className="mr-1.5 animate-spin" /> : <Check size={16} className="mr-1.5" />}
-                                {saving ? t('common.saving', 'Saving...') : editingItem ? t('common.save', 'Save') : t('product.createAndSave', 'Create & Save')}
+                                {saveMutation.isPending ? <Loader2 size={16} className="mr-1.5 animate-spin" /> : <Check size={16} className="mr-1.5" />}
+                                {saveMutation.isPending ? t('common.saving', 'Saving...') : editingItem ? t('common.save', 'Save') : t('product.createAndSave', 'Create & Save')}
                             </button>
                         </div>
                     </div>

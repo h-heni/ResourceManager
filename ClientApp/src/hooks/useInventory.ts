@@ -290,7 +290,7 @@ export function useProductServiceOptions() {
         isStockTracked: Boolean(p.isStockTracked ?? p.IsStockTracked ?? false),
       }));
     },
-    staleTime: 5 * 60 * 1000, // cache 5 min
+    staleTime: 30 * 1000, // cache 30s — refreshes quickly after cross-page mutations
   });
 }
 
@@ -306,7 +306,7 @@ export function useSupplierOptions() {
         matriculeFiscal: s.matriculeFiscal,
       }));
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 1000, // cache 30s — refreshes quickly after cross-page mutations
   });
 }
 

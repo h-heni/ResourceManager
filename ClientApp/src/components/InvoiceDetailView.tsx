@@ -339,14 +339,10 @@ export default function InvoiceDetailView({
                             <span className="sm:hidden">Notice</span>
                         </button>
                     )}
-                    {/* Delete button - Manager only, not locked, not paid */}
-                    {isManager && !invoice.isLocked && invoice.status !== 'Paid' && onDelete && (
+                    {/* Delete button - Manager only, Pending status only */}
+                    {isManager && invoice.status === 'Pending' && onDelete && (
                         <button
-                            onClick={() => {
-                                if (confirm(t('invoice.messages.confirmDelete'))) {
-                                    onDelete(invoice.id);
-                                }
-                            }}
+                            onClick={() => onDelete(invoice.id)}
                             className="flex items-center px-3 sm:px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm whitespace-nowrap"
                             title={t('common.delete')}
                         >

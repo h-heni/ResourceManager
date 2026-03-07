@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Plus, Search, Edit2, Trash2 } from 'lucide-react';
 import api from '../services/api';
 import { getErrorMessage } from '../utils/errorUtils';
@@ -7,6 +7,7 @@ import Pagination from '../components/Pagination';
 import { logger } from '../lib/logger';
 import { useNotify } from '../hooks/useNotify';
 import { useTranslation } from 'react-i18next';
+import { useClients, useSaveClient, useDeleteClient } from '../hooks/useClients';
 
 interface Client {
     id: number;
@@ -20,15 +21,11 @@ interface Client {
 export default function ClientsPage() {
     const { t } = useTranslation();
     const { notify, NotifyBanner } = useNotify();
-    const [clients, setClients] = useState<Client[]>([]);
-    const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingClient, setEditingClient] = useState<Client | null>(null);
     const [page, setPage] = useState(1);
     const [size, setSize] = useState(20);
-    const [totalCount, setTotalCount] = useState(0);
-    const [totalPages, setTotalPages] = useState(0);
 
     // Form State
     const [formData, setFormData] = useState({
@@ -40,26 +37,13 @@ export default function ClientsPage() {
     });
     const [saving, setSaving] = useState(false);
 
-    /* eslint-disable react-hooks/exhaustive-deps */
-    useEffect(() => {
-        fetchClients();
-    }, [page, size]);
-    /* eslint-enable react-hooks/exhaustive-deps */
-
-    const fetchClients = async () => {
-        try {
-            setLoading(true);
-            const res = await api.get(`/Clients?page=${page}&size=${size}`);
-            const data = res.data;
-            setClients(data.data || []);
-            setTotalCount(data.totalCount || 0);
-            setTotalPages(data.totalPages || 0);
-        } catch (error) {
-            logger.error("Error fetching clients", error);
-        } finally {
-            setLoading(false);
-        }
-    };
+    // React Query
+    const { data: clientsData, isLoading: loading } = useClients(page, size);
+    const clients = (clientsData?.data ?? []) as Client[];
+    const totalCount = clientsData?.totalCount ?? 0;
+    const totalPages = clientsData?.totalPages ?? 0;
+    const saveClientMutation = useSaveClient();
+    const deleteClientMutation = useDeleteClient();
 
     const handleOpenModal = (client?: Client) => {
         if (client) {
@@ -83,13 +67,11 @@ export default function ClientsPage() {
         if (saving) return;
         setSaving(true);
         try {
-            if (editingClient) {
-                await api.put(`/Clients/${editingClient.id}`, { ...formData, companyName: formData.name, id: editingClient.id });
-            } else {
-                await api.post('/Clients', { ...formData, companyName: formData.name });
-            }
+            await saveClientMutation.mutateAsync({
+                id: editingClient?.id,
+                data: { ...formData, companyName: formData.name },
+            });
             setIsModalOpen(false);
-            fetchClients();
         } catch (error: unknown) {
             logger.error("Error saving client", error);
             const msg = getErrorMessage(error, t('client.messages.saveFailed'));
@@ -102,8 +84,7 @@ export default function ClientsPage() {
     const handleDelete = async (id: number) => {
         if (!confirm(t('client.messages.confirmDelete'))) return;
         try {
-            await api.delete(`/Clients/${id}`);
-            fetchClients();
+            await deleteClientMutation.mutateAsync(id);
         } catch (error) {
             logger.error("Error deleting client", error);
         }

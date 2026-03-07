@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext';
 import LanguageSelector from '../components/LanguageSelector';
 import NotificationBell from '../components/NotificationBell';
 import api from '../services/api';
+import { seedSettingsCache } from '../hooks/useSettings';
+import { setAppLanguage } from '../i18n/index';
 import {
     LayoutDashboard,
     Users,
@@ -97,17 +99,46 @@ export default function DashboardLayout() {
     useEffect(() => {
         if (!isAuthenticated) return;
         
+        // Check sessionStorage cache first
+        const cachedBranding = sessionStorage.getItem('company_branding');
+        if (cachedBranding) {
+            try {
+                const cached = JSON.parse(cachedBranding);
+                setCompanyName(cached.companyName || 'Resource Manager');
+                // Seed currency settings from cached branding
+                if (cached.currency) seedSettingsCache(cached.currency, cached.currencySymbol);
+                if (cached.invoiceLanguage) setAppLanguage(cached.invoiceLanguage);
+                // Still fetch logo if needed
+                if (cached.hasLogoData) {
+                    api.get('/Settings/logo', { responseType: 'blob' }).then(logoRes => {
+                        if (logoRes.data?.size > 0) setCompanyLogo(URL.createObjectURL(logoRes.data));
+                    }).catch(() => {});
+                }
+                return;
+            } catch { /* fall through to fetch */ }
+        }
+
         let logoUrlToCleanup: string | null = null;
 
         const fetchCompanyBranding = async () => {
             try {
-                // Use /branding endpoint for all roles (works for Employee too)
                 const res = await api.get('/Settings/branding');
                 if (res.data) {
                     setCompanyName(res.data.companyName || 'Resource Manager');
+                    // Cache branding data in sessionStorage
+                    sessionStorage.setItem('company_branding', JSON.stringify({
+                        companyName: res.data.companyName,
+                        hasLogoData: res.data.hasLogoData,
+                        currency: res.data.currency,
+                        currencySymbol: res.data.currencySymbol,
+                        invoiceLanguage: res.data.invoiceLanguage
+                    }));
+                    // Seed useSettings cache so it doesn't need a separate /Settings call
+                    if (res.data.currency) seedSettingsCache(res.data.currency, res.data.currencySymbol);
+                    // Sync language from branding response
+                    if (res.data.invoiceLanguage) setAppLanguage(res.data.invoiceLanguage);
                 }
 
-                // Only fetch logo blob if the backend confirms one exists
                 if (res.data?.hasLogoData) {
                     try {
                         const logoRes = await api.get('/Settings/logo', { responseType: 'blob' });
