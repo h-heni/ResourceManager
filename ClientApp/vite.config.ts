@@ -12,13 +12,17 @@ export default defineConfig({
     css: false,
   },
   build: {
+    chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
         manualChunks: {
-          // Stable vendor chunk — changes rarely, cached aggressively
+          // Stable vendor chunks — change rarely, cached aggressively
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
           'vendor-query': ['@tanstack/react-query', 'axios'],
           'vendor-i18n': ['i18next', 'react-i18next', 'i18next-browser-languagedetector'],
+          'vendor-ui': ['lucide-react'],
+          'vendor-charts': ['recharts'],
+          'vendor-xlsx': ['xlsx'],
         },
       },
     },

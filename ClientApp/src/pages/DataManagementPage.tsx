@@ -93,8 +93,8 @@ const DATA_TYPE_CONFIG: Record<DataType, {
         labelKey: 'dataManagement.exportProducts',
         icon: Package,
         requiredColumns: ['Name', 'Price', 'Currency', 'TVA Rate'],
-        optionalColumns: ['Description'],
-        exampleRow: { Name: 'Product A', Description: 'Annual subscription', Price: '100', Currency: 'EUR', 'TVA Rate': '19' },
+        optionalColumns: ['Description', 'Stock', 'Limit'],
+        exampleRow: { Name: 'Product A', Description: 'Annual subscription', Price: '100', Currency: 'EUR', 'TVA Rate': '19', Stock: '50', Limit: '10' },
     },
     suppliers: {
         labelKey: 'dataManagement.exportSuppliers',
@@ -276,9 +276,25 @@ export default function DataManagementPage() {
         // Validate via backend (dry run)
         setImportLoading(true);
         try {
+            // Read custom expense categories from localStorage for validation
+            let customCategories: string[] | undefined;
+            if (importType === 'otherExpenses') {
+                try {
+                    const saved = localStorage.getItem('custom_expense_categories');
+                    if (saved) {
+                        const parsed = JSON.parse(saved);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            customCategories = typeof parsed[0] === 'string'
+                                ? parsed
+                                : parsed.map((c: { name: string }) => c.name);
+                        }
+                    }
+                } catch { /* ignore */ }
+            }
             const res = await api.post('/DataManagement/import/validate', {
                 dataType: importType,
                 rows: rows,
+                ...(customCategories ? { customCategories } : {}),
             });
             setValidationResult(res.data);
         } catch (error: unknown) {
@@ -410,7 +426,6 @@ export default function DataManagementPage() {
             setImportStep('result');
             setShowConflictModal(false);
         } catch (error: unknown) {
-            console.error('Resolution failed:', error);
             const message = error instanceof Error ? error.message : t('dataManagement.importError');
             setImportResult({ success: false, message });
             setImportStep('result');

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using ResourceManager.Data;
 using ResourceManager.DTOs;
@@ -15,12 +16,18 @@ namespace ResourceManager.Controllers
         private readonly AppDbContext _context;
         private readonly TimeProvider _time;
         private readonly ILogger<InventoryController> _logger;
+        private readonly IEmailService _emailService;
+        private readonly IWhatsAppService _whatsAppService;
+        private readonly UserManager<ApplicationUser> _userManager;
 
-        public InventoryController(AppDbContext context, TimeProvider time, ILogger<InventoryController> logger)
+        public InventoryController(AppDbContext context, TimeProvider time, ILogger<InventoryController> logger, IEmailService emailService, IWhatsAppService whatsAppService, UserManager<ApplicationUser> userManager)
         {
             _context = context;
             _time = time;
             _logger = logger;
+            _emailService = emailService;
+            _whatsAppService = whatsAppService;
+            _userManager = userManager;
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -43,6 +50,10 @@ namespace ResourceManager.Controllers
         {
             try
             {
+                if (page < 1) page = 1;
+                if (size < 1) size = 20;
+                if (size > 100) size = 100;
+
                 var query = _context.ProductServices
                     .AsNoTracking()
                     .Where(p => p.IsStockTracked)
@@ -154,6 +165,10 @@ namespace ResourceManager.Controllers
         {
             try
             {
+                if (page < 1) page = 1;
+                if (size < 1) size = 20;
+                if (size > 100) size = 100;
+
                 var query = _context.StockMovements
                     .AsNoTracking()
                     .Include(m => m.ProductService)
@@ -713,6 +728,10 @@ namespace ResourceManager.Controllers
         {
             try
             {
+                if (page < 1) page = 1;
+                if (size < 1) size = 20;
+                if (size > 100) size = 100;
+
                 var query = _context.PurchaseOrders
                     .AsNoTracking()
                     .Include(po => po.Supplier)
@@ -791,6 +810,8 @@ namespace ResourceManager.Controllers
                     ItemCount = po.Items.Count,
                     CreatedAt = po.CreatedAt,
                     Notes = po.Notes,
+                    SupplierPhone = po.Supplier?.Phone,
+                    SupplierEmail = null as string,
                     SupplierInvoiceId = po.SupplierInvoiceId,
                     SupplierInvoiceNumber = po.SupplierInvoice?.InvoiceNumber,
                     Items = po.Items.Select(i => new PurchaseOrderItemDto
@@ -1276,25 +1297,40 @@ namespace ResourceManager.Controllers
                                             text.Span(subtotalFormatted);
                                         });
 
-                                        var hasVat = effectiveTaxRates.Values.Any(r => r > 0);
-                                        var vatLabelText = hasVat
-                                            ? $"{vatPrefix} ({effectiveTaxRates.Values.Where(r => r > 0).First():P0})"
-                                            : $"{vatPrefix} (0%)";
-
-                                        t.Cell().Padding(5).Text(vatLabelText);
+                                        t.Cell().Padding(5).Text(vatPrefix);
                                         t.Cell().AlignRight().Padding(5).Text(text =>
                                         {
                                             text.DefaultTextStyle(x => x.FontSize(taxFontSize).SemiBold());
                                             text.Span(taxFormatted);
                                         });
 
+                                        // Taxe additionnelle (custom tax from company settings)
+                                        if (companySettings?.CustomTaxEnabled == true && companySettings.CustomTaxAmount > 0)
+                                        {
+                                            var customTaxName = companySettings.CustomTaxName ?? "Timbre fiscal";
+                                            var customTaxFormatted = FormatAmt(companySettings.CustomTaxAmount);
+                                            var customTaxFontSize = ResolveFontSize(customTaxFormatted, 10f);
+
+                                            t.Cell().Padding(5).Text(customTaxName);
+                                            t.Cell().AlignRight().Padding(5).Text(text =>
+                                            {
+                                                text.DefaultTextStyle(x => x.FontSize(customTaxFontSize).SemiBold());
+                                                text.Span(customTaxFormatted);
+                                            });
+                                        }
+
+                                        // Recalculate total including custom tax
+                                        var finalTotal = effectiveTotal + (companySettings?.CustomTaxEnabled == true ? companySettings.CustomTaxAmount : 0);
+                                        var finalTotalFormatted = FormatAmt(finalTotal);
+                                        var finalTotalFontSize = ResolveFontSize(finalTotalFormatted, 14f);
+
                                         t.Cell().ColumnSpan(2).PaddingTop(10).BorderTop(2).BorderColor(brandColor).PaddingTop(5).Row(r =>
                                         {
                                             r.RelativeItem().Text(totalTtcLabel).Bold().FontSize(14).FontColor(brandColor);
                                             r.RelativeItem().AlignRight().Text(text =>
                                             {
-                                                text.DefaultTextStyle(x => x.Bold().FontSize(totalFontSize).FontColor(brandColor));
-                                                text.Span(totalFormatted);
+                                                text.DefaultTextStyle(x => x.Bold().FontSize(finalTotalFontSize).FontColor(brandColor));
+                                                text.Span(finalTotalFormatted);
                                             });
                                         });
                                     });
@@ -1605,6 +1641,235 @@ namespace ResourceManager.Controllers
             }
 
             return count;
+        }
+
+        // POST: api/inventory/purchase-orders/{id}/send-email
+        [HttpPost("purchase-orders/{id}/send-email")]
+        public async Task<IActionResult> SendPurchaseOrderEmail(int id, [FromBody] SendDocumentEmailDto dto)
+        {
+            var po = await _context.PurchaseOrders
+                .Include(p => p.Supplier)
+                .Include(p => p.Items).ThenInclude(i => i.ProductService)
+                .FirstOrDefaultAsync(p => p.Id == id);
+
+            if (po == null) return NotFound();
+
+            var userId = _userManager.GetUserId(User);
+            if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null) return Unauthorized();
+
+            var recipientEmail = dto.RecipientEmail;
+            if (string.IsNullOrEmpty(recipientEmail))
+                return BadRequest(new { message = "Recipient email is required for purchase orders." });
+
+            var company = await _context.Companies.FindAsync(user.CompanyId);
+            var userProfile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
+            var senderName = userProfile != null ? $"{userProfile.FirstName} {userProfile.LastName}".Trim() : user.UserName ?? "";
+
+            var subject = dto.Subject ?? $"Purchase Order #{po.Number} from {company?.Name ?? "Company"}";
+            var body = dto.Body ?? $"<p>Dear {po.Supplier?.Name ?? "Supplier"},</p><p>Please find attached purchase order <strong>#{po.Number}</strong>.</p><p>Best regards,<br/>{company?.Name ?? "Company"}</p>";
+
+            // Generate PDF via the existing endpoint logic
+            var companySettings = await _context.CompanySettings.FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
+            var pdfSettings = PdfSettings.FromCompanySettings(companySettings, company, senderName,
+                currencyOverride: po.CurrencySymbol, languageOverride: po.PdfLanguage);
+
+            byte[] pdfData;
+            try
+            {
+                // Use the same PDF generation as GetPurchaseOrderPdf (inline QuestPDF)
+                var pdfResult = await GeneratePurchaseOrderPdfBytes(po, company, companySettings, pdfSettings);
+                pdfData = pdfResult;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to generate PDF for purchase order {PoId}", id);
+                return StatusCode(500, new { message = "Failed to generate PDF" });
+            }
+
+            var audit = new DocumentSendAudit
+            {
+                DocumentType = "PurchaseOrder",
+                DocumentId = id,
+                DocumentNumber = po.Number,
+                Channel = "Email",
+                RecipientEmail = recipientEmail,
+                Subject = subject,
+                Body = body,
+                SentAt = DateTime.UtcNow,
+                SentByUserId = userId,
+                SentByName = senderName,
+                Status = "Sending",
+                CompanyId = user.CompanyId
+            };
+            _context.DocumentSendAudits.Add(audit);
+            await _context.SaveChangesAsync();
+
+            var attachPdf = dto.AttachPdf ?? true;
+            var result = await _emailService.SendEmailAsync(recipientEmail, subject, body,
+                attachPdf ? pdfData : null, attachPdf ? $"PO-{po.Number}.pdf" : null);
+
+            audit.Status = result.Success ? "Sent" : "Failed";
+            audit.ErrorMessage = result.Success ? null : (result.ErrorDetails ?? result.Message);
+            audit.MessageId = result.MessageId;
+            await _context.SaveChangesAsync();
+
+            if (result.Success)
+            {
+                _logger.LogInformation("Purchase order {PoId} email sent to {Email}", id, recipientEmail);
+                return Ok(new { message = result.Message, auditId = audit.Id, status = audit.Status });
+            }
+            return StatusCode(500, new { message = result.Message, auditId = audit.Id, status = audit.Status, errorDetails = result.ErrorDetails });
+        }
+
+        // POST: api/inventory/purchase-orders/{id}/send-whatsapp
+        [HttpPost("purchase-orders/{id}/send-whatsapp")]
+        public async Task<IActionResult> SendPurchaseOrderWhatsApp(int id, [FromBody] SendDocumentWhatsAppDto? dto = null)
+        {
+            try
+            {
+                var po = await _context.PurchaseOrders
+                    .Include(p => p.Supplier)
+                    .FirstOrDefaultAsync(p => p.Id == id);
+
+                if (po == null) return NotFound(new { message = "Purchase order not found" });
+                if (po.Supplier == null) return BadRequest(new { message = "Supplier not found for this purchase order" });
+                if (string.IsNullOrEmpty(po.Supplier.Phone))
+                    return BadRequest(new { message = "Supplier phone number is required for WhatsApp sharing." });
+
+                var userId = _userManager.GetUserId(User);
+                if (string.IsNullOrEmpty(userId)) return Unauthorized();
+                var user = await _userManager.FindByIdAsync(userId);
+                if (user == null) return Unauthorized();
+
+                var userProfile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
+                var senderName = userProfile != null ? $"{userProfile.FirstName} {userProfile.LastName}".Trim() : user.UserName ?? "";
+
+                var request = HttpContext.Request;
+                var baseUrl = $"{request.Scheme}://{request.Host}";
+                var pdfUrl = $"{baseUrl}/api/Inventory/purchase-orders/{id}/pdf";
+
+                var result = await _whatsAppService.SendDocumentMessageAsync(
+                    po.Supplier.Phone, pdfUrl, $"PO-{po.Number}.pdf", dto?.CustomMessage);
+
+                var audit = new DocumentSendAudit
+                {
+                    DocumentType = "PurchaseOrder",
+                    DocumentId = id,
+                    DocumentNumber = po.Number,
+                    Channel = "WhatsApp",
+                    RecipientPhone = po.Supplier.Phone,
+                    SentAt = DateTime.UtcNow,
+                    SentByUserId = userId,
+                    SentByName = senderName,
+                    Status = result.Success ? "Sent" : "Failed",
+                    ErrorMessage = result.Success ? null : result.Error,
+                    MessageId = result.Success ? result.MessageId : null,
+                    CompanyId = user.CompanyId
+                };
+                _context.DocumentSendAudits.Add(audit);
+                await _context.SaveChangesAsync();
+
+                if (!result.Success)
+                    return BadRequest(new { message = result.Error ?? "Failed to send WhatsApp message" });
+
+                return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send WhatsApp message for purchase order {PoId}", id);
+                return StatusCode(500, new { message = "Failed to send WhatsApp message" });
+            }
+        }
+
+        // GET: api/inventory/purchase-orders/{id}/send-history
+        [HttpGet("purchase-orders/{id}/send-history")]
+        public async Task<IActionResult> GetPurchaseOrderSendHistory(int id)
+        {
+            var po = await _context.PurchaseOrders.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id);
+            if (po == null) return NotFound();
+
+            var history = await _context.DocumentSendAudits
+                .Where(a => a.DocumentType == "PurchaseOrder" && a.DocumentId == id)
+                .OrderByDescending(a => a.SentAt)
+                .Select(a => new {
+                    a.Id, a.Channel, a.RecipientEmail, a.RecipientPhone,
+                    a.Subject, a.SentAt, a.SentByName, a.Status, a.ErrorMessage
+                })
+                .ToListAsync();
+
+            return Ok(history);
+        }
+
+        /// <summary>
+        /// Helper: generate PO PDF bytes (reuses the same QuestPDF layout as GetPurchaseOrderPdf endpoint)
+        /// </summary>
+        private async Task<byte[]> GeneratePurchaseOrderPdfBytes(PurchaseOrder po, Company? company, CompanySettings? companySettings, PdfSettings pdfSettings)
+        {
+            // Call the existing PDF endpoint internally by reusing its result
+            // For simplicity, we call the existing GetPurchaseOrderPdf logic via a direct PDF generation
+            var lang = pdfSettings.InvoiceLanguage?.ToLowerInvariant() ?? "fr";
+            var culture = lang switch
+            {
+                "fr" => new System.Globalization.CultureInfo("fr-FR"),
+                "de" => new System.Globalization.CultureInfo("de-DE"),
+                "ar" => new System.Globalization.CultureInfo("ar-TN"),
+                _ => new System.Globalization.CultureInfo("en-US")
+            };
+            var moneyCulture = System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
+            var currencyCode = string.IsNullOrWhiteSpace(pdfSettings.CurrencySymbol) ? "EUR" : pdfSettings.CurrencySymbol.Trim();
+            var decimals = FiscalComplianceHelper.GetDecimalPlaces(currencyCode);
+            var displaySymbol = FiscalComplianceHelper.GetDisplayCurrencySymbol(currencyCode, lang);
+            string FormatAmt(decimal v) => $"{v.ToString($"N{decimals}", moneyCulture)}\u00A0{displaySymbol}";
+
+            var titleLabel = lang switch { "fr" => "Bon de commande", "de" => "Bestellung", "ar" => "أمر شراء", _ => "Purchase Order" };
+
+            // Use simple QuestPDF document
+            var doc = QuestPDF.Fluent.Document.Create(container =>
+            {
+                container.Page(page =>
+                {
+                    page.Size(PageSizes.A4);
+                    page.Margin(30);
+                    page.DefaultTextStyle(x => x.FontSize(10));
+
+                    page.Content().Column(col =>
+                    {
+                        col.Item().Text($"{titleLabel} #{po.Number}").Bold().FontSize(16);
+                        col.Item().Text($"{po.Date:dd/MM/yyyy}").FontSize(9);
+                        if (po.Supplier != null)
+                            col.Item().PaddingTop(10).Text($"{po.Supplier.Name} - {po.Supplier.Address}").FontSize(9);
+                        col.Item().PaddingTop(10).Table(table =>
+                        {
+                            table.ColumnsDefinition(c => { c.RelativeColumn(4); c.RelativeColumn(1); c.RelativeColumn(2); c.RelativeColumn(2); });
+                            table.Header(h =>
+                            {
+                                h.Cell().Text("Description").Bold();
+                                h.Cell().Text("Qty").Bold();
+                                h.Cell().Text("Unit Price").Bold();
+                                h.Cell().Text("Total").Bold();
+                            });
+                            foreach (var item in po.Items)
+                            {
+                                var desc = item.ProductService?.Name ?? item.Description;
+                                table.Cell().Text(desc);
+                                table.Cell().Text(item.Quantity.ToString());
+                                table.Cell().Text(FormatAmt(item.UnitPrice));
+                                table.Cell().Text(FormatAmt(item.TotalHT));
+                            }
+                        });
+                        col.Item().PaddingTop(10).AlignRight().Text($"Total: {FormatAmt(po.TotalAmount ?? 0)}").Bold();
+                    });
+                });
+            });
+
+            return await Task.FromResult(doc.GeneratePdf());
         }
     }
 }

@@ -178,7 +178,8 @@ namespace ResourceManager.Controllers
                     }
                     catch (IOException ex)
                     {
-                        return BadRequest(new { message = $"Cannot create directory: {ex.Message}" });
+                        _logger.LogError(ex, "Cannot create directory at path");
+                        return BadRequest(new { message = "Cannot create directory at the specified path." });
                     }
                 }
 
@@ -203,13 +204,14 @@ namespace ResourceManager.Controllers
                 }
                 catch (IOException ex)
                 {
-                    return BadRequest(new { message = $"Cannot write to directory: {ex.Message}" });
+                    _logger.LogError(ex, "Cannot write to directory");
+                    return BadRequest(new { message = "Directory exists but is not writable." });
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error testing path: {Path}", path);
-                return BadRequest(new { message = $"Invalid path: {ex.Message}" });
+                return BadRequest(new { message = "Invalid path." });
             }
         }
 
@@ -286,7 +288,7 @@ namespace ResourceManager.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error resolving folder: {Name}", folderName);
-                return BadRequest(new { message = $"Error resolving folder: {ex.Message}" });
+                return BadRequest(new { message = "Error resolving folder. Check server logs for details." });
             }
         }
 
@@ -436,7 +438,7 @@ namespace ResourceManager.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error browsing directories: {Path}", path);
-                return BadRequest(new { message = $"Error browsing: {ex.Message}" });
+                return BadRequest(new { message = "Error browsing directory. Check server logs for details." });
             }
         }
 

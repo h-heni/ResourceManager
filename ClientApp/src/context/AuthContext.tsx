@@ -133,7 +133,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             cancelled = true;
             isRestoringRef.current = false; // Reset so StrictMode re-mount can run restoreSession
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Listen for session-expired events from the api interceptor

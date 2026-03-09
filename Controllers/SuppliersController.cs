@@ -31,6 +31,7 @@ namespace ResourceManager.Controllers
             {
                 if (page < 1) page = 1;
                 if (size < 1) size = 20;
+                if (size > 100) size = 100;
 
                 var query = _context.Suppliers.AsNoTracking().OrderBy(f => f.Name);
 
@@ -128,12 +129,16 @@ namespace ResourceManager.Controllers
 
         // POST: api/suppliers/{id}/upload-invoice
         [HttpPost("{id}/upload-invoice")]
+        [RequestSizeLimit(10 * 1024 * 1024)]
         public async Task<IActionResult> UploadInvoice(int id, IFormFile file)
         {
             var f = await _context.Suppliers.FindAsync(id);
             if (f == null) return NotFound("Supplier not found");
 
             if (file == null || file.Length == 0) return BadRequest("No file uploaded.");
+
+            if (file.Length > 10 * 1024 * 1024)
+                return BadRequest(new { message = "File size exceeds 10MB limit." });
 
             using var memoryStream = new MemoryStream();
             await file.CopyToAsync(memoryStream);
@@ -152,7 +157,7 @@ namespace ResourceManager.Controllers
                 FileName = file.FileName,
                 FilePath = publicUrl,
                 FileType = Path.GetExtension(file.FileName).Replace(".", ""),
-                InvoiceNumber = "UPLOADED-" + DateTime.Now.Ticks,
+                InvoiceNumber = "UPLOADED-" + DateTime.UtcNow.Ticks,
                 CreatedAt = DateTime.UtcNow,
                 UserId = userId,
             };
@@ -174,6 +179,7 @@ namespace ResourceManager.Controllers
         /// Returns extracted data for review/correction before saving
         /// </summary>
         [HttpPost("scan-pdf")]
+        [RequestSizeLimit(10 * 1024 * 1024)]
         public async Task<IActionResult> ScanSupplierPdf(
             IFormFile file,
             [FromServices] ISupplierPdfScannerService scannerService)

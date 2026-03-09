@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using ResourceManager.Data;
@@ -11,9 +12,11 @@ using ResourceManager.Data;
 namespace ResourceManager.API.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260308145139_InvoiceMultipleQuotes")]
+    partial class InvoiceMultipleQuotes
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -506,21 +509,6 @@ namespace ResourceManager.API.Data.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp without time zone");
 
-                    b.Property<string>("WhatsAppAccessToken")
-                        .HasColumnType("text");
-
-                    b.Property<string>("WhatsAppBusinessAccountId")
-                        .HasColumnType("text");
-
-                    b.Property<string>("WhatsAppDisplayPhone")
-                        .HasColumnType("text");
-
-                    b.Property<bool>("WhatsAppEnabled")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("WhatsAppPhoneNumberId")
-                        .HasColumnType("text");
-
                     b.HasKey("Id");
 
                     b.HasIndex("CompanyId")
@@ -646,81 +634,6 @@ namespace ResourceManager.API.Data.Migrations
                     b.HasIndex("ProductServiceId");
 
                     b.ToTable("DeliveryNoteItems");
-                });
-
-            modelBuilder.Entity("ResourceManager.Models.DocumentSendAudit", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Body")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Channel")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<int>("CompanyId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("DocumentId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("DocumentNumber")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("DocumentType")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<string>("ErrorMessage")
-                        .HasColumnType("text");
-
-                    b.Property<string>("MessageId")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("RecipientEmail")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<string>("RecipientPhone")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<DateTime>("SentAt")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("SentByName")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("SentByUserId")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<string>("Subject")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompanyId");
-
-                    b.HasIndex("DocumentType", "DocumentId");
-
-                    b.ToTable("DocumentSendAudits");
                 });
 
             modelBuilder.Entity("ResourceManager.Models.EmailAuditLog", b =>
@@ -2520,17 +2433,6 @@ namespace ResourceManager.API.Data.Migrations
                     b.Navigation("DeliveryNote");
 
                     b.Navigation("ProductService");
-                });
-
-            modelBuilder.Entity("ResourceManager.Models.DocumentSendAudit", b =>
-                {
-                    b.HasOne("ResourceManager.Models.Company", "Company")
-                        .WithMany()
-                        .HasForeignKey("CompanyId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Company");
                 });
 
             modelBuilder.Entity("ResourceManager.Models.Invoice", b =>

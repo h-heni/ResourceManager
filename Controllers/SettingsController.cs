@@ -18,6 +18,7 @@ namespace ResourceManager.Controllers
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ILogger<SettingsController> _logger;
         private readonly IEmailService _emailService;
+        private readonly IConfiguration _configuration;
         private const long MaxLogoSize = 2 * 1024 * 1024; // 2MB max
         private readonly string[] _allowedImageTypes = { "image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp" };
         private static readonly HashSet<string> AllowedImageExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -43,12 +44,14 @@ namespace ResourceManager.Controllers
             AppDbContext context,
             UserManager<ApplicationUser> userManager,
             ILogger<SettingsController> logger,
-            IEmailService emailService)
+            IEmailService emailService,
+            IConfiguration configuration)
         {
             _context = context;
             _userManager = userManager;
             _logger = logger;
             _emailService = emailService;
+            _configuration = configuration;
         }
 
         // GET: api/settings/branding - Company branding info (accessible by ALL authenticated users)
@@ -129,7 +132,12 @@ namespace ResourceManager.Controllers
                     ShowBankBIC = false,
                     ShowBankRIB = false,
                     ShowBankIBAN = false,
-                    ProInvoiceUseTokenSignature = false
+                    ProInvoiceUseTokenSignature = false,
+                    WhatsAppPhoneNumberId = (string?)null,
+                    WhatsAppAccessToken = (string?)null,
+                    WhatsAppBusinessAccountId = (string?)null,
+                    WhatsAppDisplayPhone = (string?)null,
+                    WhatsAppEnabled = false
                 });
             }
 
@@ -227,7 +235,14 @@ namespace ResourceManager.Controllers
                 settings.ShowBankIBAN,
                 
                 // Pro Invoice token signature
-                settings.ProInvoiceUseTokenSignature
+                settings.ProInvoiceUseTokenSignature,
+                
+                // WhatsApp Business API
+                settings.WhatsAppPhoneNumberId,
+                WhatsAppAccessToken = !string.IsNullOrEmpty(settings.WhatsAppAccessToken) ? "••••••••" : null,
+                settings.WhatsAppBusinessAccountId,
+                settings.WhatsAppDisplayPhone,
+                settings.WhatsAppEnabled
             });
         }
 
@@ -257,6 +272,7 @@ namespace ResourceManager.Controllers
 
         // POST: api/settings/logo - Upload company logo
         [HttpPost("logo")]
+        [RequestSizeLimit(2 * 1024 * 1024)]
         public async Task<IActionResult> UploadLogo(IFormFile file)
         {
             if (file == null || file.Length == 0)
@@ -373,6 +389,7 @@ namespace ResourceManager.Controllers
 
         // POST: api/settings/signature - Upload signature/cachet image
         [HttpPost("signature")]
+        [RequestSizeLimit(2 * 1024 * 1024)]
         public async Task<IActionResult> UploadSignature(IFormFile file)
         {
             if (file == null || file.Length == 0) return BadRequest(new { message = "No file uploaded" });
@@ -579,6 +596,12 @@ namespace ResourceManager.Controllers
             if (dto.ShowBankIBAN.HasValue) settings.ShowBankIBAN = dto.ShowBankIBAN.Value;
             if (dto.ProInvoiceUseTokenSignature.HasValue) settings.ProInvoiceUseTokenSignature = dto.ProInvoiceUseTokenSignature.Value;
             
+            // WhatsApp Business API
+            if (dto.WhatsAppPhoneNumberId != null) settings.WhatsAppPhoneNumberId = string.IsNullOrWhiteSpace(dto.WhatsAppPhoneNumberId) ? null : dto.WhatsAppPhoneNumberId.Trim();
+            if (dto.WhatsAppAccessToken != null && dto.WhatsAppAccessToken != "••••••••") settings.WhatsAppAccessToken = string.IsNullOrWhiteSpace(dto.WhatsAppAccessToken) ? null : dto.WhatsAppAccessToken.Trim();
+            if (dto.WhatsAppBusinessAccountId != null) settings.WhatsAppBusinessAccountId = string.IsNullOrWhiteSpace(dto.WhatsAppBusinessAccountId) ? null : dto.WhatsAppBusinessAccountId.Trim();
+            if (dto.WhatsAppEnabled.HasValue) settings.WhatsAppEnabled = dto.WhatsAppEnabled.Value;
+            
             // File-system language: set once, immutable after lock
             if (dto.FileSystemLanguage != null)
             {
@@ -732,7 +755,7 @@ namespace ResourceManager.Controllers
                     <p>This is a test email to verify your email configuration is working correctly.</p>
                     <p>If you received this email, your SMTP settings are properly configured!</p>
                     <hr/>
-                    <p style='color: #666; font-size: 12px;'>Sent at: " + DateTime.Now.ToString("f") + @"</p>
+                    <p style='color: #666; font-size: 12px;'>Sent at: " + DateTime.UtcNow.ToString("f") + @" (UTC)</p>
                 </body></html>"
             );
 
@@ -757,6 +780,91 @@ namespace ResourceManager.Controllers
                     bounceStatus = result.BounceStatus
                 });
             }
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // WHATSAPP EMBEDDED SIGNUP
+        // ═══════════════════════════════════════════════════════════════
+
+        /// <summary>
+        /// Returns the Meta App ID needed by the frontend Facebook SDK
+        /// </summary>
+        [HttpGet("whatsapp/app-id")]
+        public IActionResult GetWhatsAppAppId()
+        {
+            var appId = _configuration["WhatsApp:MetaAppId"];
+            if (string.IsNullOrEmpty(appId) || appId == "SET_VIA_ENVIRONMENT")
+                return Ok(new { appId = (string?)null, configured = false });
+
+            return Ok(new { appId, configured = true });
+        }
+
+        /// <summary>
+        /// Exchange Embedded Signup authorization code for WhatsApp credentials
+        /// </summary>
+        [HttpPost("whatsapp/connect")]
+        public async Task<IActionResult> ConnectWhatsApp([FromBody] WhatsAppConnectDto dto, [FromServices] IWhatsAppService whatsAppService)
+        {
+            if (string.IsNullOrEmpty(dto.Code))
+                return BadRequest(new { error = "Authorization code is required" });
+
+            var companyId = GetCompanyId();
+            if (companyId == null)
+                return BadRequest(new { error = "Company not found" });
+
+            try
+            {
+                var result = await whatsAppService.ExchangeEmbeddedSignupCodeAsync(dto.Code, companyId.Value);
+                if (!result.Success)
+                    return BadRequest(new { error = result.Error });
+
+                return Ok(new
+                {
+                    success = true,
+                    phoneNumberId = result.PhoneNumberId,
+                    businessAccountId = result.BusinessAccountId,
+                    displayPhone = result.DisplayPhone
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "WhatsApp Embedded Signup failed for Company {CompanyId}", companyId);
+                return StatusCode(500, new { error = "Failed to connect WhatsApp. Please try again." });
+            }
+        }
+
+        /// <summary>
+        /// Disconnect WhatsApp — clears all stored credentials
+        /// </summary>
+        [HttpPost("whatsapp/disconnect")]
+        public async Task<IActionResult> DisconnectWhatsApp()
+        {
+            var companyId = GetCompanyId();
+            if (companyId == null)
+                return BadRequest(new { error = "Company not found" });
+
+            var settings = await _context.CompanySettings
+                .FirstOrDefaultAsync(s => s.CompanyId == companyId);
+
+            if (settings == null)
+                return NotFound(new { error = "Settings not found" });
+
+            settings.WhatsAppPhoneNumberId = null;
+            settings.WhatsAppAccessToken = null;
+            settings.WhatsAppBusinessAccountId = null;
+            settings.WhatsAppDisplayPhone = null;
+            settings.WhatsAppEnabled = false;
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("WhatsApp disconnected for Company {CompanyId}", companyId);
+            return Ok(new { success = true });
+        }
+
+        private int? GetCompanyId()
+        {
+            var claim = User.FindFirst("CompanyId")?.Value;
+            return int.TryParse(claim, out var id) ? id : null;
         }
     }
 
@@ -820,6 +928,12 @@ namespace ResourceManager.Controllers
         
         // Pro Invoice token signature
         public bool? ProInvoiceUseTokenSignature { get; set; }
+        
+        // WhatsApp Business API
+        public string? WhatsAppPhoneNumberId { get; set; }
+        public string? WhatsAppAccessToken { get; set; }
+        public string? WhatsAppBusinessAccountId { get; set; }
+        public bool? WhatsAppEnabled { get; set; }
     }
 
     public class UpdateCompanyDto
@@ -829,5 +943,11 @@ namespace ResourceManager.Controllers
         public string? TaxId { get; set; }
         public string? Phone { get; set; }
         public string? Email { get; set; }
+    }
+
+    public class WhatsAppConnectDto
+    {
+        [Required]
+        public string Code { get; set; } = string.Empty;
     }
 }

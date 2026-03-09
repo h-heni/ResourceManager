@@ -131,7 +131,7 @@ export default function SupplierInvoicesPage() {
 
     // React Query hooks for data fetching
     const { data: yearsData } = useAvailableYears();
-    const availableYears = yearsData?.years || [];
+    const availableYears = useMemo(() => yearsData?.years || [], [yearsData?.years]);
     const activeQuery = useSupplierInvoices(activePage, pageSize, 'Pending', debouncedSearch);
     const archivedQuery = useSupplierInvoices(archivedPage, pageSize, 'Paid', debouncedSearch, selectedYear, !!selectedYear);
     const deleteMutation = useDeleteSupplierInvoice();

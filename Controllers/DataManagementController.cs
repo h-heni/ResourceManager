@@ -74,7 +74,7 @@ namespace ResourceManager.Controllers
             var invoicePayments = await _context.Invoices
                 .Include(i => i.Client)
                 .Include(i => i.Payments)
-                .Include(i => i.Quote)
+                .Include(i => i.Quotes)
                 .Where(i => i.Payments!.Any(p => p.Status == "Completed"))
                 .ToListAsync();
 
@@ -86,7 +86,7 @@ namespace ResourceManager.Controllers
                         Date = p.PaymentDate,
                         ClientName = i.Client?.Name ?? "Unknown",
                         AmountPaid = p.Amount,
-                        Currency = i.Quote?.Currency ?? defaultCurrency,
+                        Currency = i.Quotes.FirstOrDefault()?.Currency ?? defaultCurrency,
                         PaymentMethod = "Payment",
                         InvoiceNumber = i.Number
                     }))
@@ -412,7 +412,7 @@ namespace ResourceManager.Controllers
             if (user == null)
                 return Unauthorized();
 
-            var result = await ValidateRowsAsync(request.DataType, request.Rows, user.CompanyId);
+            var result = await ValidateRowsAsync(request.DataType, request.Rows, user.CompanyId, request.CustomCategories);
             return Ok(result);
         }
 
@@ -436,7 +436,7 @@ namespace ResourceManager.Controllers
                 return Unauthorized();
 
             var companyId = user.CompanyId;
-            var validation = await ValidateRowsAsync(request.DataType, request.Rows, companyId);
+            var validation = await ValidateRowsAsync(request.DataType, request.Rows, companyId, request.CustomCategories);
             if (validation.Errors.Count > 0)
                 return BadRequest(new { message = "Validation failed", errors = validation.Errors });
 
@@ -904,6 +904,9 @@ namespace ResourceManager.Controllers
                                 TvaRate = tvaRate,
                                 Type = "product",
                                 VatApplicable = true,
+                                IsStockTracked = TryParseAmount(SafeGet(row, "Stock"), out var stockVal) && stockVal > 0,
+                                CurrentStock = TryParseAmount(SafeGet(row, "Stock"), out var stockParsed) ? stockParsed : 0,
+                                ReorderPoint = TryParseAmount(SafeGet(row, "Limit"), out var limitVal) ? limitVal : null,
                                 CompanyId = companyId,
                                 CreatedByUserId = userId,
                                 CreatedAt = DateTime.UtcNow
@@ -996,15 +999,9 @@ namespace ResourceManager.Controllers
                     "Import failed for {Type} by user {User}. Imported={Imported}, Updated={Updated}, Skipped={Skipped}. Inner={Inner}",
                     request.DataType, userId, imported, updated, skipped, ex.InnerException?.Message ?? "none");
 
-                // Provide full error chain for debugging
-                var details = ex.InnerException?.Message;
-                var deepDetails = ex.InnerException?.InnerException?.Message;
-
                 return StatusCode(500, new
                 {
-                    message = $"Import failed: {ex.Message}",
-                    details,
-                    deepDetails
+                    message = "Import failed. Check server logs for details."
                 });
             }
         }
@@ -1361,6 +1358,15 @@ namespace ResourceManager.Controllers
                                     if (TryParseAmount(SafeGet(row, "Price"), out var price)) existing.DefaultUnitPrice = price;
                                     if (TryParseAmount(SafeGet(row, "TVA Rate"), out var tva)) existing.TvaRate = tva;
                                     existing.Description = SafeGet(row, "Description");
+                                    if (TryParseAmount(SafeGet(row, "Stock"), out var stock))
+                                    {
+                                        existing.CurrentStock = stock;
+                                        existing.IsStockTracked = stock > 0;
+                                    }
+                                    if (TryParseAmount(SafeGet(row, "Limit"), out var limit))
+                                    {
+                                        existing.ReorderPoint = limit;
+                                    }
                                     existing.UpdatedAt = DateTime.UtcNow;
                                     _context.ProductServices.Update(existing);
                                     didUpdate = true;
@@ -1616,23 +1622,23 @@ namespace ResourceManager.Controllers
                 case "products":
                     if (lang == "fr")
                     {
-                        headers = "Nom;Description;Prix;Devise;Taux TVA";
-                        exampleRow = "Nom du Produit;Abonnement annuel;100,00;TND;19";
+                        headers = "Nom;Description;Prix;Devise;Taux TVA;Stock;Limite";
+                        exampleRow = "Nom du Produit;Abonnement annuel;100,00;TND;19;50;10";
                     }
                     else if (lang == "ar")
                     {
-                        headers = "الاسم;الوصف;السعر;العملة;نسبة الأداء";
-                        exampleRow = "اسم المنتج;اشتراك سنوي;100,00;TND;19";
+                        headers = "الاسم;الوصف;السعر;العملة;نسبة الأداء;المخزون;الحد";
+                        exampleRow = "اسم المنتج;اشتراك سنوي;100,00;TND;19;50;10";
                     }
                     else if (lang == "de")
                     {
-                        headers = "Name;Beschreibung;Preis;Währung;USt-Satz";
-                        exampleRow = "Produktname;Jahresabonnement;100,00;TND;19";
+                        headers = "Name;Beschreibung;Preis;Währung;USt-Satz;Bestand;Limit";
+                        exampleRow = "Produktname;Jahresabonnement;100,00;TND;19;50;10";
                     }
                     else
                     {
-                        headers = "Name;Description;Price;Currency;TVA Rate";
-                        exampleRow = "Product Name;Annual subscription;100,00;TND;19";
+                        headers = "Name;Description;Price;Currency;TVA Rate;Stock;Limit";
+                        exampleRow = "Product Name;Annual subscription;100,00;TND;19;50;10";
                     }
                     break;
 
@@ -1709,7 +1715,7 @@ namespace ResourceManager.Controllers
             return string.Join(';', columns);
         }
 
-        private async Task<ValidationResult> ValidateRowsAsync(string dataType, List<Dictionary<string, string>> rows, int companyId)
+        private async Task<ValidationResult> ValidateRowsAsync(string dataType, List<Dictionary<string, string>> rows, int companyId, List<string>? customCategories = null)
         {
             var errors = new List<ValidationError>();
             var validRows = new List<Dictionary<string, string>>();
@@ -1859,7 +1865,7 @@ namespace ResourceManager.Controllers
                         var category = SafeGet(row, "Category");
                         if (!string.IsNullOrWhiteSpace(category) && category.Length > 50) rowErrors.Add("'Category' cannot exceed 50 characters");
                     }
-                    // otherExpenses: validate Category against known built-in categories
+                    // otherExpenses: validate Category against known built-in + custom categories
                     if (dataType.ToLower() == "otherexpenses")
                     {
                         var catRaw = SafeGet(row, "Category");
@@ -1867,7 +1873,9 @@ namespace ResourceManager.Controllers
                         {
                             var normalized = ExpensesController.NormalizeCategory(catRaw);
                             var validKeys = ExpensesController.GetValidCategoryKeys();
-                            if (validKeys.Count > 0 && !validKeys.Contains(normalized))
+                            var isBuiltIn = validKeys.Contains(normalized);
+                            var isCustom = customCategories != null && customCategories.Contains(normalized, StringComparer.OrdinalIgnoreCase);
+                            if (validKeys.Count > 0 && !isBuiltIn && !isCustom)
                             {
                                 rowErrors.Add($"Unknown category '{catRaw}'. Please add this category in the Expenses page before importing.");
                             }
@@ -1960,7 +1968,7 @@ namespace ResourceManager.Controllers
                     var existingInvoices = await _context.Invoices
                         .AsNoTracking()
                         .Include(i => i.Client)
-                        .Include(i => i.Quote)
+                        .Include(i => i.Quotes)
                         .Include(i => i.Payments)
                         .Where(i => i.CompanyId == companyId && invoiceNumbers.Contains(i.Number))
                         .ToListAsync();
@@ -1985,7 +1993,7 @@ namespace ResourceManager.Controllers
                                     { "Date", existing.Date.ToString("yyyy-MM-dd") },
                                     { "Client Name", existing.Client?.Name ?? "" },
                                     { "Amount Paid", amountPaid.ToString(CultureInfo.InvariantCulture) },
-                                    { "Currency", existing.Quote?.Currency ?? "" },
+                                    { "Currency", existing.Quotes.FirstOrDefault()?.Currency ?? "" },
                                     { "Payment Method", "" }
                                 },
                                 NewData = new Dictionary<string, string>(row),
@@ -2234,7 +2242,12 @@ namespace ResourceManager.Controllers
             { "Wiederkehrend", "Recurring" },         // German
             { "Notizen", "Notes" },                   // German
             { "ملاحظات", "Notes" },                   // Arabic
-            { "Betrag", "Amount" }                    // German
+            { "Betrag", "Amount" },                    // German
+            // Product Stock aliases
+            { "المخزون", "Stock" },                   // Arabic
+            { "Bestand", "Stock" },                   // German
+            { "Limite", "Limit" },                    // French
+            { "الحد", "Limit" },                      // Arabic
         };
 
         private static Dictionary<string, string> NormalizeKeys(Dictionary<string, string> row)
@@ -2492,6 +2505,7 @@ namespace ResourceManager.Controllers
         /// This ensures server-side Excel parsing with header-based column reading.
         /// </summary>
         [HttpPost("import/parse-excel")]
+        [RequestSizeLimit(10 * 1024 * 1024)]
         public IActionResult ParseExcelUpload(IFormFile file)
         {
             if (file == null || file.Length == 0)
@@ -2589,6 +2603,7 @@ namespace ResourceManager.Controllers
         /// Column layout: [0] Date, [1] Client Name, [2] Amount Paid, [3] Currency, [4] Payment Method, [5] InvoiceNumber (optional)
         /// </summary>
         [HttpPost("import/strict-upload")]
+        [RequestSizeLimit(10 * 1024 * 1024)]
         public async Task<IActionResult> StrictPositionalUpload(IFormFile file)
         {
             if (file == null || file.Length == 0)
@@ -2777,8 +2792,7 @@ namespace ResourceManager.Controllers
 
                 return StatusCode(500, new
                 {
-                    message = $"Import failed: {ex.Message}",
-                    details = ex.InnerException?.Message
+                    message = "Import failed. Check server logs for details."
                 });
             }
         }
@@ -2791,6 +2805,7 @@ namespace ResourceManager.Controllers
         {
             public string DataType { get; set; } = string.Empty; // "revenues", "expenses", "clients", "products", "suppliers"
             public List<Dictionary<string, string>> Rows { get; set; } = new();
+            public List<string>? CustomCategories { get; set; }
         }
 
         public class ValidationError

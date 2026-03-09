@@ -5,7 +5,7 @@ import {
     Settings, Building2, Mail, Save, Loader2, Upload, X, Image, Info,
     CheckCircle, Eye, PenTool, Trash2, Lock, User, LogOut,
     FileText, FolderOpen, HardDrive, Palette, DollarSign,
-    AlertTriangle, RefreshCw
+    AlertTriangle, RefreshCw, MessageCircle, Unlink
 } from 'lucide-react';
 import api from '../services/api';
 import { invalidateSettingsCache } from '../hooks/useSettings';
@@ -56,6 +56,11 @@ interface CompanySettings {
     fileSystemLanguageLocked: boolean;
     baseStoragePath: string;
     isProfileComplete: boolean;
+    whatsAppPhoneNumberId: string;
+    whatsAppAccessToken: string;
+    whatsAppBusinessAccountId: string;
+    whatsAppDisplayPhone: string;
+    whatsAppEnabled: boolean;
 }
 
 const EMAIL_PLACEHOLDERS = [
@@ -69,7 +74,7 @@ const EMAIL_PLACEHOLDERS = [
     { key: '@Date', description: 'Today\'s date' },
 ];
 
-type SidebarSection = 'personal' | 'email' | 'pdf';
+type SidebarSection = 'personal' | 'email' | 'pdf' | 'whatsapp';
 type PersonalTab = 'company' | 'password' | 'userinfo';
 type PdfTab = 'signature' | 'branding' | 'financial' | 'storage';
 
@@ -124,6 +129,10 @@ export default function SettingsPage() {
     // Confirmation dialog for locking base storage path
     const [showBasePathLockConfirm, setShowBasePathLockConfirm] = useState(false);
 
+    // WhatsApp Embedded Signup
+    const [connectingWhatsApp, setConnectingWhatsApp] = useState(false);
+    const [disconnectingWhatsApp, setDisconnectingWhatsApp] = useState(false);
+
     // Password change
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
@@ -161,6 +170,9 @@ Best regards,
         includeLogoInEmailSignature: false,
         fileSystemLanguage: '', fileSystemLanguageLocked: false,
         baseStoragePath: '', isProfileComplete: false,
+        whatsAppPhoneNumberId: '', whatsAppAccessToken: '',
+        whatsAppBusinessAccountId: '', whatsAppDisplayPhone: '',
+        whatsAppEnabled: false,
     });
     const [status, setStatus] = useState<{ type: 'success' | 'error' | 'warning'; message: string } | null>(null);
 
@@ -243,6 +255,11 @@ Best regards,
                 fileSystemLanguageLocked: res.data.fileSystemLanguageLocked ?? false,
                 baseStoragePath: res.data.baseStoragePath || '',
                 isProfileComplete: res.data.isProfileComplete ?? false,
+                whatsAppPhoneNumberId: res.data.whatsAppPhoneNumberId || '',
+                whatsAppAccessToken: res.data.whatsAppAccessToken || '',
+                whatsAppBusinessAccountId: res.data.whatsAppBusinessAccountId || '',
+                whatsAppDisplayPhone: res.data.whatsAppDisplayPhone || '',
+                whatsAppEnabled: res.data.whatsAppEnabled ?? false,
             });
             setNewBasePath(res.data.baseStoragePath || '');
             return { hasLogoData, hasSignatureImage };
@@ -320,6 +337,10 @@ Best regards,
                 showBankIBAN: settings.showBankIBAN,
                 fileSystemLanguage: settings.fileSystemLanguage || undefined,
                 baseStoragePath: settings.baseStoragePath || undefined,
+                whatsAppPhoneNumberId: settings.whatsAppPhoneNumberId || undefined,
+                whatsAppAccessToken: settings.whatsAppAccessToken || undefined,
+                whatsAppBusinessAccountId: settings.whatsAppBusinessAccountId || undefined,
+                whatsAppEnabled: settings.whatsAppEnabled,
             });
             setStatus({ type: 'success', message: t('common.success', 'Settings saved successfully!') });
             invalidateSettingsCache(); // Clear stale currency cache
@@ -331,6 +352,120 @@ Best regards,
         } catch {
             setStatus({ type: 'error', message: t('common.error', 'Failed to save settings') });
         } finally { setSaving(false); }
+    };
+
+    // WhatsApp Embedded Signup
+    const handleConnectWhatsApp = async () => {
+        setConnectingWhatsApp(true);
+        setStatus(null);
+        try {
+            // 1. Get the Meta App ID from our backend
+            const appIdRes = await api.get('/Settings/whatsapp/app-id');
+            if (!appIdRes.data.configured || !appIdRes.data.appId) {
+                setStatus({ type: 'error', message: t('whatsapp.settings.appNotConfigured', 'WhatsApp integration is not configured on the server. Contact your administrator.') });
+                return;
+            }
+            const metaAppId = appIdRes.data.appId;
+
+            // 2. Load Facebook SDK if not already loaded
+            const fbWindow = window as unknown as { FB?: { init: (opts: Record<string, unknown>) => void; login: (cb: (resp: { authResponse?: { code?: string } }) => void, opts: Record<string, unknown>) => void } };
+            if (!fbWindow.FB) {
+                await new Promise<void>((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = 'https://connect.facebook.net/en_US/sdk.js';
+                    script.async = true;
+                    script.defer = true;
+                    script.onload = () => {
+                        const fb = (window as unknown as typeof fbWindow).FB!;
+                        fb.init({
+                            appId: metaAppId,
+                            cookie: true,
+                            xfbml: false,
+                            version: 'v21.0',
+                        });
+                        fbWindow.FB = fb;
+                        resolve();
+                    };
+                    script.onerror = () => reject(new Error('Failed to load Facebook SDK'));
+                    document.body.appendChild(script);
+                });
+            } else {
+                // Re-init with potentially different app ID
+                fbWindow.FB.init({
+                    appId: metaAppId,
+                    cookie: true,
+                    xfbml: false,
+                    version: 'v21.0',
+                });
+            }
+
+            // 3. Launch Embedded Signup via FB.login
+            const response = await new Promise<{ authResponse?: { code?: string } }>((resolve) => {
+                fbWindow.FB!.login((response) => {
+                    resolve(response);
+                }, {
+                    config_id: metaAppId,  // For Embedded Signup, pass as config_id
+                    response_type: 'code',
+                    override_default_response_type: true,
+                    extras: {
+                        setup: {},
+                        featureType: '',
+                        sessionInfoVersion: '3',
+                    }
+                });
+            });
+
+            if (response.authResponse?.code) {
+                // 4. Send the code to our backend to exchange for credentials
+                const connectRes = await api.post('/Settings/whatsapp/connect', {
+                    code: response.authResponse.code
+                });
+
+                if (connectRes.data.success) {
+                    // Update local state with new credentials
+                    setSettings(prev => ({
+                        ...prev,
+                        whatsAppPhoneNumberId: connectRes.data.phoneNumberId || '',
+                        whatsAppBusinessAccountId: connectRes.data.businessAccountId || '',
+                        whatsAppDisplayPhone: connectRes.data.displayPhone || '',
+                        whatsAppAccessToken: '••••••••',
+                        whatsAppEnabled: true,
+                    }));
+                    setStatus({ type: 'success', message: t('whatsapp.settings.connectSuccess', 'WhatsApp connected successfully!') });
+                } else {
+                    setStatus({ type: 'error', message: connectRes.data.error || t('whatsapp.settings.connectFailed', 'Failed to connect WhatsApp.') });
+                }
+            } else {
+                // User cancelled the dialog
+                setStatus({ type: 'warning', message: t('whatsapp.settings.connectCancelled', 'WhatsApp connection was cancelled.') });
+            }
+        } catch (err: unknown) {
+            const axiosErr = err as { response?: { data?: { error?: string } } };
+            setStatus({ type: 'error', message: axiosErr?.response?.data?.error || t('whatsapp.settings.connectFailed', 'Failed to connect WhatsApp.') });
+        } finally {
+            setConnectingWhatsApp(false);
+        }
+    };
+
+    const handleDisconnectWhatsApp = async () => {
+        setDisconnectingWhatsApp(true);
+        setStatus(null);
+        try {
+            await api.post('/Settings/whatsapp/disconnect');
+            setSettings(prev => ({
+                ...prev,
+                whatsAppPhoneNumberId: '',
+                whatsAppAccessToken: '',
+                whatsAppBusinessAccountId: '',
+                whatsAppDisplayPhone: '',
+                whatsAppEnabled: false,
+            }));
+            setStatus({ type: 'success', message: t('whatsapp.settings.disconnected', 'WhatsApp disconnected.') });
+        } catch {
+            setStatus({ type: 'error', message: t('whatsapp.settings.disconnectFailed', 'Failed to disconnect WhatsApp.') });
+        } finally {
+            setDisconnectingWhatsApp(false);
+        }
     };
 
     // Logo
@@ -615,6 +750,7 @@ Best regards,
         { key: 'personal', label: t('settings.personalCompany', 'Personal & Company'), icon: Building2 },
         { key: 'email', label: t('settings.emailSettings', 'Email Settings'), icon: Mail },
         { key: 'pdf', label: t('settings.pdfSettings', 'PDF Settings'), icon: FileText },
+        { key: 'whatsapp', label: t('whatsapp.settings.title', 'WhatsApp'), icon: MessageCircle },
     ];
 
     // ═══════════════════════════════════════════════════════════════
@@ -1526,10 +1662,129 @@ Best regards,
                             </div>
                         </div>
                     )}
+
+                    {/* ──── SECTION 4: WhatsApp Settings ──── */}
+                    {activeSection === 'whatsapp' && (
+                        <div className="space-y-6">
+                            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                                <div className="p-6 border-b border-gray-100">
+                                    <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                                        <MessageCircle size={20} className="text-[#065F46]" />
+                                        {t('whatsapp.settings.title', 'WhatsApp')}
+                                    </h3>
+                                    <p className="text-sm text-gray-500 mt-1">{t('whatsapp.settings.description', 'Configure your WhatsApp Business API credentials so messages appear from your company.')}</p>
+                                </div>
+                                <div className="p-6 space-y-5">
+                                    {settings.whatsAppPhoneNumberId && settings.whatsAppAccessToken ? (
+                                        /* ──── Connected State ──── */
+                                        <>
+                                            <div className="p-5 bg-emerald-50 border border-emerald-200 rounded-xl">
+                                                <div className="flex items-center gap-3 mb-3">
+                                                    <div className="p-2 bg-emerald-100 rounded-lg">
+                                                        <CheckCircle size={20} className="text-emerald-600" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-semibold text-emerald-800">{t('whatsapp.settings.connected', 'WhatsApp Connected')}</p>
+                                                        <p className="text-xs text-emerald-600">{t('whatsapp.settings.configured', 'WhatsApp is configured and ready to send messages.')}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                                                    <div className="bg-white/70 rounded-lg p-3">
+                                                        <p className="text-xs text-gray-500 mb-0.5">{t('whatsapp.settings.connectedPhone', 'Phone Number')}</p>
+                                                        <p className="text-sm font-medium text-gray-900">{settings.whatsAppDisplayPhone || settings.whatsAppPhoneNumberId}</p>
+                                                    </div>
+                                                    <div className="bg-white/70 rounded-lg p-3">
+                                                        <p className="text-xs text-gray-500 mb-0.5">{t('whatsapp.settings.businessAccountId', 'Business Account ID')}</p>
+                                                        <p className="text-sm font-medium text-gray-900 truncate">{settings.whatsAppBusinessAccountId}</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Enable toggle */}
+                                            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                                                <div>
+                                                    <label className="text-sm font-medium text-gray-900">{t('whatsapp.settings.enabled', 'Enable WhatsApp')}</label>
+                                                    <p className="text-xs text-gray-500 mt-0.5">{t('whatsapp.settings.enabledHelp', 'When enabled, the Send via WhatsApp button will appear on invoices.')}</p>
+                                                </div>
+                                                <button
+                                                    onClick={() => {
+                                                        updateSetting('whatsAppEnabled', !settings.whatsAppEnabled);
+                                                        // Auto-save the toggle
+                                                        api.put('/Settings', { whatsAppEnabled: !settings.whatsAppEnabled }).catch(() => {});
+                                                    }}
+                                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${settings.whatsAppEnabled ? 'bg-[#065F46]' : 'bg-gray-300'}`}>
+                                                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${settings.whatsAppEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                                                </button>
+                                            </div>
+
+                                            {/* Disconnect */}
+                                            <button
+                                                onClick={handleDisconnectWhatsApp}
+                                                disabled={disconnectingWhatsApp}
+                                                className="flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 border border-red-200 rounded-xl transition-colors disabled:opacity-50">
+                                                {disconnectingWhatsApp ? <Loader2 size={16} className="animate-spin" /> : <Unlink size={16} />}
+                                                {t('whatsapp.settings.disconnect', 'Disconnect WhatsApp')}
+                                            </button>
+                                        </>
+                                    ) : (
+                                        /* ──── Not Connected State ──── */
+                                        <>
+                                            <div className="p-5 bg-amber-50 border border-amber-200 rounded-xl">
+                                                <div className="flex items-center gap-3">
+                                                    <MessageCircle size={20} className="text-amber-600" />
+                                                    <p className="text-sm font-medium text-amber-700">
+                                                        {t('whatsapp.settings.notConfigured', 'WhatsApp is not configured. Click the button below to get started.')}
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            <div className="text-center py-8">
+                                                <div className="mx-auto w-16 h-16 bg-[#25D366]/10 rounded-2xl flex items-center justify-center mb-4">
+                                                    <MessageCircle size={32} className="text-[#25D366]" />
+                                                </div>
+                                                <h4 className="text-lg font-semibold text-gray-900 mb-2">{t('whatsapp.settings.connectTitle', 'Connect Your WhatsApp Business')}</h4>
+                                                <p className="text-sm text-gray-500 max-w-md mx-auto mb-6">
+                                                    {t('whatsapp.settings.connectDescription', 'Click the button below to link your WhatsApp Business number. You\'ll be guided through a quick setup process by Meta.')}
+                                                </p>
+
+                                                <button
+                                                    onClick={handleConnectWhatsApp}
+                                                    disabled={connectingWhatsApp}
+                                                    className="inline-flex items-center gap-2.5 px-6 py-3 bg-[#25D366] text-white font-medium rounded-xl shadow-lg hover:bg-[#20bd5a] transition-all disabled:opacity-50 text-base">
+                                                    {connectingWhatsApp ? (
+                                                        <Loader2 size={20} className="animate-spin" />
+                                                    ) : (
+                                                        <MessageCircle size={20} />
+                                                    )}
+                                                    {connectingWhatsApp
+                                                        ? t('whatsapp.settings.connecting', 'Connecting...')
+                                                        : t('whatsapp.settings.connectButton', 'Connect WhatsApp')}
+                                                </button>
+                                            </div>
+
+                                            <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                                                <div className="flex gap-3">
+                                                    <Info size={18} className="text-blue-500 flex-shrink-0 mt-0.5" />
+                                                    <div className="text-xs text-blue-700 space-y-1">
+                                                        <p className="font-medium">{t('whatsapp.settings.howItWorks', 'How it works:')}</p>
+                                                        <ol className="list-decimal list-inside space-y-0.5">
+                                                            <li>{t('whatsapp.settings.step1', 'A Facebook dialog will open')}</li>
+                                                            <li>{t('whatsapp.settings.step2', 'Log in with your Facebook account')}</li>
+                                                            <li>{t('whatsapp.settings.step3', 'Select or create a Meta Business Portfolio')}</li>
+                                                            <li>{t('whatsapp.settings.step4', 'Enter and verify your phone number')}</li>
+                                                            <li>{t('whatsapp.settings.step5', 'Done! Your WhatsApp is connected automatically')}</li>
+                                                        </ol>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
-
-            {/* Base Storage Path Lock Confirmation Dialog */}
             {showBasePathLockConfirm && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setShowBasePathLockConfirm(false)}>
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6" onClick={e => e.stopPropagation()}>

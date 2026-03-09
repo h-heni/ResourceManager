@@ -87,7 +87,15 @@ namespace ResourceManager.Controllers
             var aliases = GetCategoryAliases();
             if (aliases.TryGetValue(trimmed, out var canonical))
                 return canonical;
-            return trimmed.ToLowerInvariant();
+            // Check if it already matches a built-in key (case-insensitive) — preserve original casing
+            var validKeys = GetValidCategoryKeys();
+            foreach (var key in validKeys)
+            {
+                if (string.Equals(key, trimmed, StringComparison.OrdinalIgnoreCase))
+                    return key;
+            }
+            // Custom category: return trimmed as-is (preserve user's casing)
+            return trimmed;
         }
 
         /// <summary>

@@ -199,6 +199,8 @@ namespace ResourceManager.DTOs
         public string? Notes { get; set; }
         public decimal? SubTotal { get; set; }
         public decimal? TaxAmount { get; set; }
+        public string? SupplierPhone { get; set; }
+        public string? SupplierEmail { get; set; }
         public List<PurchaseOrderItemDto> Items { get; set; } = new();
     }
 

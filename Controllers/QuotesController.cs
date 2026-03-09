@@ -20,12 +20,16 @@ namespace ResourceManager.Controllers
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly ILocalPdfStorageService _pdfStorageService;
         private readonly ILogger<QuotesController> _logger;
-        public QuotesController(AppDbContext context, UserManager<ApplicationUser> userManager, ILocalPdfStorageService pdfStorageService, ILogger<QuotesController> logger)
+        private readonly IEmailService _emailService;
+        private readonly IWhatsAppService _whatsAppService;
+        public QuotesController(AppDbContext context, UserManager<ApplicationUser> userManager, ILocalPdfStorageService pdfStorageService, ILogger<QuotesController> logger, IEmailService emailService, IWhatsAppService whatsAppService)
         {
             _context = context;
             _userManager = userManager;
             _pdfStorageService = pdfStorageService;
             _logger = logger;
+            _emailService = emailService;
+            _whatsAppService = whatsAppService;
         }
 
         // GET: api/devis/last-number - Get the last quote number for suggestion
@@ -315,7 +319,7 @@ namespace ResourceManager.Controllers
                 {
                     _context.ChangeTracker.Clear();
                     _logger.LogError(ex, "Quote creation failed for company {CompanyId}", user.CompanyId);
-                    return BadRequest(new { message = createFailureReason ?? "Failed to create quote and related products.", detail = ex.InnerException?.Message ?? ex.Message });
+                    return BadRequest(new { message = createFailureReason ?? "Failed to create quote and related products." });
                 }
             }
 
@@ -425,9 +429,7 @@ namespace ResourceManager.Controllers
 
             if (devis == null) return NotFound();
 
-            var alreadyConverted = await _context.Invoices
-                .AsNoTracking()
-                .AnyAsync(i => i.QuoteId == devis.Id);
+            var alreadyConverted = devis.InvoiceId != null;
             if (alreadyConverted)
             {
                 return Conflict(new { message = "An invoice already exists for this quote." });
@@ -444,8 +446,7 @@ namespace ResourceManager.Controllers
                 Number = invoiceNumber,
                 Date = DateTime.UtcNow,
                 ClientId = devis.ClientId,
-                QuoteId = devis.Id, // Link original Quote
-                SourceQuoteNumber = devis.Number,
+                SourceQuoteNumbers = devis.Number,
                 Tfiscal = devis.Tfiscal,
                 TfiscalName = devis.TfiscalName,
                 CreatedByUserId = userId,
@@ -544,6 +545,11 @@ namespace ResourceManager.Controllers
             {
                 await _context.SaveChangesAsync();
 
+                // Link the quote to the invoice now that it has an Id
+                devis.InvoiceId = invoice.Id;
+                devis.Status = "Completed";
+                devis.Treated = true;
+
                 // Re-link delivery notes now that invoice has an Id
                 if (deliveryNotes.Count > 0)
                 {
@@ -559,7 +565,7 @@ namespace ResourceManager.Controllers
                 return Conflict(new { message = "Failed to create invoice due to duplicate number. Please retry." });
             }
 
-            return Ok(new { InvoiceId = invoice.Id, InvoiceNumber = invoice.Number, SourceQuoteNumber = invoice.SourceQuoteNumber, Message = "Converted successfully" });
+            return Ok(new { InvoiceId = invoice.Id, InvoiceNumber = invoice.Number, SourceQuoteNumbers = invoice.SourceQuoteNumbers, Message = "Converted successfully" });
         }
         // GET: api/devis/{id}/pdf
         [HttpGet("{id}/pdf")]
@@ -761,6 +767,177 @@ namespace ResourceManager.Controllers
                    || message.Contains("duplicate", StringComparison.OrdinalIgnoreCase)
                    || message.Contains("2601", StringComparison.OrdinalIgnoreCase)
                    || message.Contains("2627", StringComparison.OrdinalIgnoreCase);
+        }
+
+        // POST: api/quotes/{id}/send-email
+        [HttpPost("{id}/send-email")]
+        public async Task<IActionResult> SendQuoteEmail(int id, [FromBody] SendDocumentEmailDto dto)
+        {
+            var quote = await _context.Quotes
+                .Include(q => q.Client)
+                .Include(q => q.QuoteItems)
+                .FirstOrDefaultAsync(q => q.Id == id);
+
+            if (quote == null) return NotFound();
+
+            var userId = _userManager.GetUserId(User);
+            if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null) return Unauthorized();
+
+            var recipientEmail = dto.RecipientEmail ?? quote.Client?.Email;
+            if (string.IsNullOrEmpty(recipientEmail))
+                return BadRequest(new { message = "No recipient email provided and client has no email on file." });
+
+            var company = await _context.Companies.FindAsync(user.CompanyId);
+            var userProfile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
+            var senderName = userProfile != null ? $"{userProfile.FirstName} {userProfile.LastName}".Trim() : user.UserName ?? "";
+
+            var subject = dto.Subject ?? $"Quote #{quote.Number} from {company?.Name ?? "Company"}";
+            var body = dto.Body ?? $"<p>Dear {quote.Client?.Name ?? "Customer"},</p><p>Please find attached quote <strong>#{quote.Number}</strong>.</p><p>Best regards,<br/>{company?.Name ?? "Company"}</p>";
+
+            // Generate PDF
+            var companySettings = await _context.CompanySettings.FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
+            var pdfSettings = PdfSettings.FromCompanySettings(companySettings, company, senderName,
+                currencyOverride: quote.CurrencySymbol, languageOverride: quote.PdfLanguage);
+
+            if (quote.Tfiscal == null || quote.TfiscalName == null)
+            {
+                quote.Tfiscal = pdfSettings.CustomTaxEnabled ? pdfSettings.CustomTaxAmount : 0;
+                quote.TfiscalName = pdfSettings.CustomTaxName;
+            }
+
+            byte[] pdfData;
+            try
+            {
+                var document = new Document<Quote>(quote, pdfSettings);
+                pdfData = document.GeneratePdf();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to generate PDF for quote {QuoteId}", id);
+                return StatusCode(500, new { message = "Failed to generate PDF" });
+            }
+
+            // Create audit record
+            var audit = new DocumentSendAudit
+            {
+                DocumentType = "Quote",
+                DocumentId = id,
+                DocumentNumber = quote.Number,
+                Channel = "Email",
+                RecipientEmail = recipientEmail,
+                Subject = subject,
+                Body = body,
+                SentAt = DateTime.UtcNow,
+                SentByUserId = userId,
+                SentByName = senderName,
+                Status = "Sending",
+                CompanyId = user.CompanyId
+            };
+            _context.DocumentSendAudits.Add(audit);
+            await _context.SaveChangesAsync();
+
+            var attachPdf = dto.AttachPdf ?? true;
+            var result = await _emailService.SendEmailAsync(recipientEmail, subject, body,
+                attachPdf ? pdfData : null, attachPdf ? $"Quote-{quote.Number}.pdf" : null);
+
+            audit.Status = result.Success ? "Sent" : "Failed";
+            audit.ErrorMessage = result.Success ? null : (result.ErrorDetails ?? result.Message);
+            audit.MessageId = result.MessageId;
+            await _context.SaveChangesAsync();
+
+            if (result.Success)
+            {
+                _logger.LogInformation("Quote {QuoteId} email sent to {Email}", id, recipientEmail);
+                return Ok(new { message = result.Message, auditId = audit.Id, status = audit.Status });
+            }
+            return StatusCode(500, new { message = result.Message, auditId = audit.Id, status = audit.Status, errorDetails = result.ErrorDetails });
+        }
+
+        // POST: api/quotes/{id}/send-whatsapp
+        [HttpPost("{id}/send-whatsapp")]
+        public async Task<IActionResult> SendQuoteWhatsApp(int id, [FromBody] SendDocumentWhatsAppDto? dto = null)
+        {
+            try
+            {
+                var quote = await _context.Quotes
+                    .Include(q => q.Client)
+                    .Include(q => q.QuoteItems)
+                    .FirstOrDefaultAsync(q => q.Id == id);
+
+                if (quote == null) return NotFound(new { message = "Quote not found" });
+                if (quote.Client == null) return BadRequest(new { message = "Client not found for this quote" });
+                if (string.IsNullOrEmpty(quote.Client.Phone))
+                    return BadRequest(new { message = "Client phone number is required for WhatsApp sharing." });
+
+                var userId = _userManager.GetUserId(User);
+                if (string.IsNullOrEmpty(userId)) return Unauthorized();
+                var user = await _userManager.FindByIdAsync(userId);
+                if (user == null) return Unauthorized();
+
+                var userProfile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
+                var senderName = userProfile != null ? $"{userProfile.FirstName} {userProfile.LastName}".Trim() : user.UserName ?? "";
+
+                var request = HttpContext.Request;
+                var baseUrl = $"{request.Scheme}://{request.Host}";
+                var pdfUrl = $"{baseUrl}/api/Quotes/{id}/pdf";
+
+                var result = await _whatsAppService.SendDocumentMessageAsync(
+                    quote.Client.Phone, pdfUrl, $"Quote-{quote.Number}.pdf", dto?.CustomMessage);
+
+                var audit = new DocumentSendAudit
+                {
+                    DocumentType = "Quote",
+                    DocumentId = id,
+                    DocumentNumber = quote.Number,
+                    Channel = "WhatsApp",
+                    RecipientPhone = quote.Client.Phone,
+                    SentAt = DateTime.UtcNow,
+                    SentByUserId = userId,
+                    SentByName = senderName,
+                    Status = result.Success ? "Sent" : "Failed",
+                    ErrorMessage = result.Success ? null : result.Error,
+                    MessageId = result.Success ? result.MessageId : null,
+                    CompanyId = user.CompanyId
+                };
+                _context.DocumentSendAudits.Add(audit);
+                await _context.SaveChangesAsync();
+
+                if (!result.Success)
+                    return BadRequest(new { message = result.Error ?? "Failed to send WhatsApp message" });
+
+                return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send WhatsApp message for quote {QuoteId}", id);
+                return StatusCode(500, new { message = "Failed to send WhatsApp message" });
+            }
+        }
+
+        // GET: api/quotes/{id}/send-history
+        [HttpGet("{id}/send-history")]
+        public async Task<IActionResult> GetQuoteSendHistory(int id)
+        {
+            var quote = await _context.Quotes.AsNoTracking().FirstOrDefaultAsync(q => q.Id == id);
+            if (quote == null) return NotFound();
+
+            var history = await _context.DocumentSendAudits
+                .Where(a => a.DocumentType == "Quote" && a.DocumentId == id)
+                .OrderByDescending(a => a.SentAt)
+                .Select(a => new {
+                    a.Id, a.Channel, a.RecipientEmail, a.RecipientPhone,
+                    a.Subject, a.SentAt, a.SentByName, a.Status, a.ErrorMessage
+                })
+                .ToListAsync();
+
+            return Ok(history);
         }
     }
 }

@@ -60,6 +60,9 @@ interface QuoteData {
     status: string;
     totalAmount: number;
     quoteItems?: QuoteItem[];
+    currency?: string;
+    currencySymbol?: string;
+    pdfLanguage?: string;
 }
 
 const getQuoteNumber = (quote: QuoteData) => quote.number || quote.Number || '';
@@ -103,7 +106,7 @@ export default function InvoiceCreatePage() {
     const [quotes, setQuotes] = useState<QuoteData[]>([]);
     const [deliveryNotes, setDeliveryNotes] = useState<DeliveryNote[]>([]);
     const [selectedDeliveryNoteIds, setSelectedDeliveryNoteIds] = useState<number[]>([]);
-    const [selectedQuoteData, setSelectedQuoteData] = useState<QuoteData | null>(null);
+    const [selectedQuotesData, setSelectedQuotesData] = useState<QuoteData[]>([]);
     const [errors, setErrors] = useState<ValidationErrors>({});
     const [touched, setTouched] = useState<Record<string, boolean>>({});
     const [submitted, setSubmitted] = useState(false);
@@ -121,7 +124,7 @@ export default function InvoiceCreatePage() {
 
     // Form State
     const [clientId, setClientId] = useState('');
-    const [selectedQuoteId, setSelectedQuoteId] = useState('');
+    const [selectedQuoteIds, setSelectedQuoteIds] = useState<number[]>([]);
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [invoiceNumber, setInvoiceNumber] = useState('');
     const [lastInvoiceNumber, setLastInvoiceNumber] = useState('');
@@ -186,7 +189,7 @@ export default function InvoiceCreatePage() {
                 setInvoiceNumber(inv.number || '');
                 setDate(inv.date ? new Date(inv.date).toISOString().split('T')[0] : '');
                 setClientId(inv.clientId?.toString() || '');
-                if (inv.quoteId) setSelectedQuoteId(inv.quoteId.toString());
+                if (inv.quoteIds && inv.quoteIds.length > 0) setSelectedQuoteIds(inv.quoteIds);
                 // Load per-document currency/language if available
                 if (inv.currency) setPdfCurrency(inv.currency);
                 if (inv.currencySymbol) setPdfCurrencySymbol(inv.currencySymbol);
@@ -304,8 +307,8 @@ export default function InvoiceCreatePage() {
         }
     };
 
-    const fetchDeliveryNotesForQuote = async (quoteId: string) => {
-        if (!quoteId) {
+    const fetchDeliveryNotesForQuotes = async (quoteIds: number[]) => {
+        if (quoteIds.length === 0) {
             setDeliveryNotes([]);
             setSelectedDeliveryNoteIds([]);
             return;
@@ -321,9 +324,9 @@ export default function InvoiceCreatePage() {
                 allNotes = res.data.data;
             }
 
-            // Filter delivery notes linked to this quote that don't have an invoice yet
+            // Filter delivery notes linked to any of the selected quotes that don't have an invoice yet
             const linkedNoteIds = allNotes
-                .filter((dn: { id: number; quoteId?: number; invoiceId?: number | null }) => dn.quoteId === parseInt(quoteId) && !dn.invoiceId)
+                .filter((dn: { id: number; quoteId?: number; invoiceId?: number | null }) => dn.quoteId != null && quoteIds.includes(dn.quoteId) && !dn.invoiceId)
                 .map((dn: { id: number; quoteId?: number; invoiceId?: number | null }) => dn.id);
 
             // Fetch full details for each delivery note to get items and creator info
@@ -349,8 +352,8 @@ export default function InvoiceCreatePage() {
 
     const handleClientChange = (cid: string) => {
         setClientId(cid);
-        setSelectedQuoteId('');
-        setSelectedQuoteData(null);
+        setSelectedQuoteIds([]);
+        setSelectedQuotesData([]);
         setSelectedDeliveryNoteIds([]);
         setDeliveryNotes([]);
         setTouched(prev => ({ ...prev, clientId: true }));
@@ -372,18 +375,18 @@ export default function InvoiceCreatePage() {
     // Logic: description & quantity from delivery notes if they exist, otherwise from quote
     // Unit price ALWAYS comes from the quote
     useEffect(() => {
-        if (!selectedQuoteData?.quoteItems) return;
+        if (selectedQuotesData.length === 0) return;
+        const allQuoteItems = selectedQuotesData.flatMap(q => q.quoteItems ?? []);
+        if (allQuoteItems.length === 0) return;
 
         // Build a stable key from the current deps to avoid re-running for identical state
-        const currentKey = `${selectedQuoteData.id}:${[...selectedDeliveryNoteIds].sort().join(',')}`;
+        const currentKey = `${selectedQuotesData.map(q => q.id).sort().join('+')}:${[...selectedDeliveryNoteIds].sort().join(',')}`;
         if (currentKey === prevItemsKeyRef.current) return;
         prevItemsKeyRef.current = currentKey;
 
-        const quoteData = selectedQuoteData;
-
-        // Build a price map from quote items (key: lowercase trimmed description)
+        // Build a price map from ALL selected quotes' items (key: lowercase trimmed description)
         const quotePriceMap: Record<string, { price: number; tva: boolean; vatRate?: number; productServiceId?: number }> = {};
-        quoteData.quoteItems?.forEach(qi => {
+        allQuoteItems.forEach(qi => {
             const key = qi.description.toLowerCase().trim();
             quotePriceMap[key] = { price: qi.price, tva: qi.tva, vatRate: qi.vatRate, productServiceId: qi.productServiceId };
         });
@@ -425,9 +428,9 @@ export default function InvoiceCreatePage() {
             if (newItems.length > 0) {
                 setItems(newItems);
             }
-        } else if (deliveryNotes.length === 0 && quoteData.quoteItems) {
-            // No delivery notes exist: use description, quantity, and price from quote
-            const newItems: InvoiceItem[] = quoteData.quoteItems.map(qi => ({
+        } else if (deliveryNotes.length === 0) {
+            // No delivery notes exist: use description, quantity, and price from all quotes
+            const newItems: InvoiceItem[] = allQuoteItems.map(qi => ({
                 description: qi.description,
                 quantity: qi.quantity,
                 price: qi.price,
@@ -443,30 +446,35 @@ export default function InvoiceCreatePage() {
         }
         // If delivery notes exist but none are selected, keep current items (user deselected all)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedDeliveryNoteIds, selectedQuoteData, deliveryNotes]);
+    }, [selectedDeliveryNoteIds, selectedQuotesData, deliveryNotes]);
 
-    const handleQuoteSelection = async (qid: string) => {
-        setSelectedQuoteId(qid);
-        if (!qid) {
-            setSelectedQuoteData(null);
+    const handleQuoteSelection = async (quoteId: number, checked: boolean) => {
+        const newIds = checked
+            ? [...selectedQuoteIds, quoteId]
+            : selectedQuoteIds.filter(id => id !== quoteId);
+        setSelectedQuoteIds(newIds);
+
+        if (newIds.length === 0) {
+            setSelectedQuotesData([]);
             setDeliveryNotes([]);
             setSelectedDeliveryNoteIds([]);
             return;
         }
 
         try {
-            const res = await api.get(`/Quotes/${qid}`);
-            const quote = res.data;
-            setSelectedQuoteData(quote);
+            // Fetch details for ALL selected quotes so items/prices are merged correctly
+            const responses = await Promise.all(newIds.map(id => api.get(`/Quotes/${id}`)));
+            const allQuotes: QuoteData[] = responses.map(r => r.data);
+            setSelectedQuotesData(allQuotes);
 
-            // Inherit currency & language from the quote
-            if (quote.currency) setPdfCurrency(quote.currency);
-            if (quote.currencySymbol) setPdfCurrencySymbol(quote.currencySymbol);
-            if (quote.pdfLanguage) setPdfLanguage(quote.pdfLanguage);
+            // Inherit currency & language from the first selected quote
+            const firstQuote = allQuotes[0];
+            if (firstQuote.currency) setPdfCurrency(firstQuote.currency);
+            if (firstQuote.currencySymbol) setPdfCurrencySymbol(firstQuote.currencySymbol);
+            if (firstQuote.pdfLanguage) setPdfLanguage(firstQuote.pdfLanguage);
 
-            // Fetch delivery notes linked to this quote
-            // Items will be populated by the useEffect based on whether delivery notes exist
-            await fetchDeliveryNotesForQuote(qid);
+            // Fetch delivery notes linked to all selected quotes
+            await fetchDeliveryNotesForQuotes(newIds);
         } catch (error) {
             logger.error("Error fetching quote details", error);
         }
@@ -573,7 +581,7 @@ export default function InvoiceCreatePage() {
                 number: invoiceNumber.trim(),
                 date: new Date(date).toISOString(),
                 clientId: parseInt(clientId),
-                quoteId: selectedQuoteId ? parseInt(selectedQuoteId) : null,
+                quoteIds: selectedQuoteIds.length > 0 ? selectedQuoteIds : null,
                 deliveryNoteIds: selectedDeliveryNoteIds.length > 0 ? selectedDeliveryNoteIds : null,
                 items: items
                     .filter(item => item.description.trim() !== '')
@@ -667,7 +675,7 @@ export default function InvoiceCreatePage() {
                 )}
 
                 {/* Currency & Language (inherited from Quote - read-only) */}
-                {selectedQuoteId && (
+                {selectedQuoteIds.length > 0 && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-[#065F46]/5 border border-[#065F46]/10 rounded-xl">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -741,19 +749,25 @@ export default function InvoiceCreatePage() {
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">{t('createPage.linkQuote')}</label>
-                        <select
-                            value={selectedQuoteId}
-                            onChange={e => handleQuoteSelection(e.target.value)}
-                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none transition-all"
-                            disabled={!clientId}
-                        >
-                            <option value="">{t('createPage.noQuoteSelected')}</option>
-                            {quotes.map(quote => (
-                                <option key={quote.id} value={quote.id}>
-                                    {t('createPage.selectQuote', { number: getQuoteNumber(quote), amount: (quote.totalAmount || 0).toLocaleString() + ' ' + (pdfCurrencySymbol || DEFAULT_CURRENCY) })}
-                                </option>
-                            ))}
-                        </select>
+                        <div className={`w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl max-h-48 overflow-y-auto space-y-2 ${!clientId ? 'opacity-50 pointer-events-none' : ''}`}>
+                            {quotes.length === 0 ? (
+                                <p className="text-sm text-gray-400">{t('createPage.noQuoteSelected')}</p>
+                            ) : (
+                                quotes.map(quote => (
+                                    <label key={quote.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 p-1 rounded">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedQuoteIds.includes(quote.id)}
+                                            onChange={e => handleQuoteSelection(quote.id, e.target.checked)}
+                                            className="accent-[#065F46]"
+                                        />
+                                        <span className="text-sm text-gray-700">
+                                            {t('createPage.selectQuote', { number: getQuoteNumber(quote), amount: (quote.totalAmount || 0).toLocaleString() + ' ' + (pdfCurrencySymbol || DEFAULT_CURRENCY) })}
+                                        </span>
+                                    </label>
+                                ))
+                            )}
+                        </div>
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -775,7 +789,7 @@ export default function InvoiceCreatePage() {
                 </div>
 
                 {/* Delivery Notes Selection - Enhanced with item details */}
-                {selectedQuoteId && deliveryNotes.length > 0 && (
+                {selectedQuoteIds.length > 0 && deliveryNotes.length > 0 && (
                     <div className="border-t border-gray-100 pt-6">
                         <h3 className="text-lg font-bold text-gray-900 flex items-center mb-2">
                             <Truck className="mr-2 text-green-500" size={20} />
@@ -966,7 +980,7 @@ export default function InvoiceCreatePage() {
                             className="mt-4 flex items-center text-sm font-semibold text-[#065F46] hover:text-[#065F46] transition-colors"
                         >
                             <Plus size={18} className="mr-1" />
-                            Add Item
+                            {t('invoice.addItem')}
                         </button>
                     </div>
 

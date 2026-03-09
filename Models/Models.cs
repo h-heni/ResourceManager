@@ -4,7 +4,22 @@ using System.Net;
 
 namespace ResourceManager.Models
 {
-    public class Shared
+    /// <summary>
+    /// Interface for entities that support automatic audit stamping
+    /// (CompanyId, CreatedByUserId, CreatedBy, ModifiedBy, CreatedAt, UpdatedAt).
+    /// Eliminates reflection in AppDbContext.SaveChangesAsync.
+    /// </summary>
+    public interface IAuditable
+    {
+        int CompanyId { get; set; }
+        string? CreatedByUserId { get; set; }
+        string? CreatedBy { get; set; }
+        string? ModifiedBy { get; set; }
+        DateTime CreatedAt { get; set; }
+        DateTime? UpdatedAt { get; set; }
+    }
+
+    public class Shared : IAuditable
     {
         [Key]
         public int Id { get; set; }
@@ -178,17 +193,8 @@ namespace ResourceManager.Models
         
         [ForeignKey("ClientId")]
         public virtual Client? Client { get; set; }
-        public int? QuoteId { get; set; }
-        public Quote? Quote { get; set; } = null!;
-
-        // Currency & Language inherited from linked Quote (backward compat: falls back to company settings)
-        [NotMapped]
-        public string? EffectiveCurrency => Quote?.Currency;
-        [NotMapped]
-        public string? EffectiveCurrencySymbol => Quote?.CurrencySymbol;
-        [NotMapped]
-        public string? EffectivePdfLanguage => Quote?.PdfLanguage;
-        public string? SourceQuoteNumber { get; set; }
+        public ICollection<Quote> Quotes { get; set; } = new List<Quote>();
+        public string? SourceQuoteNumbers { get; set; }
         public ICollection<InvoiceItem> InvoiceItems { get; set; } = new List<InvoiceItem>();
         public ICollection<Payment> Payments { get; set; } = new List<Payment>();
 
@@ -380,6 +386,8 @@ namespace ResourceManager.Models
         
         public int? ClientId { get; set; }
         public Client? Client { get; set; } = null!;
+        public int? InvoiceId { get; set; }
+        [ForeignKey("InvoiceId")]
         public Invoice? Invoice { get; set; } = null!;
         public ICollection<QuoteItem> QuoteItems { get; set; } = new List<QuoteItem>();
         public ICollection<DeliveryNote> DeliveryNotes { get; set; } = new List<DeliveryNote>();
@@ -565,6 +573,13 @@ namespace ResourceManager.Models
         
         // Pro Invoice token signature
         public bool ProInvoiceUseTokenSignature { get; set; } = false;
+        
+        // WhatsApp Business API Configuration (per-company)
+        public string? WhatsAppPhoneNumberId { get; set; }
+        public string? WhatsAppAccessToken { get; set; }
+        public string? WhatsAppBusinessAccountId { get; set; }
+        public string? WhatsAppDisplayPhone { get; set; }
+        public bool WhatsAppEnabled { get; set; } = false;
     }
 
     /// <summary>
@@ -1206,6 +1221,85 @@ namespace ResourceManager.Models
 
         [ForeignKey("SupplierId")]
         public Supplier? Supplier { get; set; }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // DOCUMENT SEND AUDIT (Email / WhatsApp tracking for all document types)
+    // ═══════════════════════════════════════════════════════════════
+    public class DocumentSendAudit
+    {
+        public int Id { get; set; }
+
+        /// <summary>
+        /// Document type: "DeliveryNote", "Quote", "PurchaseOrder"
+        /// </summary>
+        [Required]
+        [MaxLength(30)]
+        public string DocumentType { get; set; } = string.Empty;
+
+        /// <summary>
+        /// FK to the document (DeliveryNote.Id, Quote.Id, PurchaseOrder.Id)
+        /// </summary>
+        [Required]
+        public int DocumentId { get; set; }
+
+        /// <summary>
+        /// Document number for display (e.g. "DV25-001", "BL25-003")
+        /// </summary>
+        [MaxLength(100)]
+        public string DocumentNumber { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Channel: "Email" or "WhatsApp"
+        /// </summary>
+        [Required]
+        [MaxLength(20)]
+        public string Channel { get; set; } = string.Empty;
+
+        [MaxLength(256)]
+        public string? RecipientEmail { get; set; }
+
+        [MaxLength(50)]
+        public string? RecipientPhone { get; set; }
+
+        [MaxLength(500)]
+        public string? Subject { get; set; }
+
+        public string? Body { get; set; }
+
+        public DateTime SentAt { get; set; } = DateTime.UtcNow;
+
+        /// <summary>
+        /// UserId of the person who triggered the send
+        /// </summary>
+        public string? SentByUserId { get; set; }
+
+        /// <summary>
+        /// Display name of the sender
+        /// </summary>
+        [MaxLength(200)]
+        public string? SentByName { get; set; }
+
+        /// <summary>
+        /// Status: "Sent", "Failed", "Pending"
+        /// </summary>
+        [Required]
+        [MaxLength(20)]
+        public string Status { get; set; } = "Pending";
+
+        public string? ErrorMessage { get; set; }
+
+        /// <summary>
+        /// SMTP Message-ID or WhatsApp message ID for tracking
+        /// </summary>
+        [MaxLength(256)]
+        public string? MessageId { get; set; }
+
+        [Required]
+        public int CompanyId { get; set; }
+
+        [ForeignKey("CompanyId")]
+        public Company? Company { get; set; }
     }
     
 }

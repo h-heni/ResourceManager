@@ -87,7 +87,7 @@ export default function InvoicesPage() {
     const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
     const [linkedDocuments, setLinkedDocuments] = useState<{
         invoiceNumber?: string;
-        linkedQuote?: { id: number; number: string; status: string } | null;
+        linkedQuotes?: { id: number; number: string; status: string }[];
         linkedDeliveryNotes?: { id: number; number: string }[];
         payments?: { id: number; amount: number; status: string }[];
         pdfFileCount?: number;
@@ -988,13 +988,22 @@ export default function InvoicesPage() {
 
                                 {linkedDocuments?.hasLinkedDocuments && (
                                     <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 space-y-2">
-                                        {linkedDocuments.linkedQuote && (
-                                            <div className="flex items-center gap-2 text-sm text-amber-800">
-                                                <FileWarning size={14} />
-                                                <span>{t('invoice.cascadeDelete.linkedQuote', { number: linkedDocuments.linkedQuote.number })}</span>
-                                                {linkedDocuments.linkedQuote.status === 'Accepted' && (
-                                                    <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">{linkedDocuments.linkedQuote.status}</span>
-                                                )}
+                                        {linkedDocuments.linkedQuotes && linkedDocuments.linkedQuotes.length > 0 && (
+                                            <div className="text-sm text-amber-800">
+                                                <div className="flex items-center gap-2">
+                                                    <FileWarning size={14} />
+                                                    <span>{t('invoice.cascadeDelete.linkedQuotes', { count: linkedDocuments.linkedQuotes.length })}</span>
+                                                </div>
+                                                <ul className="ml-6 mt-1 space-y-0.5">
+                                                    {linkedDocuments.linkedQuotes.map(q => (
+                                                        <li key={q.id} className="text-xs flex items-center gap-1">
+                                                            {q.number}
+                                                            {q.status && (
+                                                                <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">{q.status}</span>
+                                                            )}
+                                                        </li>
+                                                    ))}
+                                                </ul>
                                             </div>
                                         )}
                                         {linkedDocuments.linkedDeliveryNotes && linkedDocuments.linkedDeliveryNotes.length > 0 && (
@@ -1024,6 +1033,14 @@ export default function InvoicesPage() {
                                                 <span>{t('invoice.cascadeDelete.linkedPdfs', { count: linkedDocuments.pdfFileCount })}</span>
                                             </div>
                                         )}
+                                    </div>
+                                )}
+
+                                {linkedDocuments?.hasLinkedDocuments && (
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                                        <p className="text-sm text-blue-800">
+                                            {t('invoice.cascadeDelete.unlockWarning')}
+                                        </p>
                                     </div>
                                 )}
 

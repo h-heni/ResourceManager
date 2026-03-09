@@ -7,8 +7,6 @@ namespace ResourceManager.Data.Configurations
     {
         public void Configure(EntityTypeBuilder<Quote> builder)
         {
-            // Quote -> Invoice (optional)
-
             builder.HasMany(d => d.QuoteItems)
                 .WithOne(di => di.Quote)
                 .HasForeignKey(di => di.QuoteId);

@@ -76,7 +76,8 @@ namespace ResourceManager.Controllers
             catch (Exception ex)
             {
                 await transaction.RollbackAsync();
-                return BadRequest(ex.Message);
+                _logger.LogError(ex, "Failed to create company");
+                return BadRequest(new { message = "Failed to create company. Check server logs for details." });
             }
         }
 

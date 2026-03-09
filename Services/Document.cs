@@ -434,12 +434,12 @@ namespace ResourceManager.Services
                     });
 
                     // Show linked quote reference for invoices
-                    if (Model is Invoice invoice && (invoice.QuoteId.HasValue || !string.IsNullOrWhiteSpace(invoice.SourceQuoteNumber)))
+                    if (Model is Invoice invoice && (invoice.Quotes.Any() || !string.IsNullOrWhiteSpace(invoice.SourceQuoteNumbers)))
                     {
                         var refLabel = lang switch { "fr" => "Réf. Devis", "de" => "Angebot-Ref.", "ar" => "مرجع عرض السعر", _ => "Quote Ref." };
-                        var quoteReference = !string.IsNullOrWhiteSpace(invoice.SourceQuoteNumber)
-                            ? invoice.SourceQuoteNumber
-                            : invoice.Quote?.Number;
+                        var quoteReference = !string.IsNullOrWhiteSpace(invoice.SourceQuoteNumbers)
+                            ? invoice.SourceQuoteNumbers
+                            : string.Join(", ", invoice.Quotes.Select(q => q.Number));
 
                         if (!string.IsNullOrWhiteSpace(quoteReference))
                         {
@@ -880,12 +880,7 @@ namespace ResourceManager.Services
                                 text.Span(subtotalFormatted);
                             });
 
-                            var hasVat = Model.Items.Any(i => (i.TaxRate ?? 0) > 0);
-                            var vatLabelText = hasVat
-                                ? $"{vatPrefix} ({Model.Items.Where(i => (i.TaxRate ?? 0) > 0).Select(i => i.TaxRate ?? 0).First():P0})"
-                                : $"{vatPrefix} (0%)";
-
-                            t.Cell().Padding(5).Text(vatLabelText);
+                            t.Cell().Padding(5).Text(vatPrefix);
                             t.Cell().AlignRight().Padding(5).Text(text =>
                             {
                                 text.DefaultTextStyle(x => x.FontSize(taxFontSize).SemiBold());

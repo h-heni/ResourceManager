@@ -81,7 +81,7 @@ namespace ResourceManager.Services
                 .Include(p => p.Invoice)
                     .ThenInclude(i => i!.Client)
                 .Include(p => p.Invoice)
-                    .ThenInclude(i => i!.Quote)
+                    .ThenInclude(i => i!.Quotes)
                 .Include(p => p.Invoice)
                     .ThenInclude(i => i!.Payments)
                 .Where(p => p.Status == "Pending" && p.PaymentDate <= now);
@@ -116,7 +116,7 @@ namespace ResourceManager.Services
                 {
                     var clientName = payment.Invoice?.Client?.Name ?? "Unknown";
                     var invoiceNumber = payment.Invoice?.Number ?? "Unknown";
-                    var currencySymbol = payment.Invoice?.EffectiveCurrencySymbol ?? "TND";
+                    var currencySymbol = payment.Invoice?.Quotes.FirstOrDefault()?.CurrencySymbol ?? "TND";
 
                     var notification = new PaymentNotification
                     {

@@ -353,10 +353,11 @@
     "cascadeDelete": {
       "title": "Supprimer la facture",
       "warning": "Vous êtes sur le point de supprimer la facture {{number}}. Cette action est irréversible.",
-      "linkedQuote": "Devis lié : {{number}}",
+      "linkedQuotes": "{{count}} devis lié(s)",
       "linkedDeliveryNotes": "{{count}} bon(s) de livraison lié(s)",
       "linkedPayments": "{{count}} paiement(s) enregistré(s)",
       "linkedPdfs": "{{count}} fichier(s) PDF stocké(s)",
+      "unlockWarning": "Les devis et bons de livraison liés seront déverrouillés et disponibles pour réutilisation dans une nouvelle facture. Le numéro de facture supprimé peut être réutilisé.",
       "confirmation": "Êtes-vous sûr de vouloir continuer ? Tous les enregistrements liés seront affectés.",
       "confirmButton": "Supprimer la facture"
     }
@@ -1104,7 +1105,9 @@
       "Amount": "Montant",
       "Category": "Catégorie",
       "Notes": "Notes",
-      "Recurring": "Récurrent"
+      "Recurring": "Récurrent",
+      "Stock": "Stock",
+      "Limit": "Limite"
     }
   },
   "devis": {
@@ -1774,6 +1777,7 @@
     "poStatus": {
       "Draft": "Brouillon",
       "Submitted": "Soumis",
+      "Sent": "Envoyé",
       "PartiallyReceived": "Partiellement reçu",
       "Received": "Reçu",
       "Cancelled": "Annulé"
@@ -1809,5 +1813,60 @@
     "valuationBreakdown": "Détail de la valorisation",
     "noValuationData": "Aucune donnée de valorisation disponible",
     "costValue": "Valeur au coût"
+  },
+  "documentSend": {
+    "sendByEmail": "Envoyer par e-mail",
+    "sendByWhatsApp": "Envoyer via WhatsApp",
+    "sendHistory": "Historique d'envoi",
+    "noHistory": "Aucun historique d'envoi",
+    "quoteAttached": "Veuillez trouver ci-joint le devis",
+    "deliveryNoteAttached": "Veuillez trouver ci-joint le bon de livraison",
+    "purchaseOrderAttached": "Veuillez trouver ci-joint le bon de commande"
+  },
+  "whatsapp": {
+    "sendInvoice": "Envoyer la facture via WhatsApp",
+    "sendDocument": "Envoyer via WhatsApp",
+    "recipient": "Destinataire",
+    "phoneNumber": "Numéro de téléphone",
+    "customMessage": "Message personnalisé",
+    "optional": "optionnel",
+    "messagePlaceholder": "Entrez un message personnalisé à envoyer avec le document...",
+    "sendReminder": "Envoyer comme rappel de paiement",
+    "sendDirectly": "Envoyer via WhatsApp",
+    "sending": "Envoi en cours...",
+    "sent": "Message envoyé !",
+    "sentDescription": "Votre document a été envoyé via WhatsApp avec le PDF en pièce jointe.",
+    "pdfAttached": "Le PDF sera automatiquement joint au message WhatsApp.",
+    "errorNoPhone": "Le numéro de téléphone est requis pour le partage WhatsApp. Veuillez ajouter un numéro de téléphone à ce contact.",
+    "errorGeneric": "Échec de l'envoi du message WhatsApp. Veuillez réessayer.",
+    "settings": {
+      "title": "WhatsApp",
+      "description": "Configurez vos identifiants WhatsApp Business API pour que les messages apparaissent au nom de votre entreprise.",
+      "phoneNumberId": "ID du numéro de téléphone",
+      "businessAccountId": "ID du compte Business",
+      "enabled": "Activer WhatsApp",
+      "enabledHelp": "Lorsqu'activé, le bouton Envoyer via WhatsApp apparaîtra sur les factures.",
+      "notConfigured": "WhatsApp n'est pas configuré. Cliquez sur le bouton ci-dessous pour commencer.",
+      "configured": "WhatsApp est configuré et prêt à envoyer des messages.",
+      "connected": "WhatsApp Connecté",
+      "connectedPhone": "Numéro de téléphone",
+      "connectTitle": "Connectez votre WhatsApp Business",
+      "connectDescription": "Cliquez sur le bouton ci-dessous pour lier votre numéro WhatsApp Business. Vous serez guidé par Meta à travers un processus de configuration rapide.",
+      "connectButton": "Connecter WhatsApp",
+      "connecting": "Connexion...",
+      "connectSuccess": "WhatsApp connecté avec succès !",
+      "connectFailed": "Échec de la connexion WhatsApp.",
+      "connectCancelled": "La connexion WhatsApp a été annulée.",
+      "disconnect": "Déconnecter WhatsApp",
+      "disconnected": "WhatsApp déconnecté.",
+      "disconnectFailed": "Échec de la déconnexion WhatsApp.",
+      "appNotConfigured": "L'intégration WhatsApp n'est pas configurée sur le serveur. Contactez votre administrateur.",
+      "howItWorks": "Comment ça marche :",
+      "step1": "Une fenêtre Facebook s'ouvrira",
+      "step2": "Connectez-vous avec votre compte Facebook",
+      "step3": "Sélectionnez ou créez un Portfolio Business Meta",
+      "step4": "Entrez et vérifiez votre numéro de téléphone",
+      "step5": "Terminé ! Votre WhatsApp est connecté automatiquement"
+    }
   }
 }

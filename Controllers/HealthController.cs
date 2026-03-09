@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using ResourceManager.Data;
 using ResourceManager.Services;
 
@@ -7,7 +9,7 @@ namespace ResourceManager.Controllers;
 
 [ApiController]
 [Route("[controller]")]
-[AllowAnonymous]
+[EnableRateLimiting("Moderate")]
 public class HealthController : ControllerBase
 {
     private readonly AppDbContext _db;
@@ -21,6 +23,7 @@ public class HealthController : ControllerBase
         _serviceProvider = serviceProvider;
     }
 
+    [AllowAnonymous]
     [HttpGet("/health")]
     [HttpGet("/api/health")]
     public async Task<IActionResult> Get()
@@ -45,13 +48,14 @@ public class HealthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Health check exception");
-            return StatusCode(503, new { status = "unhealthy", reason = ex.Message });
+            return StatusCode(503, new { status = "unhealthy", reason = "internal error" });
         }
     }
 
     /// <summary>
-    /// Detailed health check including all services
+    /// Detailed health check including all services (SuperAdmin only — exposes internal config)
     /// </summary>
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "SuperAdmin")]
     [HttpGet("/api/health/detailed")]
     public async Task<IActionResult> GetDetailed()
     {
@@ -67,7 +71,8 @@ public class HealthController : ControllerBase
         }
         catch (Exception ex)
         {
-            checks["database"] = new { healthy = false, message = ex.Message };
+            _logger.LogError(ex, "Health check: database connectivity failed");
+            checks["database"] = new { healthy = false, message = "Database check failed" };
             overallHealthy = false;
         }
 
@@ -94,7 +99,8 @@ public class HealthController : ControllerBase
         }
         catch (Exception ex)
         {
-            checks["smtp"] = new { healthy = false, message = ex.Message };
+            _logger.LogError(ex, "Health check: SMTP connectivity failed");
+            checks["smtp"] = new { healthy = false, message = "SMTP check failed" };
         }
 
         // SMTP configuration check (no actual connection)
@@ -117,7 +123,8 @@ public class HealthController : ControllerBase
         }
         catch (Exception ex)
         {
-            checks["smtpConfig"] = new { healthy = false, message = ex.Message };
+            _logger.LogError(ex, "Health check: SMTP configuration check failed");
+            checks["smtpConfig"] = new { healthy = false, message = "SMTP config check failed" };
         }
 
         return Ok(new
@@ -130,8 +137,9 @@ public class HealthController : ControllerBase
     }
 
     /// <summary>
-    /// SMTP heartbeat check endpoint
+    /// SMTP heartbeat check endpoint (SuperAdmin only)
     /// </summary>
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "SuperAdmin")]
     [HttpGet("/api/health/smtp")]
     public async Task<IActionResult> CheckSmtp()
     {
@@ -176,7 +184,7 @@ public class HealthController : ControllerBase
             return StatusCode(503, new
             {
                 healthy = false,
-                message = ex.Message
+                message = "SMTP health check failed"
             });
         }
     }

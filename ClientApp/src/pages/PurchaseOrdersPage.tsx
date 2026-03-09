@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ShoppingCart, Plus, Eye, Loader2, Trash2, Check, X,
-  Package, ChevronDown, ChevronRight, CheckCircle2, Clock, AlertCircle, Search, Download, FileText, Globe
+  Package, ChevronDown, ChevronRight, CheckCircle2, Clock, AlertCircle, Search, Download, FileText, Globe, Mail, MessageSquare
 } from 'lucide-react';
 import { CURRENCY_OPTIONS, getCurrencySymbol } from '../lib/currencyUtils';
 import {
@@ -13,6 +13,9 @@ import {
 } from '../hooks/useInventory';
 import { useSettings } from '../hooks/useSettings';
 import api from '../services/api';
+import WhatsAppShareModal from '../components/WhatsAppShareModal';
+import SendEmailModal from '../components/SendEmailModal';
+import SendHistoryPanel from '../components/SendHistoryPanel';
 
 export default function PurchaseOrdersPage() {
   const { t } = useTranslation();
@@ -45,6 +48,9 @@ export default function PurchaseOrdersPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState<number | null>(null);
   const [collapsedYears, setCollapsedYears] = useState<Set<number>>(new Set());
+  const [showWhatsApp, setShowWhatsApp] = useState(false);
+  const [showEmail, setShowEmail] = useState(false);
+  const [historyRefresh, setHistoryRefresh] = useState(0);
 
   const handleDownloadPdf = async (poId: number, poNumber: string) => {
     setDownloadingPdf(poId);
@@ -127,11 +133,11 @@ export default function PurchaseOrdersPage() {
   };
 
   // Auto-prefill when viewOrder loads and receive modal is open
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (receiveModal && viewOrder && receiveItems.length === 0) {
       prefillReceiveItems();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [receiveModal, viewOrder]);
 
   const handleReceive = async () => {
@@ -326,7 +332,7 @@ export default function PurchaseOrdersPage() {
                     </div>
                   )}
                 </div>
-                <div className="flex justify-end mb-4">
+                <div className="flex justify-end gap-2 mb-4 flex-wrap">
                   <button
                     onClick={() => handleDownloadPdf(viewOrder.id, viewOrder.number)}
                     disabled={downloadingPdf === viewOrder.id}
@@ -334,6 +340,20 @@ export default function PurchaseOrdersPage() {
                   >
                     {downloadingPdf === viewOrder.id ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
                     {t('inventory.downloadPdf', 'Download PDF')}
+                  </button>
+                  <button
+                    onClick={() => setShowEmail(true)}
+                    className="px-3 py-1.5 text-sm text-white bg-[#0D9488] rounded-lg hover:bg-[#0F766E] flex items-center gap-1.5"
+                  >
+                    <Mail size={14} />
+                    {t('email.send')}
+                  </button>
+                  <button
+                    onClick={() => setShowWhatsApp(true)}
+                    className="px-3 py-1.5 text-sm text-white bg-[#25D366] rounded-lg hover:bg-[#128C7E] flex items-center gap-1.5"
+                  >
+                    <MessageSquare size={14} />
+                    WhatsApp
                   </button>
                 </div>
                 {viewOrder.notes && <p className="text-sm text-slate-500 mb-4">{viewOrder.notes}</p>}
@@ -361,6 +381,13 @@ export default function PurchaseOrdersPage() {
                     ))}
                   </tbody>
                 </table>
+                {/* Send History */}
+                <div className="mt-4 pt-4 border-t border-slate-200">
+                  <SendHistoryPanel
+                    apiEndpoint={`/Inventory/purchase-orders/${viewOrder.id}/send-history`}
+                    refreshKey={historyRefresh}
+                  />
+                </div>
               </>
             )}
           </div>
@@ -602,6 +629,34 @@ export default function PurchaseOrdersPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* WhatsApp Modal */}
+      {viewOrder && (
+        <WhatsAppShareModal
+          isOpen={showWhatsApp}
+          onClose={() => { setShowWhatsApp(false); setHistoryRefresh(n => n + 1); }}
+          documentId={viewOrder.id}
+          documentNumber={viewOrder.number}
+          contactPhone={viewOrder.supplierPhone || ''}
+          contactName={viewOrder.supplierName || ''}
+          apiEndpoint={`/Inventory/purchase-orders/${viewOrder.id}/send-whatsapp`}
+        />
+      )}
+
+      {/* Email Modal */}
+      {viewOrder && (
+        <SendEmailModal
+          isOpen={showEmail}
+          onClose={() => { setShowEmail(false); setHistoryRefresh(n => n + 1); }}
+          apiEndpoint={`/Inventory/purchase-orders/${viewOrder.id}/send-email`}
+          documentNumber={viewOrder.number}
+          contactName={viewOrder.supplierName || ''}
+          contactEmail={viewOrder.supplierEmail || ''}
+          defaultSubject={`${t('inventory.purchaseOrder')} #${viewOrder.number} - ${viewOrder.supplierName || ''}`}
+          defaultBody={`${t('email.greeting')} ${viewOrder.supplierName || ''},\n\n${t('documentSend.purchaseOrderAttached')} #${viewOrder.number}.\n\n${t('email.regards')}`}
+          onSuccess={() => setHistoryRefresh(n => n + 1)}
+        />
       )}
     </div>
   );

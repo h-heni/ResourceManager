@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Search, Trash2, Download, Eye, FileText, Package, Calendar, Filter, Archive, Edit, User, X, MapPin, Hash } from 'lucide-react';
+import { Plus, Search, Trash2, Download, Eye, FileText, Package, Calendar, Filter, Archive, Edit, User, X, MapPin, Hash, Mail, MessageSquare } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { getErrorMessage } from '../utils/errorUtils';
@@ -8,6 +8,9 @@ import { logger } from '../lib/logger';
 import { useNotify } from '../hooks/useNotify';
 import { useAuth } from '../context/AuthContext';
 import { useDeliveryNotes, useDeleteDeliveryNote } from '../hooks/useDeliveryNotes';
+import WhatsAppShareModal from '../components/WhatsAppShareModal';
+import SendEmailModal from '../components/SendEmailModal';
+import SendHistoryPanel from '../components/SendHistoryPanel';
 
 interface DeliveryNoteItemData {
     description: string;
@@ -22,6 +25,7 @@ interface DeliveryNote {
     clientAddress?: string;
     clientTaxId?: string;
     clientPhone?: string;
+    clientEmail?: string;
     quoteId?: number;
     quoteNumber?: string;
     invoiceId?: number;
@@ -39,6 +43,9 @@ export default function DeliveryNotesPage() {
     const [search, setSearch] = useState('');
     const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
     const [detailNote, setDetailNote] = useState<DeliveryNote | null>(null);
+    const [showWhatsApp, setShowWhatsApp] = useState(false);
+    const [showEmail, setShowEmail] = useState(false);
+    const [historyRefresh, setHistoryRefresh] = useState(0);
     const navigate = useNavigate();
     const { user } = useAuth();
 
@@ -407,8 +414,16 @@ export default function DeliveryNotesPage() {
 
                         </div>
 
+                        {/* Send History */}
+                        <div className="px-6 py-3 border-t">
+                            <SendHistoryPanel
+                                apiEndpoint={`/DeliveryNotes/${detailNote.id}/send-history`}
+                                refreshKey={historyRefresh}
+                            />
+                        </div>
+
                         {/* Modal Footer */}
-                        <div className="flex items-center gap-2 px-6 py-4 border-t bg-gray-50">
+                        <div className="flex items-center gap-2 px-6 py-4 border-t bg-gray-50 flex-wrap">
                             <button
                                 onClick={() => { handleViewPdf(detailNote.id); }}
                                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-[#065F46] text-white rounded-xl hover:bg-[#047857] transition-colors text-sm font-medium"
@@ -422,6 +437,20 @@ export default function DeliveryNotesPage() {
                             >
                                 <Download size={16} />
                             </button>
+                            <button
+                                onClick={() => setShowEmail(true)}
+                                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#0D9488] text-white rounded-xl hover:bg-[#0F766E] transition-colors text-sm font-medium"
+                            >
+                                <Mail size={16} />
+                                {t('email.send')}
+                            </button>
+                            <button
+                                onClick={() => setShowWhatsApp(true)}
+                                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#25D366] text-white rounded-xl hover:bg-[#128C7E] transition-colors text-sm font-medium"
+                            >
+                                <MessageSquare size={16} />
+                                WhatsApp
+                            </button>
                             {!detailNote.treated && (
                                 <button
                                     onClick={() => { setDetailNote(null); navigate(`/delivery-notes/edit/${detailNote.id}`); }}
@@ -434,6 +463,34 @@ export default function DeliveryNotesPage() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* WhatsApp Modal */}
+            {detailNote && (
+                <WhatsAppShareModal
+                    isOpen={showWhatsApp}
+                    onClose={() => { setShowWhatsApp(false); setHistoryRefresh(n => n + 1); }}
+                    documentId={detailNote.id}
+                    documentNumber={detailNote.number}
+                    contactPhone={detailNote.clientPhone || ''}
+                    contactName={detailNote.clientName}
+                    apiEndpoint={`/DeliveryNotes/${detailNote.id}/send-whatsapp`}
+                />
+            )}
+
+            {/* Email Modal */}
+            {detailNote && (
+                <SendEmailModal
+                    isOpen={showEmail}
+                    onClose={() => { setShowEmail(false); setHistoryRefresh(n => n + 1); }}
+                    apiEndpoint={`/DeliveryNotes/${detailNote.id}/send-email`}
+                    documentNumber={detailNote.number}
+                    contactName={detailNote.clientName}
+                    contactEmail={detailNote.clientEmail || ''}
+                    defaultSubject={`${t('deliveryNote.title')} #${detailNote.number} - ${detailNote.clientName}`}
+                    defaultBody={`${t('email.greeting')} ${detailNote.clientName},\n\n${t('documentSend.deliveryNoteAttached')} #${detailNote.number}.\n\n${t('email.regards')}`}
+                    onSuccess={() => setHistoryRefresh(n => n + 1)}
+                />
             )}
         </div>
     );

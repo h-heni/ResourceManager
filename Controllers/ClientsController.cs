@@ -29,6 +29,7 @@ namespace ResourceManager.Controllers
             {
                 if (page < 1) page = 1;
                 if (size < 1) size = 20;
+                if (size > 100) size = 100;
 
                 var query = _context.Clients.AsNoTracking().OrderByDescending(c => c.CreatedAt);
                 var totalCount = await query.CountAsync();

@@ -256,21 +256,19 @@ export default function DashboardPage() {
                     purchasesByYear: pd.purchasesByYear || [],
                 });
             }
-        } catch (error) {
-            console.error('Failed to fetch dashboard stats', error);
+        } catch {
             setFetchError(t('dashboard.fetchError', 'Failed to load dashboard data. Please try again.'));
         } finally {
             setLoading(false);
         }
     };
 
-    /* eslint-disable react-hooks/exhaustive-deps */
     useEffect(() => {
         if (isSuperAdmin || initialFetchDoneRef.current) return;
         initialFetchDoneRef.current = true;
         fetchStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isSuperAdmin]);
-    /* eslint-enable react-hooks/exhaustive-deps */
 
     // React Query bridge: when other pages invalidate ['dashboard'], refetch data
     const dashboardSignal = useQuery({
@@ -287,6 +285,7 @@ export default function DashboardPage() {
             fetchStats(activeCurrency || undefined, dashboardMode === 'mixed');
         }
         dashboardSignalRef.current = dashboardSignal.dataUpdatedAt;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [dashboardSignal.dataUpdatedAt]);
 
     /* Re-fetch when year changes */
@@ -1109,7 +1108,10 @@ export default function DashboardPage() {
                             return (
                                 <div key={`${cat.category}-${cat.currency}`}>
                                     <div className="flex justify-between text-sm mb-1">
-                                        <span className="text-gray-700 font-medium">{t(`expense.categories.${cat.category}`, cat.category)}</span>
+                                        <span className="text-gray-700 font-medium">{(() => {
+                                        const BASE_CATS = ['rent','utilities','office','travel','marketing','insurance','maintenance','subscription','salary','telecom','bankFees','other'];
+                                        return BASE_CATS.includes(cat.category) ? t(`expense.categories.${cat.category}`) : cat.category;
+                                    })()}</span>
                                         <span className="text-gray-500 text-xs">{formatCurrency(cat.total, activeCur)} ({pct}%)</span>
                                     </div>
                                     <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">

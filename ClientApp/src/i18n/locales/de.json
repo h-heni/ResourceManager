@@ -1094,7 +1094,9 @@
       "Amount": "Betrag",
       "Category": "Kategorie",
       "Notes": "Notizen",
-      "Recurring": "Wiederkehrend"
+      "Recurring": "Wiederkehrend",
+      "Stock": "Bestand",
+      "Limit": "Grenze"
     }
   },
   "devis": {
@@ -1764,6 +1766,7 @@
     "poStatus": {
       "Draft": "Entwurf",
       "Submitted": "Eingereicht",
+      "Sent": "Gesendet",
       "PartiallyReceived": "Teilweise erhalten",
       "Received": "Erhalten",
       "Cancelled": "Storniert"
@@ -1799,5 +1802,60 @@
     "valuationBreakdown": "Bewertungsaufschlüsselung",
     "noValuationData": "Keine Bewertungsdaten verfügbar",
     "costValue": "Kostenwert"
+  },
+  "documentSend": {
+    "sendByEmail": "Per E-Mail senden",
+    "sendByWhatsApp": "Über WhatsApp senden",
+    "sendHistory": "Sendeverlauf",
+    "noHistory": "Noch kein Sendeverlauf",
+    "quoteAttached": "Bitte finden Sie das beigefügte Angebot",
+    "deliveryNoteAttached": "Bitte finden Sie den beigefügten Lieferschein",
+    "purchaseOrderAttached": "Bitte finden Sie die beigefügte Bestellung"
+  },
+  "whatsapp": {
+    "sendInvoice": "Rechnung über WhatsApp senden",
+    "sendDocument": "Über WhatsApp senden",
+    "recipient": "Empfänger",
+    "phoneNumber": "Telefonnummer",
+    "customMessage": "Benutzerdefinierte Nachricht",
+    "optional": "optional",
+    "messagePlaceholder": "Geben Sie eine benutzerdefinierte Nachricht ein, die mit dem Dokument gesendet werden soll...",
+    "sendReminder": "Als Zahlungserinnerung senden",
+    "sendDirectly": "Über WhatsApp senden",
+    "sending": "Wird gesendet...",
+    "sent": "Nachricht gesendet!",
+    "sentDescription": "Ihr Dokument wurde über WhatsApp mit dem PDF-Anhang gesendet.",
+    "pdfAttached": "Das PDF wird automatisch an die WhatsApp-Nachricht angehängt.",
+    "errorNoPhone": "Telefonnummer ist für WhatsApp-Freigabe erforderlich. Bitte fügen Sie eine Telefonnummer für diesen Kontakt hinzu.",
+    "errorGeneric": "WhatsApp-Nachricht konnte nicht gesendet werden. Bitte versuchen Sie es erneut.",
+    "settings": {
+      "title": "WhatsApp",
+      "description": "Konfigurieren Sie Ihre WhatsApp Business API-Anmeldedaten.",
+      "phoneNumberId": "Telefonnummer-ID",
+      "businessAccountId": "Geschäftskonto-ID",
+      "enabled": "WhatsApp aktivieren",
+      "enabledHelp": "Wenn aktiviert, wird der WhatsApp-Sendebutton angezeigt.",
+      "notConfigured": "WhatsApp ist nicht konfiguriert. Klicken Sie auf die Schaltfläche unten, um loszulegen.",
+      "configured": "WhatsApp ist konfiguriert und bereit zum Senden.",
+      "connected": "WhatsApp verbunden",
+      "connectedPhone": "Telefonnummer",
+      "connectTitle": "WhatsApp Business verbinden",
+      "connectDescription": "Klicken Sie auf die Schaltfläche, um Ihre WhatsApp Business-Nummer zu verknüpfen.",
+      "connectButton": "WhatsApp verbinden",
+      "connecting": "Verbindung wird hergestellt...",
+      "connectSuccess": "WhatsApp erfolgreich verbunden!",
+      "connectFailed": "WhatsApp-Verbindung fehlgeschlagen.",
+      "connectCancelled": "WhatsApp-Verbindung abgebrochen.",
+      "disconnect": "WhatsApp trennen",
+      "disconnected": "WhatsApp getrennt.",
+      "disconnectFailed": "WhatsApp-Trennung fehlgeschlagen.",
+      "appNotConfigured": "WhatsApp-Integration ist auf dem Server nicht konfiguriert. Kontaktieren Sie Ihren Administrator.",
+      "howItWorks": "So funktioniert es:",
+      "step1": "Ein Facebook-Dialog öffnet sich",
+      "step2": "Melden Sie sich mit Ihrem Facebook-Konto an",
+      "step3": "Wählen oder erstellen Sie ein Meta Business-Portfolio",
+      "step4": "Geben Sie Ihre Telefonnummer ein und bestätigen Sie sie",
+      "step5": "Fertig! Ihr WhatsApp wird automatisch verbunden"
+    }
   }
 }

@@ -50,14 +50,43 @@ const BASE_CATEGORIES = [
     'bankFees', 'other'
 ];
 
-function getCustomCategories(): string[] {
+const getCategoryLabel = (cat: string, t: (key: string) => string) => {
+    if (BASE_CATEGORIES.includes(cat)) {
+        return t(`expense.categories.${cat}`);
+    }
+    return cat;
+};
+
+interface CustomCategory {
+    name: string;
+    color: string;
+}
+
+const CUSTOM_COLOR_OPTIONS = [
+    { bg: 'bg-violet-100 text-violet-700', dot: 'bg-violet-500' },
+    { bg: 'bg-pink-100 text-pink-700', dot: 'bg-pink-500' },
+    { bg: 'bg-rose-100 text-rose-700', dot: 'bg-rose-500' },
+    { bg: 'bg-indigo-100 text-indigo-700', dot: 'bg-indigo-500' },
+    { bg: 'bg-sky-100 text-sky-700', dot: 'bg-sky-500' },
+    { bg: 'bg-lime-100 text-lime-700', dot: 'bg-lime-500' },
+    { bg: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500' },
+    { bg: 'bg-fuchsia-100 text-fuchsia-700', dot: 'bg-fuchsia-500' },
+];
+
+function getCustomCategories(): CustomCategory[] {
     try {
         const saved = localStorage.getItem('custom_expense_categories');
-        return saved ? JSON.parse(saved) : [];
+        if (!saved) return [];
+        const parsed = JSON.parse(saved);
+        // Backward compat: old format was string[]
+        if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'string') {
+            return (parsed as string[]).map(name => ({ name, color: CUSTOM_COLOR_OPTIONS[0].bg }));
+        }
+        return parsed as CustomCategory[];
     } catch { return []; }
 }
 
-function saveCustomCategories(cats: string[]) {
+function saveCustomCategories(cats: CustomCategory[]) {
     localStorage.setItem('custom_expense_categories', JSON.stringify(cats));
 }
 
@@ -77,15 +106,16 @@ export default function ExpensesPage() {
     const summary = summaryRaw as ExpenseSummary | undefined;
     const saveMutation = useSaveExpense();
     const deleteMutation = useDeleteExpense();
-    const expenses = (expensesData?.data || []) as Expense[];
+    const expenses = (expensesData?.data || []) as unknown as Expense[];
     const totalCount = expensesData?.totalCount || 0;
     const totalPages = expensesData?.totalPages || 0;
 
     // Custom categories
-    const [customCategories, setCustomCategories] = useState<string[]>(getCustomCategories());
+    const [customCategories, setCustomCategories] = useState<CustomCategory[]>(getCustomCategories());
     const [showCategoryModal, setShowCategoryModal] = useState(false);
     const [newCategoryName, setNewCategoryName] = useState('');
-    const allCategories = [...BASE_CATEGORIES, ...customCategories];
+    const [newCategoryColor, setNewCategoryColor] = useState(CUSTOM_COLOR_OPTIONS[0].bg);
+    const allCategories = [...BASE_CATEGORIES, ...customCategories.map(c => c.name)];
 
     // Modal state
     const [showModal, setShowModal] = useState(false);
@@ -184,20 +214,29 @@ export default function ExpensesPage() {
             bankFees: 'bg-red-100 text-red-700',
             other: 'bg-gray-100 text-gray-700'
         };
-        return colors[cat] || 'bg-violet-100 text-violet-700';
+        if (colors[cat]) return colors[cat];
+        const custom = customCategories.find(c => c.name === cat);
+        return custom?.color || 'bg-violet-100 text-violet-700';
     };
 
     const handleAddCustomCategory = () => {
         const name = newCategoryName.trim();
         if (!name || allCategories.includes(name)) return;
-        const updated = [...customCategories, name];
+        const updated = [...customCategories, { name, color: newCategoryColor }];
         setCustomCategories(updated);
         saveCustomCategories(updated);
         setNewCategoryName('');
+        setNewCategoryColor(CUSTOM_COLOR_OPTIONS[0].bg);
     };
 
-    const handleRemoveCustomCategory = (cat: string) => {
-        const updated = customCategories.filter(c => c !== cat);
+    const handleRemoveCustomCategory = (catName: string) => {
+        const updated = customCategories.filter(c => c.name !== catName);
+        setCustomCategories(updated);
+        saveCustomCategories(updated);
+    };
+
+    const handleChangeCategoryColor = (catName: string, color: string) => {
+        const updated = customCategories.map(c => c.name === catName ? { ...c, color } : c);
         setCustomCategories(updated);
         saveCustomCategories(updated);
     };
@@ -330,7 +369,7 @@ export default function ExpensesPage() {
                         <option value="all">{t('common.all')}</option>
                         {allCategories.map(cat => (
                             <option key={cat} value={cat}>
-                                {t(`expense.categories.${cat}`, cat)}
+                                {getCategoryLabel(cat, t)}
                             </option>
                         ))}
                     </select>
@@ -418,7 +457,7 @@ export default function ExpensesPage() {
                                                 </td>
                                                 <td className="rm-cell-status">
                                                     <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getCategoryColor(expense.category)}`}>
-                                                        {t(`expense.categories.${expense.category}`, expense.category)}
+                                                        {getCategoryLabel(expense.category, t)}
                                                     </span>
                                                 </td>
                                                 <td className="rm-cell-date">
@@ -568,7 +607,7 @@ export default function ExpensesPage() {
                                 >
                                     {allCategories.map(cat => (
                                         <option key={cat} value={cat}>
-                                            {t(`expense.categories.${cat}`, cat)}
+                                            {getCategoryLabel(cat, t)}
                                         </option>
                                     ))}
                                 </select>
@@ -671,6 +710,16 @@ export default function ExpensesPage() {
                                         <Plus size={18} />
                                     </button>
                                 </div>
+                                <div className="flex gap-1.5 mt-2">
+                                    {CUSTOM_COLOR_OPTIONS.map(opt => (
+                                        <button
+                                            key={opt.dot}
+                                            type="button"
+                                            onClick={() => setNewCategoryColor(opt.bg)}
+                                            className={`w-6 h-6 rounded-full ${opt.dot} transition-all ${newCategoryColor === opt.bg ? 'ring-2 ring-offset-1 ring-gray-400 scale-110' : 'hover:scale-110'}`}
+                                        />
+                                    ))}
+                                </div>
                             </div>
 
                             {/* Built-in categories */}
@@ -679,7 +728,7 @@ export default function ExpensesPage() {
                                 <div className="flex flex-wrap gap-2">
                                     {BASE_CATEGORIES.map(cat => (
                                         <span key={cat} className={`inline-flex px-3 py-1.5 rounded-full text-xs font-medium ${getCategoryColor(cat)}`}>
-                                            {t(`expense.categories.${cat}`, cat)}
+                                            {getCategoryLabel(cat, t)}
                                         </span>
                                     ))}
                                 </div>
@@ -689,17 +738,29 @@ export default function ExpensesPage() {
                             {customCategories.length > 0 && (
                                 <div>
                                     <p className="text-xs font-medium text-gray-400 uppercase mb-2">{t('expense.customCategories', 'Custom Categories')}</p>
-                                    <div className="flex flex-wrap gap-2">
+                                    <div className="space-y-2">
                                         {customCategories.map(cat => (
-                                            <span key={cat} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700">
-                                                {cat}
-                                                <button
-                                                    onClick={() => handleRemoveCustomCategory(cat)}
-                                                    className="ml-1 p-0.5 hover:bg-violet-200 rounded-full transition-colors"
-                                                >
-                                                    <X size={12} />
-                                                </button>
-                                            </span>
+                                            <div key={cat.name} className="flex items-center gap-2">
+                                                <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium ${cat.color}`}>
+                                                    {cat.name}
+                                                    <button
+                                                        onClick={() => handleRemoveCustomCategory(cat.name)}
+                                                        className="ml-1 p-0.5 hover:bg-black/10 rounded-full transition-colors"
+                                                    >
+                                                        <X size={12} />
+                                                    </button>
+                                                </span>
+                                                <div className="flex gap-1">
+                                                    {CUSTOM_COLOR_OPTIONS.map(opt => (
+                                                        <button
+                                                            key={opt.dot}
+                                                            type="button"
+                                                            onClick={() => handleChangeCategoryColor(cat.name, opt.bg)}
+                                                            className={`w-4 h-4 rounded-full ${opt.dot} transition-all ${cat.color === opt.bg ? 'ring-2 ring-offset-1 ring-gray-400 scale-110' : 'hover:scale-110'}`}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            </div>
                                         ))}
                                     </div>
                                 </div>
