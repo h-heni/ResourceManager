@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using ResourceManager.Data;
 using ResourceManager.Services;
@@ -9,19 +10,23 @@ namespace ResourceManager.Controllers
     /// <summary>
     /// Receives webhook events from external services (e.g. Brevo email delivery events).
     /// These endpoints are anonymous — they do NOT require JWT authentication.
+    /// Secured via shared secret header (X-Brevo-Secret).
     /// </summary>
     [ApiController]
     [Route("api/[controller]")]
     [AllowAnonymous]
+    [EnableRateLimiting("Moderate")]
     public class WebhooksController : ControllerBase
     {
         private readonly AppDbContext _context;
         private readonly ILogger<WebhooksController> _logger;
+        private readonly string? _webhookSecret;
 
-        public WebhooksController(AppDbContext context, ILogger<WebhooksController> logger)
+        public WebhooksController(AppDbContext context, ILogger<WebhooksController> logger, IConfiguration configuration)
         {
             _context = context;
             _logger = logger;
+            _webhookSecret = configuration["Brevo:WebhookSecret"];
         }
 
         /// <summary>
@@ -33,6 +38,17 @@ namespace ResourceManager.Controllers
         [HttpPost("brevo")]
         public async Task<IActionResult> BrevoWebhook([FromBody] BrevoWebhookEvent payload)
         {
+            // Validate webhook secret if configured
+            if (!string.IsNullOrEmpty(_webhookSecret))
+            {
+                if (!Request.Headers.TryGetValue("X-Brevo-Secret", out var secretHeader)
+                    || !string.Equals(secretHeader, _webhookSecret, StringComparison.Ordinal))
+                {
+                    _logger.LogWarning("Brevo webhook: invalid or missing secret header");
+                    return Unauthorized();
+                }
+            }
+
             if (payload == null || string.IsNullOrEmpty(payload.Event))
             {
                 _logger.LogWarning("Brevo webhook: empty or invalid payload");

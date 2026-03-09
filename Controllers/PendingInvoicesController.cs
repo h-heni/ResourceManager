@@ -37,6 +37,7 @@ namespace ResourceManager.Controllers
         /// Employee uploads a supplier invoice PDF. The file is GZip-compressed before storing in DB.
         /// </summary>
         [HttpPost("upload-supplier")]
+        [RequestSizeLimit(10 * 1024 * 1024)]
         public async Task<IActionResult> UploadSupplierInvoice(
             [FromForm] string supplierName,
             [FromForm] DateTime date,
@@ -293,9 +294,8 @@ namespace ResourceManager.Controllers
                 catch (Exception ex)
                 {
                     failed++;
-                    var errorMsg = $"Failed to sync '{invoice.FileName}' (Supplier: {invoice.SupplierName}): {ex.Message}";
-                    errors.Add(errorMsg);
-                    _logger.LogError(ex, "Failed to sync invoice {InvoiceId}", invoice.Id);
+                    errors.Add($"Failed to sync '{invoice.FileName}' (Supplier: {invoice.SupplierName})");
+                    _logger.LogError(ex, "Failed to sync invoice {InvoiceId}: {Message}", invoice.Id, ex.Message);
                 }
             }
 

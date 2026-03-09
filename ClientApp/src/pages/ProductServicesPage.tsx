@@ -75,7 +75,10 @@ export default function ProductServicesPage() {
         } catch { /* ignore */ }
     }, []);
 
-    useEffect(() => { fetchTaxSettings(); }, [fetchTaxSettings]);
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        void fetchTaxSettings();
+    }, [fetchTaxSettings]);
 
     // Sort alphabetically A→Z
     const sortedItems = [...items].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));

@@ -104,7 +104,8 @@ export default function DashboardLayout() {
         if (cachedBranding) {
             try {
                 const cached = JSON.parse(cachedBranding);
-                setCompanyName(cached.companyName || 'Resource Manager');
+                // Use queueMicrotask to avoid synchronous setState in effect
+                queueMicrotask(() => setCompanyName(cached.companyName || 'Resource Manager'));
                 // Seed currency settings from cached branding
                 if (cached.currency) seedSettingsCache(cached.currency, cached.currencySymbol);
                 if (cached.invoiceLanguage) setAppLanguage(cached.invoiceLanguage);

@@ -5,7 +5,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using ResourceManager.Models;
 using System.Security.Claims;
-using System.Reflection.Emit;
 using ResourceManager.Services;
 namespace ResourceManager.Data;
 
@@ -73,6 +72,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<StockAlert> StockAlerts { get; set; }
     public DbSet<PurchaseOrder> PurchaseOrders { get; set; }
     public DbSet<PurchaseOrderItem> PurchaseOrderItems { get; set; }
+    public DbSet<DocumentSendAudit> DocumentSendAudits { get; set; }
 
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -110,6 +110,10 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<StockAlert>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
         builder.Entity<PurchaseOrder>().HasQueryFilter(e => _isSuperAdmin || (e.CompanyId == _currentCompanyId && !e.IsDeleted));
         builder.Entity<PurchaseOrderItem>().HasQueryFilter(i => _isSuperAdmin || i.PurchaseOrder!.CompanyId == _currentCompanyId);
+
+        // Document send audit
+        builder.Entity<DocumentSendAudit>().HasQueryFilter(e => _isSuperAdmin || e.CompanyId == _currentCompanyId);
+        builder.Entity<DocumentSendAudit>().HasIndex(e => new { e.DocumentType, e.DocumentId });
 
         // Matching query filters for dependent entities with required FK to a filtered parent
         // (prevents EF Core warning about required-end relationship with global-filtered entity)
@@ -163,54 +167,28 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
         foreach (var entry in addedEntities)
         {
-            // --- STAMP 1: COMPANY ID ---
-            // Check if the object has a "CompanyId" property
-            var companyProp = entry.Entity.GetType().GetProperty("CompanyId");
-
-            // Only run this logic if the User is logged in (currentCompanyId != 0)
-            // AND the entity actually has a CompanyId property
-            if (companyProp != null && currentCompanyId != 0)
+            if (entry.Entity is IAuditable auditable)
             {
-                // 1. Check what value is CURRENTLY inside the object
-                var currentValue = companyProp.GetValue(entry.Entity);
-
-                // 2. Convert to int safely (handle nulls if nullable)
-                int currentIdValue = 0;
-                if (currentValue != null)
+                // --- STAMP 1: COMPANY ID ---
+                // Only overwrite if it is 0 (Default/Empty) and user is logged in
+                if (auditable.CompanyId == 0 && currentCompanyId != 0)
                 {
-                    int.TryParse(currentValue.ToString(), out currentIdValue);
+                    auditable.CompanyId = currentCompanyId;
                 }
 
-                // 3. THE FIX: Only overwrite if it is 0 (Default/Empty)
-                // If you manually set it to 'newCompany.Id' in your controller, we respect that.
-                if (currentIdValue == 0)
+                // --- STAMP 2: USER ID (AUDIT) ---
+                if (!string.IsNullOrEmpty(currentUserId))
                 {
-                    companyProp.SetValue(entry.Entity, currentCompanyId);
+                    auditable.CreatedByUserId = currentUserId;
                 }
-            }
 
-            // --- STAMP 2: USER ID (AUDIT) ---
-            // Check if the object has a "CreatedByUserId" or "UserId" property
-            // Note: Make sure your Shared class uses "CreatedByUserId"
-            var userProp = entry.Entity.GetType().GetProperty("CreatedByUserId");
-            if (userProp != null && !string.IsNullOrEmpty(currentUserId))
-            {
-                // Force the value to the logged-in user
-                userProp.SetValue(entry.Entity, currentUserId);
-            }
+                if (!string.IsNullOrWhiteSpace(currentUserFirstName))
+                {
+                    auditable.CreatedBy = currentUserFirstName;
+                }
 
-            var createdByNameProp = entry.Entity.GetType().GetProperty("CreatedBy");
-            if (createdByNameProp != null && !string.IsNullOrWhiteSpace(currentUserFirstName))
-            {
-                createdByNameProp.SetValue(entry.Entity, currentUserFirstName);
-            }
-
-            // --- STAMP 3: CREATED DATE ---
-            // While we are here, let's auto-set the date too!
-            var dateProp = entry.Entity.GetType().GetProperty("CreatedAt");
-            if (dateProp != null)
-            {
-                dateProp.SetValue(entry.Entity, DateTime.UtcNow);
+                // --- STAMP 3: CREATED DATE ---
+                auditable.CreatedAt = DateTime.UtcNow;
             }
         }
 
@@ -219,16 +197,14 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
 
         foreach (var entry in modifiedEntities)
         {
-            var updatedAtProp = entry.Entity.GetType().GetProperty("UpdatedAt");
-            if (updatedAtProp != null)
+            if (entry.Entity is IAuditable auditable)
             {
-                updatedAtProp.SetValue(entry.Entity, DateTime.UtcNow);
-            }
+                auditable.UpdatedAt = DateTime.UtcNow;
 
-            var modifiedByNameProp = entry.Entity.GetType().GetProperty("ModifiedBy");
-            if (modifiedByNameProp != null && !string.IsNullOrWhiteSpace(currentUserFirstName))
-            {
-                modifiedByNameProp.SetValue(entry.Entity, currentUserFirstName);
+                if (!string.IsNullOrWhiteSpace(currentUserFirstName))
+                {
+                    auditable.ModifiedBy = currentUserFirstName;
+                }
             }
         }
 

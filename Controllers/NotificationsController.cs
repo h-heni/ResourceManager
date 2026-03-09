@@ -154,7 +154,7 @@ namespace ResourceManager.Controllers
                 .Include(p => p.Invoice)
                     .ThenInclude(i => i!.Payments)
                 .Include(p => p.Invoice)
-                    .ThenInclude(i => i!.Quote)
+                    .ThenInclude(i => i!.Quotes)
                 .FirstOrDefaultAsync(p => p.Id == notification.PaymentId);
 
             if (payment == null) return NotFound(new { message = "Payment not found" });
@@ -183,11 +183,11 @@ namespace ResourceManager.Controllers
                 {
                     payment.Invoice.Status = "Paid";
                     
-                    // Mark related quote as treated
-                    if (payment.Invoice.Quote != null)
+                    // Mark related quotes as treated
+                    foreach (var q in payment.Invoice.Quotes)
                     {
-                        payment.Invoice.Quote.Status = "Completed";
-                        payment.Invoice.Quote.Treated = true;
+                        q.Status = "Completed";
+                        q.Treated = true;
                     }
                     
                     // Mark related delivery notes as treated  
@@ -272,7 +272,7 @@ namespace ResourceManager.Controllers
                     .Include(p => p.Invoice)
                         .ThenInclude(i => i!.Client)
                     .Include(p => p.Invoice)
-                        .ThenInclude(i => i!.Quote)
+                        .ThenInclude(i => i!.Quotes)
                     .Where(p => p.CreatedByUserId == userId && p.Status == "Pending" && p.PaymentDate <= DateTime.UtcNow)
                     .Select(p => new
                     {
@@ -284,7 +284,7 @@ namespace ResourceManager.Controllers
                         ClientName = p.Invoice != null && p.Invoice.Client != null ? p.Invoice.Client.Name : "Unknown",
                         InvoiceTotal = p.Invoice != null ? p.Invoice.TotalAmount : 0m,
                         p.Notes,
-                        InvoiceCurrencySymbol = p.Invoice != null && p.Invoice.Quote != null ? p.Invoice.Quote.CurrencySymbol : "TND"
+                        InvoiceCurrencySymbol = p.Invoice != null ? p.Invoice.Quotes.Select(q => q.CurrencySymbol).FirstOrDefault() ?? "TND" : "TND"
                     })
                     .ToListAsync();
 
@@ -307,7 +307,7 @@ namespace ResourceManager.Controllers
                 .Include(p => p.Invoice)
                     .ThenInclude(i => i!.Payments)
                 .Include(p => p.Invoice)
-                    .ThenInclude(i => i!.Quote)
+                    .ThenInclude(i => i!.Quotes)
                 .FirstOrDefaultAsync(p => p.Id == paymentId && p.CreatedByUserId == userId);
 
             if (payment == null) return NotFound(new { message = "Payment not found" });
@@ -343,10 +343,10 @@ namespace ResourceManager.Controllers
                     payment.Invoice.Treated = true;
                     payment.Invoice.TreatedByUserId = userId;
                     payment.Invoice.TreatedAt = DateTime.UtcNow;
-                    if (payment.Invoice.Quote != null)
+                    foreach (var q in payment.Invoice.Quotes)
                     {
-                        payment.Invoice.Quote.Status = "Completed";
-                        payment.Invoice.Quote.Treated = true;
+                        q.Status = "Completed";
+                        q.Treated = true;
                     }
                     var deliveryNotes = await _context.DeliveryNotes
                         .Where(dn => dn.InvoiceId == payment.InvoiceId)

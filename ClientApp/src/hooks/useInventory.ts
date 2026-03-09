@@ -98,6 +98,8 @@ export interface PurchaseOrderDetail {
   itemCount: number;
   createdAt: string;
   notes: string | null;
+  supplierPhone: string | null;
+  supplierEmail: string | null;
   supplierInvoiceId: number | null;
   supplierInvoiceNumber: string | null;
   items: PurchaseOrderItem[];

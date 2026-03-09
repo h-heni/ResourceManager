@@ -99,6 +99,7 @@ namespace ResourceManager.Controllers
             {
                 if (page < 1) page = 1;
                 if (pageSize < 1) pageSize = 20;
+                if (pageSize > 100) pageSize = 100;
 
                 var user = await GetCurrentUserAsync(_userManager);
                 if (user == null) return Unauthorized();
@@ -112,7 +113,7 @@ namespace ResourceManager.Controllers
                     .AsNoTracking()
                     .Include(i => i.Client)
                     .Include(i => i.Payments)
-                    .Include(i => i.Quote)
+                    .Include(i => i.Quotes)
                     .Where(i => i.CompanyId == user.CompanyId
                         && i.Date.Year == filterYear
                         && (i.Treated == true || i.Category == "imported"))
@@ -137,8 +138,8 @@ namespace ResourceManager.Controllers
                         TotalAmount = i.TotalAmount,
                         ClientName = i.Client != null ? i.Client.Name : "Unknown",
                         ClientId = i.ClientId,
-                        Currency = i.Quote?.Currency ?? "",
-                        CurrencySymbol = i.Quote?.CurrencySymbol ?? "",
+                        Currency = i.Quotes.FirstOrDefault()?.Currency ?? "",
+                        CurrencySymbol = i.Quotes.FirstOrDefault()?.CurrencySymbol ?? "",
                         AmountPaid = i.Payments != null ? i.Payments.Where(p => p.Status == "Completed").Sum(p => p.Amount) : 0m,
                         RemainingAmount = i.TotalAmount - (i.Payments != null ? i.Payments.Where(p => p.Status == "Completed").Sum(p => p.Amount) : 0m),
                         Status = i.Status ?? "Paid",

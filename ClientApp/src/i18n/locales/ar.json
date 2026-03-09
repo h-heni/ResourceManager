@@ -1094,7 +1094,9 @@
       "Amount": "المبلغ",
       "Category": "الفئة",
       "Notes": "ملاحظات",
-      "Recurring": "متكرر"
+      "Recurring": "متكرر",
+      "Stock": "المخزون",
+      "Limit": "الحد"
     }
   },
   "devis": {
@@ -1764,6 +1766,7 @@
     "poStatus": {
       "Draft": "مسودة",
       "Submitted": "مقدم",
+      "Sent": "مُرسل",
       "PartiallyReceived": "مستلم جزئياً",
       "Received": "مستلم",
       "Cancelled": "ملغى"
@@ -1799,5 +1802,60 @@
     "valuationBreakdown": "تفصيل التقييم",
     "noValuationData": "لا تتوفر بيانات تقييم",
     "costValue": "قيمة التكلفة"
+  },
+  "documentSend": {
+    "sendByEmail": "إرسال عبر البريد الإلكتروني",
+    "sendByWhatsApp": "إرسال عبر واتساب",
+    "sendHistory": "سجل الإرسال",
+    "noHistory": "لا يوجد سجل إرسال بعد",
+    "quoteAttached": "يرجى الاطلاع على عرض السعر المرفق",
+    "deliveryNoteAttached": "يرجى الاطلاع على إشعار التسليم المرفق",
+    "purchaseOrderAttached": "يرجى الاطلاع على أمر الشراء المرفق"
+  },
+  "whatsapp": {
+    "sendInvoice": "إرسال الفاتورة عبر واتساب",
+    "sendDocument": "إرسال عبر واتساب",
+    "recipient": "المستلم",
+    "phoneNumber": "رقم الهاتف",
+    "customMessage": "رسالة مخصصة",
+    "optional": "اختياري",
+    "messagePlaceholder": "أدخل رسالة مخصصة لإرسالها مع المستند...",
+    "sendReminder": "إرسال كتذكير بالدفع",
+    "sendDirectly": "إرسال عبر واتساب",
+    "sending": "جارٍ الإرسال...",
+    "sent": "تم إرسال الرسالة!",
+    "sentDescription": "تم إرسال المستند عبر واتساب مع ملف PDF مرفق.",
+    "pdfAttached": "سيتم إرفاق ملف PDF تلقائيًا برسالة واتساب.",
+    "errorNoPhone": "رقم الهاتف مطلوب للمشاركة عبر واتساب. يرجى إضافة رقم هاتف لجهة الاتصال.",
+    "errorGeneric": "فشل إرسال رسالة واتساب. يرجى المحاولة مرة أخرى.",
+    "settings": {
+      "title": "واتساب",
+      "description": "قم بتكوين بيانات اعتماد WhatsApp Business API الخاصة بك.",
+      "phoneNumberId": "معرف رقم الهاتف",
+      "businessAccountId": "معرف حساب الأعمال",
+      "enabled": "تفعيل واتساب",
+      "enabledHelp": "عند التفعيل، سيظهر زر الإرسال عبر واتساب.",
+      "notConfigured": "واتساب غير مكوّن. انقر على الزر أدناه للبدء.",
+      "configured": "واتساب مكوّن وجاهز لإرسال الرسائل.",
+      "connected": "واتساب متصل",
+      "connectedPhone": "رقم الهاتف",
+      "connectTitle": "اربط واتساب للأعمال",
+      "connectDescription": "انقر على الزر أدناه لربط رقم واتساب للأعمال.",
+      "connectButton": "ربط واتساب",
+      "connecting": "جارٍ الربط...",
+      "connectSuccess": "تم ربط واتساب بنجاح!",
+      "connectFailed": "فشل ربط واتساب.",
+      "connectCancelled": "تم إلغاء ربط واتساب.",
+      "disconnect": "فصل واتساب",
+      "disconnected": "تم فصل واتساب.",
+      "disconnectFailed": "فشل فصل واتساب.",
+      "appNotConfigured": "تكامل واتساب غير مكوّن على الخادم. اتصل بالمسؤول.",
+      "howItWorks": "كيف يعمل:",
+      "step1": "سيتم فتح نافذة فيسبوك",
+      "step2": "سجّل الدخول بحسابك على فيسبوك",
+      "step3": "اختر أو أنشئ محفظة أعمال Meta",
+      "step4": "أدخل رقم هاتفك وتحقق منه",
+      "step5": "تم! واتساب متصل تلقائيًا"
+    }
   }
 }

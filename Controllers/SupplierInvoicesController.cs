@@ -310,6 +310,7 @@ namespace ResourceManager.Controllers
         // POST: api/SupplierInvoices/upload
         // ═══════════════════════════════════════════════════════════════
         [HttpPost("upload")]
+        [RequestSizeLimit(15 * 1024 * 1024)]
         public async Task<IActionResult> UploadAndExtract(
             IFormFile file,
             [FromQuery] int? supplierId,
@@ -399,7 +400,7 @@ namespace ResourceManager.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error uploading supplier invoice PDF");
-                return StatusCode(500, new { message = "Failed to process PDF", error = ex.Message });
+                return StatusCode(500, new { message = "Failed to process PDF. Check server logs for details." });
             }
         }
 
@@ -479,6 +480,7 @@ namespace ResourceManager.Controllers
                 // Per-document currency
                 Currency = dto.Currency,
                 CurrencySymbol = dto.CurrencySymbol,
+                CompanyId = user.CompanyId,
                 CreatedAt = DateTime.UtcNow,
                 UserId = userId
             };

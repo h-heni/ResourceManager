@@ -3,13 +3,14 @@ import { useTranslation } from 'react-i18next';
 import {
     X, FileText, User, DollarSign, CreditCard, Package,
     ClipboardList, Truck, CheckCircle, AlertCircle, Clock, Edit2,
-    Download, Mail, History, Receipt, Lock, FileWarning, Trash2
+    Download, Mail, History, Receipt, Lock, FileWarning, Trash2, MessageSquare
 } from 'lucide-react';
 import api from '../services/api';
 import { formatCurrency as fmtCurrency } from '../lib/formatNumber';
 import { logger } from '../lib/logger';
 import { useNotify } from '../hooks/useNotify';
 import { DEFAULT_CURRENCY } from '../lib/currencyUtils';
+import WhatsAppShareModal from './WhatsAppShareModal';
 
 interface Payment {
     id: number;
@@ -79,7 +80,7 @@ interface InvoiceDetails {
     payments: Payment[];
     items: InvoiceItem[];
     quoteId?: number;
-    relatedQuote?: RelatedQuote;
+    relatedQuotes?: RelatedQuote[];
     relatedDeliveryNotes?: RelatedDeliveryNote[];
     createdAt: string;
     updatedAt?: string;
@@ -95,6 +96,7 @@ interface Props {
     onEdit?: (id: number) => void;
     onDownloadPdf?: (id: number, number: string) => void;
     onSendEmail?: (invoice: InvoiceDetails) => void;
+    onSendWhatsApp?: (invoice: InvoiceDetails) => void;
     onDelete?: (id: number) => void;
     isManager?: boolean;
 }
@@ -105,6 +107,7 @@ export default function InvoiceDetailView({
     onEdit,
     onDownloadPdf,
     onSendEmail,
+    // onSendWhatsApp - available via props for future use
     onDelete,
     isManager = false
 }: Props) {
@@ -113,6 +116,7 @@ export default function InvoiceDetailView({
     const [invoice, setInvoice] = useState<InvoiceDetails | null>(null);
     const [loading, setLoading] = useState(true);
     const [downloadingRemainingPdf, setDownloadingRemainingPdf] = useState(false);
+    const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'details' | 'items' | 'payments' | 'related'>('details');
 
@@ -250,6 +254,7 @@ export default function InvoiceDetailView({
     ] as const;
 
     return (
+        <>
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-0 md:p-4">
             <div className="bg-white rounded-none md:rounded-2xl shadow-2xl w-full h-full md:max-w-5xl md:h-[90vh] flex flex-col overflow-hidden animate-scale-up">
                 {/* Header */}
@@ -307,6 +312,14 @@ export default function InvoiceDetailView({
                     >
                         <Mail size={16} className="me-2" />
                         {t('email.send')}
+                    </button>
+                    <button
+                        onClick={() => setShowWhatsAppModal(true)}
+                        className="flex items-center px-3 sm:px-4 py-2 bg-[#25D366] text-white rounded-lg hover:bg-[#128C7E] transition-colors text-sm whitespace-nowrap"
+                    >
+                        <MessageSquare size={16} className="me-2" />
+                        <span className="hidden sm:inline">WhatsApp</span>
+                        <span className="sm:hidden">WA</span>
                     </button>
                     {/* Remaining Payment PDF - only for partially paid / pending with balance */}
                     {(invoice.status === 'PartiallyPaid' || (invoice.status === 'Pending' && invoice.remainingAmount > 0)) && (
@@ -667,36 +680,40 @@ export default function InvoiceDetailView({
 
                     {activeTab === 'related' && (
                         <div className="space-y-6">
-                            {/* Related Quote */}
+                            {/* Related Quotes */}
                             <div className="bg-white rounded-xl border overflow-hidden">
                                 <div className="px-4 py-3 border-b flex items-center bg-blue-50">
                                     <ClipboardList size={18} className="me-2 text-blue-600" />
                                     <h3 className="font-semibold text-blue-900">{t('invoice.relatedQuote')}</h3>
                                 </div>
-                                {invoice.relatedQuote ? (
-                                    <div className="p-4 flex items-center justify-between">
-                                        <div>
-                                            <p className="font-medium text-gray-900">
-                                                {t('quote.title')} #{invoice.relatedQuote.number}
-                                            </p>
-                                            <p className="text-sm text-gray-500">
-                                                {formatDate(invoice.relatedQuote.date)} • {formatCurrency(invoice.relatedQuote.totalAmount)}
-                                            </p>
-                                            <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
-                                                {invoice.relatedQuote.createdBy && (
-                                                    <span className="text-[11px] text-gray-400">{t('common.createdBy')}{invoice.relatedQuote.createdBy}</span>
-                                                )}
-                                                {invoice.relatedQuote.modifiedBy && (
-                                                    <span className="text-[11px] text-gray-400">{t('common.updatedBy')}{invoice.relatedQuote.modifiedBy}</span>
-                                                )}
+                                {invoice.relatedQuotes && invoice.relatedQuotes.length > 0 ? (
+                                    <div className="divide-y">
+                                        {invoice.relatedQuotes.map((quote, index) => (
+                                            <div key={quote.id || index} className="p-4 flex items-center justify-between">
+                                                <div>
+                                                    <p className="font-medium text-gray-900">
+                                                        {t('quote.title')} #{quote.number}
+                                                    </p>
+                                                    <p className="text-sm text-gray-500">
+                                                        {formatDate(quote.date)} • {formatCurrency(quote.totalAmount)}
+                                                    </p>
+                                                    <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
+                                                        {quote.createdBy && (
+                                                            <span className="text-[11px] text-gray-400">{t('common.createdBy')}{quote.createdBy}</span>
+                                                        )}
+                                                        {quote.modifiedBy && (
+                                                            <span className="text-[11px] text-gray-400">{t('common.updatedBy')}{quote.modifiedBy}</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <span className={`px-3 py-1 rounded-full text-sm font-medium ${quote.status === 'Accepted'
+                                                    ? 'bg-emerald-100 text-emerald-800'
+                                                    : 'bg-gray-100 text-gray-800'
+                                                    }`}>
+                                                    {quote.status}
+                                                </span>
                                             </div>
-                                        </div>
-                                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${invoice.relatedQuote.status === 'Accepted'
-                                            ? 'bg-emerald-100 text-emerald-800'
-                                            : 'bg-gray-100 text-gray-800'
-                                            }`}>
-                                            {invoice.relatedQuote.status}
-                                        </span>
+                                        ))}
                                     </div>
                                 ) : invoice.quoteId ? (
                                     <div className="p-4 text-gray-600">
@@ -752,5 +769,20 @@ export default function InvoiceDetailView({
                 </div>
             </div>
         </div>
+        {/* WhatsApp Share Modal */}
+        {invoice && (
+            <WhatsAppShareModal
+                isOpen={showWhatsAppModal}
+                onClose={() => setShowWhatsAppModal(false)}
+                documentId={invoice.id}
+                documentNumber={invoice.number || invoice.Number || ''}
+                contactPhone={invoice.clientPhone || ''}
+                contactName={invoice.clientName || ''}
+                apiEndpoint={`/Invoices/${invoice.id}/send-whatsapp`}
+                showPaymentReminder={true}
+            />
+        )}
+        </>
     );
 }
+

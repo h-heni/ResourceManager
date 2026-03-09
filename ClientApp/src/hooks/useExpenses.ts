@@ -7,9 +7,8 @@ interface PaginatedResult<T> {
     totalPages: number;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useExpenses(page: number, size: number) {
-    return useQuery<PaginatedResult<any>>({
+    return useQuery<PaginatedResult<Record<string, unknown>>>({
         queryKey: ['expenses', page, size],
         queryFn: async () => {
             const res = await api.get(`/Expenses?page=${page}&size=${size}`);
@@ -19,9 +18,8 @@ export function useExpenses(page: number, size: number) {
     });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useExpenseSummary() {
-    return useQuery<any>({
+    return useQuery<Record<string, unknown>>({
         queryKey: ['expenses', 'summary'],
         queryFn: async () => {
             const res = await api.get('/Expenses/summary');

@@ -95,7 +95,7 @@ namespace ResourceManager.Controllers
                 .Where(i => i.Date >= startOfYear && i.Date < endOfYear)
                 .Include(i => i.Payments)
                 .Include(i => i.Client)
-                .Include(i => i.Quote)
+                .Include(i => i.Quotes)
                 .Include(i => i.InvoiceItems)
                 .ToListAsync();
 
@@ -126,7 +126,7 @@ namespace ResourceManager.Controllers
             }
 
             var invoiceCurrencies = yearInvoices
-                .Select(i => NC(i.Quote?.Currency))
+                .Select(i => NC(i.Quotes.FirstOrDefault()?.Currency))
                 .Distinct()
                 .ToList();
 
@@ -192,7 +192,7 @@ namespace ResourceManager.Controllers
 
                 foreach (var invoice in revenueInvoices)
                 {
-                    var invCurrency = NC(invoice.Quote?.Currency);
+                    var invCurrency = NC(invoice.Quotes.FirstOrDefault()?.Currency);
                     var confirmedPaid = invoice.AmountPaid; // Only confirmed payments count as revenue
                     totalRevenue += ConvertAmount(confirmedPaid, invCurrency);
                     if (!currencyBreakdownRevenue.ContainsKey(invCurrency))
@@ -203,7 +203,7 @@ namespace ResourceManager.Controllers
             else
             {
                 filteredInvoices = yearInvoices
-                    .Where(i => NC(i.Quote?.Currency) == selectedCurrency)
+                    .Where(i => NC(i.Quotes.FirstOrDefault()?.Currency) == selectedCurrency)
                     .ToList();
 
                 revenueInvoices = filteredInvoices
@@ -265,14 +265,14 @@ namespace ResourceManager.Controllers
             var pendingInvoicesList = filteredInvoices.Where(i => i.Status == "Pending" && !i.Treated).ToList();
             var pendingInvoicesCount = pendingInvoicesList.Count;
             var pendingInvoicesAmount = isMixedMode
-                ? pendingInvoicesList.Sum(i => ConvertAmount(i.RemainingAmount, NC(i.Quote?.Currency)))
+                ? pendingInvoicesList.Sum(i => ConvertAmount(i.RemainingAmount, NC(i.Quotes.FirstOrDefault()?.Currency)))
                 : pendingInvoicesList.Sum(i => i.RemainingAmount);
 
             // Partially Paid
             var partiallyPaidList = filteredInvoices.Where(i => i.Status == "PartiallyPaid").ToList();
             var partiallyPaidCount = partiallyPaidList.Count;
             var partiallyPaidAmount = isMixedMode
-                ? partiallyPaidList.Sum(i => ConvertAmount(i.RemainingAmount, NC(i.Quote?.Currency)))
+                ? partiallyPaidList.Sum(i => ConvertAmount(i.RemainingAmount, NC(i.Quotes.FirstOrDefault()?.Currency)))
                 : partiallyPaidList.Sum(i => i.RemainingAmount);
 
             // Pending Payments (Scheduled future payments)
@@ -293,7 +293,7 @@ namespace ResourceManager.Controllers
                     .GroupBy(i => i.Date.Year)
                     .ToDictionary(g => g.Key, g => new {
                         amount = isMixedMode
-                            ? g.Sum(i => ConvertAmount(i.AmountPaid, NC(i.Quote?.Currency)))
+                            ? g.Sum(i => ConvertAmount(i.AmountPaid, NC(i.Quotes.FirstOrDefault()?.Currency)))
                             : g.Sum(i => i.AmountPaid),
                         count = g.Count()
                     });
@@ -312,7 +312,7 @@ namespace ResourceManager.Controllers
                 var revenueByMonth = revenueInvoices
                     .GroupBy(i => i.Date.Month)
                     .ToDictionary(g => g.Key, g => isMixedMode
-                        ? g.Sum(i => ConvertAmount(i.AmountPaid, NC(i.Quote?.Currency)))
+                        ? g.Sum(i => ConvertAmount(i.AmountPaid, NC(i.Quotes.FirstOrDefault()?.Currency)))
                         : g.Sum(i => i.AmountPaid));
 
                 chart = Enumerable.Range(1, 12).Select(month => {
@@ -339,8 +339,8 @@ namespace ResourceManager.Controllers
                              && i.Date >= periodStart
                              && i.Date < periodEnd)
                     .Sum(i => isMixedMode
-                        ? ConvertAmount(i.AmountPaid, NC(i.Quote?.Currency))
-                        : (NC(i.Quote?.Currency) == selectedCurrency ? i.AmountPaid : 0m));
+                        ? ConvertAmount(i.AmountPaid, NC(i.Quotes.FirstOrDefault()?.Currency))
+                        : (NC(i.Quotes.FirstOrDefault()?.Currency) == selectedCurrency ? i.AmountPaid : 0m));
             }
 
             var thisMonthRevenue = SumPeriodRevenue(currentPeriodStart, nextPeriodStart);
@@ -459,7 +459,7 @@ namespace ResourceManager.Controllers
                 .Where(i => i.ClientId.HasValue)
                 .GroupBy(i => i.ClientId!.Value)
                 .Select(g => {
-                    var totalAmount = g.Sum(i => NormalizeAmount(i.AmountPaid, NC(i.Quote?.Currency)));
+                    var totalAmount = g.Sum(i => NormalizeAmount(i.AmountPaid, NC(i.Quotes.FirstOrDefault()?.Currency)));
                     return new {
                         clientId = g.Key,
                         clientName = g.First().Client?.Name ?? "Unknown",
@@ -638,13 +638,13 @@ namespace ResourceManager.Controllers
 
             var invoices = await _context.Invoices
                 .AsNoTracking()
-                .Include(i => i.Quote)
+                .Include(i => i.Quotes)
                 .Include(i => i.Payments)
                 .Where(i => !string.Equals(i.Status, "Draft"))
                 .Select(i => new
                 {
                     Year = i.Date.Year,
-                    Currency = i.Quote != null ? i.Quote.Currency : null,
+                    Currency = i.Quotes.Select(q => q.Currency).FirstOrDefault(),
                     Amount = i.Payments
                         .Where(p => p.Status == "Completed")
                         .Sum(p => (decimal?)p.Amount) ?? 0
@@ -820,7 +820,7 @@ namespace ResourceManager.Controllers
                 var invoices = await _context.Invoices.IgnoreQueryFilters()
                     .AsNoTracking()
                     .Include(i => i.Payments)
-                    .Include(i => i.Quote)
+                    .Include(i => i.Quotes)
                     .Where(i => i.CompanyId == company.Id && !i.IsDeleted)
                     .ToListAsync();
 
@@ -836,7 +836,7 @@ namespace ResourceManager.Controllers
                     .ToListAsync();
 
                 // Group by normalized currency
-                var currencies = invoices.Select(i => NC(i.Quote?.Currency))
+                var currencies = invoices.Select(i => NC(i.Quotes.FirstOrDefault()?.Currency))
                     .Union(supplierInvoices.Select(si => NC(si.Currency)))
                     .Union(otherExpenses.Select(e => NC(e.Currency)))
                     .Union(new[] { defaultCurrency })
@@ -845,7 +845,7 @@ namespace ResourceManager.Controllers
 
                 var currencyBuckets = currencies.Select(cur =>
                 {
-                    var curInvoices = invoices.Where(i => NC(i.Quote?.Currency) == cur).ToList();
+                    var curInvoices = invoices.Where(i => NC(i.Quotes.FirstOrDefault()?.Currency) == cur).ToList();
                     var curSupplier = supplierInvoices.Where(si => NC(si.Currency) == cur).ToList();
                     var curExpenses = otherExpenses.Where(e => NC(e.Currency) == cur).ToList();
 

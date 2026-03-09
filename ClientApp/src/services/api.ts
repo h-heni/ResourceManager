@@ -9,11 +9,11 @@ import { getErrorStatus } from '../utils/errorUtils';
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
 // ═══════════════════════════════════════════════════════════════
-// TOKEN STORE — persisted in localStorage for session continuity
-// across page refreshes (eliminates "Refresh = Logout" loop).
+// TOKEN STORE — in-memory only (never persisted to localStorage).
+// On page refresh, the session is restored via HttpOnly refresh
+// cookie → /api/auth/refresh. This prevents XSS token theft.
 // ═══════════════════════════════════════════════════════════════
-const TOKEN_STORAGE_KEY = 'access_token';
-let accessToken: string | null = localStorage.getItem(TOKEN_STORAGE_KEY);
+let accessToken: string | null = null;
 let isRefreshing = false;
 let isLoggingOut = false;  // Guard: prevents interceptor from redirecting during logout
 let failedQueue: Array<{
@@ -56,11 +56,6 @@ try {
 
 export function setAccessToken(token: string | null) {
     accessToken = token;
-    if (token) {
-        localStorage.setItem(TOKEN_STORAGE_KEY, token);
-    } else {
-        localStorage.removeItem(TOKEN_STORAGE_KEY);
-    }
 }
 
 export function getAccessToken(): string | null {

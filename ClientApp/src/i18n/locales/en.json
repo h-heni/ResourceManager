@@ -353,10 +353,11 @@
     "cascadeDelete": {
       "title": "Delete Invoice",
       "warning": "You are about to delete invoice {{number}}. This action cannot be undone.",
-      "linkedQuote": "Linked quote: {{number}}",
+      "linkedQuotes": "{{count}} linked quote(s)",
       "linkedDeliveryNotes": "{{count}} linked delivery note(s)",
       "linkedPayments": "{{count}} recorded payment(s)",
       "linkedPdfs": "{{count}} stored PDF file(s)",
+      "unlockWarning": "Linked quotes and delivery notes will be unlocked and available for reuse in a new invoice. The deleted invoice number can be reused.",
       "confirmation": "Are you sure you want to proceed? All linked records will be affected.",
       "confirmButton": "Delete Invoice"
     }
@@ -1104,7 +1105,9 @@
       "Amount": "Amount",
       "Category": "Category",
       "Notes": "Notes",
-      "Recurring": "Recurring"
+      "Recurring": "Recurring",
+      "Stock": "Stock",
+      "Limit": "Limit"
     }
   },
   "devis": {
@@ -1774,6 +1777,7 @@
     "poStatus": {
       "Draft": "Draft",
       "Submitted": "Submitted",
+      "Sent": "Sent",
       "PartiallyReceived": "Partially Received",
       "Received": "Received",
       "Cancelled": "Cancelled"
@@ -1809,5 +1813,60 @@
     "valuationBreakdown": "Valuation Breakdown",
     "noValuationData": "No valuation data available",
     "costValue": "Cost Value"
+  },
+  "documentSend": {
+    "sendByEmail": "Send by Email",
+    "sendByWhatsApp": "Send via WhatsApp",
+    "sendHistory": "Send History",
+    "noHistory": "No send history yet",
+    "quoteAttached": "Please find attached quote",
+    "deliveryNoteAttached": "Please find attached delivery note",
+    "purchaseOrderAttached": "Please find attached purchase order"
+  },
+  "whatsapp": {
+    "sendInvoice": "Send Invoice via WhatsApp",
+    "sendDocument": "Send via WhatsApp",
+    "recipient": "Recipient",
+    "phoneNumber": "Phone Number",
+    "customMessage": "Custom Message",
+    "optional": "optional",
+    "messagePlaceholder": "Enter a custom message to send with the document...",
+    "sendReminder": "Send as Payment Reminder",
+    "sendDirectly": "Send via WhatsApp",
+    "sending": "Sending...",
+    "sent": "Message Sent!",
+    "sentDescription": "Your document has been sent via WhatsApp with the PDF attached.",
+    "pdfAttached": "The PDF will be attached to the WhatsApp message automatically.",
+    "errorNoPhone": "Phone number is required for WhatsApp sharing. Please add a phone number to this contact.",
+    "errorGeneric": "Failed to send WhatsApp message. Please try again.",
+    "settings": {
+      "title": "WhatsApp",
+      "description": "Configure your WhatsApp Business API credentials so messages appear from your company.",
+      "phoneNumberId": "Phone Number ID",
+      "businessAccountId": "Business Account ID",
+      "enabled": "Enable WhatsApp",
+      "enabledHelp": "When enabled, the Send via WhatsApp button will appear on invoices.",
+      "notConfigured": "WhatsApp is not configured. Click the button below to get started.",
+      "configured": "WhatsApp is configured and ready to send messages.",
+      "connected": "WhatsApp Connected",
+      "connectedPhone": "Phone Number",
+      "connectTitle": "Connect Your WhatsApp Business",
+      "connectDescription": "Click the button below to link your WhatsApp Business number. You'll be guided through a quick setup process by Meta.",
+      "connectButton": "Connect WhatsApp",
+      "connecting": "Connecting...",
+      "connectSuccess": "WhatsApp connected successfully!",
+      "connectFailed": "Failed to connect WhatsApp.",
+      "connectCancelled": "WhatsApp connection was cancelled.",
+      "disconnect": "Disconnect WhatsApp",
+      "disconnected": "WhatsApp disconnected.",
+      "disconnectFailed": "Failed to disconnect WhatsApp.",
+      "appNotConfigured": "WhatsApp integration is not configured on the server. Contact your administrator.",
+      "howItWorks": "How it works:",
+      "step1": "A Facebook dialog will open",
+      "step2": "Log in with your Facebook account",
+      "step3": "Select or create a Meta Business Portfolio",
+      "step4": "Enter and verify your phone number",
+      "step5": "Done! Your WhatsApp is connected automatically"
+    }
   }
 }

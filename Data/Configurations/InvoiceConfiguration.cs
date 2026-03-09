@@ -8,10 +8,10 @@ public class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
 {
     public void Configure(EntityTypeBuilder<Invoice> builder)
     {
-            builder.HasOne(i => i.Quote)
-        .WithOne(d => d.Invoice)
-        .HasForeignKey<Invoice>(d => d.QuoteId)
-        .IsRequired(false);
+        builder.HasMany(i => i.Quotes)
+            .WithOne(q => q.Invoice)
+            .HasForeignKey(q => q.InvoiceId)
+            .IsRequired(false);
 
         builder.HasOne(i => i.Client)
                 .WithMany(c => c.Invoices)

@@ -21,14 +21,18 @@ namespace ResourceManager.Controllers
         private readonly IEmailService _emailService;
         private readonly ILocalPdfStorageService _pdfStorageService;
         private readonly InventoryService _inventoryService;
-        
+        private readonly IWhatsAppService _whatsAppService;
+        private readonly IConfiguration _configuration;
+
         public InvoicesController(
-            AppDbContext context, 
-            UserManager<ApplicationUser> userManager, 
+            AppDbContext context,
+            UserManager<ApplicationUser> userManager,
             ILogger<InvoicesController> logger,
             IEmailService emailService,
             ILocalPdfStorageService pdfStorageService,
-            InventoryService inventoryService)
+            InventoryService inventoryService,
+            IWhatsAppService whatsAppService,
+            IConfiguration configuration)
         {
             _context = context;
             _userManager = userManager;
@@ -36,6 +40,8 @@ namespace ResourceManager.Controllers
             _emailService = emailService;
             _pdfStorageService = pdfStorageService;
             _inventoryService = inventoryService;
+            _whatsAppService = whatsAppService;
+            _configuration = configuration;
         }
 
         // GET: api/invoices
@@ -46,12 +52,13 @@ namespace ResourceManager.Controllers
             {
                 if (page < 1) page = 1;
                 if (size < 1) size = 20;
+                if (size > 100) size = 100;
 
                 var query = _context.Invoices
                     .AsNoTracking()
                     .Include(i => i.Client)
                     .Include(i => i.Payments)
-                    .Include(i => i.Quote)
+                    .Include(i => i.Quotes)
                     .AsQueryable();
 
                 // Employee role: hide archived (Treated) records
@@ -94,11 +101,11 @@ namespace ResourceManager.Controllers
                         Status = i.Treated ? "Archived" : i.Status,
                         i.IsLocked,
                         i.Treated,
-                        i.QuoteId,
-                        i.SourceQuoteNumber,
-                        Currency = i.Quote?.Currency,
-                        CurrencySymbol = i.Quote?.CurrencySymbol,
-                        PdfLanguage = i.Quote?.PdfLanguage,
+                        QuoteIds = i.Quotes.Select(q => q.Id).ToList(),
+                        SourceQuoteNumbers = i.SourceQuoteNumbers,
+                        Currency = i.Quotes.FirstOrDefault()?.Currency,
+                        CurrencySymbol = i.Quotes.FirstOrDefault()?.CurrencySymbol,
+                        PdfLanguage = i.Quotes.FirstOrDefault()?.PdfLanguage,
                         AmountPaid = amountPaid,
                         PendingAmount = pendingAmount,
                         RemainingAmount = Math.Max(0, (i.TotalAmount ?? 0) - (amountPaid + pendingAmount)),
@@ -295,7 +302,7 @@ namespace ResourceManager.Controllers
                 .Include(i => i.Client)
                 .Include(i => i.InvoiceItems)
                 .Include(i => i.Payments)
-                .Include(i => i.Quote)
+                .Include(i => i.Quotes)
                 .FirstOrDefaultAsync(i => i.Id == id);
 
             if (invoice == null) return NotFound();
@@ -318,7 +325,7 @@ namespace ResourceManager.Controllers
                 .Include(i => i.InvoiceItems)
                 .Include(i => i.Payments)
                 .Include(i => i.CreatedByUser)
-                .Include(i => i.Quote)
+                .Include(i => i.Quotes)
                 .FirstOrDefaultAsync(i => i.Id == id);
 
             if (invoice == null) return NotFound();
@@ -329,27 +336,17 @@ namespace ResourceManager.Controllers
                 return NotFound(new { message = "Invoice not found or access denied" });
             }
 
-            // Get related quote if exists
-            object? relatedQuote = null;
-            if (invoice.QuoteId.HasValue)
+            // Get related quotes
+            var relatedQuotes = invoice.Quotes.Select(q => new
             {
-                var devis = await _context.Quotes
-                    .Include(d => d.Client)
-                    .FirstOrDefaultAsync(d => d.Id == invoice.QuoteId.Value);
-                if (devis != null)
-                {
-                    relatedQuote = new
-                    {
-                        devis.Id,
-                        devis.Number,
-                        devis.Date,
-                        totalAmount = devis.TotalAmount,
-                        status = devis.Status ?? "Draft",
-                        createdBy = devis.CreatedBy,
-                        modifiedBy = devis.ModifiedBy
-                    };
-                }
-            }
+                q.Id,
+                q.Number,
+                q.Date,
+                totalAmount = q.TotalAmount,
+                status = q.Status ?? "Draft",
+                createdBy = q.CreatedBy,
+                modifiedBy = q.ModifiedBy
+            }).ToList();
 
             // Get related delivery notes
             var relatedDeliveryNotes = await _context.DeliveryNotes
@@ -421,9 +418,9 @@ namespace ResourceManager.Controllers
                 invoice.Treated,
                 TreatedBy = (!string.IsNullOrEmpty(invoice.TreatedByUserId) && userMap.ContainsKey(invoice.TreatedByUserId)) ? userMap[invoice.TreatedByUserId] : null,
                 TreatedAt = invoice.TreatedAt,
-                Currency = invoice.Quote?.Currency,
-                CurrencySymbol = invoice.Quote?.CurrencySymbol,
-                PdfLanguage = invoice.Quote?.PdfLanguage,
+                Currency = invoice.Quotes.FirstOrDefault()?.Currency,
+                CurrencySymbol = invoice.Quotes.FirstOrDefault()?.CurrencySymbol,
+                PdfLanguage = invoice.Quotes.FirstOrDefault()?.PdfLanguage,
                 amountPaid,
                 pendingAmount,
                 remainingAmount = Math.Max(0, (invoice.TotalAmount ?? 0) - (amountPaid + pendingAmount)),
@@ -454,9 +451,9 @@ namespace ResourceManager.Controllers
                     vat = i.TaxRate,
                     i.ProductServiceId
                 }).ToList(),
-                quoteId = invoice.QuoteId,
-                sourceQuoteNumber = invoice.SourceQuoteNumber,
-                relatedQuote,
+                quoteIds = invoice.Quotes.Select(q => q.Id).ToList(),
+                sourceQuoteNumbers = invoice.SourceQuoteNumbers,
+                relatedQuotes,
                 relatedDeliveryNotes,
                 invoice.CreatedAt,
                 invoice.UpdatedAt,
@@ -550,19 +547,20 @@ namespace ResourceManager.Controllers
             var userProvidedNumber = dto.Number?.Trim() ?? string.Empty;
             var isAutoNumber = string.IsNullOrWhiteSpace(userProvidedNumber);
 
-            string? sourceQuoteNumber = null;
-            if (dto.QuoteId.HasValue && dto.QuoteId.Value > 0)
+            string? sourceQuoteNumbers = null;
+            if (dto.QuoteIds != null && dto.QuoteIds.Any())
             {
-                var linkedQuote = await _context.Quotes
+                var linkedQuotes = await _context.Quotes
                     .AsNoTracking()
-                    .FirstOrDefaultAsync(d => d.Id == dto.QuoteId.Value);
+                    .Where(q => dto.QuoteIds.Contains(q.Id))
+                    .ToListAsync();
 
-                if (linkedQuote == null)
+                if (linkedQuotes.Count != dto.QuoteIds.Count)
                 {
-                    return BadRequest(new { message = "Linked quote was not found." });
+                    return BadRequest(new { message = "One or more linked quotes were not found." });
                 }
 
-                sourceQuoteNumber = linkedQuote.Number;
+                sourceQuoteNumbers = string.Join(", ", linkedQuotes.Select(q => q.Number));
             }
 
             // Retry loop for auto-numbered invoices (handles concurrent number collisions)
@@ -593,8 +591,7 @@ namespace ResourceManager.Controllers
                     Date = dto.Date.ToUniversalTime(),
                     DueDate = dto.DueDate?.ToUniversalTime(),
                     ClientId = dto.ClientId,
-                    QuoteId = dto.QuoteId,
-                    SourceQuoteNumber = sourceQuoteNumber,
+                    SourceQuoteNumbers = sourceQuoteNumbers,
                     Tfiscal = companySettings?.CustomTaxEnabled == true ? companySettings.CustomTaxAmount : 0,
                     TfiscalName = companySettings?.CustomTaxName ?? "Timbre Fiscal",
                     CreatedByUserId = userId,
@@ -602,9 +599,28 @@ namespace ResourceManager.Controllers
                     Status = "Pending"
                 };
 
+                // Collect valid product IDs to validate FK references
+                var requestedProductIds = dto.Items
+                    .Where(i => i.ProductServiceId.HasValue)
+                    .Select(i => i.ProductServiceId!.Value)
+                    .Distinct()
+                    .ToList();
+                var existingProductIds = requestedProductIds.Count > 0
+                    ? (await _context.ProductServices
+                        .Where(p => requestedProductIds.Contains(p.Id))
+                        .Select(p => p.Id)
+                        .ToListAsync())
+                        .ToHashSet()
+                    : new HashSet<int>();
+
                 // Map Items
                 foreach (var itemDto in dto.Items)
                 {
+                    // Null out ProductServiceId if the product doesn't exist to avoid FK violation
+                    var validProductId = itemDto.ProductServiceId.HasValue && existingProductIds.Contains(itemDto.ProductServiceId.Value)
+                        ? itemDto.ProductServiceId
+                        : null;
+
                     invoice.InvoiceItems.Add(new InvoiceItem
                     {
                         Description = itemDto.Description,
@@ -612,7 +628,7 @@ namespace ResourceManager.Controllers
                         Price = itemDto.Price,
                         Tva = itemDto.Tva,
                         VatRate = itemDto.Tva && itemDto.VatRate.HasValue ? itemDto.VatRate.Value / 100m : null,
-                        ProductServiceId = itemDto.ProductServiceId
+                        ProductServiceId = validProductId
                     });
                 }
 
@@ -644,17 +660,21 @@ namespace ResourceManager.Controllers
                             await _context.SaveChangesAsync();
                         }
 
-                        // Update Quote status to Completed when invoice is created
-                        if (dto.QuoteId.HasValue && dto.QuoteId.Value > 0)
+                        // Link Quotes to this invoice and mark them as Completed
+                        if (dto.QuoteIds != null && dto.QuoteIds.Any())
                         {
-                            var devis = await _context.Quotes.FindAsync(dto.QuoteId.Value);
-                            if (devis != null)
+                            var quotesToLink = await _context.Quotes
+                                .Where(q => dto.QuoteIds.Contains(q.Id))
+                                .ToListAsync();
+                            foreach (var q in quotesToLink)
                             {
-                                devis.Status = "Completed";
-                                devis.Treated = true;
-                                await _context.SaveChangesAsync();
-                                _logger.LogInformation("Quote {QuoteId} status updated to Completed after invoice creation.", dto.QuoteId.Value);
+                                q.InvoiceId = invoice.Id;
+                                q.Status = "Completed";
+                                q.Treated = true;
                             }
+                            await _context.SaveChangesAsync();
+                            _logger.LogInformation("Quotes [{QuoteIds}] linked and marked Completed for invoice {InvoiceId}.",
+                                string.Join(",", dto.QuoteIds), invoice.Id);
                         }
 
                         await transaction.CommitAsync();
@@ -678,13 +698,13 @@ namespace ResourceManager.Controllers
                     _context.ChangeTracker.Clear();
                     _logger.LogError(ex, "DbUpdateException creating invoice. CompanyId={CompanyId}, ClientId={ClientId}, Number={Number}",
                         invoice.CompanyId, invoice.ClientId, invoice.Number);
-                    return StatusCode(500, new { message = "Failed to save invoice. Check server logs for details.", detail = ex.InnerException?.Message ?? ex.Message });
+                    return StatusCode(500, new { message = "Failed to save invoice. Check server logs for details." });
                 }
                 catch (Exception ex)
                 {
                     _context.ChangeTracker.Clear();
                     _logger.LogError(ex, "Unexpected error creating invoice. Number={Number}", invoice.Number);
-                    return StatusCode(500, new { message = "Failed to create invoice.", detail = ex.InnerException?.Message ?? ex.Message });
+                    return StatusCode(500, new { message = "Failed to create invoice. Check server logs for details." });
                 }
             } // end retry loop
 
@@ -703,7 +723,7 @@ namespace ResourceManager.Controllers
             }
             catch (Exception ex)
             {
-                stockError = ex.Message;
+                stockError = "Stock deduction failed";
                 _logger.LogError(ex, "Stock deduction FAILED for invoice {Number} (Id={Id}). Exception: {Message}",
                     invoice.Number, invoice.Id, ex.Message);
             }
@@ -717,8 +737,8 @@ namespace ResourceManager.Controllers
                 invoice.Date,
                 invoice.DueDate,
                 invoice.ClientId,
-                invoice.QuoteId,
-                invoice.SourceQuoteNumber,
+                QuoteIds = dto.QuoteIds,
+                invoice.SourceQuoteNumbers,
                 invoice.Status,
                 invoice.SubTotal,
                 invoice.TaxAmount,
@@ -729,9 +749,9 @@ namespace ResourceManager.Controllers
                 invoice.RemainingAmount,
                 invoice.IsOverdue,
                 invoice.DaysUntilDue,
-                Currency = invoice.Quote?.Currency,
-                CurrencySymbol = invoice.Quote?.CurrencySymbol,
-                PdfLanguage = invoice.Quote?.PdfLanguage,
+                Currency = invoice.Quotes.FirstOrDefault()?.Currency,
+                CurrencySymbol = invoice.Quotes.FirstOrDefault()?.CurrencySymbol,
+                PdfLanguage = invoice.Quotes.FirstOrDefault()?.PdfLanguage,
                 StockDeducted = stockDeducted,
                 StockError = stockError,
                 InvoiceItems = invoice.InvoiceItems.Select(i => new {
@@ -814,7 +834,7 @@ namespace ResourceManager.Controllers
         {
             var invoice = await _context.Invoices
                 .Include(i => i.Payments)
-                .Include(i => i.Quote)
+                .Include(i => i.Quotes)
                 .FirstOrDefaultAsync(i => i.Id == id);
 
             if (invoice == null) return NotFound();
@@ -865,11 +885,11 @@ namespace ResourceManager.Controllers
                 invoice.TreatedByUserId = _userManager.GetUserId(User);
                 invoice.TreatedAt = DateTime.UtcNow;
 
-                // Update linked Quote to Completed
-                if (invoice.Quote != null)
+                // Update linked Quotes to Completed
+                foreach (var q in invoice.Quotes)
                 {
-                    invoice.Quote.Status = "Completed";
-                    invoice.Quote.Treated = true;
+                    q.Status = "Completed";
+                    q.Treated = true;
                 }
 
                 // Update linked Delivery Notes to Completed
@@ -910,7 +930,7 @@ namespace ResourceManager.Controllers
         {
             var invoice = await _context.Invoices
                 .Include(i => i.Payments)
-                .Include(i => i.Quote)
+                .Include(i => i.Quotes)
                 .FirstOrDefaultAsync(i => i.Id == id);
 
             if (invoice == null) return NotFound();
@@ -940,17 +960,17 @@ namespace ResourceManager.Controllers
                 invoice.IsLocked = false;
             }
 
-            // If invoice was Paid and now isn't, revert Treated flag + linked Quote/DeliveryNotes
+            // If invoice was Paid and now isn't, revert Treated flag + linked Quotes/DeliveryNotes
             if (invoice.Status != "Paid")
             {
                 invoice.Treated = false;
                 invoice.TreatedByUserId = null;
                 invoice.TreatedAt = null;
 
-                if (invoice.Quote != null)
+                foreach (var q in invoice.Quotes)
                 {
-                    invoice.Quote.Status = "Accepted";
-                    invoice.Quote.Treated = false;
+                    q.Status = "Accepted";
+                    q.Treated = false;
                 }
 
                 var deliveryNotes = await _context.DeliveryNotes
@@ -984,16 +1004,15 @@ namespace ResourceManager.Controllers
         {
             var invoice = await _context.Invoices
                 .Include(i => i.Payments)
-                .Include(i => i.Quote)
+                .Include(i => i.Quotes)
                 .FirstOrDefaultAsync(i => i.Id == id);
             if (invoice == null) return NotFound();
 
-            var linkedQuote = invoice.QuoteId != null
-                ? await _context.Quotes.Where(q => q.Id == invoice.QuoteId).Select(q => new { q.Id, q.Number, q.Status }).FirstOrDefaultAsync()
-                : null;
+            var linkedQuotes = invoice.Quotes.Select(q => new { q.Id, q.Number, q.Status }).ToList();
 
+            var quoteIds = invoice.Quotes.Select(q => q.Id).ToList();
             var linkedDeliveryNotes = await _context.DeliveryNotes
-                .Where(dn => dn.InvoiceId == id || (dn.QuoteId == invoice.QuoteId && invoice.QuoteId != null))
+                .Where(dn => dn.InvoiceId == id || (dn.QuoteId != null && quoteIds.Contains(dn.QuoteId.Value)))
                 .Select(dn => new { dn.Id, dn.Number })
                 .ToListAsync();
 
@@ -1009,11 +1028,11 @@ namespace ResourceManager.Controllers
                 invoiceNumber = invoice.Number,
                 isLocked = invoice.IsLocked,
                 status = invoice.Status,
-                linkedQuote,
+                linkedQuotes,
                 linkedDeliveryNotes,
                 payments,
                 pdfFileCount = pdfFiles,
-                hasLinkedDocuments = linkedQuote != null || linkedDeliveryNotes.Any() || payments.Any()
+                hasLinkedDocuments = linkedQuotes.Any() || linkedDeliveryNotes.Any() || payments.Any()
             });
         }
 
@@ -1024,6 +1043,7 @@ namespace ResourceManager.Controllers
         {
             var invoice = await _context.Invoices
                 .Include(i => i.Payments)
+                .Include(i => i.Quotes)
                 .FirstOrDefaultAsync(i => i.Id == id);
             if (invoice == null) return NotFound();
 
@@ -1039,12 +1059,21 @@ namespace ResourceManager.Controllers
             _context.InvoiceItems.RemoveRange(invoiceItems);
 
             // Cascade: unlink delivery notes (don't delete them, just remove the FK)
+            var quoteIds = invoice.Quotes.Select(q => q.Id).ToList();
             var linkedDeliveryNotes = await _context.DeliveryNotes
-                .Where(dn => dn.InvoiceId == id)
+                .Where(dn => dn.InvoiceId == id || (dn.QuoteId != null && quoteIds.Contains(dn.QuoteId.Value)))
                 .ToListAsync();
             foreach (var dn in linkedDeliveryNotes)
             {
                 dn.InvoiceId = null;
+            }
+
+            // Cascade: unlock linked quotes (set them free for reuse in new invoice)
+            foreach (var q in invoice.Quotes)
+            {
+                q.InvoiceId = null;
+                q.Status = "Accepted";
+                q.Treated = false;
             }
 
             // Cascade: remove payments
@@ -1071,12 +1100,17 @@ namespace ResourceManager.Controllers
                 .ToListAsync();
             _context.StockMovements.RemoveRange(stockMovements);
 
+            // Store the invoice number before deleting (it becomes reusable)
+            var deletedNumber = invoice.Number;
+
             // Hard-delete the invoice itself
             _context.Invoices.Remove(invoice);
 
             await _context.SaveChangesAsync();
 
-            return Ok(new { message = "Invoice deleted successfully." });
+            _logger.LogInformation("Invoice {Number} (ID={Id}) deleted. Linked quotes and delivery notes unlocked.", deletedNumber, id);
+
+            return Ok(new { message = "Invoice deleted successfully. Linked quotes and delivery notes have been unlocked.", deletedNumber });
         }
         
         // GET: api/invoices/{id}/pdf (Keeping legacy PDF generation if needed, or remove if strictly following new spec only. Keeping as it's useful.)
@@ -1086,7 +1120,7 @@ namespace ResourceManager.Controllers
             var invoice = await _context.Invoices
                                 .Include(i => i.Client)
                                 .Include(i => i.InvoiceItems)
-                                .Include(i => i.Quote)
+                                .Include(i => i.Quotes)
                                 .FirstOrDefaultAsync(i => i.Id == id);
             if (invoice == null) return NotFound();
 
@@ -1116,8 +1150,8 @@ namespace ResourceManager.Controllers
             // Build PDF settings from company config
             var pdfSettings = PdfSettings.FromCompanySettings(
                 companySettings, company, creatorName,
-                currencyOverride: invoice.Quote?.CurrencySymbol,
-                languageOverride: invoice.Quote?.PdfLanguage);
+                currencyOverride: invoice.Quotes.FirstOrDefault()?.CurrencySymbol,
+                languageOverride: invoice.Quotes.FirstOrDefault()?.PdfLanguage);
             
             // Apply custom tax settings to invoice if not already set
             if (invoice.Tfiscal == null || invoice.TfiscalName == null)
@@ -1183,7 +1217,7 @@ namespace ResourceManager.Controllers
                 .Include(i => i.Client)
                 .Include(i => i.InvoiceItems)
                 .Include(i => i.Payments)
-                .Include(i => i.Quote)
+                .Include(i => i.Quotes)
                 .FirstOrDefaultAsync(i => i.Id == id);
 
             if (invoice == null) return NotFound();
@@ -1212,8 +1246,8 @@ namespace ResourceManager.Controllers
             // Use Quote currency (EffectiveCurrencySymbol) as requested
             var pdfSettings = PdfSettings.FromCompanySettings(
                 companySettings, company, creatorName,
-                currencyOverride: invoice.EffectiveCurrencySymbol,
-                languageOverride: invoice.EffectivePdfLanguage);
+                currencyOverride: invoice.Quotes.FirstOrDefault()?.CurrencySymbol,
+                languageOverride: invoice.Quotes.FirstOrDefault()?.PdfLanguage);
 
             var guardKey = $"remaining:{invoice.Id}";
             if (!PdfGenerationGuard.TryEnter(guardKey))
@@ -1249,7 +1283,7 @@ namespace ResourceManager.Controllers
             var invoice = await _context.Invoices
                 .IgnoreQueryFilters()
                 .Include(i => i.Client)
-                .Include(i => i.Quote)
+                .Include(i => i.Quotes)
                 .FirstOrDefaultAsync(i => i.VerificationToken == token && !i.IsDeleted);
 
             if (invoice == null)
@@ -1266,7 +1300,7 @@ namespace ResourceManager.Controllers
                 date = invoice.Date,
                 dueDate = invoice.DueDate,
                 totalAmount = invoice.TotalAmount,
-                currency = invoice.Quote?.CurrencySymbol ?? "DT",
+                currency = invoice.Quotes.FirstOrDefault()?.CurrencySymbol ?? "DT",
                 clientName = invoice.Client?.Name,
                 companyName = company?.Name,
                 status = invoice.Status,
@@ -1281,7 +1315,7 @@ namespace ResourceManager.Controllers
             var invoice = await _context.Invoices
                 .Include(i => i.Client)
                 .Include(i => i.InvoiceItems)
-                .Include(i => i.Quote)
+                .Include(i => i.Quotes)
                 .FirstOrDefaultAsync(i => i.Id == id);
 
             if (invoice == null) return NotFound();
@@ -1439,6 +1473,64 @@ namespace ResourceManager.Controllers
 
             return Ok(emails);
         }
+
+        // POST: api/invoices/{id}/send-whatsapp - Send invoice via WhatsApp Cloud API
+        [HttpPost("{id}/send-whatsapp")]
+        public async Task<IActionResult> SendInvoiceWhatsApp(int id, [FromBody] SendInvoiceWhatsAppDto? dto = null)
+        {
+            try
+            {
+                var invoice = await _context.Invoices
+                    .Include(i => i.Client)
+                    .Include(i => i.InvoiceItems)
+                    .Include(i => i.Quotes)
+                    .FirstOrDefaultAsync(i => i.Id == id);
+
+                if (invoice == null)
+                    return NotFound(new { message = "Invoice not found" });
+
+                if (invoice.Client == null)
+                    return BadRequest(new { message = "Client not found for this invoice" });
+
+                if (User.IsInRole("Employee") && invoice.Treated)
+                    return NotFound(new { message = "Invoice not found or access denied" });
+
+                if (string.IsNullOrEmpty(invoice.Client.Phone))
+                    return BadRequest(new { message = "Client phone number is required for WhatsApp sharing. Please add a phone number to this client." });
+
+                // Generate the public PDF URL
+                var request = HttpContext.Request;
+                var baseUrl = $"{request.Scheme}://{request.Host}";
+                var pdfUrl = $"{baseUrl}/api/Invoices/{id}/pdf";
+
+                // Send via WhatsApp Cloud API
+                WhatsAppSendResponse result;
+                if (dto?.SendPaymentReminder == true)
+                {
+                    result = await _whatsAppService.SendPaymentReminderAsync(invoice, invoice.Client, pdfUrl);
+                }
+                else
+                {
+                    result = await _whatsAppService.SendInvoiceMessageAsync(invoice, invoice.Client, pdfUrl, dto?.CustomMessage);
+                }
+
+                if (!result.Success)
+                    return BadRequest(new { message = result.Error ?? "Failed to send WhatsApp message" });
+
+                return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send WhatsApp message for invoice {InvoiceId}", id);
+                return StatusCode(500, new { message = "Failed to send WhatsApp message" });
+            }
+        }
+
+
 
         private string GetDefaultEmailTemplate(Invoice invoice, Company? company)
         {

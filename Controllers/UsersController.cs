@@ -285,10 +285,10 @@ namespace ResourceManager.Controllers
 
                     return Ok(new { Message = $"Tenant and all associated data deleted permanently." });
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     await transaction.RollbackAsync();
-                    return StatusCode(500, new { Message = $"Cascading delete failed: {ex.Message}" });
+                    return StatusCode(500, new { Message = "Cascading delete failed. Check server logs for details." });
                 }
             }
             else if (isSuperAdmin)

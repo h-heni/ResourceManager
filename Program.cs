@@ -71,8 +71,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // This enables UserManager, RoleManager, and links them to EF Core
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
-    options.Password.RequireDigit = false; // Adjust as needed
-    options.Password.RequiredLength = 6;
+    options.Password.RequireDigit = true;
+    options.Password.RequiredLength = 8;
     // Lockout: 5 failed attempts → 30-second lockout (matches rate-limiter RetryAfter)
     options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromSeconds(30);
     options.Lockout.MaxFailedAccessAttempts = 5;
@@ -172,6 +172,9 @@ builder.Services.AddScoped<ResourceManager.Services.IMailKitEmailService, Resour
 
 // Local PDF Storage Service
 builder.Services.AddScoped<ResourceManager.Services.ILocalPdfStorageService, ResourceManager.Services.LocalPdfStorageService>();
+
+// WhatsApp Cloud API Service (Meta Business Platform)
+builder.Services.AddHttpClient<ResourceManager.Services.IWhatsAppService, ResourceManager.Services.WhatsAppService>();
 
 // Supplier PDF Scanner Service (Part 4: PDF Upload + Data Extraction)
 builder.Services.AddScoped<ResourceManager.Services.ISupplierPdfScannerService, ResourceManager.Services.SupplierPdfScannerService>();

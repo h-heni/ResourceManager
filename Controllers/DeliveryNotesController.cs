@@ -17,14 +17,18 @@ namespace ResourceManager.Controllers
         private readonly ILocalPdfStorageService _pdfStorageService;
         private readonly ILogger<DeliveryNotesController> _logger;
         private readonly InventoryService _inventoryService;
+        private readonly IEmailService _emailService;
+        private readonly IWhatsAppService _whatsAppService;
 
-        public DeliveryNotesController(AppDbContext context, UserManager<ApplicationUser> userManager, ILocalPdfStorageService pdfStorageService, ILogger<DeliveryNotesController> logger, InventoryService inventoryService)
+        public DeliveryNotesController(AppDbContext context, UserManager<ApplicationUser> userManager, ILocalPdfStorageService pdfStorageService, ILogger<DeliveryNotesController> logger, InventoryService inventoryService, IEmailService emailService, IWhatsAppService whatsAppService)
         {
             _context = context;
             _userManager = userManager;
             _pdfStorageService = pdfStorageService;
             _logger = logger;
             _inventoryService = inventoryService;
+            _emailService = emailService;
+            _whatsAppService = whatsAppService;
         }
 
         // GET: api/deliverynotes
@@ -35,6 +39,7 @@ namespace ResourceManager.Controllers
             {
                 if (page < 1) page = 1;
                 if (size < 1) size = 20;
+                if (size > 100) size = 100;
 
                 var query = _context.DeliveryNotes
                     .AsNoTracking()
@@ -255,13 +260,13 @@ namespace ResourceManager.Controllers
                 catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
                 {
                     _context.ChangeTracker.Clear();
-                    return Conflict(new { message = "Delivery note number already exists. Please retry.", detail = ex.InnerException?.Message ?? ex.Message });
+                    return Conflict(new { message = "Delivery note number already exists. Please retry." });
                 }
                 catch (DbUpdateException ex)
                 {
                     _context.ChangeTracker.Clear();
                     _logger.LogError(ex, "DbUpdateException creating delivery note. Number={Number}", note.Number);
-                    return StatusCode(500, new { message = "Failed to save delivery note.", detail = ex.InnerException?.Message ?? ex.Message });
+                    return StatusCode(500, new { message = "Failed to save delivery note. Check server logs for details." });
                 }
             }
 
@@ -303,7 +308,7 @@ namespace ResourceManager.Controllers
 
             note.Number = dto.Number ?? note.Number;
             note.Date = dto.Date.ToUniversalTime();
-            note.ClientId = dto.ClientId ?? note.ClientId;
+            note.ClientId = dto.ClientId;
             note.UpdatedAt = DateTime.UtcNow;
 
             // Replace items
@@ -461,6 +466,170 @@ namespace ResourceManager.Controllers
                    || message.Contains("duplicate", StringComparison.OrdinalIgnoreCase)
                    || message.Contains("2601", StringComparison.OrdinalIgnoreCase)
                    || message.Contains("2627", StringComparison.OrdinalIgnoreCase);
+        }
+
+        // POST: api/deliverynotes/{id}/send-email
+        [HttpPost("{id}/send-email")]
+        public async Task<IActionResult> SendDeliveryNoteEmail(int id, [FromBody] SendDocumentEmailDto dto)
+        {
+            var note = await _context.DeliveryNotes
+                .Include(dn => dn.Client)
+                .Include(dn => dn.DeliveryNoteItems)
+                .Include(dn => dn.Quote)
+                .FirstOrDefaultAsync(dn => dn.Id == id);
+
+            if (note == null) return NotFound();
+
+            var userId = _userManager.GetUserId(User);
+            if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+            var user = await _userManager.FindByIdAsync(userId);
+            if (user == null) return Unauthorized();
+
+            var recipientEmail = dto.RecipientEmail ?? note.Client?.Email;
+            if (string.IsNullOrEmpty(recipientEmail))
+                return BadRequest(new { message = "No recipient email provided and client has no email on file." });
+
+            var company = await _context.Companies.FindAsync(user.CompanyId);
+            var userProfile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
+            var senderName = userProfile != null ? $"{userProfile.FirstName} {userProfile.LastName}".Trim() : user.UserName ?? "";
+
+            var subject = dto.Subject ?? $"Delivery Note #{note.Number} from {company?.Name ?? "Company"}";
+            var body = dto.Body ?? $"<p>Dear {note.Client?.Name ?? "Customer"},</p><p>Please find attached delivery note <strong>#{note.Number}</strong>.</p><p>Best regards,<br/>{company?.Name ?? "Company"}</p>";
+
+            // Generate PDF
+            var companySettings = await _context.CompanySettings.FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
+            var pdfSettings = PdfSettings.FromCompanySettings(companySettings, company, senderName,
+                currencyOverride: note.Quote?.CurrencySymbol, languageOverride: note.Quote?.PdfLanguage);
+
+            byte[] pdfData;
+            try
+            {
+                var document = new Document<DeliveryNote>(note, pdfSettings);
+                pdfData = document.GeneratePdf();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to generate PDF for delivery note {NoteId}", id);
+                return StatusCode(500, new { message = "Failed to generate PDF" });
+            }
+
+            var audit = new DocumentSendAudit
+            {
+                DocumentType = "DeliveryNote",
+                DocumentId = id,
+                DocumentNumber = note.Number,
+                Channel = "Email",
+                RecipientEmail = recipientEmail,
+                Subject = subject,
+                Body = body,
+                SentAt = DateTime.UtcNow,
+                SentByUserId = userId,
+                SentByName = senderName,
+                Status = "Sending",
+                CompanyId = user.CompanyId
+            };
+            _context.DocumentSendAudits.Add(audit);
+            await _context.SaveChangesAsync();
+
+            var attachPdf = dto.AttachPdf ?? true;
+            var result = await _emailService.SendEmailAsync(recipientEmail, subject, body,
+                attachPdf ? pdfData : null, attachPdf ? $"DeliveryNote-{note.Number}.pdf" : null);
+
+            audit.Status = result.Success ? "Sent" : "Failed";
+            audit.ErrorMessage = result.Success ? null : (result.ErrorDetails ?? result.Message);
+            audit.MessageId = result.MessageId;
+            await _context.SaveChangesAsync();
+
+            if (result.Success)
+            {
+                _logger.LogInformation("Delivery note {NoteId} email sent to {Email}", id, recipientEmail);
+                return Ok(new { message = result.Message, auditId = audit.Id, status = audit.Status });
+            }
+            return StatusCode(500, new { message = result.Message, auditId = audit.Id, status = audit.Status, errorDetails = result.ErrorDetails });
+        }
+
+        // POST: api/deliverynotes/{id}/send-whatsapp
+        [HttpPost("{id}/send-whatsapp")]
+        public async Task<IActionResult> SendDeliveryNoteWhatsApp(int id, [FromBody] SendDocumentWhatsAppDto? dto = null)
+        {
+            try
+            {
+                var note = await _context.DeliveryNotes
+                    .Include(dn => dn.Client)
+                    .FirstOrDefaultAsync(dn => dn.Id == id);
+
+                if (note == null) return NotFound(new { message = "Delivery note not found" });
+                if (note.Client == null) return BadRequest(new { message = "Client not found for this delivery note" });
+                if (string.IsNullOrEmpty(note.Client.Phone))
+                    return BadRequest(new { message = "Client phone number is required for WhatsApp sharing." });
+
+                var userId = _userManager.GetUserId(User);
+                if (string.IsNullOrEmpty(userId)) return Unauthorized();
+                var user = await _userManager.FindByIdAsync(userId);
+                if (user == null) return Unauthorized();
+
+                var userProfile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
+                var senderName = userProfile != null ? $"{userProfile.FirstName} {userProfile.LastName}".Trim() : user.UserName ?? "";
+
+                var request = HttpContext.Request;
+                var baseUrl = $"{request.Scheme}://{request.Host}";
+                var pdfUrl = $"{baseUrl}/api/DeliveryNotes/{id}/pdf";
+
+                var result = await _whatsAppService.SendDocumentMessageAsync(
+                    note.Client.Phone, pdfUrl, $"DeliveryNote-{note.Number}.pdf", dto?.CustomMessage);
+
+                var audit = new DocumentSendAudit
+                {
+                    DocumentType = "DeliveryNote",
+                    DocumentId = id,
+                    DocumentNumber = note.Number,
+                    Channel = "WhatsApp",
+                    RecipientPhone = note.Client.Phone,
+                    SentAt = DateTime.UtcNow,
+                    SentByUserId = userId,
+                    SentByName = senderName,
+                    Status = result.Success ? "Sent" : "Failed",
+                    ErrorMessage = result.Success ? null : result.Error,
+                    MessageId = result.Success ? result.MessageId : null,
+                    CompanyId = user.CompanyId
+                };
+                _context.DocumentSendAudits.Add(audit);
+                await _context.SaveChangesAsync();
+
+                if (!result.Success)
+                    return BadRequest(new { message = result.Error ?? "Failed to send WhatsApp message" });
+
+                return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to send WhatsApp message for delivery note {NoteId}", id);
+                return StatusCode(500, new { message = "Failed to send WhatsApp message" });
+            }
+        }
+
+        // GET: api/deliverynotes/{id}/send-history
+        [HttpGet("{id}/send-history")]
+        public async Task<IActionResult> GetDeliveryNoteSendHistory(int id)
+        {
+            var note = await _context.DeliveryNotes.AsNoTracking().FirstOrDefaultAsync(dn => dn.Id == id);
+            if (note == null) return NotFound();
+
+            var history = await _context.DocumentSendAudits
+                .Where(a => a.DocumentType == "DeliveryNote" && a.DocumentId == id)
+                .OrderByDescending(a => a.SentAt)
+                .Select(a => new {
+                    a.Id, a.Channel, a.RecipientEmail, a.RecipientPhone,
+                    a.Subject, a.SentAt, a.SentByName, a.Status, a.ErrorMessage
+                })
+                .ToListAsync();
+
+            return Ok(history);
         }
     }
 }
