@@ -34,30 +34,30 @@
 
 	<ItemGroup>
 		<!-- Use EF Core 8.x for a net8.0 app -->
-		<PackageReference Include="ClosedXML" Version="0.104.2" />
-		<PackageReference Include="MailKit" Version="4.15.0" />
-		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.24" />
-		<PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.24" />
-		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.24" />
+		<PackageReference Include="ClosedXML" Version="0.105.0" />
+		<PackageReference Include="MailKit" Version="4.15.1" />
+		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.25" />
+		<PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.25" />
+		<PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.25" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.*">
 			<PrivateAssets>all</PrivateAssets>
 		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
 		<PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="8.0.15" />
-		<PackageReference Include="MimeKit" Version="4.15.0" />
-		<PackageReference Include="MiniExcel" Version="1.42.0" />
+		<PackageReference Include="MimeKit" Version="4.15.1" />
+		<PackageReference Include="MiniExcel" Version="1.43.0" />
 
 		<!-- Add runtime/provider and design packages (8.x) -->
 		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.*" />
 		<PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.*" />
-		<PackageReference Include="Polly" Version="8.6.5" />
+		<PackageReference Include="Polly" Version="8.6.6" />
 		<PackageReference Include="QRCoder" Version="1.7.0" />
 		<PackageReference Include="QuestPDF" Version="2025.12.3" />
 		<PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
 		<PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
 		<PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
-		<PackageReference Include="SkiaSharp" Version="3.119.1" />
-		<PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.119.1" />
+		<PackageReference Include="SkiaSharp" Version="3.119.2" />
+		<PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.119.2" />
 		<PackageReference Include="Supabase" Version="1.1.1" />
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="8.1.4" />
 		<PackageReference Include="Tesseract" Version="5.2.0" />

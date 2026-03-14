@@ -1409,7 +1409,7 @@ export default function LandingPage() {
 
           {/* Bottom Bar */}
           <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-gray-500">
-            <p>© 2024 {t('common.appName')}. {t('landing.allRightsReserved')}</p>
+            <p>© 2026 {t('common.appName')}. {t('landing.allRightsReserved')}</p>
             <div className="flex gap-6 flex-wrap justify-center">
               <a href="#" className="hover:text-white transition-colors">{t('landing.privacyPolicy')}</a>
               <a href="#" className="hover:text-white transition-colors">{t('landing.termsOfService')}</a>
