@@ -42,9 +42,9 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [dev, main]
+    branches: [dev, main, master]
   pull_request:
-    branches: [dev, main]
+    branches: [dev, main, master]
   workflow_dispatch:
 
 env:
@@ -147,7 +147,7 @@ jobs:
     name: Docker Build & Push
     runs-on: ubuntu-latest
     needs: [backend, frontend]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     permissions:
       contents: read
       packages: write
@@ -206,7 +206,7 @@ jobs:
     name: Deploy to Production
     runs-on: ubuntu-latest
     needs: [docker]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     environment: production
     permissions:
       contents: read
