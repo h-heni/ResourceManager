@@ -106,7 +106,7 @@ export default function LoginPage() {
             <div className="w-full max-w-md bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden animate-fade-in">
                 <div className="p-8">
                     <div className="text-center mb-10">
-                        <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-[#065F46]">
+                        <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-purple-600">
                             {t('common.appName')}
                         </h1>
                         <p className="text-gray-500 mt-2">{t('auth.messages.signInPrompt')}</p>
@@ -123,7 +123,7 @@ export default function LoginPage() {
                                     required
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
+                                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
                                     placeholder={t('auth.placeholders.email')}
                                 />
                             </div>
@@ -141,7 +141,7 @@ export default function LoginPage() {
                             <div className="text-right">
                                 <span 
                                     onClick={() => navigate('/forgot-password')} 
-                                    className="text-sm text-[#065F46] hover:underline cursor-pointer"
+                                    className="text-sm text-purple-600 hover:underline cursor-pointer"
                                 >
                                     {t('auth.forgotPassword')}
                                 </span>
@@ -171,7 +171,7 @@ export default function LoginPage() {
                             disabled={loading || isRateLimited}
                             className={cn(
                                 "w-full py-3 px-4 rounded-xl text-white font-semibold shadow-lg transition-all transform hover:scale-[1.02] active:scale-[0.98]",
-                                "bg-[#065F46] hover:bg-[#047857]",
+                                "bg-purple-600 hover:bg-purple-700",
                                 (loading || isRateLimited) && "opacity-70 cursor-not-allowed"
                             )}
                         >
@@ -199,7 +199,7 @@ export default function LoginPage() {
                 <div className="px-8 py-4 bg-gray-50 border-t border-gray-100/50 text-center">
                     <p className="text-sm text-gray-500">
                         {t('auth.messages.noAccount')}{' '}
-                        <span onClick={() => navigate('/signup')} className="text-[#065F46] font-semibold cursor-pointer hover:underline">{t('auth.messages.createAccount')}</span>
+                        <span onClick={() => navigate('/signup')} className="text-purple-600 font-semibold cursor-pointer hover:underline">{t('auth.messages.createAccount')}</span>
                     </p>
                 </div>
             </div>

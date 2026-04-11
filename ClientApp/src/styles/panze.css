@@ -1,0 +1,245 @@
+/* ==========================================================
+   PANZE DESIGN SYSTEM — Theme Variables & Glass Components
+   Ported from Design/src/styles/panze.css
+   ========================================================== */
+
+.panze-dashboard-wrapper {
+  transition: background-color 0.5s ease, color 0.5s ease;
+  background-color: var(--panze-bg, #f8fafc);
+  color: var(--panze-text-primary, #0f172a);
+  min-height: 100vh;
+}
+
+/* ── Theme: Default (Purple) ── */
+:root {
+  --panze-bg: #FAFAFA;
+  --panze-text-primary: #09090B;
+  --panze-text-secondary: #52525B;
+  --panze-text-muted: #71717A;
+  --panze-glass-bg: rgba(255, 255, 255, 0.7);
+  --panze-glass-border: rgba(255, 255, 255, 0.5);
+  --panze-glass-shadow: 0 8px 32px 0 rgba(124, 58, 237, 0.07);
+  --panze-accent: #7C3AED;
+  --panze-accent-light: #8B5CF6;
+  --panze-accent-hover: #6D28D9;
+  --panze-card-bg: #ffffff;
+  --panze-card-border: #E4E4E7;
+  --panze-divider: #E4E4E7;
+  --panze-input-bg: #ffffff;
+  --panze-surface: #F4F4F5;
+}
+
+/* Theme: Dark */
+.panze-theme-dark {
+  --panze-bg: #0f172a;
+  --panze-text-primary: #f8fafc;
+  --panze-text-secondary: #94a3b8;
+  --panze-text-muted: #64748b;
+  --panze-glass-bg: rgba(30, 41, 59, 0.6);
+  --panze-glass-border: rgba(255, 255, 255, 0.1);
+  --panze-glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  --panze-accent: #3b82f6;
+  --panze-accent-light: #60a5fa;
+  --panze-accent-hover: #2563eb;
+  --panze-card-bg: #1e293b;
+  --panze-card-border: rgba(255, 255, 255, 0.1);
+  --panze-divider: rgba(255, 255, 255, 0.1);
+  --panze-input-bg: #1e293b;
+  --panze-surface: #334155;
+}
+
+/* Theme: Pastel Dream */
+.panze-theme-pastel {
+  --panze-bg: #faf5ff;
+  --panze-text-primary: #4a044e;
+  --panze-text-secondary: #a21caf;
+  --panze-text-muted: #c026d3;
+  --panze-glass-bg: rgba(255, 255, 255, 0.5);
+  --panze-glass-border: rgba(240, 171, 252, 0.5);
+  --panze-glass-shadow: 0 8px 32px 0 rgba(134, 25, 143, 0.05);
+  --panze-accent: #d946ef;
+  --panze-accent-light: #e879f9;
+  --panze-accent-hover: #c026d3;
+  --panze-card-bg: #ffffff;
+  --panze-card-border: rgba(240, 171, 252, 0.3);
+  --panze-divider: rgba(240, 171, 252, 0.3);
+  --panze-input-bg: #ffffff;
+  --panze-surface: #fdf4ff;
+}
+
+/* Theme: Soft Mint (Green — familiar to existing users) */
+.panze-theme-mint {
+  --panze-bg: #ecfdf5;
+  --panze-text-primary: #064e3b;
+  --panze-text-secondary: #047857;
+  --panze-text-muted: #059669;
+  --panze-glass-bg: rgba(255, 255, 255, 0.6);
+  --panze-glass-border: rgba(110, 231, 183, 0.5);
+  --panze-glass-shadow: 0 8px 32px 0 rgba(4, 120, 87, 0.05);
+  --panze-accent: #10b981;
+  --panze-accent-light: #34d399;
+  --panze-accent-hover: #059669;
+  --panze-card-bg: #ffffff;
+  --panze-card-border: rgba(110, 231, 183, 0.3);
+  --panze-divider: rgba(110, 231, 183, 0.3);
+  --panze-input-bg: #ffffff;
+  --panze-surface: #f0fdf4;
+}
+
+/* Theme: Peach Bliss */
+.panze-theme-peach {
+  --panze-bg: #fff7ed;
+  --panze-text-primary: #7c2d12;
+  --panze-text-secondary: #c2410c;
+  --panze-text-muted: #ea580c;
+  --panze-glass-bg: rgba(255, 255, 255, 0.6);
+  --panze-glass-border: rgba(253, 186, 116, 0.5);
+  --panze-glass-shadow: 0 8px 32px 0 rgba(194, 65, 12, 0.05);
+  --panze-accent: #f97316;
+  --panze-accent-light: #fb923c;
+  --panze-accent-hover: #ea580c;
+  --panze-card-bg: #ffffff;
+  --panze-card-border: rgba(253, 186, 116, 0.3);
+  --panze-divider: rgba(253, 186, 116, 0.3);
+  --panze-input-bg: #ffffff;
+  --panze-surface: #fffbeb;
+}
+
+/* ── Glassmorphism Card ── */
+.panze-glass-card {
+  background: var(--panze-glass-bg, rgba(255, 255, 255, 0.7));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--panze-glass-border, rgba(255, 255, 255, 0.5));
+  box-shadow: var(--panze-glass-shadow, 0 8px 32px 0 rgba(31, 38, 135, 0.07));
+  border-radius: 24px;
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.panze-glass-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px 0 rgba(31, 38, 135, 0.1);
+}
+
+/* ── Small UI elements ── */
+.panze-pill {
+  border-radius: 9999px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panze-glass-bg);
+  border: 1px solid var(--panze-glass-border);
+  color: var(--panze-text-primary);
+}
+
+.panze-text-secondary {
+  color: var(--panze-text-secondary);
+}
+
+.panze-bento-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 1.5rem;
+}
+
+/* Base resets for Panze wrapper children */
+.panze-dashboard-wrapper h1,
+.panze-dashboard-wrapper h2,
+.panze-dashboard-wrapper h3,
+.panze-dashboard-wrapper p,
+.panze-dashboard-wrapper span,
+.panze-dashboard-wrapper div {
+  color: inherit;
+}
+
+/* ── Panze primary button ── */
+.panze-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 9999px;
+  border: none;
+  background: var(--panze-accent, #7C3AED);
+  color: #ffffff;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.panze-btn-primary:hover {
+  background: var(--panze-accent-hover, #6D28D9);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25);
+}
+
+/* ── Panze table styles (override rm-table in Panze mode) ── */
+.panze-shell .rm-table-card {
+  border-radius: 16px;
+  border-color: var(--panze-card-border, #E4E4E7);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04);
+}
+
+.panze-shell .rm-table thead th {
+  background: var(--panze-surface, #F4F4F5);
+  color: var(--panze-text-muted, #71717A);
+  border-color: var(--panze-divider, #E4E4E7);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.panze-shell .rm-table tbody td {
+  color: var(--panze-text-primary, #09090B);
+  border-color: var(--panze-surface, #F4F4F5);
+}
+
+.panze-shell .rm-table tbody tr:hover {
+  background: var(--panze-surface, #F4F4F5);
+}
+
+/* ── Action bar for multi-select ── */
+.panze-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--panze-card-bg, #ffffff);
+  border: 1px solid var(--panze-card-border, #E4E4E7);
+  border-radius: 9999px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.panze-action-bar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  border: 1px solid var(--panze-divider, #E4E4E7);
+  background: transparent;
+  color: var(--panze-text-secondary, #52525B);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+
+.panze-action-bar-btn:hover {
+  border-color: var(--panze-accent, #7C3AED);
+  color: var(--panze-accent, #7C3AED);
+  background: rgba(124, 58, 237, 0.04);
+}
+
+.panze-action-bar-btn--danger:hover {
+  border-color: #EF4444;
+  color: #EF4444;
+  background: rgba(239, 68, 68, 0.04);
+}

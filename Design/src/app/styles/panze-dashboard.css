@@ -1,0 +1,732 @@
+/* ==========================================================
+   RSC MANAGER — ANALYTICS DASHBOARD
+   Pixel-accurate recreation of laxi.ai spec
+   
+   TOKENS:
+   ───────
+   Primary indigo:    #4F46E5
+   Accent blue:       #3B82F6
+   Accent sky:        #0EA5E9
+   Accent light:      #818CF8
+   Neutral bg:        #FAFAFA
+   Card white:        #FFFFFF
+   Divider:           #E4E4E7
+   Text primary:      #09090B
+   Text secondary:    #52525B
+   Text muted:        #71717A
+   ========================================================== */
+
+/* ── Keyframes ────────────────────────────────────────────── */
+@keyframes panze-fade-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes panze-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+
+@keyframes panze-sparkline-draw {
+  from { stroke-dashoffset: 200; }
+  to   { stroke-dashoffset: 0; }
+}
+
+/* ── Full-bleed background ────────────────────────────────── */
+.panze-shell {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #09090B;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  position: relative;
+  background: #ffffff;
+}
+
+/* Add a very subtle, crisp shadow for premium depth, avoiding "none" flat look */
+.panze-shell .shadow-sm,
+.panze-shell .shadow-md,
+.panze-shell .shadow-lg,
+.panze-shell .shadow-xl,
+.panze-shell .shadow-inner,
+.panze-shell .hover\:shadow-md:hover {
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04) !important;
+}
+
+/* ── Main Container ──────────────────────────────────── */
+.panze-container {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100vh;
+  background: #FAFAFA;
+  border-radius: 0;
+  box-shadow: none;
+  display: flex;
+  overflow: hidden;
+}
+
+/* ── SIDEBAR ──────────────────────────────────────────────── */
+.panze-sidebar {
+  width: 240px;
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 24px 0;
+  background: #ffffff;
+  border-right: 1px solid #E4E4E7;
+  border-radius: 0;
+  overflow: hidden;
+  transition: width 0.3s ease, min-width 0.3s ease;
+  box-shadow: none;
+  z-index: 10;
+  position: relative;
+}
+
+.panze-sidebar-collapsed .panze-sidebar {
+  width: 68px;
+  min-width: 68px;
+}
+
+/* Logo */
+.panze-sidebar-top {
+  padding: 0 24px 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.panze-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #09090B;
+  letter-spacing: -0.3px;
+}
+
+.panze-logo-icon {
+  width: 30px;
+  height: 30px;
+  background: var(--color-indigo-700, #4338CA);
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.panze-sidebar-collapsed .panze-sidebar-top {
+  padding: 0 0 20px;
+  justify-content: center;
+}
+
+/* ── Nav Sections ── */
+.panze-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 12px;
+}
+
+.panze-nav::-webkit-scrollbar { width: 0px; display: none; }
+.panze-nav::-webkit-scrollbar-track { background: transparent; }
+.panze-nav::-webkit-scrollbar-thumb { background: transparent; }
+
+.panze-nav-section {
+  font-size: 10px;
+  font-weight: 600;
+  color: #71717A;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 20px 12px 6px;
+  margin: 0;
+}
+
+.panze-nav-section:first-child {
+  padding-top: 0;
+}
+
+.panze-nav-group { position: relative; }
+
+.panze-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #3F3F46;
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  position: relative;
+  font-family: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.panze-sidebar-collapsed .panze-nav-item {
+  justify-content: center;
+  padding: 10px;
+}
+
+.panze-sidebar-collapsed .panze-nav {
+  padding: 0 10px;
+  align-items: center;
+}
+
+.panze-nav-item:hover {
+  background: #F4F4F5;
+  color: #09090B;
+}
+
+/* Active nav — indigo highlight */
+.panze-nav-item.active {
+  background: var(--color-indigo-50, #EEF2FF);
+  color: var(--color-indigo-600, #4F46E5);
+  font-weight: 600;
+}
+
+.panze-nav-item.active:hover {
+  background: var(--color-indigo-100, #E0E7FF);
+}
+
+.panze-nav-icon {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.panze-nav-label { flex: 1; }
+
+.panze-nav-chevron {
+  width: 14px; height: 14px;
+  color: #E4E4E7;
+  flex-shrink: 0;
+  transition: all 0.15s;
+  display: none;
+}
+
+.panze-nav-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--color-indigo-600, #4F46E5);
+  flex-shrink: 0;
+  animation: panze-pulse 2s ease-in-out infinite;
+}
+
+/* Accordion */
+.panze-nav-chevron-toggle {
+  width: 14px; height: 14px;
+  color: #A1A1AA;
+  flex-shrink: 0;
+  transition: transform 0.25s ease, color 0.15s;
+}
+
+.panze-nav-chevron-toggle.rotated { transform: rotate(180deg); }
+
+.panze-nav-item.expanded {
+  background: #F4F4F5;
+  color: #09090B;
+}
+.panze-nav-item.expanded .panze-nav-chevron-toggle { color: var(--color-indigo-600, #4F46E5); }
+
+.panze-nav-submenu {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+.panze-nav-submenu-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0 8px 0;
+  position: relative;
+}
+.panze-nav-submenu-inner::before {
+  content: '';
+  position: absolute;
+  left: 21px; top: 4px; bottom: 12px;
+  width: 1.5px;
+  background: #E4E4E7;
+  border-radius: 2px;
+}
+.panze-nav-subitem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px 8px 40px;
+  border-radius: 9999px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: #71717A;
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  position: relative;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+.panze-nav-subitem:hover { color: var(--color-indigo-600, #4F46E5); background: #F4F4F5; }
+.panze-nav-subitem-icon { color: #A1A1AA; flex-shrink: 0; transition: color 0.15s; }
+.panze-nav-subitem:hover .panze-nav-subitem-icon { color: var(--color-indigo-600, #4F46E5); }
+.panze-nav-subitem::before {
+  content: '';
+  position: absolute;
+  left: 21px; top: 50%;
+  width: 10px; height: 1.5px;
+  background: #E4E4E7;
+  border-radius: 2px;
+}
+.panze-sidebar-collapsed .panze-nav-submenu { display: none; }
+
+.panze-nav-badge {
+  font-size: 10px; font-weight: 600;
+  color: #ffffff;
+  background: var(--color-indigo-600, #4F46E5);
+  padding: 1px 7px;
+  border-radius: 9999px;
+  min-width: 18px;
+  text-align: center;
+}
+
+/* Sidebar bottom user */
+.panze-sidebar-user {
+  padding: 20px 24px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  border-top: 1px solid #E4E4E7;
+  margin-top: auto;
+  padding-top: 16px;
+}
+
+.panze-sidebar-collapsed .panze-sidebar-user {
+  padding: 16px 0 0;
+}
+
+.panze-sidebar-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--color-indigo-600, #4F46E5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.panze-sidebar-user-info {
+  text-align: center;
+}
+
+.panze-sidebar-user-name {
+  font-size: 11.5px;
+  color: #52525B;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panze-sidebar-user-role {
+  font-size: 11px;
+  color: #71717A;
+}
+
+.panze-sidebar-settings-btn {
+  width: 28px; height: 28px;
+  border-radius: 9999px;
+  border: none;
+  background: transparent;
+  color: #71717A;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.panze-sidebar-settings-btn:hover { background: #F4F4F5; color: #52525B; }
+
+.panze-sidebar-collapse-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 8px 0;
+  border: none;
+  background: transparent;
+  color: #A1A1AA;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.panze-sidebar-collapse-btn:hover { color: #52525B; }
+
+/* ── RIGHT CONTENT PANE ──────────────────────────────────── */
+.panze-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: #FAFAFA;
+  border-radius: 0;
+}
+
+/* ── HEADER ───────────────────────────────────────────────── */
+.panze-header {
+  padding: 28px 28px 0;
+  flex-shrink: 0;
+}
+
+.panze-header-left { display: flex; flex-direction: column; gap: 4px; }
+
+.panze-header .panze-page-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #09090B;
+  letter-spacing: -0.5px;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.panze-header-subtitle {
+  font-size: 13px;
+  color: #52525B;
+  font-weight: 400;
+  margin: 0;
+}
+
+.panze-header-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.panze-header-action {
+  width: 36px; height: 36px;
+  border-radius: 9999px;
+  border: none;
+  background: #ffffff;
+  color: #52525B;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  position: relative;
+  box-shadow: 0 1px 3px rgba(9, 9, 11, 0.04);
+  border: 1px solid #E4E4E7;
+}
+.panze-header-action:hover { background: #ffffff; color: #09090B; box-shadow: 0 2px 6px rgba(9, 9, 11, 0.08); }
+
+.panze-header-action-dot {
+  position: absolute;
+  top: 6px; right: 6px;
+  width: 7px; height: 7px;
+  background: var(--color-indigo-500, #6366F1);
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+}
+
+.panze-header-avatar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: var(--color-indigo-600, #4F46E5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px; font-weight: 700;
+  color: #ffffff;
+  cursor: pointer;
+  margin-left: 8px;
+  box-shadow: 0 1px 3px rgba(9, 9, 11, 0.04);
+}
+
+.panze-back-btn-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 9999px;
+  background: #09090B;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+  margin-left: 4px;
+}
+.panze-back-btn-inline:hover { background: var(--color-indigo-600, #4F46E5); }
+
+/* ── MAIN SCROLLABLE ──────────────────────────────────────── */
+.panze-main {
+  flex: 1;
+  padding: 20px 28px 28px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ── KPI CARDS ROW ────────────────────────────────────────── */
+.panze-kpi-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.panze-kpi-card {
+  background: #ffffff;
+  border: 1px solid #E4E4E7;
+  border-radius: 16px;
+  padding: 20px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease;
+  animation: panze-fade-in 0.35s ease both;
+}
+
+.panze-kpi-card:nth-child(2) { animation-delay: 0.05s; }
+
+.panze-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+}
+
+.panze-kpi-info { display: flex; flex-direction: column; gap: 2px; }
+.panze-kpi-label { font-size: 12px; font-weight: 500; color: #71717A; letter-spacing: 0.01em; }
+.panze-kpi-value {
+  font-size: 30px;
+  font-weight: 700;
+  color: #09090B;
+  letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+
+.panze-kpi-sparkline { flex-shrink: 0; }
+
+/* KPI Change Badge */
+.panze-kpi-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 2px 8px 2px 5px;
+  border-radius: 9999px;
+  width: fit-content;
+  margin-top: 4px;
+}
+.panze-kpi-change-up {
+  color: var(--color-blue-600, #2563EB);
+  background: rgba(59, 130, 246, 0.12);
+}
+.panze-kpi-change-down {
+  color: var(--color-indigo-600, #4F46E5);
+  background: rgba(79, 70, 229, 0.12);
+}
+
+/* ── MAIN GRID (recommendations + right analytics) ────────── */
+.panze-content-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* ── RECOMMENDATIONS CARD ─────────────────────────────────── */
+.panze-recommend-card {
+  background: #ffffff;
+  border: 1px solid #E4E4E7;
+  border-radius: 16px;
+  padding: 20px 32px;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+  animation: panze-fade-in 0.35s 0.1s ease both;
+}
+
+.panze-recommend-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.panze-recommend-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #09090B;
+  margin-bottom: 0;
+}
+
+.panze-recommend-see-all {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-indigo-600, #4F46E5);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 9999px;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.panze-recommend-see-all:hover {
+  background: var(--color-indigo-50, #EEF2FF);
+}
+
+.panze-recommend-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #F4F4F5;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.panze-recommend-item:last-child { border-bottom: none; }
+.panze-recommend-item:hover { background: #FAFAFA; margin: 0 -8px; padding: 10px 8px; border-radius: 8px; }
+
+.panze-recommend-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #F4F4F5;
+  border: 1px solid #E4E4E7;
+}
+
+.panze-recommend-info { flex: 1; min-width: 0; }
+.panze-recommend-name { font-size: 13.5px; font-weight: 500; color: #09090B; }
+.panze-recommend-sub { font-size: 11.5px; color: #71717A; margin-top: 1px; }
+.panze-recommend-chevron { color: #A1A1AA; flex-shrink: 0; transition: color 0.15s; }
+.panze-recommend-item:hover .panze-recommend-chevron { color: var(--color-indigo-600, #4F46E5); }
+
+/* ── RIGHT ANALYTICS COLUMN ───────────────────────────────── */
+.panze-analytics-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.panze-analytics-card {
+  background: #ffffff;
+  border: 1px solid #E4E4E7;
+  border-radius: 16px;
+  padding: 20px 32px;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+  animation: panze-fade-in 0.35s 0.15s ease both;
+}
+
+.panze-analytics-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #09090B;
+  margin-bottom: 12px;
+}
+
+/* Pie chart legend */
+.panze-pie-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  flex: 1;
+}
+
+.panze-pie-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #52525B;
+}
+
+.panze-pie-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Gauge */
+.panze-gauge-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.panze-gauge-label {
+  font-size: 24px;
+  font-weight: 700;
+  color: #09090B;
+  margin-top: -24px;
+}
+
+.panze-gauge-sublabel {
+  font-size: 12px;
+  color: #71717A;
+  margin-top: 4px;
+}
+
+/* ── SCROLLBARS ──────────────────────────────────────────── */
+.panze-shell *::-webkit-scrollbar { width: 4px; height: 4px; }
+.panze-shell *::-webkit-scrollbar-track { background: transparent; }
+.panze-shell *::-webkit-scrollbar-thumb { background: rgba(9, 9, 11, 0.1); border-radius: 9999px; }
+
+/* ── SECTION DIVIDER ──────────────────────────────────────── */
+.panze-section-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+  margin-bottom: 8px;
+}
+
+.panze-section-divider-line { flex: 1; height: 1px; background: #E4E4E7; }
+.panze-section-divider-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #71717A;
+  white-space: nowrap;
+}
+
+/* ── RESPONSIVE ───────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .panze-content-grid { grid-template-columns: 1fr; }
+  .panze-kpi-row { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 768px) {
+  .panze-sidebar { display: none; }
+}

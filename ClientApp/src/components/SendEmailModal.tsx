@@ -87,7 +87,7 @@ export default function SendEmailModal({
             <h3 className="text-lg font-semibold text-gray-900">{t('email.sentSuccess')}</h3>
             <button
               onClick={handleClose}
-              className="px-6 py-2 bg-[#065F46] text-white rounded-xl hover:bg-[#047857] transition-colors"
+              className="px-6 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors"
             >
               {t('common.close')}
             </button>

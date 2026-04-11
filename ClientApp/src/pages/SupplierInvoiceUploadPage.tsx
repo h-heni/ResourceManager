@@ -77,7 +77,7 @@ export default function SupplierInvoiceUploadPage() {
         <div className="max-w-lg mx-auto px-4 py-6">
             {/* Header */}
             <div className="text-center mb-8">
-                <div className="w-16 h-16 bg-gradient-to-br from-[#065F46] to-emerald-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
+                <div className="w-16 h-16 bg-gradient-to-br from-purple-600 to-emerald-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
                     <Upload className="text-white" size={28} />
                 </div>
                 <h1 className="text-2xl font-bold text-gray-900">
@@ -111,7 +111,7 @@ export default function SupplierInvoiceUploadPage() {
                     {/* Supplier Name */}
                     <div>
                         <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                            <Building2 size={16} className="text-[#065F46]" />
+                            <Building2 size={16} className="text-purple-600" />
                             {t('upload.supplierName', 'Supplier Name')}
                         </label>
                         <input
@@ -119,7 +119,7 @@ export default function SupplierInvoiceUploadPage() {
                             value={supplierName}
                             onChange={e => setSupplierName(e.target.value)}
                             placeholder={t('upload.supplierPlaceholder', 'e.g. ABC Electronics')}
-                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#065F46]/30 focus:border-[#065F46] outline-none transition-all"
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500/30 focus:border-purple-600 outline-none transition-all"
                             required
                         />
                     </div>
@@ -128,20 +128,20 @@ export default function SupplierInvoiceUploadPage() {
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                                <Calendar size={16} className="text-[#065F46]" />
+                                <Calendar size={16} className="text-purple-600" />
                                 {t('upload.date', 'Date')}
                             </label>
                             <input
                                 type="date"
                                 value={date}
                                 onChange={e => setDate(e.target.value)}
-                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#065F46]/30 focus:border-[#065F46] outline-none transition-all"
+                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500/30 focus:border-purple-600 outline-none transition-all"
                                 required
                             />
                         </div>
                         <div>
                             <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                                <DollarSign size={16} className="text-[#065F46]" />
+                                <DollarSign size={16} className="text-purple-600" />
                                 {t('upload.amount', 'Amount')}
                             </label>
                             <input
@@ -151,7 +151,7 @@ export default function SupplierInvoiceUploadPage() {
                                 value={amount}
                                 onChange={e => setAmount(e.target.value)}
                                 placeholder="0.00"
-                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-[#065F46]/30 focus:border-[#065F46] outline-none transition-all"
+                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-purple-500/30 focus:border-purple-600 outline-none transition-all"
                                 required
                             />
                         </div>
@@ -160,12 +160,12 @@ export default function SupplierInvoiceUploadPage() {
                     {/* File Upload Area */}
                     <div>
                         <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                            <FileText size={16} className="text-[#065F46]" />
+                            <FileText size={16} className="text-purple-600" />
                             {t('upload.pdfFile', 'PDF File')}
                         </label>
                         <label className={`block w-full p-6 border-2 border-dashed rounded-xl cursor-pointer transition-all text-center ${file
                                 ? 'border-emerald-300 bg-emerald-50/50'
-                                : 'border-gray-200 bg-gray-50 hover:border-[#065F46]/40 hover:bg-[#065F46]/5'
+                                : 'border-gray-200 bg-gray-50 hover:border-purple-600/40 hover:bg-purple-600/5'
                             }`}>
                             <input
                                 type="file"
@@ -201,7 +201,7 @@ export default function SupplierInvoiceUploadPage() {
                     <button
                         type="submit"
                         disabled={!isValid}
-                        className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-[#065F46] to-emerald-600 text-white rounded-xl font-semibold text-base shadow-lg hover:shadow-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
+                        className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-purple-600 to-emerald-600 text-white rounded-xl font-semibold text-base shadow-lg hover:shadow-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
                     >
                         {uploading ? (
                             <>

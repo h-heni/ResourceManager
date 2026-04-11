@@ -350,7 +350,7 @@ export default function NotificationBell() {
             {isOpen && (
                 <div className="absolute end-0 mt-2 w-96 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden animate-scale-up">
                     {/* Header */}
-                    <div className="px-4 py-3 bg-gradient-to-r from-[#065F46] to-[#14B8A6] text-white flex justify-between items-center">
+                    <div className="px-4 py-3 bg-gradient-to-r from-purple-600 to-purple-500 text-white flex justify-between items-center">
                         <div className="flex items-center gap-2">
                             <Bell size={18} />
                             <span className="font-semibold">{t('notifications.title')}</span>
@@ -370,7 +370,7 @@ export default function NotificationBell() {
                         <button
                             onClick={() => setActiveTab('notifications')}
                             className={`flex-1 py-2 text-sm font-medium transition-colors ${activeTab === 'notifications'
-                                ? 'text-[#065F46] border-b-2 border-[#065F46]'
+                                ? 'text-purple-600 border-b-2 border-purple-600'
                                 : 'text-gray-500 hover:text-gray-700'
                                 }`}
                         >
@@ -406,7 +406,7 @@ export default function NotificationBell() {
                     <div className="max-h-96 overflow-y-auto">
                         {loading ? (
                             <div className="p-6 text-center text-gray-500">
-                                <div className="animate-spin w-6 h-6 border-2 border-[#065F46] border-t-transparent rounded-full mx-auto mb-2"></div>
+                                <div className="animate-spin w-6 h-6 border-2 border-purple-600 border-t-transparent rounded-full mx-auto mb-2"></div>
                                 {t('notifications.loading')}
                             </div>
                         ) : activeTab === 'stock' ? (
@@ -628,19 +628,19 @@ export default function NotificationBell() {
                                 notifications.filter(n => !isDuePaymentNotification(n)).map(notification => (
                                     <div
                                         key={notification.id}
-                                        className={`px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors ${!notification.isRead ? 'bg-[#065F46]/5/50' : ''
+                                        className={`px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors ${!notification.isRead ? 'bg-purple-600/5' : ''
                                             }`}
                                     >
                                         <div className="flex items-start gap-3">
                                             <div className={`p-2 rounded-full ${isDuePaymentNotification(notification)
                                                 ? 'bg-amber-100'
-                                                : notification.isRead ? 'bg-gray-100' : 'bg-[#065F46]/10'
+                                                : notification.isRead ? 'bg-gray-100' : 'bg-purple-600/10'
                                                 }`}>
                                                 {isDuePaymentNotification(notification) ? (
                                                     <Banknote size={16} className="text-amber-600" />
                                                 ) : (
                                                     <Clock size={16} className={
-                                                        notification.isRead ? 'text-gray-500' : 'text-[#065F46]'
+                                                        notification.isRead ? 'text-gray-500' : 'text-purple-600'
                                                     } />
                                                 )}
                                             </div>
@@ -712,7 +712,7 @@ export default function NotificationBell() {
                                                 {!notification.isRead && !isDuePaymentNotification(notification) && (
                                                     <button
                                                         onClick={() => markAsRead(notification.id)}
-                                                        className="p-1 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded transition-colors"
+                                                        className="p-1 text-gray-400 hover:text-purple-600 hover:bg-purple-600/5 rounded transition-colors"
                                                         title="Mark as read"
                                                     >
                                                         <Check size={14} />

@@ -526,11 +526,11 @@ export default function DashboardPage() {
     if (fetchError && !stats) {
         return (
             <div className="flex flex-col items-center justify-center h-64 gap-4">
-                <div className="text-red-600 bg-red-50 border border-red-200 rounded-xl p-6 text-center max-w-md">
+                <div className="text-red-600 bg-red-50 border border-red-200 rounded-2xl p-6 text-center max-w-md">
                     <p className="font-medium mb-2">{fetchError}</p>
                     <button
                         onClick={() => { setFetchError(null); setLoading(true); fetchStats(); }}
-                        className="mt-2 px-4 py-2 bg-[#065F46] text-white rounded-lg text-sm hover:bg-[#054E3B] transition-colors"
+                        className="mt-2 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 transition-colors"
                     >
                         {t('common.retry', 'Retry')}
                     </button>
@@ -542,9 +542,9 @@ export default function DashboardPage() {
     /* ─── Loading skeleton ─── */
     if (loading) {
         return (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {[1, 2, 3, 4].map(i => (
-                    <div key={i} className="h-32 bg-gray-100 rounded-2xl animate-pulse" />
+                    <div key={i} className="h-28 bg-white border border-[#E4E4E7] rounded-2xl animate-pulse" />
                 ))}
             </div>
         );
@@ -578,27 +578,27 @@ export default function DashboardPage() {
             {/* Header with currency selector */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">{t('nav.dashboard')}</h1>
-                    <p className="text-sm text-gray-500 mt-0.5">{t('dashboard.overview')}</p>
+                    <h1 className="text-2xl font-semibold text-[#09090B] tracking-tight">{t('nav.dashboard')}</h1>
+                    <p className="text-sm text-[#71717A] mt-0.5">{t('dashboard.overview')}</p>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                     {/* Mode toggle */}
                     {stats && stats.availableCurrencies.length > 1 && (
-                        <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
+                        <div className="flex items-center gap-1 bg-[#F4F4F5] p-1 rounded-full">
                             <button
                                 onClick={() => handleModeChange('single')}
-                                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${dashboardMode === 'single'
-                                    ? 'bg-white text-gray-900 shadow-sm'
-                                    : 'text-gray-500 hover:text-gray-700'
+                                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${dashboardMode === 'single'
+                                    ? 'bg-white text-[#09090B] shadow-sm'
+                                    : 'text-[#71717A] hover:text-[#52525B]'
                                     }`}
                             >
                                 {t('dashboard.perCurrency', 'Per Currency')}
                             </button>
                             <button
                                 onClick={() => handleModeChange('mixed')}
-                                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors flex items-center gap-1 ${dashboardMode === 'mixed'
-                                    ? 'bg-white text-gray-900 shadow-sm'
-                                    : 'text-gray-500 hover:text-gray-700'
+                                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors flex items-center gap-1 ${dashboardMode === 'mixed'
+                                    ? 'bg-white text-[#09090B] shadow-sm'
+                                    : 'text-[#71717A] hover:text-[#52525B]'
                                     }`}
                             >
                                 <Globe size={12} />
@@ -608,14 +608,14 @@ export default function DashboardPage() {
                     )}
                     {/* Single-mode currency tabs */}
                     {dashboardMode === 'single' && stats && stats.availableCurrencies.length > 1 && (
-                        <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
+                        <div className="flex items-center gap-1 bg-[#F4F4F5] p-1 rounded-full">
                             {stats.availableCurrencies.map(c => (
                                 <button
                                     key={c}
                                     onClick={() => handleCurrencyChange(c)}
-                                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${cur === c
-                                        ? 'bg-white text-gray-900 shadow-sm'
-                                        : 'text-gray-500 hover:text-gray-700'
+                                    className={`px-3 py-1.5 text-sm font-medium rounded-full transition-colors ${cur === c
+                                        ? 'bg-white text-[#09090B] shadow-sm'
+                                        : 'text-[#71717A] hover:text-[#52525B]'
                                         }`}
                                 >
                                     {c}
@@ -627,7 +627,8 @@ export default function DashboardPage() {
                     <select
                         value={selectedYear === null ? 'all' : selectedYear}
                         onChange={e => handleYearChange(e.target.value)}
-                        className="px-3 py-1.5 text-sm font-medium rounded-lg bg-gray-100 border-0 text-gray-700 focus:ring-2 focus:ring-[#065F46] outline-none cursor-pointer"
+                        className="panze-form-select px-3 py-1.5 text-sm font-medium !rounded-full !border-[#E4E4E7] !bg-white"
+                        style={{ width: 'auto', paddingRight: '36px' }}
                     >
                         <option value="all">{t('dashboard.allYears', 'All Years')}</option>
                         {availableYears.map(yr => (
@@ -729,27 +730,25 @@ export default function DashboardPage() {
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {statCards.map((stat, idx) => (
-                    <div key={idx} className="bg-white p-4 sm:p-5 rounded-xl border border-gray-100 shadow-sm">
-                        <div className="flex items-center justify-between">
-                            <div className="min-w-0">
-                                <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">{stat.title}</p>
-                                <p className="text-2xl font-bold text-gray-900 mt-1">{stat.value}</p>
-                                {stat.subtitle && (
-                                    <p className="text-xs text-gray-400 mt-1 truncate">{stat.subtitle}</p>
-                                )}
-                            </div>
-                            <div className="p-2.5 rounded-lg bg-gray-50" style={{ color: stat.iconColor }}>
-                                <stat.icon size={20} />
-                            </div>
+                    <div key={idx} className="panze-kpi-card">
+                        <div className="panze-kpi-info">
+                            <span className="panze-kpi-label">{stat.title}</span>
+                            <span className="panze-kpi-value" style={{ fontSize: '24px' }}>{stat.value}</span>
+                            {stat.subtitle && (
+                                <span className="text-xs text-[#71717A] mt-1 truncate">{stat.subtitle}</span>
+                            )}
+                        </div>
+                        <div className="p-2.5 rounded-2xl bg-[#F4F4F5]" style={{ color: stat.iconColor }}>
+                            <stat.icon size={20} />
                         </div>
                     </div>
                 ))}
             </div>
 
             {/* Financial Summary: Sales vs Purchases */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="panze-content-grid">
                 {/* Sales */}
-                <div className="bg-white p-4 sm:p-5 rounded-xl border border-gray-100 shadow-sm">
+                <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] shadow-sm" style={{ animation: 'panze-fade-in 0.35s 0.1s ease both' }}>
                     <h3 className="text-sm font-semibold text-gray-900 mb-3">{t('dashboard.salesOverview', 'Sales')}</h3>
                     <div className="grid grid-cols-3 gap-3">
                         <div className="text-center">
@@ -772,23 +771,19 @@ export default function DashboardPage() {
                     {revenueSummary?.revenueByYear?.length ? (
                         <div className="mt-3 border-t border-gray-50 pt-2">
                             <p className="text-[11px] text-gray-400 mb-2">{t('dashboard.revenueByYear', 'Revenue by year')}</p>
-                            <div className="rm-table-card border-gray-100 shadow-none overflow-x-auto">
-                                <table className="rm-table">
-                                    <colgroup>
-                                        <col style={{ width: '40%' }} />
-                                        <col style={{ width: '60%' }} />
-                                    </colgroup>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
                                     <thead>
                                         <tr>
-                                            <th className="rm-th-id">{t('common.year', 'Year')}</th>
-                                            <th className="rm-th-number">{t('dashboard.totalRevenueLabel', 'Revenue')}</th>
+                                            <th className="py-2.5 px-3 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left">{t('common.year', 'Year')}</th>
+                                            <th className="py-2.5 px-3 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-right">{t('dashboard.totalRevenueLabel', 'Revenue')}</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {revenueSummary.revenueByYear.map((entry) => (
-                                            <tr key={entry.year}>
-                                                <td className="rm-cell-text whitespace-nowrap font-medium text-gray-700">{entry.year}</td>
-                                                <td className="rm-cell-currency">{fmt(entry.total)}</td>
+                                            <tr key={entry.year} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+                                                <td className="py-2 px-3 whitespace-nowrap font-medium text-slate-700">{entry.year}</td>
+                                                <td className="py-2 px-3 text-right font-semibold text-slate-900">{fmt(entry.total)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -799,7 +794,7 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Purchases */}
-                <div className="bg-white p-4 sm:p-5 rounded-xl border border-gray-100 shadow-sm">
+                <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] shadow-sm" style={{ animation: 'panze-fade-in 0.35s 0.15s ease both' }}>
                     <h3 className="text-sm font-semibold text-gray-900 mb-3">{t('dashboard.purchasesOverview', 'Purchases')}</h3>
                     <div className="grid grid-cols-3 gap-3">
                         <div className="text-center">
@@ -818,23 +813,19 @@ export default function DashboardPage() {
                     {purchasesSummary?.purchasesByYear?.length ? (
                         <div className="mt-3 border-t border-gray-50 pt-2">
                             <p className="text-[11px] text-gray-400 mb-2">{t('dashboard.expensesByYear', 'Expenses by year')}</p>
-                            <div className="rm-table-card border-gray-100 shadow-none overflow-x-auto">
-                                <table className="rm-table">
-                                    <colgroup>
-                                        <col style={{ width: '40%' }} />
-                                        <col style={{ width: '60%' }} />
-                                    </colgroup>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
                                     <thead>
                                         <tr>
-                                            <th className="rm-th-id">{t('common.year', 'Year')}</th>
-                                            <th className="rm-th-number">{t('expense.totalExpenses', 'Expenses')}</th>
+                                            <th className="py-2.5 px-3 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left">{t('common.year', 'Year')}</th>
+                                            <th className="py-2.5 px-3 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-right">{t('expense.totalExpenses', 'Expenses')}</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {purchasesSummary.purchasesByYear.map((entry) => (
-                                            <tr key={entry.year}>
-                                                <td className="rm-cell-text whitespace-nowrap font-medium text-gray-700">{entry.year}</td>
-                                                <td className="rm-cell-currency">{fmt(entry.total)}</td>
+                                            <tr key={entry.year} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+                                                <td className="py-2 px-3 whitespace-nowrap font-medium text-slate-700">{entry.year}</td>
+                                                <td className="py-2 px-3 text-right font-semibold text-slate-900">{fmt(entry.total)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -854,9 +845,9 @@ export default function DashboardPage() {
             </div>
 
             {/* Charts Row: Revenue vs Expenses (merged), Growth */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="panze-content-grid">
                 {/* Merged Revenue vs Expenses Chart */}
-                <div className="bg-white p-4 sm:p-5 rounded-xl border border-gray-100 shadow-sm">
+                <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] shadow-sm" style={{ animation: 'panze-fade-in 0.35s 0.2s ease both' }}>
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-sm font-semibold text-gray-900">{t('dashboard.revenueVsExpenses', 'Revenue vs Expenses')}</h3>
                         <div className="flex items-center gap-3">
@@ -889,7 +880,7 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Growth Trajectory Chart */}
-                <div className="bg-white p-4 sm:p-5 rounded-xl border border-gray-100 shadow-sm">
+                <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] shadow-sm" style={{ animation: 'panze-fade-in 0.35s 0.25s ease both' }}>
                     <div className="flex items-center justify-between mb-4">
                         <h3 className="text-sm font-semibold text-gray-900">{t('dashboard.growthTrajectory', 'Growth')}</h3>
                         <span className={`text-xs font-semibold ${netResult >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
@@ -927,34 +918,28 @@ export default function DashboardPage() {
             {stats && ((stats.mostSoldProducts?.length > 0) || (stats.mostBoughtProducts?.length > 0)) && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     {/* Top Sold Products (from client invoices) */}
-                    <div className="bg-white p-4 sm:p-5 rounded-xl border border-gray-100 shadow-sm">
-                        <h3 className="text-sm font-semibold text-gray-900 mb-4">
+                    <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] shadow-sm">
+                        <h3 className="text-sm font-semibold text-[#09090B] mb-4">
                             {t('dashboard.topSoldProducts', 'Top Sold Products')}
                         </h3>
                         {stats.mostSoldProducts?.length > 0 ? (
-                            <div className="rm-table-card border-gray-100 shadow-none overflow-x-auto">
-                                <table className="rm-table">
-                                    <colgroup>
-                                        <col style={{ width: '8%' }} />
-                                        <col style={{ width: '47%' }} />
-                                        <col style={{ width: '18%' }} />
-                                        <col style={{ width: '27%' }} />
-                                    </colgroup>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
                                     <thead>
                                         <tr>
-                                            <th className="rm-th-id">#</th>
-                                            <th>{t('common.description', 'Description')}</th>
-                                            <th className="rm-th-number">{t('common.quantity', 'Qty')}</th>
-                                            <th className="rm-th-number">{t('common.total', 'Total')}</th>
+                                            <th className="py-2.5 px-3 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left w-8">#</th>
+                                            <th className="py-2.5 px-3 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left">{t('common.description', 'Description')}</th>
+                                            <th className="py-2.5 px-3 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-right">{t('common.quantity', 'Qty')}</th>
+                                            <th className="py-2.5 px-3 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-right">{t('common.total', 'Total')}</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {stats.mostSoldProducts.slice(0, 5).map((p, idx) => (
-                                            <tr key={p.description}>
-                                                <td className="rm-cell-text whitespace-nowrap font-semibold text-gray-500">{idx + 1}</td>
-                                                <td className="rm-cell-text font-medium text-gray-900">{p.description}</td>
-                                                <td className="rm-cell-number">{p.totalQuantity}</td>
-                                                <td className="rm-cell-currency">{fmt(p.totalAmount)}</td>
+                                            <tr key={p.description} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+                                                <td className="py-2 px-3 whitespace-nowrap font-semibold text-slate-400">{idx + 1}</td>
+                                                <td className="py-2 px-3 font-medium text-slate-900">{p.description}</td>
+                                                <td className="py-2 px-3 text-right text-slate-600">{p.totalQuantity}</td>
+                                                <td className="py-2 px-3 text-right font-semibold text-slate-900">{fmt(p.totalAmount)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -966,34 +951,28 @@ export default function DashboardPage() {
                     </div>
 
                     {/* Top Purchased Products (from supplier invoices) */}
-                    <div className="bg-white p-4 sm:p-5 rounded-xl border border-gray-100 shadow-sm">
-                        <h3 className="text-sm font-semibold text-gray-900 mb-4">
+                    <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] shadow-sm">
+                        <h3 className="text-sm font-semibold text-[#09090B] mb-4">
                             {t('dashboard.topPurchasedProducts', 'Top Purchased Products')}
                         </h3>
                         {stats.mostBoughtProducts?.length > 0 ? (
-                            <div className="rm-table-card border-gray-100 shadow-none overflow-x-auto">
-                                <table className="rm-table">
-                                    <colgroup>
-                                        <col style={{ width: '8%' }} />
-                                        <col style={{ width: '47%' }} />
-                                        <col style={{ width: '18%' }} />
-                                        <col style={{ width: '27%' }} />
-                                    </colgroup>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
                                     <thead>
                                         <tr>
-                                            <th className="rm-th-id">#</th>
-                                            <th>{t('common.description', 'Description')}</th>
-                                            <th className="rm-th-number">{t('common.quantity', 'Qty')}</th>
-                                            <th className="rm-th-number">{t('common.total', 'Total')}</th>
+                                            <th className="py-2.5 px-3 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left w-8">#</th>
+                                            <th className="py-2.5 px-3 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left">{t('common.description', 'Description')}</th>
+                                            <th className="py-2.5 px-3 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-right">{t('common.quantity', 'Qty')}</th>
+                                            <th className="py-2.5 px-3 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-right">{t('common.total', 'Total')}</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {stats.mostBoughtProducts.slice(0, 5).map((p, idx) => (
-                                            <tr key={p.description}>
-                                                <td className="rm-cell-text whitespace-nowrap font-semibold text-gray-500">{idx + 1}</td>
-                                                <td className="rm-cell-text font-medium text-gray-900">{p.description}</td>
-                                                <td className="rm-cell-number">{p.totalQuantity}</td>
-                                                <td className="rm-cell-currency">{fmt(p.totalAmount)}</td>
+                                            <tr key={p.description} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+                                                <td className="py-2 px-3 whitespace-nowrap font-semibold text-slate-400">{idx + 1}</td>
+                                                <td className="py-2 px-3 font-medium text-slate-900">{p.description}</td>
+                                                <td className="py-2 px-3 text-right text-slate-600">{p.totalQuantity}</td>
+                                                <td className="py-2 px-3 text-right font-semibold text-slate-900">{fmt(p.totalAmount)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -1009,8 +988,8 @@ export default function DashboardPage() {
             {/* Bottom Row: Status Breakdown + Top Clients */}
             <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
                 {/* Invoice Status Breakdown */}
-                <div className="bg-white p-4 sm:p-5 rounded-xl border border-gray-100 shadow-sm">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-4">
+                <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] shadow-sm">
+                    <h3 className="text-sm font-semibold text-[#09090B] mb-4">
                         {t('dashboard.statusBreakdown', 'Invoice Status Breakdown')}
                     </h3>
                     {stats?.statusBreakdown && stats.statusBreakdown.length > 0 ? (
@@ -1044,27 +1023,20 @@ export default function DashboardPage() {
                 </div>
 
                 {/* Top Clients */}
-                <div className="bg-white p-4 sm:p-5 rounded-xl border border-gray-100 shadow-sm">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-4">
+                <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] shadow-sm">
+                    <h3 className="text-sm font-semibold text-[#09090B] mb-4">
                         {t('dashboard.topClients', 'Top Clients by Revenue')}
                     </h3>
                     {stats?.topClients && stats.topClients.length > 0 ? (
-                        <div className="rm-table-card border-gray-100 shadow-none overflow-x-auto">
-                            <table className="rm-table">
-                                <colgroup>
-                                    <col style={{ width: '6%' }} />
-                                    <col style={{ width: '34%' }} />
-                                    <col style={{ width: '16%' }} />
-                                    <col style={{ width: '30%' }} />
-                                    <col style={{ width: '14%' }} />
-                                </colgroup>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
                                 <thead>
                                     <tr>
-                                        <th className="rm-th-id">#</th>
-                                        <th>{t('invoice.client', 'Client')}</th>
-                                        <th className="rm-th-number">{t('dashboard.invoicesLabel', 'Invoices')}</th>
-                                        <th className="rm-th-number">{t('dashboard.revenueLabel', 'Revenue')}</th>
-                                        <th className="rm-th-number">{t('dashboard.share', 'Share')}</th>
+                                        <th className="py-2.5 px-3 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left w-8">#</th>
+                                        <th className="py-2.5 px-3 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left">{t('invoice.client', 'Client')}</th>
+                                        <th className="py-2.5 px-3 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-right">{t('dashboard.invoicesLabel', 'Invoices')}</th>
+                                        <th className="py-2.5 px-3 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-right">{t('dashboard.revenueLabel', 'Revenue')}</th>
+                                        <th className="py-2.5 px-3 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-right">{t('dashboard.share', 'Share')}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1072,12 +1044,12 @@ export default function DashboardPage() {
                                         const totalRevenueForYear = selectedYearRevenue || 1;
                                         const pct = Math.round((client.totalAmount / totalRevenueForYear) * 100);
                                         return (
-                                            <tr key={client.clientId}>
-                                                <td className="rm-cell-text whitespace-nowrap font-semibold text-gray-500">{idx + 1}</td>
-                                                <td className="rm-cell-text font-medium text-gray-900">{client.clientName}</td>
-                                                <td className="rm-cell-number">{client.totalInvoices}</td>
-                                                <td className="rm-cell-currency">{fmt(client.totalAmount)}</td>
-                                                <td className="rm-cell-number">{pct}%</td>
+                                            <tr key={client.clientId} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+                                                <td className="py-2 px-3 whitespace-nowrap font-semibold text-slate-400">{idx + 1}</td>
+                                                <td className="py-2 px-3 font-medium text-slate-900">{client.clientName}</td>
+                                                <td className="py-2 px-3 text-right text-slate-600">{client.totalInvoices}</td>
+                                                <td className="py-2 px-3 text-right font-semibold text-slate-900">{fmt(client.totalAmount)}</td>
+                                                <td className="py-2 px-3 text-right text-slate-600">{pct}%</td>
                                             </tr>
                                         );
                                     })}
@@ -1098,8 +1070,8 @@ export default function DashboardPage() {
                 const currencyTotal = filtered.reduce((s, c) => s + c.total, 0);
                 if (filtered.length === 0) return null;
                 return (
-                <div className="bg-white p-4 sm:p-5 rounded-xl border border-gray-100 shadow-sm">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-4">
+                <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] shadow-sm">
+                    <h3 className="text-sm font-semibold text-[#09090B] mb-4">
                         {t('dashboard.expensesByCategory', 'Expenses by Category')}
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
@@ -1130,10 +1102,10 @@ export default function DashboardPage() {
 
             {/* Inventory Summary Widget */}
             {inventoryReport && (
-                <div className="bg-white p-4 sm:p-5 rounded-xl border border-gray-100 shadow-sm">
+                <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#E4E4E7] shadow-sm">
                     <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                            <Package size={16} className="text-[#065F46]" />
+                        <h3 className="text-sm font-semibold text-[#09090B] flex items-center gap-2">
+                            <Package size={16} className="text-purple-600" />
                             {t('inventory.title', 'Inventory Management')}
                         </h3>
                         {activeAlertCount > 0 && (

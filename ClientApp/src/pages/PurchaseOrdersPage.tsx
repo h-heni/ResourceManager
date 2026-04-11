@@ -179,18 +179,18 @@ export default function PurchaseOrdersPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <ShoppingCart className="text-[#065F46]" />
+            <ShoppingCart className="text-purple-600" />
             {t('inventory.purchaseOrders', 'Purchase Orders')}
           </h1>
           <p className="text-sm text-slate-500 mt-1">{t('inventory.poSubtitle', 'Manage purchase orders to restock inventory')}</p>
         </div>
-        <button onClick={() => setShowCreate(true)} className="px-4 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#064E3B] text-sm font-medium flex items-center gap-2">
+        <button onClick={() => setShowCreate(true)} className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium flex items-center gap-2">
           <Plus size={16} /> {t('inventory.createPO', 'Create PO')}
         </button>
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center py-12"><Loader2 className="animate-spin text-[#065F46]" size={32} /></div>
+        <div className="flex justify-center py-12"><Loader2 className="animate-spin text-purple-600" size={32} /></div>
       ) : !orders.length ? (
         <div className="text-center py-12 text-slate-500">
           <ShoppingCart size={48} className="mx-auto mb-3 text-slate-300" />
@@ -228,7 +228,7 @@ export default function PurchaseOrdersPage() {
                       </tr>
                       {!isCollapsed && yearOrders.map(po => (
                   <tr key={po.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3 font-medium text-[#065F46]">{po.number}</td>
+                    <td className="px-4 py-3 font-medium text-purple-600">{po.number}</td>
                     <td className="px-4 py-3 text-slate-900">{po.supplierName}</td>
                     <td className="px-4 py-3 text-slate-500">{new Date(po.date).toLocaleDateString()}</td>
                     <td className="px-4 py-3 text-slate-500">{po.expectedDeliveryDate ? new Date(po.expectedDeliveryDate).toLocaleDateString() : '—'}</td>
@@ -245,13 +245,13 @@ export default function PurchaseOrdersPage() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => setViewId(po.id)} className="p-1.5 text-slate-400 hover:text-[#065F46]" title={t('common.view', 'View')}>
+                        <button onClick={() => setViewId(po.id)} className="p-1.5 text-slate-400 hover:text-purple-600" title={t('common.view', 'View')}>
                           <Eye size={15} />
                         </button>
                         <button
                           onClick={() => handleDownloadPdf(po.id, po.number)}
                           disabled={downloadingPdf === po.id}
-                          className="p-1.5 text-slate-400 hover:text-[#065F46] disabled:opacity-50"
+                          className="p-1.5 text-slate-400 hover:text-purple-600 disabled:opacity-50"
                           title={t('inventory.downloadPdf', 'Download PDF')}
                         >
                           {downloadingPdf === po.id ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
@@ -315,7 +315,7 @@ export default function PurchaseOrdersPage() {
               <button onClick={() => setViewId(null)} className="p-1 text-slate-400 hover:text-slate-900"><X size={18} /></button>
             </div>
             {loadingDetail ? (
-              <div className="flex justify-center py-8"><Loader2 className="animate-spin text-[#065F46]" size={24} /></div>
+              <div className="flex justify-center py-8"><Loader2 className="animate-spin text-purple-600" size={24} /></div>
             ) : viewOrder && (
               <>
                 <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
@@ -336,7 +336,7 @@ export default function PurchaseOrdersPage() {
                   <button
                     onClick={() => handleDownloadPdf(viewOrder.id, viewOrder.number)}
                     disabled={downloadingPdf === viewOrder.id}
-                    className="px-3 py-1.5 text-sm text-[#065F46] border border-[#065F46] rounded-lg hover:bg-[#065F46]/5 flex items-center gap-1.5 disabled:opacity-50"
+                    className="px-3 py-1.5 text-sm text-purple-600 border border-purple-600 rounded-lg hover:bg-purple-600/5 flex items-center gap-1.5 disabled:opacity-50"
                   >
                     {downloadingPdf === viewOrder.id ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
                     {t('inventory.downloadPdf', 'Download PDF')}
@@ -403,7 +403,7 @@ export default function PurchaseOrdersPage() {
               <p className="text-sm text-slate-500">{t('inventory.receiveDesc', 'Enter received quantities for each item')}</p>
               <button
                 onClick={prefillReceiveItems}
-                className="text-xs text-[#065F46] hover:underline font-medium"
+                className="text-xs text-purple-600 hover:underline font-medium"
               >
                 {t('inventory.receiveAll', 'Receive All')}
               </button>
@@ -441,7 +441,7 @@ export default function PurchaseOrdersPage() {
                               return [...prev, { purchaseOrderItemId: item.id, receivedQuantity: val }];
                             });
                           }}
-                          className="w-20 border border-slate-300 rounded px-2 py-1 text-sm text-end focus:ring-2 focus:ring-[#065F46]"
+                          className="w-20 border border-slate-300 rounded px-2 py-1 text-sm text-end focus:ring-2 focus:ring-purple-500"
                         />
                       </td>
                     </tr>
@@ -456,7 +456,7 @@ export default function PurchaseOrdersPage() {
               <button
                 onClick={handleReceive}
                 disabled={receiveMut.isPending}
-                className="px-4 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#064E3B] text-sm font-medium disabled:opacity-50 flex items-center gap-2"
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium disabled:opacity-50 flex items-center gap-2"
               >
                 {receiveMut.isPending && <Loader2 size={14} className="animate-spin" />}
                 {t('inventory.confirmReceive', 'Confirm Receipt')}
@@ -478,7 +478,7 @@ export default function PurchaseOrdersPage() {
                   <select
                     value={createForm.supplierId}
                     onChange={e => setCreateForm(f => ({ ...f, supplierId: e.target.value }))}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#065F46]"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500"
                   >
                     <option value="">{t('inventory.selectSupplier', '-- Select a supplier --')}</option>
                     {(supplierOptions || []).map(s => (
@@ -492,7 +492,7 @@ export default function PurchaseOrdersPage() {
                     type="date"
                     value={createForm.expectedDeliveryDate}
                     onChange={e => setCreateForm(f => ({ ...f, expectedDeliveryDate: e.target.value }))}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#065F46]"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500"
                   />
                 </div>
               </div>
@@ -504,7 +504,7 @@ export default function PurchaseOrdersPage() {
                   <select
                     value={createForm.currency}
                     onChange={e => setCreateForm(f => ({ ...f, currency: e.target.value }))}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#065F46]"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500"
                   >
                     <option value="">{t('createPage.currencyHelp', 'Company default')}</option>
                     {CURRENCY_OPTIONS.map(c => (
@@ -519,7 +519,7 @@ export default function PurchaseOrdersPage() {
                   <select
                     value={createForm.pdfLanguage}
                     onChange={e => setCreateForm(f => ({ ...f, pdfLanguage: e.target.value }))}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#065F46]"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500"
                   >
                     <option value="">{t('createPage.languageHelp', 'Company default')}</option>
                     <option value="fr">{t('language.fr', 'Français')}</option>
@@ -535,7 +535,7 @@ export default function PurchaseOrdersPage() {
                   value={createForm.notes}
                   onChange={e => setCreateForm(f => ({ ...f, notes: e.target.value }))}
                   rows={2}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#065F46]"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500"
                 />
               </div>
               <div>
@@ -548,7 +548,7 @@ export default function PurchaseOrdersPage() {
                       placeholder={t('inventory.searchProduct', 'Search products...')}
                       value={productSearch}
                       onChange={e => setProductSearch(e.target.value)}
-                      className="w-full pl-9 pr-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#065F46]"
+                      className="w-full pl-9 pr-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
                     />
                   </div>
                 </div>
@@ -568,7 +568,7 @@ export default function PurchaseOrdersPage() {
                               : it)
                           }));
                         }}
-                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#065F46]"
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500"
                       >
                         <option value="">{t('inventory.selectProduct', '-- Select --')}</option>
                         {(productOptions || [])
@@ -588,7 +588,7 @@ export default function PurchaseOrdersPage() {
                           const val = e.target.value;
                           setCreateForm(f => ({ ...f, items: f.items.map((it, i) => i === idx ? { ...it, quantity: val } : it) }));
                         }}
-                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#065F46]"
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500"
                       />
                     </div>
                     <div className="w-28">
@@ -601,7 +601,7 @@ export default function PurchaseOrdersPage() {
                           const val = e.target.value;
                           setCreateForm(f => ({ ...f, items: f.items.map((it, i) => i === idx ? { ...it, unitPrice: val } : it) }));
                         }}
-                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#065F46]"
+                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500"
                       />
                     </div>
                     {createForm.items.length > 1 && (
@@ -609,7 +609,7 @@ export default function PurchaseOrdersPage() {
                     )}
                   </div>
                 ))}
-                <button onClick={addItem} className="text-sm text-[#065F46] hover:underline flex items-center gap-1 mt-1">
+                <button onClick={addItem} className="text-sm text-purple-600 hover:underline flex items-center gap-1 mt-1">
                   <Plus size={14} /> {t('inventory.addLine', 'Add line')}
                 </button>
               </div>
@@ -621,7 +621,7 @@ export default function PurchaseOrdersPage() {
               <button
                 onClick={handleCreate}
                 disabled={createMut.isPending}
-                className="px-4 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#064E3B] text-sm font-medium disabled:opacity-50 flex items-center gap-2"
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium disabled:opacity-50 flex items-center gap-2"
               >
                 {createMut.isPending && <Loader2 size={14} className="animate-spin" />}
                 {t('common.create', 'Create')}

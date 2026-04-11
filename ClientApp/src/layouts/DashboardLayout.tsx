@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation, NavLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import LanguageSelector from '../components/LanguageSelector';
@@ -22,7 +22,6 @@ import {
     DollarSign,
     Package,
     ChevronDown,
-    ChevronRight,
     Building2,
     Database,
     Shield,
@@ -90,7 +89,7 @@ export default function DashboardLayout() {
         }
 
         if (Object.keys(newExpanded).length > 0) {
-            setExpandedSections(prev => ({ ...prev, ...newExpanded }));
+            setExpandedSections(newExpanded);
         }
     }, [location.pathname]);
     /* eslint-enable react-hooks/set-state-in-effect */
@@ -208,7 +207,14 @@ export default function DashboardLayout() {
     };
 
     const toggleSection = (key: string) => {
-        setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
+        setExpandedSections(prev => {
+            const isCurrentlyOpen = prev[key];
+            // Close all sections, then toggle the clicked one
+            const next: Record<string, boolean> = {};
+            for (const k of Object.keys(prev)) next[k] = false;
+            next[key] = !isCurrentlyOpen;
+            return next;
+        });
     };
 
     // ════════════════════════════════════════════════════════
@@ -280,36 +286,26 @@ export default function DashboardLayout() {
         return currentPath === normalizedPath || currentPath.startsWith(`${normalizedPath}/`);
     };
 
-    const renderNavItem = (item: NavItem, indent = false) => {
+    const renderNavItem = (item: NavItem, isSubItem = false) => {
         const active = isActivePath(item.path);
         return (
-            <button
+            <NavLink
                 key={item.path}
-                onClick={() => {
-                    navigate(item.path);
-                    if (isMobile) setDrawerOpen(false);
-                }}
+                to={item.path}
+                onClick={() => { if (isMobile) setDrawerOpen(false); }}
                 className={cn(
-                    "w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors duration-200 group text-start text-sm",
-                    indent && "ps-11",
-                    active
-                        ? "bg-[#065F46] text-white shadow-sm"
-                        : "text-slate-700 hover:bg-slate-100"
+                    isSubItem ? 'panze-nav-subitem' : 'panze-nav-item',
+                    active && 'active'
                 )}
             >
-                <item.icon size={18} className="flex-shrink-0" />
-                <span className="font-medium truncate">{item.label}</span>
+                <span className="panze-nav-icon">
+                    <item.icon size={isSubItem ? 16 : 18} />
+                </span>
+                <span className={isSubItem ? undefined : 'panze-nav-label'}>{item.label}</span>
                 {typeof item.badge === 'number' && item.badge > 0 && (
-                    <span
-                        className={cn(
-                            'ms-auto rounded-full px-2 py-0.5 text-xs font-semibold leading-none',
-                            active ? 'bg-white/20 text-white' : 'bg-[#ECFDF5] text-[#065F46]'
-                        )}
-                    >
-                        {item.badge}
-                    </span>
+                    <span className="panze-nav-badge">{item.badge}</span>
                 )}
-            </button>
+            </NavLink>
         );
     };
 
@@ -317,28 +313,37 @@ export default function DashboardLayout() {
         const isExpanded = expandedSections[section.key] || false;
         const hasActiveChild = section.children.some(c => isActivePath(c.path));
 
+        // Check if ANY section has an active child (for dimming others)
+        const anyGroupActive = navSections.some(s => s.children.some(c => isActivePath(c.path)));
+        const isDimmed = anyGroupActive && !hasActiveChild;
+
         return (
-            <div key={section.key} className="space-y-0.5">
+            <div key={section.key} className={cn('panze-nav-group', hasActiveChild && 'section-active', isDimmed && 'section-dimmed')}>
                 <button
                     onClick={() => toggleSection(section.key)}
                     className={cn(
-                        "w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-colors duration-200 text-start text-sm",
-                        hasActiveChild
-                            ? "text-[#065F46] font-semibold bg-[#065F46]/5"
-                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                        'panze-nav-item',
+                        isExpanded && 'expanded',
+                        hasActiveChild && !isExpanded && 'active'
                     )}
                 >
-                    <section.icon size={18} className="flex-shrink-0" />
-                    <span className="font-medium truncate flex-1">{section.label}</span>
-                    <span className="flex-shrink-0 text-slate-400">
-                        {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    <span className="panze-nav-icon">
+                        <section.icon size={18} />
                     </span>
+                    <span className="panze-nav-label">{section.label}</span>
+                    <ChevronDown
+                        size={14}
+                        className={cn('panze-nav-chevron-toggle', isExpanded && 'rotated')}
+                    />
                 </button>
-                {isExpanded && (
-                    <div className="space-y-0.5">
+                <div
+                    className="panze-nav-submenu"
+                    style={{ maxHeight: isExpanded ? `${section.children.length * 44}px` : '0px' }}
+                >
+                    <div className="panze-nav-submenu-inner">
                         {section.children.map(child => renderNavItem(child, true))}
                     </div>
-                )}
+                </div>
             </div>
         );
     };
@@ -349,62 +354,78 @@ export default function DashboardLayout() {
 
     const sidebarContent = (
         <>
-            {/* Company Header */}
-            <div className="h-[72px] flex items-center gap-3 px-4 border-b border-slate-200">
+            {/* Panze Logo / Company Header */}
+            <div className="panze-sidebar-top">
                 {companyLogo ? (
                     <img
                         src={companyLogo}
                         alt="Company Logo"
-                        className="h-10 w-10 object-contain rounded-lg flex-shrink-0"
+                        className="h-[30px] w-[30px] object-contain rounded-full flex-shrink-0"
                     />
                 ) : (
-                    <div className="size-10 rounded-lg bg-[#065F46] flex items-center justify-center flex-shrink-0">
-                        <LayoutDashboard className="size-6 text-white" />
+                    <div className="panze-logo-icon">
+                        <LayoutDashboard size={16} />
                     </div>
                 )}
-                <div className="min-w-0 flex-1">
-                    <div className="text-base font-semibold text-slate-900 truncate">
-                        {companyName || t('common.appName')}
-                    </div>
-                    <div className="text-xs text-slate-500">{t('common.appName')}</div>
-                </div>
+                <span className="panze-logo truncate">
+                    {companyName || t('common.appName')}
+                </span>
                 {isMobile && (
                     <button
                         onClick={() => setDrawerOpen(false)}
-                        className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors flex-shrink-0"
+                        className="ml-auto p-1.5 rounded-full hover:bg-[#F4F4F5] text-[#71717A] transition-colors flex-shrink-0"
                     >
-                        <X size={18} />
+                        <X size={16} />
                     </button>
                 )}
             </div>
 
             {/* Navigation */}
-            <nav className="flex-1 p-3 space-y-1 overflow-y-auto mt-1">
+            <nav className="panze-nav">
+                {/* Top-level items (Dashboard) */}
                 {topNavItems.map(item => renderNavItem(item))}
+
                 {!isSuperAdmin && (
                     <>
-                        <div className="border-t border-slate-200 my-2" />
                         {navSections.map(section => renderSection(section))}
                     </>
                 )}
-                <div className="border-t border-slate-200 my-2" />
-                {bottomNavItems.map(item => renderNavItem(item))}
+
+                {bottomNavItems.length > 0 && (
+                    <>
+                        <div className="panze-nav-section">{t('nav.settings', 'Config')}</div>
+                        {bottomNavItems.map(item => renderNavItem(item))}
+                    </>
+                )}
             </nav>
 
             {/* User info + Logout */}
-            <div className="p-3 border-t border-slate-200">
+            <div className="panze-sidebar-user">
+                <div className="panze-sidebar-avatar">
+                    {userName ? userName.charAt(0).toUpperCase() : 'U'}
+                </div>
                 {userName && (
-                    <div className="text-xs text-slate-500 mb-2 truncate px-4">
-                        {userName}
+                    <div className="panze-sidebar-user-info">
+                        <div className="panze-sidebar-user-name">{userName}</div>
                     </div>
                 )}
-                <button
-                    onClick={handleLogout}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-slate-600 hover:bg-red-50 hover:text-red-600 transition-colors text-sm"
-                >
-                    <LogOut size={18} />
-                    <span className="font-medium">{t('nav.signOut')}</span>
-                </button>
+                <div className="flex items-center gap-1">
+                    <LanguageSelector />
+                    <button
+                        onClick={() => navigate('/settings')}
+                        className="panze-sidebar-settings-btn"
+                        title={t('nav.settings')}
+                    >
+                        <Settings size={14} />
+                    </button>
+                    <button
+                        onClick={handleLogout}
+                        className="panze-sidebar-settings-btn hover:!bg-red-50 hover:!text-red-500"
+                        title={t('nav.signOut')}
+                    >
+                        <LogOut size={14} />
+                    </button>
+                </div>
             </div>
         </>
     );
@@ -414,70 +435,56 @@ export default function DashboardLayout() {
     // ════════════════════════════════════════════════════════
 
     return (
-        <div className="min-h-screen bg-[#F9FAFB] flex" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
-            {/* Mobile overlay — strictly conditional to avoid ghost shadow */}
+        <div className="panze-shell">
+            {/* Mobile overlay */}
             {isMobile && drawerOpen && (
                 <div
-                    className="fixed inset-0 bg-black/50 z-40"
+                    className="panze-mobile-overlay visible"
                     onClick={() => setDrawerOpen(false)}
                 />
             )}
 
-            {/* Sidebar: desktop = always visible; mobile = conditional drawer */}
-            {(!isMobile || drawerOpen) && (
-                <aside
-                    className={cn(
-                        "fixed inset-y-0 start-0 z-50 w-72 flex flex-col",
-                        "bg-white border-e border-slate-200",
-                        isMobile && "shadow-xl"
-                    )}
+            {/* Mobile hamburger button */}
+            {isMobile && !drawerOpen && (
+                <button
+                    onClick={() => setDrawerOpen(true)}
+                    className="panze-mobile-menu-btn"
+                    style={{ display: 'flex' }}
+                    aria-label={t('nav.openMenu', 'Open menu')}
                 >
-                    {sidebarContent}
-                </aside>
+                    <Menu size={20} />
+                </button>
             )}
 
-            {/* Main Content */}
-            <main className={cn(
-                "min-h-screen min-w-0 w-full",
-                !isMobile && "ms-72"
-            )}>
-                {/* Topbar */}
-                <div className="bg-white border-b border-slate-200 px-4 lg:px-8 py-3 flex justify-between items-center">
-                    <div className="flex items-center gap-3">
-                        {isMobile && (
-                            <button
-                                onClick={() => setDrawerOpen(true)}
-                                className="p-2 rounded-lg hover:bg-slate-100 text-slate-600"
-                                aria-label={t('nav.openMenu', 'Open menu')}
-                            >
-                                <Menu size={20} />
-                            </button>
-                        )}
-                        {companyLogo && (
-                            <img src={companyLogo} alt="" className="h-7 w-7 object-contain rounded" />
-                        )}
-                        <span className="text-sm font-medium text-slate-600 hidden lg:inline">
-                            {companyName}
-                        </span>
-                        {userName && (
-                            <>
-                                <div className="w-px h-5 bg-slate-200 hidden lg:block" />
-                                <span className="text-sm text-slate-500 hidden lg:inline">{userName}</span>
-                            </>
-                        )}
-                    </div>
-                    <div className="flex items-center gap-3">
-                        {!isSuperAdmin && <NotificationBell />}
-                        <div className="w-px h-6 bg-slate-200" />
-                        <LanguageSelector />
+            {/* Sidebar */}
+            <aside className={cn('panze-sidebar', isMobile && (drawerOpen ? 'mobile-open' : ''))}>
+                {sidebarContent}
+            </aside>
+
+            {/* Right content area */}
+            <div className="panze-right">
+                {/* Header bar */}
+                <div className="panze-header">
+                    <div className="flex items-center justify-between">
+                        <div className="panze-header-left">
+                            {/* Page title injected by child pages or left empty */}
+                        </div>
+                        <div className="panze-header-right">
+                            {!isSuperAdmin && (
+                                <div className="panze-header-action" style={{ position: 'relative' }}>
+                                    <NotificationBell />
+                                </div>
+                            )}
+                            <LanguageSelector />
+                        </div>
                     </div>
                 </div>
 
-                {/* Page Content */}
-                <div className="rm-content-shell space-y-8 animate-fade-in">
+                {/* Main scrollable content */}
+                <div className="panze-main">
                     <Outlet />
                 </div>
-            </main>
+            </div>
         </div>
     );
 }

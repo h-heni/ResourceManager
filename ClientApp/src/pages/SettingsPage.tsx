@@ -157,7 +157,7 @@ If you have any questions, please contact us at @CompanyPhone or @CompanyEmail.
 Best regards,
 @CompanyName`,
         logoUrl: '', hasLogoData: false,
-        primaryColor: '#065F46', secondaryColor: '#14B8A6',
+        primaryColor: '#7C3AED', secondaryColor: '#8B5CF6',
         currency: DEFAULT_CURRENCY, currencySymbol: DEFAULT_CURRENCY,
         defaultVatRate: 0.19, customTaxEnabled: true,
         customTaxName: 'Timbre Fiscal', customTaxAmount: 1.000,
@@ -228,8 +228,8 @@ Best regards,
                 defaultEmailBody: res.data.defaultEmailBody || settings.defaultEmailBody,
                 logoUrl: res.data.logoUrl || '',
                 hasLogoData: res.data.hasLogoData || false,
-                primaryColor: res.data.primaryColor || '#065F46',
-                secondaryColor: res.data.secondaryColor || '#14B8A6',
+                primaryColor: res.data.primaryColor || '#7C3AED',
+                secondaryColor: res.data.secondaryColor || '#8B5CF6',
                 currency: res.data.currency || DEFAULT_CURRENCY,
                 currencySymbol: res.data.currencySymbol || DEFAULT_CURRENCY,
                 defaultVatRate: res.data.defaultVatRate || 0.19,
@@ -737,7 +737,7 @@ Best regards,
     if (loading) {
         return (
             <div className="flex items-center justify-center h-64">
-                <Loader2 className="animate-spin text-[#065F46]" size={32} />
+                <Loader2 className="animate-spin text-purple-600" size={32} />
             </div>
         );
     }
@@ -762,14 +762,14 @@ Best regards,
             {/* Header */}
             <div className="flex flex-col gap-4 mb-6 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center space-x-3">
-                    <Settings className="text-[#065F46]" size={28} />
+                    <Settings className="text-purple-600" size={28} />
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900">{t('settings.title', 'Settings')}</h1>
                         <p className="text-gray-500 text-sm">{t('settings.manage', 'Manage your company settings and preferences')}</p>
                     </div>
                 </div>
                 <button onClick={() => handleSave()} disabled={saving}
-                    className="w-full sm:w-auto flex items-center justify-center px-6 py-3 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all disabled:opacity-50">
+                    className="w-full sm:w-auto flex items-center justify-center px-6 py-3 bg-purple-600 text-white rounded-xl shadow-lg hover:bg-purple-700 transition-all disabled:opacity-50">
                     {saving ? <Loader2 size={20} className="mr-2 animate-spin" /> : <Save size={20} className="mr-2" />}
                     {saving ? t('common.loading', 'Saving...') : t('common.save', 'Save Changes')}
                 </button>
@@ -800,11 +800,11 @@ Best regards,
                         <button key={sec.key} onClick={() => setActiveSection(sec.key)}
                             className={`flex items-center gap-3 p-5 rounded-2xl text-left transition-all text-sm font-semibold border-2 ${
                                 activeSection === sec.key
-                                    ? 'bg-[#065F46] text-white shadow-lg border-[#065F46]'
+                                    ? 'bg-purple-600 text-white shadow-lg border-purple-600'
                                     : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-100 shadow-sm'
                             }`}>
-                            <div className={`p-2.5 rounded-xl ${activeSection === sec.key ? 'bg-white/20' : 'bg-[#065F46]/5'}`}>
-                                <sec.icon size={20} className={activeSection === sec.key ? 'text-white' : 'text-[#065F46]'} />
+                            <div className={`p-2.5 rounded-xl ${activeSection === sec.key ? 'bg-white/20' : 'bg-purple-600/5'}`}>
+                                <sec.icon size={20} className={activeSection === sec.key ? 'text-white' : 'text-purple-600'} />
                             </div>
                             {sec.label}
                         </button>
@@ -825,7 +825,7 @@ Best regards,
                                 ]).map(tab => (
                                     <button key={tab.key} onClick={() => setPersonalTab(tab.key)}
                                         className={`flex-shrink-0 sm:flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
-                                            personalTab === tab.key ? 'bg-white text-[#065F46] shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                                            personalTab === tab.key ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'
                                         }`}>
                                         <tab.icon size={16} />{tab.label}
                                     </button>
@@ -836,40 +836,40 @@ Best regards,
                                 {personalTab === 'company' && (
                                     <div className="space-y-6">
                                         <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                                            <Building2 className="mr-2 text-[#065F46]" size={20} />
+                                            <Building2 className="mr-2 text-purple-600" size={20} />
                                             {t('settings.companyInfo', 'Company Information')}
                                         </h3>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.companyName', 'Company Name')}</label>
                                                 <input type="text" value={settings.companyName} onChange={e => updateSetting('companyName', e.target.value)}
-                                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none" />
+                                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none" />
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.fiscalId', 'Tax ID (Matricule Fiscal)')}</label>
                                                 <input type="text" value={settings.companyTaxId} onChange={e => updateSetting('companyTaxId', e.target.value)}
-                                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none" />
+                                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none" />
                                             </div>
                                             <div className="md:col-span-2">
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.address', 'Address')}</label>
                                                 <textarea value={settings.companyAddress} onChange={e => updateSetting('companyAddress', e.target.value)} rows={2}
-                                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none" />
+                                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none" />
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.phone', 'Phone')}</label>
                                                 <input type="text" value={settings.companyPhone} onChange={e => updateSetting('companyPhone', e.target.value)}
-                                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none" />
+                                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none" />
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.email', 'Email')}</label>
                                                 <input type="email" value={settings.companyEmail} onChange={e => updateSetting('companyEmail', e.target.value)}
-                                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none" />
+                                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none" />
                                             </div>
                                         </div>
                                         {/* Logo Upload */}
                                         <div className="p-6 border-2 border-dashed border-gray-200 rounded-xl">
                                             <h4 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
-                                                <Image size={18} className="text-[#065F46]" />
+                                                <Image size={18} className="text-purple-600" />
                                                 {t('settings.logo', 'Company Logo')}
                                                 {settings.hasLogoData && <CheckCircle size={16} className="text-emerald-500" />}
                                             </h4>
@@ -892,7 +892,7 @@ Best regards,
                                                 <div className="flex-1">
                                                     <input ref={fileInputRef} type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" />
                                                     <button onClick={() => fileInputRef.current?.click()} disabled={uploadingLogo}
-                                                        className="flex items-center gap-2 px-4 py-2 bg-[#065F46]/5 text-[#065F46] rounded-xl hover:bg-[#065F46]/10 transition-colors disabled:opacity-50">
+                                                        className="flex items-center gap-2 px-4 py-2 bg-purple-600/5 text-purple-600 rounded-xl hover:bg-purple-600/10 transition-colors disabled:opacity-50">
                                                         {uploadingLogo ? <><Loader2 size={18} className="animate-spin" />Uploading...</> : <><Upload size={18} />{t('common.upload', 'Upload Logo')}</>}
                                                     </button>
                                                     <p className="text-xs text-gray-500 mt-2">{t('settings.logoHint', 'PNG or JPG, max 2MB. Appears on PDFs and emails.')}</p>
@@ -901,7 +901,7 @@ Best regards,
                                             <div className="flex items-center mt-4 pt-4 border-t border-gray-100">
                                                 <label className="flex items-center space-x-2 cursor-pointer">
                                                     <input type="checkbox" checked={settings.showCompanyLogo} onChange={e => updateSetting('showCompanyLogo', e.target.checked)}
-                                                        className="w-5 h-5 text-[#065F46] border-gray-300 rounded focus:ring-[#065F46]" />
+                                                        className="w-5 h-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500" />
                                                     <span className="text-sm font-medium text-gray-700">{t('settings.showLogoOnPdf', 'Show logo on PDFs')}</span>
                                                 </label>
                                             </div>
@@ -912,7 +912,7 @@ Best regards,
                                 {personalTab === 'password' && (
                                     <div className="space-y-6">
                                         <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                                            <Lock className="mr-2 text-[#065F46]" size={20} />
+                                            <Lock className="mr-2 text-purple-600" size={20} />
                                             {t('settings.changePassword', 'Change Password')}
                                         </h3>
                                         <div className="max-w-md space-y-4">
@@ -936,7 +936,7 @@ Best regards,
                                                 <PasswordInput value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} />
                                             </div>
                                             <button onClick={handleChangePassword} disabled={changingPassword}
-                                                className="flex items-center px-6 py-3 bg-[#065F46] text-white rounded-xl hover:bg-[#047857] transition-all disabled:opacity-50">
+                                                className="flex items-center px-6 py-3 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-all disabled:opacity-50">
                                                 {changingPassword ? <Loader2 size={18} className="mr-2 animate-spin" /> : <Lock size={18} className="mr-2" />}
                                                 {changingPassword ? t('common.loading', 'Changing...') : t('settings.changePassword', 'Change Password')}
                                             </button>
@@ -947,13 +947,13 @@ Best regards,
                                 {personalTab === 'userinfo' && (
                                     <div className="space-y-6">
                                         <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                                            <User className="mr-2 text-[#065F46]" size={20} />
+                                            <User className="mr-2 text-purple-600" size={20} />
                                             {t('settings.userInfo', 'Logged-in User')}
                                         </h3>
                                         <div className="p-6 bg-gray-50 rounded-xl space-y-4">
                                             <div className="flex items-center gap-4">
-                                                <div className="w-16 h-16 bg-[#065F46]/10 rounded-full flex items-center justify-center">
-                                                    <User size={32} className="text-[#065F46]" />
+                                                <div className="w-16 h-16 bg-purple-600/10 rounded-full flex items-center justify-center">
+                                                    <User size={32} className="text-purple-600" />
                                                 </div>
                                                 <div>
                                                     <p className="text-lg font-bold text-gray-900">{displayName}</p>
@@ -1003,7 +1003,7 @@ Best regards,
                             {/* Email Template Editor */}
                             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 lg:p-8 space-y-6">
                                 <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                                    <FileText className="mr-2 text-[#065F46]" size={20} />
+                                    <FileText className="mr-2 text-purple-600" size={20} />
                                     {t('settings.emailTemplate', 'Email Template')}
                                 </h3>
 
@@ -1032,7 +1032,7 @@ Best regards,
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.emailSubject', 'Email Subject')}</label>
                                     <input type="text" value={settings.emailSubjectTemplate} onChange={e => updateSetting('emailSubjectTemplate', e.target.value)}
-                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
                                         placeholder={t('settings.emailSubjectPlaceholder')} />
                                     <p className="text-xs text-gray-500 mt-1">{t('settings.subjectHelp', 'Use @ placeholders for dynamic content. Example: Invoice #@InvoiceNumber from @CompanyName')}</p>
                                 </div>
@@ -1040,7 +1040,7 @@ Best regards,
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.emailBody', 'Email Body')}</label>
                                     <textarea value={settings.defaultEmailBody} onChange={e => updateSetting('defaultEmailBody', e.target.value)} rows={10}
-                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none font-mono text-sm"
+                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none font-mono text-sm"
                                         placeholder={t('settings.emailBodyPlaceholder')} />
                                     <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mt-1">
                                         <p className="text-xs text-gray-500">{t('settings.bodyHelp', 'This is the default message when sending invoices by email. Use the placeholders above for dynamic content.')}</p>
@@ -1056,7 +1056,7 @@ Best regards,
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.emailSignature', 'Email Signature')}</label>
                                     <textarea value={settings.emailSignature} onChange={e => updateSetting('emailSignature', e.target.value)} rows={4}
-                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
                                         placeholder={t('settings.emailSignaturePlaceholder')} />
                                     <p className="text-xs text-gray-500 mt-1">{t('settings.signatureHelp', 'This text is appended at the end of every email you send.')}</p>
                                 </div>
@@ -1066,7 +1066,7 @@ Best regards,
                                     <label className="flex items-center space-x-2 cursor-pointer">
                                         <input type="checkbox" checked={settings.includeLogoInEmailSignature}
                                             onChange={e => updateSetting('includeLogoInEmailSignature', e.target.checked)}
-                                            className="w-5 h-5 text-[#065F46] border-gray-300 rounded focus:ring-[#065F46]" />
+                                            className="w-5 h-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500" />
                                         <span className="text-sm font-medium text-gray-700">{t('settings.includeLogoInSignature', 'Include company logo in email signature')}</span>
                                     </label>
                                     {!settings.hasLogoData && (
@@ -1089,7 +1089,7 @@ Best regards,
                                 ]).map(tab => (
                                     <button key={tab.key} onClick={() => setPdfTab(tab.key)}
                                         className={`flex-shrink-0 sm:flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
-                                            pdfTab === tab.key ? 'bg-white text-[#065F46] shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                                            pdfTab === tab.key ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'
                                         }`}>
                                         <tab.icon size={16} />{tab.label}
                                     </button>
@@ -1101,7 +1101,7 @@ Best regards,
                                 {pdfTab === 'signature' && (
                                     <div className="space-y-6">
                                         <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                                            <PenTool className="mr-2 text-[#065F46]" size={20} />
+                                            <PenTool className="mr-2 text-purple-600" size={20} />
                                             {t('settings.signature', 'Signature')}
                                         </h3>
                                         <p className="text-sm text-gray-500">{t('settings.signatureDesc', 'Upload your company stamp or signature image. This will appear at the bottom of generated invoices and quotes.')}</p>
@@ -1126,7 +1126,7 @@ Best regards,
                                                 <div className="flex-1">
                                                     <input ref={signatureInputRef} type="file" accept="image/*" onChange={handleSignatureUpload} className="hidden" />
                                                     <button onClick={() => signatureInputRef.current?.click()} disabled={uploadingSignature}
-                                                        className="flex items-center gap-2 px-4 py-2 bg-[#065F46]/5 text-[#065F46] rounded-xl hover:bg-[#065F46]/10 transition-colors disabled:opacity-50">
+                                                        className="flex items-center gap-2 px-4 py-2 bg-purple-600/5 text-purple-600 rounded-xl hover:bg-purple-600/10 transition-colors disabled:opacity-50">
                                                         {uploadingSignature ? <><Loader2 size={18} className="animate-spin" />Uploading...</> : <><Upload size={18} />{t('settings.uploadSignature', 'Upload Signature / Cachet')}</>}
                                                     </button>
                                                     <p className="text-xs text-gray-500 mt-2">{t('settings.signatureHint', 'PNG with transparent background recommended. Max 2MB.')}</p>
@@ -1138,7 +1138,7 @@ Best regards,
                                                     <input type="checkbox" checked={settings.showSignatureOnPdf}
                                                         onChange={e => updateSetting('showSignatureOnPdf', e.target.checked)}
                                                         disabled={!settings.hasSignatureImage}
-                                                        className="w-5 h-5 text-[#065F46] border-gray-300 rounded focus:ring-[#065F46]" />
+                                                        className="w-5 h-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500" />
                                                     <span className={`text-sm font-medium ${settings.hasSignatureImage ? 'text-gray-700' : 'text-gray-400'}`}>
                                                         {t('settings.showSignatureOnPdf', 'Show signature on PDFs')}
                                                     </span>
@@ -1151,7 +1151,7 @@ Best regards,
                                             <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.pdfSignature', 'PDF Signature Text')}</label>
                                             <input type="text" value={settings.pdfSignatureText} onChange={e => updateSetting('pdfSignatureText', e.target.value)}
                                                 maxLength={100}
-                                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
                                                 placeholder={t('settings.signaturePlaceholder', 'E.g. John Smith')} />
                                             <p className="text-xs text-gray-500 mt-1">{t('settings.signatureNameHelp', 'The name that appears bold on the PDF signature')}</p>
                                         </div>
@@ -1160,7 +1160,7 @@ Best regards,
                                             <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.pdfSignerPosition', 'Signer Position / Title')}</label>
                                             <input type="text" value={settings.pdfSignerPosition} onChange={e => updateSetting('pdfSignerPosition', e.target.value)}
                                                 maxLength={100}
-                                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                                                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
                                                 placeholder={t('settings.signerPositionPlaceholder', 'E.g. Managing Director, CEO, Accountant')} />
                                             <p className="text-xs text-gray-500 mt-1">{t('settings.signerPositionHelp', 'Appears below the signature name on PDFs (e.g. job title or role)')}</p>
                                         </div>
@@ -1169,7 +1169,7 @@ Best regards,
                                             <label className="flex items-center space-x-2 cursor-pointer">
                                                 <input type="checkbox" checked={settings.proInvoiceUseTokenSignature}
                                                     onChange={e => updateSetting('proInvoiceUseTokenSignature', e.target.checked)}
-                                                    className="w-5 h-5 text-[#065F46] border-gray-300 rounded focus:ring-[#065F46]" />
+                                                    className="w-5 h-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500" />
                                                 <span className="text-sm font-medium text-gray-700">
                                                     {t('settings.proInvoiceTokenSignature', 'Enable verification token on invoices (Pro)')}
                                                 </span>
@@ -1183,14 +1183,14 @@ Best regards,
                                 {pdfTab === 'branding' && (
                                     <div className="space-y-6">
                                         <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                                            <Palette className="mr-2 text-[#065F46]" size={20} />
+                                            <Palette className="mr-2 text-purple-600" size={20} />
                                             {t('settings.branding', 'Branding & Appearance')}
                                         </h3>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.language', 'Invoice Language')}</label>
                                                 <select value={settings.invoiceLanguage} onChange={e => updateSetting('invoiceLanguage', e.target.value)}
-                                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none">
+                                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none">
                                                     <option value="fr">Français</option>
                                                     <option value="en">English</option>
                                                     <option value="de">Deutsch</option>
@@ -1203,7 +1203,7 @@ Best regards,
                                                 <div className="flex items-center space-x-3">
                                                     <input type="color" value={settings.primaryColor} onChange={e => updateSetting('primaryColor', e.target.value)} className="w-12 h-12 rounded-lg cursor-pointer border border-gray-200" />
                                                     <input type="text" value={settings.primaryColor} onChange={e => updateSetting('primaryColor', e.target.value)} className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl" />
-                                                    <button onClick={() => updateSetting('primaryColor', '#065F46')} className="px-3 py-2 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg">Reset</button>
+                                                    <button onClick={() => updateSetting('primaryColor', '#7C3AED')} className="px-3 py-2 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg">Reset</button>
                                                 </div>
                                             </div>
                                             <div>
@@ -1211,13 +1211,13 @@ Best regards,
                                                 <div className="flex items-center space-x-3">
                                                     <input type="color" value={settings.secondaryColor} onChange={e => updateSetting('secondaryColor', e.target.value)} className="w-12 h-12 rounded-lg cursor-pointer border border-gray-200" />
                                                     <input type="text" value={settings.secondaryColor} onChange={e => updateSetting('secondaryColor', e.target.value)} className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl" />
-                                                    <button onClick={() => updateSetting('secondaryColor', '#14B8A6')} className="px-3 py-2 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg">Reset</button>
+                                                    <button onClick={() => updateSetting('secondaryColor', '#8B5CF6')} className="px-3 py-2 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg">Reset</button>
                                                 </div>
                                             </div>
                                             <div className="md:col-span-2">
                                                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('settings.pdfFooter', 'PDF Footer Text')}</label>
                                                 <textarea value={settings.pdfFooterText} onChange={e => updateSetting('pdfFooterText', e.target.value)} rows={2}
-                                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
                                                     placeholder={t('settings.pdfFooterPlaceholder')} />
                                             </div>
                                         </div>
@@ -1233,9 +1233,9 @@ Best regards,
                                         {/* Live PDF Preview */}
                                         <div className="p-6 rounded-xl border-2 border-gray-200 bg-gray-50">
                                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                                                <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2"><Eye size={18} className="text-[#065F46]" />{t('settings.livePdfPreview', 'Live PDF Preview')}</h4>
+                                                <h4 className="text-sm font-semibold text-gray-700 flex items-center gap-2"><Eye size={18} className="text-purple-600" />{t('settings.livePdfPreview', 'Live PDF Preview')}</h4>
                                                 <button onClick={handleGeneratePreview} disabled={generatingPreview}
-                                                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-[#065F46] text-white rounded-xl hover:bg-[#047857] disabled:opacity-50">
+                                                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700 disabled:opacity-50">
                                                     {generatingPreview ? <><Loader2 size={16} className="animate-spin" />{t('settings.generating')}</> : <><Eye size={16} />{t('settings.generatePreview')}</>}
                                                 </button>
                                             </div>
@@ -1255,7 +1255,7 @@ Best regards,
                                 {pdfTab === 'financial' && (
                                     <div className="space-y-6">
                                         <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                                            <DollarSign className="mr-2 text-[#065F46]" size={20} />
+                                            <DollarSign className="mr-2 text-purple-600" size={20} />
                                             {t('settings.financial', 'Financial Settings')}
                                         </h3>
                                         {settings.isProfileComplete && (
@@ -1303,7 +1303,7 @@ Best regards,
                                                 </div>
                                                 <label className="relative inline-flex items-center cursor-pointer">
                                                     <input type="checkbox" checked={settings.customTaxEnabled} onChange={e => updateSetting('customTaxEnabled', e.target.checked)} disabled={settings.isProfileComplete} className="sr-only peer" />
-                                                    <div className={`w-11 h-6 bg-gray-300 peer-focus:ring-4 peer-focus:ring-[#065F46]/30 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#065F46] ${settings.isProfileComplete ? 'opacity-50 cursor-not-allowed' : ''}`}></div>
+                                                    <div className={`w-11 h-6 bg-gray-300 peer-focus:ring-4 peer-focus:ring-purple-500/30 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600 ${settings.isProfileComplete ? 'opacity-50 cursor-not-allowed' : ''}`}></div>
                                                 </label>
                                             </div>
                                             {settings.customTaxEnabled && (
@@ -1379,7 +1379,7 @@ Best regards,
                                                 {settings.customTaxEnabled && <div className="flex justify-between"><span className="text-gray-600">{settings.customTaxName}</span><span>{settings.customTaxAmount.toFixed(3)} {settings.currencySymbol}</span></div>}
                                                 <div className="flex justify-between pt-2 border-t border-gray-200">
                                                     <span className="font-semibold">{t('common.total')}</span>
-                                                    <span className="text-[#065F46] font-bold">{(1000 + 1000 * settings.defaultVatRate + (settings.customTaxEnabled ? settings.customTaxAmount : 0)).toFixed(3)} {settings.currencySymbol}</span>
+                                                    <span className="text-purple-600 font-bold">{(1000 + 1000 * settings.defaultVatRate + (settings.customTaxEnabled ? settings.customTaxAmount : 0)).toFixed(3)} {settings.currencySymbol}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -1390,7 +1390,7 @@ Best regards,
                                 {pdfTab === 'storage' && (
                                     <div className="space-y-6">
                                         <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                                            <HardDrive className="mr-2 text-[#065F46]" size={20} />
+                                            <HardDrive className="mr-2 text-purple-600" size={20} />
                                             {t('settings.storage', 'PDF Storage')}
                                         </h3>
 
@@ -1470,7 +1470,7 @@ Best regards,
                                                             }
                                                         }}
                                                         disabled={browsingFolders}
-                                                        className="flex items-center gap-2 px-4 py-3 bg-[#065F46] text-white rounded-xl hover:bg-[#047857] disabled:opacity-50 transition-colors text-sm font-medium whitespace-nowrap"
+                                                        className="flex items-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-colors text-sm font-medium whitespace-nowrap"
                                                     >
                                                         {browsingFolders ? <Loader2 size={16} className="animate-spin" /> : <FolderOpen size={16} />}
                                                         Browse
@@ -1489,9 +1489,9 @@ Best regards,
                                         {folderBrowser && (
                                             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setFolderBrowser(null)}>
                                                 <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-                                                    <div className="flex items-center justify-between px-5 py-3.5 bg-gradient-to-r from-[#065F46]/5 to-blue-50 border-b border-gray-200">
+                                                    <div className="flex items-center justify-between px-5 py-3.5 bg-gradient-to-r from-purple-600/5 to-blue-50 border-b border-gray-200">
                                                         <div className="flex items-center gap-2 min-w-0">
-                                                            <FolderOpen size={18} className="text-[#065F46] flex-shrink-0" />
+                                                            <FolderOpen size={18} className="text-purple-600 flex-shrink-0" />
                                                             <span className="font-semibold text-gray-800">{t('settings.selectFolder', 'Select a folder')}</span>
                                                         </div>
                                                         <button onClick={() => setFolderBrowser(null)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"><X size={18} /></button>
@@ -1504,7 +1504,7 @@ Best regards,
                                                     <div className="p-2 max-h-80 overflow-y-auto">
                                                         {folderBrowser.parent && (
                                                             <button onClick={() => handleBrowseFolders(folderBrowser.parent)}
-                                                                className="w-full px-3 py-2.5 text-left hover:bg-[#065F46]/5 rounded-lg flex items-center gap-2 text-[#065F46] text-sm font-medium group">
+                                                                className="w-full px-3 py-2.5 text-left hover:bg-purple-600/5 rounded-lg flex items-center gap-2 text-purple-600 text-sm font-medium group">
                                                                 <FolderOpen size={14} className="group-hover:scale-110 transition-transform" />
                                                                 {t('settings.parentFolder', '.. (Parent folder)')}
                                                             </button>
@@ -1521,8 +1521,8 @@ Best regards,
                                                                     }
                                                                     handleBrowseFolders(item.path);
                                                                 }}
-                                                                className={`w-full px-3 py-2.5 text-left hover:bg-[#065F46]/5 rounded-lg flex items-center gap-2 text-sm transition-colors ${
-                                                                    newBasePath === item.path ? 'bg-[#065F46]/5 text-[#065F46] font-medium ring-1 ring-[#065F46]/20' : 'text-gray-700'
+                                                                className={`w-full px-3 py-2.5 text-left hover:bg-purple-600/5 rounded-lg flex items-center gap-2 text-sm transition-colors ${
+                                                                    newBasePath === item.path ? 'bg-purple-600/5 text-purple-600 font-medium ring-1 ring-purple-600/20' : 'text-gray-700'
                                                                 }`}>
                                                                 <FolderOpen size={14} className={item.type === 'drive' ? 'text-blue-500' : 'text-amber-500'} />
                                                                 <span className="font-mono text-sm">{item.name}</span>
@@ -1545,7 +1545,7 @@ Best regards,
                                                                 setFolderBrowser(null);
                                                             }}
                                                                 disabled={!newBasePath}
-                                                                className="px-4 py-2 bg-[#065F46] text-white text-sm rounded-lg hover:bg-[#047857] disabled:opacity-40 whitespace-nowrap font-medium transition-colors">
+                                                                className="px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-40 whitespace-nowrap font-medium transition-colors">
                                                                 {t('settings.useThisFolder', 'Use this folder')}
                                                             </button>
                                                         </div>
@@ -1559,13 +1559,13 @@ Best regards,
                                             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
                                                 <div>
                                                     <h4 className="font-semibold text-gray-800 flex items-center gap-2">
-                                                        <CheckCircle size={18} className="text-[#065F46]" />
+                                                        <CheckCircle size={18} className="text-purple-600" />
                                                         {t('settings.fileConsistencyCheck', 'File Consistency Check')}
                                                     </h4>
                                                     <p className="text-sm text-gray-500 mt-1">{t('settings.fileConsistencyDesc', 'Verify all registered PDF files exist on disk. Missing files can be regenerated from your data.')}</p>
                                                 </div>
                                                 <button onClick={handleCheckConsistency} disabled={checkingConsistency || recovering}
-                                                    className="w-full sm:w-auto px-5 py-2.5 bg-[#065F46] text-white rounded-xl hover:bg-[#047857] disabled:opacity-50 flex items-center justify-center gap-2 text-sm whitespace-nowrap transition-colors">
+                                                    className="w-full sm:w-auto px-5 py-2.5 bg-purple-600 text-white rounded-xl hover:bg-purple-700 disabled:opacity-50 flex items-center justify-center gap-2 text-sm whitespace-nowrap transition-colors">
                                                     {checkingConsistency ? <><Loader2 size={16} className="animate-spin" />{t('settings.checking', 'Checking...')}</> : <><CheckCircle size={16} />{t('settings.checkNow', 'Check Now')}</>}
                                                 </button>
                                             </div>
@@ -1669,7 +1669,7 @@ Best regards,
                             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                                 <div className="p-6 border-b border-gray-100">
                                     <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                                        <MessageCircle size={20} className="text-[#065F46]" />
+                                        <MessageCircle size={20} className="text-purple-600" />
                                         {t('whatsapp.settings.title', 'WhatsApp')}
                                     </h3>
                                     <p className="text-sm text-gray-500 mt-1">{t('whatsapp.settings.description', 'Configure your WhatsApp Business API credentials so messages appear from your company.')}</p>
@@ -1712,7 +1712,7 @@ Best regards,
                                                         // Auto-save the toggle
                                                         api.put('/Settings', { whatsAppEnabled: !settings.whatsAppEnabled }).catch(() => {});
                                                     }}
-                                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${settings.whatsAppEnabled ? 'bg-[#065F46]' : 'bg-gray-300'}`}>
+                                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${settings.whatsAppEnabled ? 'bg-purple-600' : 'bg-gray-300'}`}>
                                                     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${settings.whatsAppEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
                                                 </button>
                                             </div>

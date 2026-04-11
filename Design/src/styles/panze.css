@@ -1,0 +1,101 @@
+.panze-dashboard-wrapper {
+  transition: background-color 0.5s ease, color 0.5s ease;
+  background-color: var(--panze-bg, #f8fafc);
+  color: var(--panze-text-primary, #0f172a);
+  min-height: 100vh;
+}
+
+/* Theme: Dark */
+.panze-theme-dark {
+  --panze-bg: #0f172a;
+  --panze-text-primary: #f8fafc;
+  --panze-text-secondary: #94a3b8;
+  --panze-glass-bg: rgba(30, 41, 59, 0.6);
+  --panze-glass-border: rgba(255, 255, 255, 0.1);
+  --panze-glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  --panze-accent: #3b82f6;
+}
+
+/* Theme: Pastel Dream */
+.panze-theme-pastel {
+  --panze-bg: #faf5ff;
+  --panze-text-primary: #4a044e;
+  --panze-text-secondary: #a21caf;
+  --panze-glass-bg: rgba(255, 255, 255, 0.5);
+  --panze-glass-border: rgba(240, 171, 252, 0.5);
+  --panze-glass-shadow: 0 8px 32px 0 rgba(134, 25, 143, 0.05);
+  --panze-accent: #d946ef;
+}
+
+/* Theme: Soft Mint */
+.panze-theme-mint {
+  --panze-bg: #ecfdf5;
+  --panze-text-primary: #064e3b;
+  --panze-text-secondary: #047857;
+  --panze-glass-bg: rgba(255, 255, 255, 0.6);
+  --panze-glass-border: rgba(110, 231, 183, 0.5);
+  --panze-glass-shadow: 0 8px 32px 0 rgba(4, 120, 87, 0.05);
+  --panze-accent: #10b981;
+}
+
+/* Theme: Peach Bliss */
+.panze-theme-peach {
+  --panze-bg: #fff7ed;
+  --panze-text-primary: #7c2d12;
+  --panze-text-secondary: #c2410c;
+  --panze-glass-bg: rgba(255, 255, 255, 0.6);
+  --panze-glass-border: rgba(253, 186, 116, 0.5);
+  --panze-glass-shadow: 0 8px 32px 0 rgba(194, 65, 12, 0.05);
+  --panze-accent: #f97316;
+}
+
+/* Glassmorphism Card */
+.panze-glass-card {
+  background: var(--panze-glass-bg, rgba(255, 255, 255, 0.7));
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--panze-glass-border, rgba(255, 255, 255, 0.5));
+  box-shadow: var(--panze-glass-shadow, 0 8px 32px 0 rgba(31, 38, 135, 0.07));
+  border-radius: 24px;
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.panze-glass-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--panze-glass-shadow, 0 12px 40px 0 rgba(31, 38, 135, 0.1));
+}
+
+/* Small UI elements */
+.panze-pill {
+  border-radius: 9999px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panze-glass-bg);
+  border: 1px solid var(--panze-glass-border);
+  color: var(--panze-text-primary);
+}
+
+.panze-text-secondary {
+  color: var(--panze-text-secondary);
+}
+
+.panze-bento-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 1.5rem;
+}
+
+/* Base resets for children */
+.panze-dashboard-wrapper h1,
+.panze-dashboard-wrapper h2,
+.panze-dashboard-wrapper h3,
+.panze-dashboard-wrapper p,
+.panze-dashboard-wrapper span,
+.panze-dashboard-wrapper div {
+  color: inherit;
+}

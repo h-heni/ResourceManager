@@ -1,0 +1,117 @@
+Figma task brief — recreate the dashboard exactly like the provided image (pixel-accurate visual spec, components, spacing, colors, typography, states, and export assets). Use an 8px baseline grid and Auto Layout everywhere. Build reusable components and tokens.
+
+Canvas & frame
+
+* Desktop frame: 1440 × 820 px, center the design on a soft full-bleed blurred gradient background that matches the image.
+* Background gradient (full-bleed): radial/soft blur from top-right blue to bottom-left orange.
+
+  * Suggested stops: #6FC3FF (top-right), #FFD166 (middle), #FF9F43 (bottom-left). Apply heavy gaussian blur + reduced opacity to recreate soft wallpaper feel.
+* Main content container: white card with large rounded corners (24px radius) inset 48px from the frame edges and a subtle inner padding 28px; width ~1120px, height ~680px. Add gentle drop shadow: 0 12px 30px rgba(16,24,40,0.06).
+
+Left sidebar (vertical)
+
+* Width: 240px; full height of main content card; inner padding 24px; white background with 12px radius on left side; thin dividing line to the right (#EEF2F5 1px).
+* Top area: logo block — left-aligned logo mark + "laxi.ai" wordmark (use a rounded geometric sans like Inter or Poppins). Logo color: deep purple #5B3BFF. Space below logo: 28px.
+* Navigation sections (stacked, Auto Layout vertical, 12px spacing):
+
+  * Section header “SETUP” small caps 12px weight 600, color #9AA3AD, letter spacing 0.12em.
+  * Items: “Design”, “Data Sources”, “Playground”, “Controls” — each with left icon (line-style outline), label 14px medium (#141414) and 14px regular description color (#464E56). Row padding 10px vertical, hover state: background #F7F9FB, rounded 8px.
+  * Next section “DEPLOY” with item “Share and Deploy”.
+  * Next section “MONITOR” with items “Conversations”, “Analytics” — highlight “Analytics” with pill background #F5EBFF and purple left indicator bar (4px) or change text color to primary purple #5B3BFF.
+* Bottom-left avatar + email block: small circular avatar 40px, below it “[Chris@shop.com](mailto:Chris@shop.com)” 12px muted (#6B7280).
+
+Top header and title
+
+* Inside main container, top-left: page title “Analytics Dashboard” 28px Inter SemiBold (#111827). Subtitle beneath: “Monitor your AI agent’s performance and user engagement” 14px regular (#6B7280). Left align.
+
+Top KPI cards row (two small metric cards at top)
+
+* Grid: two cards side-by-side with 24px gap.
+* Card style: white, rounded 12px, subtle inset shadow 0 6px 18px rgba(16,24,40,0.04), padding 20px.
+* Card 1: title “Total Conversations” 12px muted (#7C8794). Large metric 32px bold “3.298” (use dot thousands separator). Right side small line chart sparkline, light purple area gradient under line.
+* Card 2: title “Products click” and metric “1.543” with green sparkline area.
+* Match spacing and alignment to the image (metrics left, sparkline right).
+
+Main left content block (recommendations list)
+
+* Large card under KPIs: width ~420px, rounded 12px, padding 18px.
+* Title “Most recommended” 14px semibold.
+* Vertical list of product items (5 rows). Each row: 56×56 rounded square grayscale product thumbnail, product name 14px medium, small subtitle if needed; chevron on the far right. Use faint separators or 8px gaps. Left-edge icon column.
+
+Center floating chat card (modal)
+
+* Floating card centered overlapping lower area of main content: width ~360px, height dynamic, rounded 18px, heavy drop shadow 0 20px 40px rgba(16,24,40,0.12). White card with an inner stacked chat header, message blocks, and product recommendation tile.
+* Chat header: small “Hey! I’m looking for a cream” top label (muted), little close “x” icon top-right.
+* Message bubble style: left-aligned assistant bubbles with very light gray background #F7F8FA, text 14px #111827. Include emoji and short copy exactly like the screenshot. Final assistant message contains a product tile:
+
+  * Product tile: left image 64×64 rounded 8px, right column name “Hydra-Calm Moisturizer”, small description, and a purple CTA button “Discover Now” (pill: 14px, background #6C49FF, text white). Card inside chat should have a subtle border radius and 8px padding.
+* Bottom input: rounded input field 48px height with placeholder “Ask anything…”, left icon mic, right purple send circle (34px) with arrow.
+
+Right column analytics widgets
+
+* Place three stacked cards to the right (pie chart card, feedback gauge card, and smaller summary cards). Style them like KPI cards: white, rounded 12px, padding 18px.
+* Pie chart card: title “Conversation Categories” 14px; donut chart using four segment colors: blue #4EA8FF, yellow #FFD166, pink #FF6B9C, green #4CD97B. Legend squares to the right with labels.
+* Gauge card (bottom-right): semicircular gauge with green-to-red gradient showing satisfaction; center small emoji/time or percent indicator.
+* Keep spacing and alignment consistent with the image grid.
+
+Colors & Tokens
+
+* Primary purple: #6C49FF
+* Accent green: #4CD97B
+* Accent blue: #4EA8FF
+* Accent pink: #FF6B9C
+* Neutral background gray: #F7F9FB
+* Card white: #FFFFFF
+* Divider: #EEF2F5
+* Text primary: #111827; secondary #6B7280; muted #9AA3AD
+
+Typography
+
+* Use Inter (or SF Pro) for all UI text.
+
+  * H1 / Page title: 28px / 600
+  * H2 / Card titles: 14px / 600
+  * Metric large numbers: 32px / 700
+  * Body / labels: 14px / 400
+  * Footnotes: 12px / 400
+
+Spacing & measurement rules (apply to all components)
+
+* Global grid: 8px baseline
+* Side padding: 24–28px inside cards
+* Card corner radii: 12px (small), 18px (chat modal), 24px (main outer container)
+* Shadows: soft elevation for cards, stronger for floating chat modal; use rgba blacks with low alpha.
+
+Components & naming
+
+* Create Figma components for Sidebar/Item, KPI Card/Metric, Product List Item, Chat Modal, Product Tile, Toggle Switch, Pie Chart, Gauge. Use variants for hover/active/disabled.
+* Create color/style tokens in the Figma Assets panel (Primary, Secondary, Neutrals, Shadows, Radii, Spacings, Fonts).
+* Provide Auto Layout constraints so the design is responsive to width changes.
+
+Assets to export
+
+* Product thumbnails as 1x PNG with rounded corners.
+* Export primary icons as SVG (menu, chevrons, small charts).
+* Provide a light interaction prototype for: sidebar hover, “Analytics” highlighted state, chat open/close, CTA hover.
+
+Interaction notes
+
+* Chat modal should appear with a 240ms ease-out scale-in motion.
+* KPI sparklines animate on load (draw path).
+* Hover states: card lift (translateY -4px) + stronger shadow.
+
+Deliverables
+
+* One clean Figma file with pages: 01_Tokens, 02_Components, 03_Layouts (Final). Include a short developer handoff page listing hex values, font sizes, spacing, and export settings.
+
+Copy to use (exact)
+
+* Page title: Analytics Dashboard
+* Subtitle: Monitor your AI agent’s performance and user engagement
+* KPI titles: Total Conversations, Products click
+* Product list title: Most recommended
+* Chat: Hey! I'm looking for a cream
+* Product tile CTA: Discover Now
+* Input placeholder: Ask anything…
+
+Recreate pixel relationships and spacing to visually match the screenshot exactly; pay special attention to the floating chat card scale, shadow, and the soft blurred wallpaper background.

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Search, Download, Eye, DollarSign, X, Mail, Send, Calendar, Clock, Edit2, Archive, Filter, CheckCircle, FileWarning, AlertTriangle, Loader2 } from 'lucide-react';
+import { motion } from 'motion/react';
+import { Plus, Search, Download, Eye, DollarSign, X, Mail, Send, Calendar, Clock, Archive, Filter, CheckCircle, FileWarning, AlertTriangle, Loader2, Check, Pencil, Trash2, CreditCard } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { getErrorMessage, getAxiosResponseData } from '../utils/errorUtils';
@@ -81,6 +82,7 @@ export default function InvoicesPage() {
     const [archivedPage, setArchivedPage] = useState(1);
     const [pageSize, setPageSize] = useState(20);
     const [invoiceNumberSort, setInvoiceNumberSort] = useState<'asc' | 'desc'>('asc');
+    const [selectedRows, setSelectedRows] = useState<number[]>([]);
     
     // Cascade delete warning state
     const [showDeleteWarning, setShowDeleteWarning] = useState(false);
@@ -429,36 +431,142 @@ export default function InvoicesPage() {
             const activeCount = activeTotalCount;
             const archivedCount = archivedTotalCount;
 
+    const toggleRow = (id: number) => {
+        setSelectedRows(prev => prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]);
+    };
+
+    const toggleAll = () => {
+        if (selectedRows.length === sortedInvoices.length && sortedInvoices.length > 0) {
+            setSelectedRows([]);
+        } else {
+            setSelectedRows(sortedInvoices.map(i => i.id));
+        }
+    };
+
     return (
-        <div className="space-y-6">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="w-full flex flex-col gap-6">
             <NotifyBanner />
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+
+            {/* ── Page Header ── */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-900">{t('nav.invoices')}</h1>
-                    <p className="text-gray-500 mt-1">{t('invoice.pageDescription')}</p>
+                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight">{t('nav.invoices')}</h1>
+                    <p className="text-sm text-slate-500 mt-1">{t('invoice.pageDescription')}</p>
                 </div>
-                <button
-                    onClick={() => navigate('/invoices/create')}
-                    className="flex items-center px-4 py-2 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all transform hover:scale-105"
-                >
-                    <Plus size={20} className="me-2" />
-                    {t('invoice.create')}
-                </button>
             </div>
 
-            <div className="relative">
-                <Search className="absolute start-4 top-3.5 h-5 w-5 text-gray-400" />
-                <input
-                    type="text"
-                    placeholder={t('invoice.searchPlaceholder')}
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="w-full ps-12 pe-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent outline-none transition-all"
-                />
-            </div>
+            {/* ── Table Container ── */}
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col p-6">
 
-            {/* Active / Archived Toggle */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                {/* Action Bar / Search */}
+                <div className="flex items-center justify-between mb-6 h-12">
+                    <div className="flex-1 flex items-center gap-4">
+                        {selectedRows.length > 0 ? (
+                            <motion.div
+                                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                className="flex items-center gap-1 p-1 bg-white rounded-full border border-slate-200 shadow-sm overflow-x-auto"
+                            >
+                                <div className="px-3 py-1.5 text-xs font-bold text-purple-700 bg-purple-50 rounded-full flex items-center gap-2 border border-purple-100/50 flex-shrink-0">
+                                    <span className="w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center text-white text-[10px] shadow-inner">{selectedRows.length}</span>
+                                    {t('common.selected', 'Selected')}
+                                </div>
+                                {selectedRows.length === 1 && (() => {
+                                    const inv = sortedInvoices.find(i => i.id === selectedRows[0]);
+                                    return inv && isManager && !inv.isLocked && inv.status !== 'Paid' && inv.status !== 'PartiallyPaid' ? (
+                                        <button
+                                            onClick={() => navigate(`/invoices/edit/${inv.id}`)}
+                                            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 hover:bg-purple-50 text-slate-600 hover:text-purple-700 rounded-full text-xs font-medium transition-colors"
+                                        >
+                                            <Pencil size={14} className="text-purple-500" /> {t('common.edit')}
+                                        </button>
+                                    ) : null;
+                                })()}
+                                {selectedRows.length === 1 && (() => {
+                                    const inv = sortedInvoices.find(i => i.id === selectedRows[0]);
+                                    return inv && inv.status !== 'Paid' ? (
+                                        <button
+                                            onClick={() => { openPaymentModal(inv); }}
+                                            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 rounded-full text-xs font-medium transition-colors"
+                                        >
+                                            <Check size={14} className="text-emerald-500" /> {t('invoice.addPayment')}
+                                        </button>
+                                    ) : null;
+                                })()}
+                                <button
+                                    onClick={() => {
+                                        const inv = sortedInvoices.find(i => i.id === selectedRows[0]);
+                                        if (inv) openEmailModal(inv);
+                                    }}
+                                    className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 hover:bg-purple-50 text-slate-600 hover:text-purple-700 rounded-full text-xs font-medium transition-colors"
+                                >
+                                    <Send size={14} className="text-purple-500" /> {t('email.sendInvoice')}
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        selectedRows.forEach(id => {
+                                            const inv = sortedInvoices.find(i => i.id === id);
+                                            handleDownloadPdf(id, inv);
+                                        });
+                                    }}
+                                    disabled={downloadingInvoiceId !== null}
+                                    className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 hover:bg-purple-50 text-slate-600 hover:text-purple-700 rounded-full text-xs font-medium transition-colors disabled:opacity-50"
+                                >
+                                    <Download size={14} className="text-purple-500" /> {t('invoice.downloadPdf')}
+                                </button>
+                                {selectedRows.length === 1 && (
+                                    <button
+                                        onClick={() => handleViewDetails(selectedRows[0])}
+                                        className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 hover:bg-purple-50 text-slate-600 hover:text-purple-700 rounded-full text-xs font-medium transition-colors"
+                                    >
+                                        <Eye size={14} className="text-purple-500" /> {t('invoice.viewDetails')}
+                                    </button>
+                                )}
+                                {selectedRows.length === 1 && (() => {
+                                    const inv = sortedInvoices.find(i => i.id === selectedRows[0]);
+                                    return inv && (inv.status === 'PartiallyPaid' || (inv.status === 'Pending' && inv.remainingAmount > 0)) ? (
+                                        <button
+                                            onClick={() => handleDownloadRemainingPdf(inv.id, inv)}
+                                            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 hover:bg-orange-50 text-slate-600 hover:text-orange-700 rounded-full text-xs font-medium transition-colors"
+                                        >
+                                            <FileWarning size={14} className="text-orange-500" /> {t('invoice.remainingPaymentPdf', 'Remaining')}
+                                        </button>
+                                    ) : null;
+                                })()}
+                                <div className="w-px h-4 bg-slate-200 mx-1 flex-shrink-0" />
+                                <button
+                                    onClick={() => { selectedRows.forEach(id => handleDelete(id)); setSelectedRows([]); }}
+                                    className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 hover:bg-red-50 text-slate-600 hover:text-red-600 rounded-full text-xs font-medium transition-colors"
+                                >
+                                    <Trash2 size={14} className="text-red-500" /> {t('common.delete')}
+                                </button>
+                            </motion.div>
+                        ) : (
+                            <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="relative max-w-sm w-full">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                <input
+                                    type="text"
+                                    placeholder={t('invoice.searchPlaceholder')}
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    className="w-full pl-10 pr-4 py-2.5 bg-white/50 border border-slate-200/60 hover:border-purple-300 focus:bg-white focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 rounded-full text-sm font-medium outline-none transition-all placeholder:text-slate-400 text-slate-900 shadow-sm"
+                                />
+                            </motion.div>
+                        )}
+                    </div>
+                    {!selectedRows.length && (
+                        <motion.button
+                            initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+                            onClick={() => navigate('/invoices/create')}
+                            className="flex-shrink-0 flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-full text-sm font-semibold transition-all shadow-sm hover:shadow-md active:scale-95"
+                        >
+                            <Plus size={16} /> {t('invoice.create')}
+                        </motion.button>
+                    )}
+                </div>
+
+                {/* Active / Archived Toggle */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6">
                 <div className="flex p-1 bg-gray-100 rounded-xl">
                     <button
                         onClick={() => {
@@ -467,7 +575,7 @@ export default function InvoicesPage() {
                         }}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                             viewMode === 'active'
-                                ? 'bg-white shadow-sm text-[#065F46]'
+                                ? 'bg-white shadow-sm text-purple-600'
                                 : 'text-gray-500 hover:text-gray-700'
                         }`}
                     >
@@ -518,196 +626,165 @@ export default function InvoicesPage() {
             </div>
 
             {(loading || (viewMode === 'archived' && loadingArchive)) ? (
-                <div className="text-center py-20 text-gray-500">{t('common.loadingData')}</div>
+                <div className="text-center py-20 text-slate-400">{t('common.loadingData')}</div>
             ) : (
-                <div className="rm-table-card">
-                        <table className="rm-table min-w-[850px]">
-                            <colgroup>
-                                <col style={{ width: '12%' }} />{/* Invoice # */}
-                                <col style={{ width: '15%' }} />{/* Client */}
-                                <col style={{ width: '11%' }} />{/* Date */}
-                                <col style={{ width: '13%' }} />{/* Total */}
-                                <col style={{ width: '13%' }} />{/* Paid */}
-                                <col style={{ width: '13%' }} />{/* Remaining */}
-                                <col style={{ width: '12%' }} />{/* Status */}
-                                <col style={{ width: '11%' }} />{/* Actions */}
-                            </colgroup>
-                            <thead>
-                                <tr>
-                                    <th
-                                        className="rm-th-id cursor-pointer select-none"
-                                        onClick={() => setInvoiceNumberSort(prev => prev === 'asc' ? 'desc' : 'asc')}
+                <>
+                <div className="flex-1 overflow-x-auto overflow-y-visible">
+                    <table className="w-full text-left border-collapse min-w-[900px]">
+                        <thead>
+                            <tr>
+                                <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest w-12">
+                                    <button
+                                        onClick={toggleAll}
+                                        className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${
+                                            selectedRows.length > 0 && selectedRows.length === sortedInvoices.length
+                                                ? 'bg-purple-600 border-purple-600 text-white shadow-sm'
+                                                : 'border-slate-300 hover:border-purple-400 bg-white text-transparent'
+                                        }`}
                                     >
-                                        {t('invoice.invoiceNumber', 'Invoice #')} {invoiceNumberSort === 'asc' ? '↑' : '↓'}
-                                    </th>
-                                    <th>{t('invoice.client')}</th>
-                                    <th className="rm-th-date">{t('invoice.date')}</th>
-                                    <th className="rm-th-number">{t('invoice.total')}</th>
-                                    <th className="rm-th-number">{t('invoice.amountPaid')}</th>
-                                    <th className="rm-th-number">{t('invoice.remaining')}</th>
-                                    <th className="rm-th-status">{t('common.status')}</th>
-                                    <th className="rm-th-actions">{t('common.actions')}</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {sortedInvoices.map((invoice) => (
-                                    <tr key={invoice.id} className="group">
-                                        <td className="rm-cell-text whitespace-nowrap font-semibold text-[#065F46]">
-                                            {invoice.source === 'historical' && invoice.invoiceId ? (
-                                                <button
-                                                    type="button"
-                                                    className="hover:underline inline-block"
-                                                    onClick={() => handleViewDetails(invoice.invoiceId!)}
-                                                    title={resolveLinkedInvoiceNumber(invoice) || undefined}
-                                                >
-                                                    #{resolveLinkedInvoiceNumber(invoice) || invoice.id}
-                                                </button>
-                                            ) : (
-                                                <span className="inline-block" title={resolveInvoiceNumber(invoice) || String(invoice.id)}>
-                                                    #{resolveInvoiceNumber(invoice) || invoice.id}
+                                        <Check size={12} strokeWidth={3} />
+                                    </button>
+                                </th>
+                                <th
+                                    className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest cursor-pointer select-none"
+                                    onClick={() => setInvoiceNumberSort(prev => prev === 'asc' ? 'desc' : 'asc')}
+                                >
+                                    {t('invoice.invoiceNumber', 'Invoice #')} {invoiceNumberSort === 'asc' ? '↑' : '↓'}
+                                </th>
+                                <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest">{t('invoice.client')}</th>
+                                <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest">{t('invoice.dates', 'Dates')}</th>
+                                <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest">{t('common.status')}</th>
+                                <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-right">{t('invoice.total')}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {sortedInvoices.length > 0 ? sortedInvoices.map((invoice, idx) => {
+                                const isSelected = selectedRows.includes(invoice.id);
+                                return (
+                                    <motion.tr
+                                        key={invoice.id}
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: idx * 0.05 }}
+                                        onClick={() => toggleRow(invoice.id)}
+                                        className={`group border-b border-slate-100 cursor-pointer transition-colors ${
+                                            isSelected ? 'bg-purple-50/50' : 'hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        <td className="py-4 px-4 align-top w-12">
+                                            <div
+                                                className={`w-5 h-5 mt-1 rounded-full border flex items-center justify-center transition-all ${
+                                                    isSelected
+                                                        ? 'bg-purple-600 border-purple-600 text-white shadow-sm'
+                                                        : 'border-slate-300 bg-white text-transparent group-hover:border-purple-400'
+                                                }`}
+                                            >
+                                                <Check size={12} strokeWidth={3} />
+                                            </div>
+                                        </td>
+                                        <td className="py-4 px-4 align-top">
+                                            <div className="flex flex-col gap-1">
+                                                <span className="font-bold text-slate-800 text-sm">
+                                                    {invoice.source === 'historical' && invoice.invoiceId ? (
+                                                        <button
+                                                            type="button"
+                                                            className="hover:underline"
+                                                            onClick={(e) => { e.stopPropagation(); handleViewDetails(invoice.invoiceId!); }}
+                                                        >
+                                                            #{resolveLinkedInvoiceNumber(invoice) || invoice.id}
+                                                        </button>
+                                                    ) : (
+                                                        <span>#{resolveInvoiceNumber(invoice) || invoice.id}</span>
+                                                    )}
                                                 </span>
-                                            )}
-                                        </td>
-                                        <td className="rm-cell-text">
-                                            <span title={invoice.clientName || undefined}>
-                                                {invoice.clientName || t('common.unknown')}
-                                            </span>
-                                        </td>
-                                        <td className="rm-cell-date">{invoice.date ? new Date(invoice.date).toLocaleDateString() : t('users.table.notAvailable')}</td>
-                                        <td className="rm-cell-currency">
-                                            {formatCurrency(invoice.totalAmount, invoice.currencySymbol || DEFAULT_CURRENCY)}
-                                        </td>
-                                        <td className="rm-cell-currency">
-                                            <div className="flex flex-col items-end">
-                                                <span className="text-emerald-600 font-medium">
-                                                    {formatCurrency(invoice.amountPaid, invoice.currencySymbol || DEFAULT_CURRENCY)}
+                                                <span className="text-xs text-slate-500 flex items-center gap-1">
+                                                    <CreditCard size={12} className="text-slate-400" />
+                                                    {invoice.currency || DEFAULT_CURRENCY}
                                                 </span>
-                                                {(invoice.pendingAmount || 0) > 0 && (
-                                                    <span className="text-xs text-orange-500 flex items-center gap-1 mt-0.5" title={t('invoice.pending')}>
-                                                        <Clock size={12} />
-                                                        +{formatCurrency(invoice.pendingAmount, invoice.currencySymbol || DEFAULT_CURRENCY)}
+                                            </div>
+                                        </td>
+                                        <td className="py-4 px-4 align-top">
+                                            <span className="font-medium text-slate-700 text-sm">{invoice.clientName || t('common.unknown')}</span>
+                                        </td>
+                                        <td className="py-4 px-4 align-top">
+                                            <div className="flex flex-col gap-1">
+                                                <span className="text-xs font-semibold text-slate-600 flex items-center gap-1">
+                                                    <Calendar size={12} className="text-slate-400" /> {invoice.date ? new Date(invoice.date).toLocaleDateString() : '-'}
+                                                </span>
+                                                {invoice.dueDate && (
+                                                    <span className="text-xs text-slate-500 flex items-center gap-1">
+                                                        <Calendar size={12} className="text-red-300" /> {new Date(invoice.dueDate).toLocaleDateString()}
                                                     </span>
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="rm-cell-currency text-amber-600">
-                                            {invoice.remainingAmount > 0 ? formatCurrency(invoice.remainingAmount, invoice.currencySymbol || DEFAULT_CURRENCY) : '—'}
-                                        </td>
-                                        <td className="rm-cell-status text-center">
-                                            <span className={`px-3 py-1 text-xs font-semibold rounded-full inline-block ${getInvoiceStatusColor(invoice.status)}`}>
+                                        <td className="py-4 px-4 align-top">
+                                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest border ${getInvoiceStatusColor(invoice.status)}`}>
                                                 {t(`invoice.status.${invoice.status}`, invoice.status)}
                                             </span>
                                             {viewMode === 'archived' && invoice.source === 'historical' && (
-                                                <span className="ms-1 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded-full inline-block">
+                                                <span className="ms-1 px-2 py-0.5 text-[10px] bg-blue-100 text-blue-700 rounded-full border border-blue-200">
                                                     {t('common.imported', 'Imported')}
                                                 </span>
                                             )}
                                         </td>
-                                        <td className="rm-cell-actions">
-                                            <div className="flex items-center justify-end gap-0.5">
-                                                {/* Don't show action buttons for historical archived items */}
-                                                {!(viewMode === 'archived' && invoice.source === 'historical') && (
-                                                    <>
-                                                        {/* Add Payment - Everyone can add payments if not fully paid */}
-                                                        {invoice.status !== 'Paid' && (
-                                                            <button
-                                                                onClick={() => openPaymentModal(invoice)}
-                                                                className="p-1 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                                                                title={t('invoice.addPayment')}
-                                                            >
-                                                                <DollarSign size={15} />
-                                                            </button>
-                                                        )}
-                                                        {/* Edit Invoice - Only if not locked/paid/partially paid (payments registered) */}
-                                                        {isManager && !invoice.isLocked && invoice.status !== 'Paid' && invoice.status !== 'PartiallyPaid' && (
-                                                            <button
-                                                                onClick={() => navigate(`/invoices/edit/${invoice.id}`)}
-                                                                className="p-1 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                                                                title={t('common.edit')}
-                                                            >
-                                                                <Edit2 size={15} />
-                                                            </button>
-                                                        )}
-                                                        {/* Send Email */}
-                                                        <button
-                                                            onClick={() => openEmailModal(invoice)}
-                                                            className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                            title={t('email.sendInvoice')}
-                                                        >
-                                                            <Mail size={15} />
-                                                        </button>
-                                                        {/* View Details (Eye icon now shows detail view, not PDF) */}
-                                                        <button
-                                                            onClick={() => handleViewDetails(invoice.id)}
-                                                            className="p-1 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
-                                                            title={t('invoice.viewDetails')}
-                                                        >
-                                                            <Eye size={15} />
-                                                        </button>
-                                                        {/* Download PDF */}
-                                                        <button
-                                                            onClick={() => handleDownloadPdf(invoice.id, invoice)}
-                                                            disabled={loading || (viewMode === 'archived' && loadingArchive) || downloadingInvoiceId === invoice.id}
-                                                            className="p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                                                            title={t('invoice.downloadPdf')}
-                                                        >
-                                                            <Download size={15} />
-                                                        </button>
-                                                        {/* Remaining Payment PDF - only for partially paid / pending */}
-                                                        {(invoice.status === 'PartiallyPaid' || (invoice.status === 'Pending' && invoice.remainingAmount > 0)) && (
-                                                            <button
-                                                                onClick={() => handleDownloadRemainingPdf(invoice.id, invoice)}
-                                                                disabled={downloadingInvoiceId === invoice.id}
-                                                                className="p-1 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
-                                                                title={t('invoice.remainingPaymentPdf', 'Remaining Payment Notice')}
-                                                            >
-                                                                <FileWarning size={15} />
-                                                            </button>
-                                                        )}
-                                                        {/* Delete button removed from table - only available in detail view */}
-                                                    </>
+                                        <td className="py-4 px-4 align-top text-right">
+                                            <div className="flex flex-col items-end gap-0.5">
+                                                <span className="font-bold text-slate-900 tracking-tight text-base">
+                                                    {formatCurrency(invoice.totalAmount, invoice.currencySymbol || DEFAULT_CURRENCY)}
+                                                </span>
+                                                {invoice.amountPaid > 0 && (
+                                                    <span className="text-xs text-emerald-600 font-medium">
+                                                        {t('invoice.amountPaid')}: {formatCurrency(invoice.amountPaid, invoice.currencySymbol || DEFAULT_CURRENCY)}
+                                                    </span>
                                                 )}
-                                                {/* For historical items, show a view-only indicator */}
-                                                {viewMode === 'archived' && invoice.source === 'historical' && (
-                                                    <span className="text-xs text-gray-400 italic whitespace-nowrap">
-                                                        {t('common.viewOnly', 'View only')}
+                                                {invoice.remainingAmount > 0 && (
+                                                    <span className="text-xs text-amber-600">
+                                                        {t('invoice.remaining')}: {formatCurrency(invoice.remainingAmount, invoice.currencySymbol || DEFAULT_CURRENCY)}
                                                     </span>
                                                 )}
                                             </div>
                                         </td>
-                                    </tr>
-                                ))}
-                                {sortedInvoices.length === 0 && (
-                                    <tr>
-                                        <td colSpan={8} className="px-4 py-12 text-center text-gray-500">
-                                            {t('invoice.messages.empty')}
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    {!search && (
-                        <Pagination
-                            page={currentPage}
-                            totalPages={currentTotalPages}
-                            totalCount={currentTotalCount}
-                            size={pageSize}
-                            onPageChange={(p) => {
-                                if (viewMode === 'archived') {
-                                    setArchivedPage(p);
-                                } else {
-                                    setActivePage(p);
-                                }
-                            }}
-                            onSizeChange={(s) => {
-                                setPageSize(s);
-                                setActivePage(1);
-                                setArchivedPage(1);
-                            }}
-                        />
-                    )}
+                                    </motion.tr>
+                                );
+                            }) : (
+                                <tr>
+                                    <td colSpan={6} className="py-16 text-center">
+                                        <div className="flex flex-col items-center justify-center">
+                                            <div className="w-12 h-12 bg-white border border-slate-200 rounded-xl shadow-sm flex items-center justify-center mb-3">
+                                                <Search className="text-slate-400" size={20} />
+                                            </div>
+                                            <h3 className="text-sm font-bold text-slate-800">{t('invoice.messages.empty')}</h3>
+                                        </div>
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
                 </div>
+                {!search && (
+                    <Pagination
+                        page={currentPage}
+                        totalPages={currentTotalPages}
+                        totalCount={currentTotalCount}
+                        size={pageSize}
+                        onPageChange={(p) => {
+                            if (viewMode === 'archived') {
+                                setArchivedPage(p);
+                            } else {
+                                setActivePage(p);
+                            }
+                        }}
+                        onSizeChange={(s) => {
+                            setPageSize(s);
+                            setActivePage(1);
+                            setArchivedPage(1);
+                        }}
+                    />
+                )}
+                </>
             )}
+            </div>
 
             {/* Payment Modal */}
             {showPaymentModal && selectedInvoice && (
@@ -738,7 +815,7 @@ export default function InvoicesPage() {
                                     onClick={() => setIsScheduledPayment(false)}
                                     className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg transition-all ${
                                         !isScheduledPayment 
-                                            ? 'bg-white shadow-sm text-[#065F46] font-medium' 
+                                            ? 'bg-white shadow-sm text-purple-600 font-medium' 
                                             : 'text-gray-600 hover:text-gray-800'
                                     }`}
                                 >
@@ -750,7 +827,7 @@ export default function InvoicesPage() {
                                     onClick={() => setIsScheduledPayment(true)}
                                     className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg transition-all ${
                                         isScheduledPayment 
-                                            ? 'bg-white shadow-sm text-[#065F46] font-medium' 
+                                            ? 'bg-white shadow-sm text-purple-600 font-medium' 
                                             : 'text-gray-600 hover:text-gray-800'
                                     }`}
                                 >
@@ -788,7 +865,7 @@ export default function InvoicesPage() {
                                     max={selectedInvoice.remainingAmount}
                                     value={paymentAmount}
                                     onChange={(e) => setPaymentAmount(e.target.value)}
-                                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
                                     placeholder={t('invoice.enterAmount')}
                                 />
                             </div>
@@ -798,7 +875,7 @@ export default function InvoicesPage() {
                                     type="text"
                                     value={paymentNotes}
                                     onChange={(e) => setPaymentNotes(e.target.value)}
-                                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
                                     placeholder={t('invoice.paymentNotesPlaceholder')}
                                 />
                             </div>
@@ -1068,6 +1145,6 @@ export default function InvoicesPage() {
                     </div>
                 </div>
             )}
-        </div>
+        </motion.div>
     );
 }

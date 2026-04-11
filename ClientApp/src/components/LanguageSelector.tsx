@@ -47,7 +47,7 @@ export default function LanguageSelector() {
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:text-gray-900 rounded-xl hover:bg-gray-100 transition-colors border border-gray-200 bg-white shadow-sm"
       >
-        <Globe size={18} className="text-[#065F46]" />
+        <Globe size={18} className="text-purple-600" />
         <span>{currentLang.flag}</span>
         <span className="hidden sm:inline font-medium">{currentLang.name}</span>
         <ChevronDown size={16} className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
@@ -64,14 +64,14 @@ export default function LanguageSelector() {
               onClick={() => changeLanguage(lang.code)}
               className={`w-full px-4 py-2.5 text-start text-sm hover:bg-gray-50 flex items-center gap-3 transition-colors ${
                 i18n.language === lang.code 
-                  ? 'bg-[#065F46]/5 text-[#065F46] font-medium' 
+                  ? 'bg-purple-600/5 text-purple-600 font-medium' 
                   : 'text-gray-700'
               }`}
             >
               <span className="text-lg">{lang.flag}</span>
               <span>{lang.name}</span>
               {i18n.language === lang.code && (
-                <span className="ms-auto text-[#065F46]">✓</span>
+                <span className="ms-auto text-purple-600">✓</span>
               )}
             </button>
           ))}

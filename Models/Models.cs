@@ -639,6 +639,36 @@ namespace ResourceManager.Models
     }
 
     /// <summary>
+    /// Stores supplier invoice files as GZip-compressed binary blobs in the database.
+    /// Held in a separate table so the blob is never loaded during list queries.
+    /// </summary>
+    public class SupplierInvoiceFileData
+    {
+        public int Id { get; set; }
+
+        /// <summary>FK to SupplierInvoice — unique 1-to-1.</summary>
+        public int SupplierInvoiceId { get; set; }
+        public SupplierInvoice? SupplierInvoice { get; set; }
+
+        /// <summary>GZip-compressed file bytes.</summary>
+        public byte[] CompressedData { get; set; } = Array.Empty<byte>();
+
+        /// <summary>Original (uncompressed) file size in bytes.</summary>
+        public long OriginalSize { get; set; }
+
+        /// <summary>Compressed size in bytes (informational).</summary>
+        public long CompressedSize { get; set; }
+
+        /// <summary>Compression algorithm used — always "GZip".</summary>
+        public string CompressionType { get; set; } = "GZip";
+
+        /// <summary>MIME type of the original file, e.g. "application/pdf" or "image/jpeg".</summary>
+        public string MimeType { get; set; } = "application/pdf";
+
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    /// <summary>
     /// Other Expenses - operational costs not tied to supplier invoices
     /// </summary>
     public class OtherExpense : Shared

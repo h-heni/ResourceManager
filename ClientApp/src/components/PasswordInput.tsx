@@ -52,7 +52,7 @@ export default function PasswordInput({
                     value={value}
                     className={cn(
                         'w-full ps-10 pe-10 py-3 border border-gray-200 rounded-xl',
-                        'focus:ring-2 focus:ring-[#065F46] focus:border-transparent',
+                        'focus:ring-2 focus:ring-purple-500 focus:border-transparent',
                         'transition-all outline-none bg-gray-50/50 focus:bg-white',
                         className,
                     )}

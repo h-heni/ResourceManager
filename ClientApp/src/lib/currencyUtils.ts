@@ -12,8 +12,8 @@ export const DEFAULT_CURRENCY = 'TND';
  * Every chart, bar, legend, and status indicator MUST use these.
  */
 export const CHART_COLORS = {
-    revenue:      '#4F46E5', // indigo-600
-    revenueTo:    '#818CF8', // indigo-400 (gradient end)
+    revenue:      '#7C3AED', // purple-600
+    revenueTo:    '#818CF8', // purple-400 (gradient end)
     expenses:     '#F43F5E', // rose-500
     expensesTo:   '#FDA4AF', // rose-300 (gradient end)
     net:          '#059669', // emerald-600

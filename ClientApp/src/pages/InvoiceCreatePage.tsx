@@ -649,7 +649,7 @@ export default function InvoiceCreatePage() {
                 <button
                     onClick={handleSubmit}
                     disabled={loading || loadingInvoice}
-                    className="w-full sm:w-auto flex items-center justify-center px-6 py-3 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                    className="w-full sm:w-auto flex items-center justify-center px-6 py-3 bg-purple-600 text-white rounded-xl shadow-lg hover:bg-purple-700 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                     <Save size={20} className="mr-2" />
                     {loading ? t('createPage.saving') : isEditMode ? t('createPage.updateButton') : t('createPage.saveButton')}
@@ -676,7 +676,7 @@ export default function InvoiceCreatePage() {
 
                 {/* Currency & Language (inherited from Quote - read-only) */}
                 {selectedQuoteIds.length > 0 && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-[#065F46]/5 border border-[#065F46]/10 rounded-xl">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-purple-600/5 border border-purple-600/10 rounded-xl">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 {t('createPage.documentCurrency')}
@@ -709,7 +709,7 @@ export default function InvoiceCreatePage() {
                             value={invoiceNumber}
                             onChange={e => setInvoiceNumber(e.target.value)}
                             onBlur={() => handleBlur('invoiceNumber')}
-                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none transition-all ${errors.invoiceNumber && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-purple-500 outline-none transition-all ${errors.invoiceNumber && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
                                 }`}
                             placeholder={t('createPage.enterNumber')}
                             required
@@ -719,7 +719,7 @@ export default function InvoiceCreatePage() {
                         )}
                         {lastInvoiceNumber && !errors.invoiceNumber && (
                             <p className="text-xs text-gray-500 mt-1">
-                                {t('createPage.lastInvoice')} <span className="font-medium text-[#065F46]">{lastInvoiceNumber}</span>
+                                {t('createPage.lastInvoice')} <span className="font-medium text-purple-600">{lastInvoiceNumber}</span>
                                 {suggestedNumber && (
                                     <span> — {t('createPage.suggested')} <span className="font-medium text-green-600">{suggestedNumber}</span></span>
                                 )}
@@ -734,7 +734,7 @@ export default function InvoiceCreatePage() {
                             value={clientId}
                             onChange={e => handleClientChange(e.target.value)}
                             onBlur={() => handleBlur('clientId')}
-                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none transition-all ${errors.clientId && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-purple-500 outline-none transition-all ${errors.clientId && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
                                 }`}
                             required
                         >
@@ -759,7 +759,7 @@ export default function InvoiceCreatePage() {
                                             type="checkbox"
                                             checked={selectedQuoteIds.includes(quote.id)}
                                             onChange={e => handleQuoteSelection(quote.id, e.target.checked)}
-                                            className="accent-[#065F46]"
+                                            className="accent-purple-600"
                                         />
                                         <span className="text-sm text-gray-700">
                                             {t('createPage.selectQuote', { number: getQuoteNumber(quote), amount: (quote.totalAmount || 0).toLocaleString() + ' ' + (pdfCurrencySymbol || DEFAULT_CURRENCY) })}
@@ -778,7 +778,7 @@ export default function InvoiceCreatePage() {
                             value={date}
                             onChange={e => setDate(e.target.value)}
                             onBlur={() => handleBlur('date')}
-                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none transition-all ${errors.date && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-purple-500 outline-none transition-all ${errors.date && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
                                 }`}
                             required
                         />
@@ -861,7 +861,7 @@ export default function InvoiceCreatePage() {
                 <div className="border-t border-gray-100 pt-6">
                     <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <h3 className="text-lg font-bold text-gray-900 flex items-center">
-                            <FileText className="mr-2 text-[#065F46]" size={20} />
+                            <FileText className="mr-2 text-purple-600" size={20} />
                             {t('invoice.items')} <span className="text-red-500 ml-1">*</span>
                         </h3>
                     </div>
@@ -889,7 +889,7 @@ export default function InvoiceCreatePage() {
                                                 searchProducts(e.target.value, index);
                                             }}
                                             onBlur={() => { handleBlur('items'); dismissProdSuggestions(); }}
-                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#065F46] outline-none ${item.description.trim() === '' && touched.items ? 'border-amber-400' : 'border-gray-200'
+                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none ${item.description.trim() === '' && touched.items ? 'border-amber-400' : 'border-gray-200'
                                                 }`}
                                             placeholder={t('createPage.enterDescription', 'Description or search product...')}
                                             autoComplete="off"
@@ -902,7 +902,7 @@ export default function InvoiceCreatePage() {
                                                         key={product.id}
                                                         type="button"
                                                         onMouseDown={() => selectProduct(product, index)}
-                                                        className="w-full px-3 py-2 text-left hover:bg-[#065F46]/5 flex justify-between items-center text-sm border-b border-gray-50 last:border-0"
+                                                        className="w-full px-3 py-2 text-left hover:bg-purple-600/5 flex justify-between items-center text-sm border-b border-gray-50 last:border-0"
                                                     >
                                                         <div>
                                                             <span className="font-medium text-gray-900">{product.name}</span>
@@ -910,7 +910,7 @@ export default function InvoiceCreatePage() {
                                                                 <span className="text-gray-400 ml-1 text-xs">— {product.description}</span>
                                                             )}
                                                         </div>
-                                                        <span className="text-[#065F46] font-medium text-xs whitespace-nowrap ml-2">
+                                                        <span className="text-purple-600 font-medium text-xs whitespace-nowrap ml-2">
                                                             {product.defaultUnitPrice.toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}
                                                         </span>
                                                     </button>
@@ -925,7 +925,7 @@ export default function InvoiceCreatePage() {
                                             min="1"
                                             value={item.quantity}
                                             onChange={e => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
-                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#065F46] outline-none text-right ${item.quantity <= 0 && item.description.trim() ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-right ${item.quantity <= 0 && item.description.trim() ? 'border-red-500 bg-red-50' : 'border-gray-200'
                                                 }`}
                                         />
                                     </div>
@@ -937,7 +937,7 @@ export default function InvoiceCreatePage() {
                                             step="0.001"
                                             value={item.price}
                                             onChange={e => updateItem(index, 'price', parseFloat(e.target.value) || 0)}
-                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#065F46] outline-none text-right ${item.price < 0 && item.description.trim() ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none text-right ${item.price < 0 && item.description.trim() ? 'border-red-500 bg-red-50' : 'border-gray-200'
                                                 }`}
                                         />
                                     </div>
@@ -955,7 +955,7 @@ export default function InvoiceCreatePage() {
                                                     updateItem(index, 'vatRate', val);
                                                 }
                                             }}
-                                            className="w-full px-2 py-2 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-[#065F46] outline-none"
+                                            className="w-full px-2 py-2 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-purple-500 outline-none"
                                         >
                                             <option value={-1}>{t('invoice.noTax', 'No Tax')}</option>
                                             {taxSettings.availableVatRates.filter(r => r > 0).map(rate => (
@@ -977,7 +977,7 @@ export default function InvoiceCreatePage() {
 
                         <button
                             onClick={addItem}
-                            className="mt-4 flex items-center text-sm font-semibold text-[#065F46] hover:text-[#065F46] transition-colors"
+                            className="mt-4 flex items-center text-sm font-semibold text-purple-600 hover:text-purple-600 transition-colors"
                         >
                             <Plus size={18} className="mr-1" />
                             {t('invoice.addItem')}
@@ -997,7 +997,7 @@ export default function InvoiceCreatePage() {
                             </div>
                             <div className="border-t border-gray-200 pt-3 flex justify-between text-xl font-bold text-gray-900">
                                 <span>{t('invoice.total')}:</span>
-                                <span className="text-[#065F46]">{calculateTotal().toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}</span>
+                                <span className="text-purple-600">{calculateTotal().toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}</span>
                             </div>
                         </div>
                     </div>

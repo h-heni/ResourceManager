@@ -103,7 +103,7 @@ const DashboardPreview = ({ t }: { t: TFunction }) => {
 
   return (
     <div className="w-full bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-200 pointer-events-none select-none">
-    <div className="bg-gradient-to-r from-[#065F46] to-[#10B981] px-4 py-3 flex items-center gap-2 border-b border-gray-200">
+    <div className="bg-gradient-to-r from-purple-600 to-[#10B981] px-4 py-3 flex items-center gap-2 border-b border-gray-200">
       <div className="flex gap-1.5">
         <div className="w-3 h-3 rounded-full bg-red-400" />
         <div className="w-3 h-3 rounded-full bg-yellow-400" />
@@ -246,7 +246,7 @@ const InvoicesPreview = ({ t }: { t: TFunction }) => (
         </div>
         <div className="flex items-center gap-2">
           <Filter className="w-4 h-4 text-gray-400 flex-shrink-0" />
-          <span className="text-xs bg-[#065F46] text-white px-3 py-1.5 rounded-lg font-medium whitespace-nowrap">
+          <span className="text-xs bg-purple-600 text-white px-3 py-1.5 rounded-lg font-medium whitespace-nowrap">
             {t('landing.invoicesPreview.newInvoice')}
           </span>
         </div>
@@ -255,8 +255,8 @@ const InvoicesPreview = ({ t }: { t: TFunction }) => (
       {/* Year Header */}
       <div className="bg-[#ECFDF5] px-4 py-2 border-b border-emerald-200 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <ChevronDown className="w-4 h-4 text-[#065F46]" />
-          <span className="text-sm font-semibold text-[#065F46]">2024</span>
+          <ChevronDown className="w-4 h-4 text-purple-600" />
+          <span className="text-sm font-semibold text-purple-600">2024</span>
         </div>
         <span className="text-xs text-gray-600">156 {t('landing.invoicesPreview.invoicesTotal')} $124,500</span>
       </div>
@@ -306,7 +306,7 @@ const InvoicesPreview = ({ t }: { t: TFunction }) => (
             <span className="w-8 h-8 flex items-center justify-center rounded border border-gray-200 text-gray-400">
               <ChevronLeft className="w-4 h-4" />
             </span>
-            <span className="w-8 h-8 flex items-center justify-center rounded bg-[#065F46] text-white text-sm font-medium">1</span>
+            <span className="w-8 h-8 flex items-center justify-center rounded bg-purple-600 text-white text-sm font-medium">1</span>
             <span className="w-8 h-8 flex items-center justify-center rounded border border-gray-200 text-gray-600 text-sm">2</span>
             <span className="w-8 h-8 flex items-center justify-center rounded border border-gray-200 text-gray-600 text-sm">3</span>
             <span className="w-8 h-8 flex items-center justify-center rounded border border-gray-200 text-gray-600">
@@ -359,7 +359,7 @@ const DataManagementPreview = ({ t }: { t: TFunction }) => (
             </div>
           ))}
         </div>
-        <span className="w-full mt-4 flex items-center justify-center gap-2 bg-[#065F46] text-white py-2.5 rounded-lg text-sm font-medium">
+        <span className="w-full mt-4 flex items-center justify-center gap-2 bg-purple-600 text-white py-2.5 rounded-lg text-sm font-medium">
           <FileSpreadsheet className="w-4 h-4 flex-shrink-0" />
           <span className="truncate">{t('landing.dataManagementPreview.importFromExcel')}</span>
         </span>
@@ -594,7 +594,7 @@ export default function LandingPage() {
     purple: 'bg-purple-100 text-purple-700',
     orange: 'bg-orange-100 text-orange-700',
     teal: 'bg-teal-100 text-teal-700',
-    indigo: 'bg-indigo-100 text-indigo-700',
+    indigo: 'bg-purple-100 text-purple-700',
   };
 
   const colorBgClasses = {
@@ -603,7 +603,7 @@ export default function LandingPage() {
     purple: 'hover:bg-purple-50 hover:border-purple-200',
     orange: 'hover:bg-orange-50 hover:border-orange-200',
     teal: 'hover:bg-teal-50 hover:border-teal-200',
-    indigo: 'hover:bg-indigo-50 hover:border-indigo-200',
+    indigo: 'hover:bg-purple-50 hover:border-purple-200',
   };
 
   const direction = i18n.language === 'ar' ? 'rtl' : 'ltr';
@@ -630,7 +630,7 @@ export default function LandingPage() {
         <div className="mx-auto flex h-20 w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#065F46] to-[#10B981] shadow-lg shadow-emerald-200">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-purple-600 to-[#10B981] shadow-lg shadow-emerald-200">
               <BarChart3 className="h-6 w-6 text-white" />
             </div>
             <span className="text-lg font-bold text-gray-900">{t('common.appName')}</span>
@@ -662,7 +662,7 @@ export default function LandingPage() {
             </Link>
             <Link
               to="/login"
-              className="rounded-lg bg-gradient-to-r from-[#065F46] to-[#10B981] px-3 py-2 text-sm font-semibold text-white transition-all hover:shadow-lg hover:shadow-emerald-200 sm:px-4"
+              className="rounded-lg bg-gradient-to-r from-purple-600 to-[#10B981] px-3 py-2 text-sm font-semibold text-white transition-all hover:shadow-lg hover:shadow-emerald-200 sm:px-4"
             >
               {t('auth.login')}
             </Link>
@@ -715,7 +715,7 @@ export default function LandingPage() {
             {/* Main Headline */}
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-gray-900 mb-6 leading-tight">
               {t('landing.heroTitle')}{' '}
-              <span className="bg-gradient-to-r from-[#065F46] via-emerald-600 to-[#10B981] bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-purple-600 via-emerald-600 to-[#10B981] bg-clip-text text-transparent">
                 {t('landing.heroHighlight')}
               </span>
             </h1>
@@ -729,7 +729,7 @@ export default function LandingPage() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
               <Link
                 to="/signup"
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#065F46] to-[#10B981] px-8 py-4 text-base font-bold text-white shadow-lg shadow-emerald-200 transition-all hover:shadow-xl hover:shadow-emerald-300 hover:-translate-y-0.5"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-[#10B981] px-8 py-4 text-base font-bold text-white shadow-lg shadow-emerald-200 transition-all hover:shadow-xl hover:shadow-emerald-300 hover:-translate-y-0.5"
               >
                 {t('landing.startFreeTrial')}
                 <ArrowRight className="w-5 h-5" />
@@ -789,7 +789,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto">
           {/* Section Header */}
           <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 bg-[#065F46]/10 text-[#065F46] px-4 py-2 rounded-full text-sm font-medium mb-4">
+            <div className="inline-flex items-center gap-2 bg-purple-600/10 text-purple-600 px-4 py-2 rounded-full text-sm font-medium mb-4">
               <Zap className="w-4 h-4" />
               <span>{t('landing.powerfulFeatures')}</span>
             </div>
@@ -931,7 +931,7 @@ export default function LandingPage() {
       {/* ========================================
           BENEFITS SECTION
       ======================================== */}
-      <section id="benefits" className="py-24 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-[#065F46] to-[#10B981] text-white">
+      <section id="benefits" className="py-24 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-purple-600 to-[#10B981] text-white">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">
@@ -946,7 +946,7 @@ export default function LandingPage() {
             {benefits.map((benefit, index) => (
               <div key={index} className="bg-white/10 backdrop-blur rounded-2xl p-6 border border-white/20">
                 <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center mb-4">
-                  <div className="text-[#065F46]">{benefit.icon}</div>
+                  <div className="text-purple-600">{benefit.icon}</div>
                 </div>
                 <h3 className="text-lg font-bold mb-2">{t(`landing.${benefit.titleKey}`)}</h3>
                 <p className="text-emerald-100 text-sm">{t(`landing.${benefit.descriptionKey}`)}</p>
@@ -977,7 +977,7 @@ export default function LandingPage() {
       <section className="py-24 px-4 sm:px-6 lg:px-8 bg-white">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 bg-[#065F46]/10 text-[#065F46] px-4 py-2 rounded-full text-sm font-medium mb-4">
+            <div className="inline-flex items-center gap-2 bg-purple-600/10 text-purple-600 px-4 py-2 rounded-full text-sm font-medium mb-4">
               <Zap className="w-4 h-4" />
               <span>{t('landing.getStartedFast')}</span>
             </div>
@@ -1013,7 +1013,7 @@ export default function LandingPage() {
               <div key={index} className="relative">
                 <div className="bg-gray-50 rounded-2xl p-8 h-full">
                   <div className="text-6xl font-bold text-gray-200 mb-4">{item.step}</div>
-                  <div className="w-12 h-12 bg-[#065F46] rounded-xl flex items-center justify-center text-white mb-4">
+                  <div className="w-12 h-12 bg-purple-600 rounded-xl flex items-center justify-center text-white mb-4">
                     {item.icon}
                   </div>
                   <h3 className="text-xl font-bold text-gray-900 mb-2">{t(`landing.${item.titleKey}`)}</h3>
@@ -1113,7 +1113,7 @@ export default function LandingPage() {
       <section id="pricing" className="py-24 px-4 sm:px-6 lg:px-8 bg-white">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 bg-[#065F46]/10 text-[#065F46] px-4 py-2 rounded-full text-sm font-medium mb-4">
+            <div className="inline-flex items-center gap-2 bg-purple-600/10 text-purple-600 px-4 py-2 rounded-full text-sm font-medium mb-4">
               <DollarSign className="w-4 h-4" />
               <span>{t('landing.pricing')}</span>
             </div>
@@ -1166,12 +1166,12 @@ export default function LandingPage() {
                 key={index}
                 className={`relative bg-white rounded-2xl p-8 border ${
                   plan.popular
-                    ? 'border-[#065F46] shadow-xl shadow-emerald-100 md:scale-105'
+                    ? 'border-purple-600 shadow-xl shadow-emerald-100 md:scale-105'
                     : 'border-gray-200 shadow-sm'
                 }`}
               >
                 {plan.popular && (
-                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-gradient-to-r from-[#065F46] to-[#10B981] text-white px-4 py-1 rounded-full text-sm font-semibold whitespace-nowrap">
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-gradient-to-r from-purple-600 to-[#10B981] text-white px-4 py-1 rounded-full text-sm font-semibold whitespace-nowrap">
                     {t('landing.mostPopular')}
                   </div>
                 )}
@@ -1197,8 +1197,8 @@ export default function LandingPage() {
                   to="/signup"
                   className={`block text-center py-3 px-6 rounded-xl font-semibold transition-colors ${
                     plan.popular
-                      ? 'bg-gradient-to-r from-[#065F46] to-[#10B981] text-white hover:shadow-lg'
-                      : 'border-2 border-gray-200 text-gray-700 hover:border-[#065F46] hover:text-[#065F46]'
+                      ? 'bg-gradient-to-r from-purple-600 to-[#10B981] text-white hover:shadow-lg'
+                      : 'border-2 border-gray-200 text-gray-700 hover:border-purple-600 hover:text-purple-600'
                   }`}
                 >
                   {t(`landing.${plan.ctaKey}`)}
@@ -1231,7 +1231,7 @@ export default function LandingPage() {
       <section id="faq" className="py-24 px-4 sm:px-6 lg:px-8 bg-gray-50">
         <div className="max-w-3xl mx-auto">
           <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 bg-[#065F46]/10 text-[#065F46] px-4 py-2 rounded-full text-sm font-medium mb-4">
+            <div className="inline-flex items-center gap-2 bg-purple-600/10 text-purple-600 px-4 py-2 rounded-full text-sm font-medium mb-4">
               <MessageSquare className="w-4 h-4" />
               <span>{t('landing.faq')}</span>
             </div>
@@ -1271,7 +1271,7 @@ export default function LandingPage() {
             <p className="text-gray-600 mb-4">{t('landing.stillHaveQuestions')}</p>
             <a
               href="mailto:support@rscmanager.com"
-              className="inline-flex items-center gap-2 text-[#065F46] font-semibold hover:underline"
+              className="inline-flex items-center gap-2 text-purple-600 font-semibold hover:underline"
             >
               <Mail className="w-4 h-4" />
               {t('landing.contactSupportTeam')}
@@ -1283,7 +1283,7 @@ export default function LandingPage() {
       {/* ========================================
           FINAL CTA
       ======================================== */}
-      <section className="py-24 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-[#065F46] via-emerald-700 to-[#10B981] text-white relative overflow-hidden">
+      <section className="py-24 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-purple-600 via-emerald-700 to-[#10B981] text-white relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-0 left-1/4 w-96 h-96 bg-white rounded-full blur-3xl" />
           <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-white rounded-full blur-3xl" />
@@ -1298,7 +1298,7 @@ export default function LandingPage() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
               to="/signup"
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-bold text-[#065F46] shadow-lg transition-all hover:shadow-xl hover:-translate-y-0.5"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-bold text-purple-600 shadow-lg transition-all hover:shadow-xl hover:-translate-y-0.5"
             >
               {t('landing.startFreeTrial')}
               <ArrowRight className="w-5 h-5" />
@@ -1323,7 +1323,7 @@ export default function LandingPage() {
             {/* Brand Column */}
             <div className="lg:col-span-2">
               <div className="flex items-center gap-2 mb-4">
-                <div className="w-10 h-10 bg-gradient-to-br from-[#065F46] to-[#10B981] rounded-xl flex items-center justify-center">
+                <div className="w-10 h-10 bg-gradient-to-br from-purple-600 to-[#10B981] rounded-xl flex items-center justify-center">
                   <BarChart3 className="w-6 h-6 text-white" />
                 </div>
                 <span className="text-xl font-bold">{t('common.appName')}</span>
@@ -1340,7 +1340,7 @@ export default function LandingPage() {
                   <a
                     key={index}
                     href="#"
-                    className="w-10 h-10 bg-gray-800 rounded-lg flex items-center justify-center text-gray-400 hover:bg-[#065F46] hover:text-white transition-colors"
+                    className="w-10 h-10 bg-gray-800 rounded-lg flex items-center justify-center text-gray-400 hover:bg-purple-600 hover:text-white transition-colors"
                     aria-label={social.name}
                   >
                     {social.icon}

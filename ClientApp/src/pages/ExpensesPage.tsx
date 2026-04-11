@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { motion } from 'motion/react';
 import {
-    Plus, Trash2, Edit2, Search, DollarSign, Calendar, X,
-    TrendingUp, Loader2, FileText, Settings2, ChevronDown, ChevronRight
+    Plus, Trash2, Search, DollarSign, Calendar, X,
+    TrendingUp, Loader2, FileText, Settings2, ChevronDown, ChevronRight, Check, Pencil
 } from 'lucide-react';
 import { useExpenses, useExpenseSummary, useSaveExpense, useDeleteExpense } from '../hooks/useExpenses';
 import { useAuth } from '../context/AuthContext';
@@ -66,7 +67,7 @@ const CUSTOM_COLOR_OPTIONS = [
     { bg: 'bg-violet-100 text-violet-700', dot: 'bg-violet-500' },
     { bg: 'bg-pink-100 text-pink-700', dot: 'bg-pink-500' },
     { bg: 'bg-rose-100 text-rose-700', dot: 'bg-rose-500' },
-    { bg: 'bg-indigo-100 text-indigo-700', dot: 'bg-indigo-500' },
+    { bg: 'bg-purple-100 text-purple-700', dot: 'bg-purple-500' },
     { bg: 'bg-sky-100 text-sky-700', dot: 'bg-sky-500' },
     { bg: 'bg-lime-100 text-lime-700', dot: 'bg-lime-500' },
     { bg: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500' },
@@ -95,6 +96,7 @@ export default function ExpensesPage() {
     const { isManager } = useAuth();
     const { currencySymbol } = useSettings();
     const [search, setSearch] = useState('');
+    const [selectedRows, setSelectedRows] = useState<number[]>([]);
     const [filterCategory, setFilterCategory] = useState<string>('all');
     const [page, setPage] = useState(1);
     const [size, setSize] = useState(20);
@@ -204,9 +206,9 @@ export default function ExpensesPage() {
             rent: 'bg-blue-100 text-blue-700',
             utilities: 'bg-yellow-100 text-yellow-700',
             office: 'bg-green-100 text-green-700',
-            travel: 'bg-[#065F46]/10 text-[#065F46]',
-            marketing: 'bg-[#14B8A6]/10 text-[#14B8A6]',
-            insurance: 'bg-[#065F46]/10 text-[#065F46]',
+            travel: 'bg-purple-600/10 text-purple-600',
+            marketing: 'bg-purple-500/10 text-purple-500',
+            insurance: 'bg-purple-600/10 text-purple-600',
             maintenance: 'bg-orange-100 text-orange-700',
             subscription: 'bg-cyan-100 text-cyan-700',
             salary: 'bg-emerald-100 text-emerald-700',
@@ -264,41 +266,46 @@ export default function ExpensesPage() {
 
     const sortedYears = Object.keys(groupedExpenses)
         .map(Number)
-        .sort((a, b) => b - a); // Newest years first
+        .sort((a, b) => b - a);
+
+    const toggleRow = (id: number) => {
+        setSelectedRows(prev => prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]);
+    };
 
     if (loading) {
         return (
             <div className="flex items-center justify-center h-64">
-                <Loader2 className="animate-spin text-[#065F46]" size={32} />
+                <Loader2 className="animate-spin text-purple-600" size={32} />
             </div>
         );
     }
 
     return (
-        <div className="space-y-6">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="w-full flex flex-col gap-6">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">{t('expense.title')}</h1>
-                    <p className="text-sm text-gray-500 mt-1">
+                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight">{t('expense.title')}</h1>
+                    <p className="text-sm text-slate-500 mt-1">
                         {expenses.length} {t('expense.title').toLowerCase()}
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
-                <button
+                <motion.button
+                    initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
                     onClick={openCreateModal}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-[#065F46] text-white rounded-xl hover:bg-[#047857] shadow-lg hover:shadow-xl transition-all font-medium"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-full text-sm font-semibold transition-all shadow-sm hover:shadow-md active:scale-95"
                 >
-                    <Plus size={18} />
+                    <Plus size={16} />
                     {t('expense.newExpense')}
-                </button>
+                </motion.button>
                 {isManager && (
                     <button
                         onClick={() => setShowCategoryModal(true)}
-                        className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 shadow-sm transition-all font-medium"
+                        className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-full hover:bg-slate-50 shadow-sm transition-all font-medium text-sm"
                         title={t('expense.manageCategories', 'Manage Categories')}
                     >
-                        <Settings2 size={18} />
+                        <Settings2 size={16} />
                         {t('expense.manageCategories', 'Manage Categories')}
                     </button>
                 )}
@@ -312,8 +319,8 @@ export default function ExpensesPage() {
                 <div key={cb.currency} className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
                         <div className="flex items-center gap-3">
-                            <div className="p-2 bg-[#065F46]/10 rounded-lg">
-                                <DollarSign size={20} className="text-[#065F46]" />
+                            <div className="p-2 bg-purple-600/10 rounded-lg">
+                                <DollarSign size={20} className="text-purple-600" />
                             </div>
                             <div>
                                 <p className="text-sm text-gray-500">{t('expense.totalExpenses')} ({cb.currencySymbol})</p>
@@ -334,8 +341,8 @@ export default function ExpensesPage() {
                     </div>
                     <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
                         <div className="flex items-center gap-3">
-                            <div className="p-2 bg-[#065F46]/10 rounded-lg">
-                                <TrendingUp size={20} className="text-[#065F46]" />
+                            <div className="p-2 bg-purple-600/10 rounded-lg">
+                                <TrendingUp size={20} className="text-purple-600" />
                             </div>
                             <div>
                                 <p className="text-sm text-gray-500">{t('expense.thisYear')} ({cb.currencySymbol})</p>
@@ -348,64 +355,91 @@ export default function ExpensesPage() {
                 </>
             )}
 
-            {/* Search & Filter Bar */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-                <div className="flex flex-col sm:flex-row gap-3">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                        <input
-                            type="text"
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            placeholder={t('expense.searchPlaceholder')}
-                            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] focus:border-[#065F46] transition"
-                        />
+            {/* Search & Filter + Action Bar */}
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col p-6">
+                <div className="flex items-center justify-between mb-6 h-12">
+                    <div className="flex-1 flex items-center gap-4">
+                        {selectedRows.length > 0 ? (
+                            <motion.div
+                                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                className="flex items-center gap-1 p-1 bg-white rounded-full border border-slate-200 shadow-sm"
+                            >
+                                <div className="px-3 py-1.5 text-xs font-bold text-purple-700 bg-purple-50 rounded-full flex items-center gap-2 border border-purple-100/50">
+                                    <span className="w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center text-white text-[10px] shadow-inner">{selectedRows.length}</span>
+                                    {t('common.selected', 'Selected')}
+                                </div>
+                                {selectedRows.length === 1 && (
+                                    <button
+                                        onClick={() => { const e = expenses.find(e => e.id === selectedRows[0]); if (e) openEditModal(e); }}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-purple-50 text-slate-600 hover:text-purple-700 rounded-full text-xs font-medium transition-colors"
+                                    >
+                                        <Pencil size={14} className="text-purple-500" /> {t('common.edit')}
+                                    </button>
+                                )}
+                                <div className="w-px h-4 bg-slate-200 mx-1" />
+                                <button
+                                    onClick={() => { selectedRows.forEach(id => handleDelete(id)); setSelectedRows([]); }}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-red-50 text-slate-600 hover:text-red-600 rounded-full text-xs font-medium transition-colors"
+                                >
+                                    <Trash2 size={14} className="text-red-500" /> {t('common.delete')}
+                                </button>
+                            </motion.div>
+                        ) : (
+                            <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-3 flex-1">
+                                <div className="relative max-w-sm w-full">
+                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                    <input
+                                        type="text"
+                                        value={search}
+                                        onChange={(e) => setSearch(e.target.value)}
+                                        placeholder={t('expense.searchPlaceholder')}
+                                        className="w-full pl-10 pr-4 py-2.5 bg-white/50 border border-slate-200/60 hover:border-purple-300 focus:bg-white focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 rounded-full text-sm font-medium outline-none transition-all placeholder:text-slate-400 text-slate-900 shadow-sm"
+                                    />
+                                </div>
+                                <select
+                                    value={filterCategory}
+                                    onChange={(e) => setFilterCategory(e.target.value)}
+                                    className="px-4 py-2.5 border border-slate-200/60 rounded-full focus:ring-4 focus:ring-purple-500/10 focus:border-purple-500 transition bg-white text-sm font-medium text-slate-900 shadow-sm"
+                                >
+                                    <option value="all">{t('common.all')}</option>
+                                    {allCategories.map(cat => (
+                                        <option key={cat} value={cat}>
+                                            {getCategoryLabel(cat, t)}
+                                        </option>
+                                    ))}
+                                </select>
+                            </motion.div>
+                        )}
                     </div>
-                    <select
-                        value={filterCategory}
-                        onChange={(e) => setFilterCategory(e.target.value)}
-                        className="px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] focus:border-[#065F46] transition bg-white"
-                    >
-                        <option value="all">{t('common.all')}</option>
-                        {allCategories.map(cat => (
-                            <option key={cat} value={cat}>
-                                {getCategoryLabel(cat, t)}
-                            </option>
-                        ))}
-                    </select>
                 </div>
-            </div>
 
             {/* Expenses Table */}
             {filteredExpenses.length === 0 ? (
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
-                    <FileText size={48} className="mx-auto text-gray-300 mb-4" />
-                    <p className="text-gray-500">{t('expense.noExpenses')}</p>
+                <div className="py-16 flex flex-col items-center justify-center text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                    <div className="w-12 h-12 bg-white border border-slate-200 rounded-xl shadow-sm flex items-center justify-center mb-3">
+                        <FileText className="text-slate-400" size={20} />
+                    </div>
+                    <h3 className="text-sm font-bold text-slate-800">{t('expense.noExpenses')}</h3>
                 </div>
             ) : (
-                <div className="rm-table-card">
-                    <table className="rm-table">
-                        <colgroup>
-                            <col style={{ width: '32%' }} />{/* Description */}
-                            <col style={{ width: '18%' }} />{/* Category */}
-                            <col style={{ width: '15%' }} />{/* Date */}
-                            <col style={{ width: '20%' }} />{/* Amount */}
-                            <col style={{ width: '15%' }} />{/* Actions */}
-                        </colgroup>
+                <div className="overflow-x-auto">
+                    <table className="w-full">
                         <thead>
                             <tr>
-                                <th>{t('expense.description')}</th>
-                                <th className="rm-th-status">{t('expense.category')}</th>
-                                <th className="rm-th-date">{t('expense.date')}</th>
-                                <th className="rm-th-number">{t('expense.amount')}</th>
-                                <th className="rm-th-actions">{t('common.actions')}</th>
+                                <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left w-10">
+                                    <div className="w-5 h-5" />
+                                </th>
+                                <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left">{t('expense.description')}</th>
+                                <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left">{t('expense.category')}</th>
+                                <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left">{t('expense.date')}</th>
+                                <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-right">{t('expense.amount')}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {sortedYears.map(year => {
                                 const isCollapsed = collapsedYears.has(year);
                                 const yearExpenses = groupedExpenses[year];
-                                // Calculate total for this year per currency
                                 const yearTotalsByCurrency: Record<string, { total: number; symbol: string }> = {};
                                 yearExpenses.forEach(e => {
                                     const sym = e.currencySymbol || currencySymbol;
@@ -418,20 +452,19 @@ export default function ExpensesPage() {
 
                                 return (
                                     <React.Fragment key={year}>
-                                        {/* Year Header */}
-                                        <tr className="rm-group-header cursor-pointer hover:bg-gray-50" onClick={() => toggleYearCollapse(year)}>
-                                            <td colSpan={5} className="rm-cell-group-header">
+                                        <tr className="cursor-pointer hover:bg-slate-50/80" onClick={() => toggleYearCollapse(year)}>
+                                            <td colSpan={5} className="py-3 px-4 border-b border-slate-100">
                                                 <div className="flex items-center gap-3">
-                                                    <span className="p-1 text-gray-400">
+                                                    <span className="p-1 text-slate-400">
                                                         {isCollapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
                                                     </span>
-                                                    <span className="font-semibold text-gray-900">{year}</span>
-                                                    <span className="text-sm text-gray-500">
+                                                    <span className="font-semibold text-slate-900">{year}</span>
+                                                    <span className="text-sm text-slate-500">
                                                         ({yearExpenses.length} {yearExpenses.length === 1 ? t('expense.title') : t('expense.title').toLowerCase()})
                                                     </span>
                                                     <div className="ml-auto flex gap-4">
                                                         {Object.values(yearTotalsByCurrency).map((total, i) => (
-                                                            <span key={i} className="text-sm font-medium text-[#065F46]">
+                                                            <span key={i} className="text-sm font-bold text-purple-600">
                                                                 {formatCurrency(total.total, total.symbol)}
                                                             </span>
                                                         ))}
@@ -439,63 +472,62 @@ export default function ExpensesPage() {
                                                 </div>
                                             </td>
                                         </tr>
-                                        {/* Year Expenses (only if not collapsed) */}
-                                        {!isCollapsed && yearExpenses.map(expense => (
-                                            <tr key={expense.id}>
-                                                <td className="rm-cell-text">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-sm font-medium text-gray-900">{expense.description}</span>
-                                                        {expense.isRecurring && (
-                                                            <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 text-xs rounded-full font-medium">
-                                                                {t('expense.recurring')}
-                                                            </span>
+                                        {!isCollapsed && yearExpenses.map((expense, idx) => {
+                                            const isSelected = selectedRows.includes(expense.id);
+                                            return (
+                                                <motion.tr
+                                                    key={expense.id}
+                                                    initial={{ opacity: 0, y: 6 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    transition={{ delay: idx * 0.03 }}
+                                                    onClick={() => toggleRow(expense.id)}
+                                                    className={`border-b border-slate-100 cursor-pointer transition-colors ${
+                                                        isSelected ? 'bg-purple-50/50' : 'hover:bg-slate-50/80'
+                                                    }`}
+                                                >
+                                                    <td className="py-3.5 px-4">
+                                                        <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${
+                                                            isSelected ? 'bg-purple-600 border-purple-600 text-white shadow-sm' : 'border-slate-300 bg-white text-transparent'
+                                                        }`}>
+                                                            <Check size={12} strokeWidth={3} />
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-3.5 px-4">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-sm font-medium text-slate-900">{expense.description}</span>
+                                                            {expense.isRecurring && (
+                                                                <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 text-[10px] rounded-full font-bold uppercase tracking-widest border border-blue-200">
+                                                                    {t('expense.recurring')}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        {expense.notes && (
+                                                            <p className="text-xs text-slate-400 mt-0.5">{expense.notes}</p>
                                                         )}
-                                                    </div>
-                                                    {expense.notes && (
-                                                        <p className="text-xs text-gray-400 mt-0.5">{expense.notes}</p>
-                                                    )}
-                                                </td>
-                                                <td className="rm-cell-status">
-                                                    <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getCategoryColor(expense.category)}`}>
-                                                        {getCategoryLabel(expense.category, t)}
-                                                    </span>
-                                                </td>
-                                                <td className="rm-cell-date">
-                                                    {new Date(expense.date).toLocaleDateString()}
-                                                </td>
-                                                <td className="rm-cell-currency">
-                                                    {formatCurrency(expense.amount, expense.currencySymbol || currencySymbol)}
-                                                </td>
-                                                <td className="rm-cell-actions">
-                                                    <div className="flex justify-end gap-2">
-                                                        <button
-                                                            onClick={(e) => { e.stopPropagation(); openEditModal(expense); }}
-                                                            className="p-2 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
-                                                            title={t('common.edit')}
-                                                        >
-                                                            <Edit2 size={16} />
-                                                        </button>
-                                                        <button
-                                                            onClick={(e) => { e.stopPropagation(); handleDelete(expense.id); }}
-                                                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                            title={t('common.delete')}
-                                                        >
-                                                            <Trash2 size={16} />
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                        {/* Year Footer (only if not collapsed) */}
+                                                    </td>
+                                                    <td className="py-3.5 px-4">
+                                                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest border ${getCategoryColor(expense.category)}`}>
+                                                            {getCategoryLabel(expense.category, t)}
+                                                        </span>
+                                                    </td>
+                                                    <td className="py-3.5 px-4 text-sm text-slate-600">
+                                                        {new Date(expense.date).toLocaleDateString()}
+                                                    </td>
+                                                    <td className="py-3.5 px-4 text-sm font-semibold text-slate-900 text-right">
+                                                        {formatCurrency(expense.amount, expense.currencySymbol || currencySymbol)}
+                                                    </td>
+                                                </motion.tr>
+                                            );
+                                        })}
                                         {!isCollapsed && (
-                                            <tr className="rm-year-footer bg-[#065F46]/5">
-                                                <td colSpan={3} className="rm-cell-number">
-                                                    <span className="text-xs font-semibold text-gray-500 uppercase">{t('expense.yearTotal', 'Year Total')}</span>
+                                            <tr className="bg-purple-50/30">
+                                                <td colSpan={4} className="py-2 px-4 text-right">
+                                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('expense.yearTotal', 'Year Total')}</span>
                                                 </td>
-                                                <td colSpan={2}>
-                                                    <div className="flex justify-end gap-4">
+                                                <td className="py-2 px-4 text-right">
+                                                    <div className="flex flex-col items-end gap-0.5">
                                                         {Object.values(yearTotalsByCurrency).map((total, i) => (
-                                                            <span key={i} className="text-sm font-bold text-[#065F46]">
+                                                            <span key={i} className="text-sm font-bold text-purple-600">
                                                                 {formatCurrency(total.total, total.symbol)}
                                                             </span>
                                                         ))}
@@ -507,9 +539,8 @@ export default function ExpensesPage() {
                                 );
                             })}
                         </tbody>
-                        <tfoot className="bg-gray-50 border-t-2 border-gray-200">
+                        <tfoot className="border-t-2 border-slate-200">
                             {(() => {
-                                // Group filtered expenses by currency for the total row
                                 const byCur: Record<string, { total: number; symbol: string }> = {};
                                 filteredExpenses.forEach(e => {
                                     const sym = e.currencySymbol || currencySymbol;
@@ -520,13 +551,12 @@ export default function ExpensesPage() {
                                 const entries = Object.values(byCur);
                                 return entries.map((entry, i) => (
                                     <tr key={i}>
-                                        <td colSpan={3} className="rm-cell-number">
-                                            {i === 0 ? t('common.total') : ''}
+                                        <td colSpan={4} className="py-3 px-4 text-right">
+                                            {i === 0 ? <span className="text-sm font-bold text-slate-900">{t('common.total')}</span> : ''}
                                         </td>
-                                        <td className="rm-cell-currency font-bold">
+                                        <td className="py-3 px-4 text-right font-bold text-purple-600">
                                             {formatCurrency(entry.total, entry.symbol)}
                                         </td>
-                                        <td></td>
                                     </tr>
                                 ));
                             })()}
@@ -534,6 +564,7 @@ export default function ExpensesPage() {
                     </table>
                 </div>
             )}
+            </div>
 
             {/* Pagination */}
             {!search && filterCategory === 'all' && (
@@ -567,7 +598,7 @@ export default function ExpensesPage() {
                                     type="text"
                                     value={form.description}
                                     onChange={e => setForm({ ...form, description: e.target.value })}
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] focus:border-[#065F46]"
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-600"
                                     placeholder={t('expense.description')}
                                 />
                             </div>
@@ -581,7 +612,7 @@ export default function ExpensesPage() {
                                         step="0.001"
                                         value={form.amount}
                                         onChange={e => setForm({ ...form, amount: e.target.value })}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] focus:border-[#065F46]"
+                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-600"
                                         placeholder="0.000"
                                     />
                                 </div>
@@ -591,7 +622,7 @@ export default function ExpensesPage() {
                                         type="date"
                                         value={form.date}
                                         onChange={e => setForm({ ...form, date: e.target.value })}
-                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] focus:border-[#065F46]"
+                                        className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-600"
                                     />
                                 </div>
                             </div>
@@ -603,7 +634,7 @@ export default function ExpensesPage() {
                                 <select
                                     value={form.category}
                                     onChange={e => setForm({ ...form, category: e.target.value })}
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] focus:border-[#065F46] bg-white"
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-600 bg-white"
                                 >
                                     {allCategories.map(cat => (
                                         <option key={cat} value={cat}>
@@ -620,7 +651,7 @@ export default function ExpensesPage() {
                                         const opt = CURRENCY_OPTIONS.find(o => o.code === e.target.value);
                                         setForm({ ...form, currency: e.target.value, currencySymbol: opt?.symbol || e.target.value });
                                     }}
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] focus:border-[#065F46] bg-white"
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-600 bg-white"
                                 >
                                     {CURRENCY_OPTIONS.map(opt => (
                                         <option key={opt.code} value={opt.code}>
@@ -638,7 +669,7 @@ export default function ExpensesPage() {
                                     value={form.notes}
                                     onChange={e => setForm({ ...form, notes: e.target.value })}
                                     rows={2}
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] focus:border-[#065F46]"
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-600"
                                     placeholder={t('expense.notes')}
                                 />
                             </div>
@@ -649,7 +680,7 @@ export default function ExpensesPage() {
                                     type="checkbox"
                                     checked={form.isRecurring}
                                     onChange={e => setForm({ ...form, isRecurring: e.target.checked })}
-                                    className="w-4 h-4 rounded border-gray-300 text-[#065F46] focus:ring-[#065F46]"
+                                    className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                                 />
                                 <span className="text-sm text-gray-700">{t('expense.recurring')}</span>
                             </label>
@@ -665,7 +696,7 @@ export default function ExpensesPage() {
                             <button
                                 onClick={handleSave}
                                 disabled={saveMutation.isPending || !form.description.trim() || !form.amount}
-                                className="px-6 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#047857] disabled:opacity-50 font-medium flex items-center gap-2 transition-all"
+                                className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 font-medium flex items-center gap-2 transition-all"
                             >
                                 {saveMutation.isPending && <Loader2 size={16} className="animate-spin" />}
                                 {t('common.save')}
@@ -699,13 +730,13 @@ export default function ExpensesPage() {
                                         value={newCategoryName}
                                         onChange={e => setNewCategoryName(e.target.value)}
                                         onKeyDown={e => e.key === 'Enter' && handleAddCustomCategory()}
-                                        className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] focus:border-[#065F46]"
+                                        className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-600"
                                         placeholder={t('expense.categoryNamePlaceholder', 'e.g. Legal Fees')}
                                     />
                                     <button
                                         onClick={handleAddCustomCategory}
                                         disabled={!newCategoryName.trim()}
-                                        className="px-4 py-2.5 bg-[#065F46] text-white rounded-lg hover:bg-[#047857] disabled:opacity-50 transition-colors"
+                                        className="px-4 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
                                     >
                                         <Plus size={18} />
                                     </button>
@@ -769,7 +800,7 @@ export default function ExpensesPage() {
                         <div className="flex justify-end px-6 py-4 border-t border-gray-100 bg-gray-50">
                             <button
                                 onClick={() => setShowCategoryModal(false)}
-                                className="px-4 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#047857] transition-colors font-medium"
+                                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
                             >
                                 {t('common.close')}
                             </button>
@@ -778,6 +809,6 @@ export default function ExpensesPage() {
                 </div>
             )}
 
-        </div>
+        </motion.div>
     );
 }

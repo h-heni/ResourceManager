@@ -60,8 +60,8 @@ export default function CompanyInitPage() {
     const [logoPreview, setLogoPreview] = useState<string | null>(null);
     const [signatureFile, setSignatureFile] = useState<File | null>(null);
     const [signaturePreview, setSignaturePreview] = useState<string | null>(null);
-    const [primaryColor, setPrimaryColor] = useState('#065F46');
-    const [secondaryColor, setSecondaryColor] = useState('#14B8A6');
+    const [primaryColor, setPrimaryColor] = useState('#7C3AED');
+    const [secondaryColor, setSecondaryColor] = useState('#8B5CF6');
 
     // PDF Settings
     const [pdfFooterText, setPdfFooterText] = useState('');
@@ -365,7 +365,7 @@ export default function CompanyInitPage() {
         return (
             <div className="min-h-screen bg-gradient-to-b from-[#F0FDF4] to-[#F9FAFB] flex items-center justify-center p-4">
                 <div className="flex flex-col items-center gap-4">
-                    <Loader2 className="h-8 w-8 animate-spin text-[#065F46]" />
+                    <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
                     <p className="text-gray-600">{t('common.loading')}</p>
                 </div>
             </div>
@@ -377,7 +377,7 @@ export default function CompanyInitPage() {
             <NotifyBanner />
             <div className="w-full max-w-2xl bg-white border border-slate-200 shadow-lg rounded-2xl overflow-hidden animate-fade-in">
                 {/* Header */}
-                <div className="bg-gradient-to-r from-[#065F46] to-[#14B8A6] px-8 py-6 text-white">
+                <div className="bg-gradient-to-r from-purple-600 to-purple-500 px-8 py-6 text-white">
                     <div className="flex items-center gap-3 mb-2">
                         <Building2 className="w-8 h-8" />
                         <h1 className="text-2xl font-bold">{t('companyInit.title')}</h1>
@@ -410,7 +410,7 @@ export default function CompanyInitPage() {
                                 <div className="relative">
                                     <Building2 className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                                     <input value={companyName} onChange={e => setCompanyName(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent outline-none bg-gray-50/50 focus:bg-white"
+                                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none bg-gray-50/50 focus:bg-white"
                                         placeholder={t('companyInit.placeholders.companyName')} />
                                 </div>
                             </div>
@@ -419,7 +419,7 @@ export default function CompanyInitPage() {
                                 <div className="relative">
                                     <MapPin className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                                     <input value={companyAddress} onChange={e => setCompanyAddress(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent outline-none bg-gray-50/50 focus:bg-white"
+                                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none bg-gray-50/50 focus:bg-white"
                                         placeholder={t('companyInit.placeholders.companyAddress')} />
                                 </div>
                             </div>
@@ -429,7 +429,7 @@ export default function CompanyInitPage() {
                                     <div className="relative">
                                         <Hash className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                                         <input value={taxId} onChange={e => setTaxId(e.target.value)}
-                                            className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent outline-none bg-gray-50/50 focus:bg-white"
+                                            className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none bg-gray-50/50 focus:bg-white"
                                             placeholder={t('companyInit.placeholders.fiscalId')} />
                                     </div>
                                 </div>
@@ -438,7 +438,7 @@ export default function CompanyInitPage() {
                                     <div className="relative">
                                         <Phone className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                                         <input value={companyPhone} onChange={e => setCompanyPhone(e.target.value)}
-                                            className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent outline-none bg-gray-50/50 focus:bg-white"
+                                            className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none bg-gray-50/50 focus:bg-white"
                                             placeholder={t('companyInit.placeholders.phone')} />
                                     </div>
                                 </div>
@@ -448,7 +448,7 @@ export default function CompanyInitPage() {
                                 <div className="relative">
                                     <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                                     <input type="email" value={companyEmail} onChange={e => setCompanyEmail(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent outline-none bg-gray-50/50 focus:bg-white"
+                                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none bg-gray-50/50 focus:bg-white"
                                         placeholder={t('companyInit.placeholders.companyEmail')} />
                                 </div>
                             </div>
@@ -464,7 +464,7 @@ export default function CompanyInitPage() {
                                     <DollarSign className="h-4 w-4" /> {t('users.fields.defaultCurrency')}
                                 </label>
                                 <select value={currency} onChange={e => setCurrency(e.target.value)}
-                                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent outline-none bg-gray-50/50 focus:bg-white">
+                                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none bg-gray-50/50 focus:bg-white">
                                     {CURRENCY_OPTIONS.map(c => (
                                         <option key={c.code} value={c.code}>{c.label}</option>
                                     ))}
@@ -481,7 +481,7 @@ export default function CompanyInitPage() {
                                             className={cn(
                                                 "flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-all",
                                                 defaultVatRate === opt.value
-                                                    ? "border-[#065F46] bg-[#065F46]/10 text-[#065F46]"
+                                                    ? "border-purple-600 bg-purple-600/10 text-purple-600"
                                                     : "border-gray-200 text-gray-600 hover:border-gray-300"
                                             )}>
                                             {opt.label}
@@ -495,17 +495,17 @@ export default function CompanyInitPage() {
                                 <label className="flex items-center gap-2 cursor-pointer">
                                     <input type="checkbox" checked={customTaxEnabled}
                                         onChange={e => setCustomTaxEnabled(e.target.checked)}
-                                        className="rounded border-gray-300 text-[#065F46] focus:ring-[#065F46]" />
+                                        className="rounded border-gray-300 text-purple-600 focus:ring-purple-500" />
                                     <span className="text-sm font-medium text-gray-700">{t('companyInit.customTaxEnable')}</span>
                                 </label>
                                 {customTaxEnabled && (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-6">
                                         <input value={customTaxName} onChange={e => setCustomTaxName(e.target.value)}
-                                            className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#065F46] outline-none"
+                                            className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
                                             placeholder={t('settings.taxName')} />
                                         <input type="number" step="0.001" value={customTaxAmount}
                                             onChange={e => setCustomTaxAmount(parseFloat(e.target.value) || 0)}
-                                            className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#065F46] outline-none"
+                                            className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
                                             placeholder={t('settings.taxAmount')} />
                                     </div>
                                 )}
@@ -596,7 +596,7 @@ export default function CompanyInitPage() {
                                 <label className="flex items-center gap-2 cursor-pointer mt-2">
                                     <input type="checkbox" checked={showCompanyLogo}
                                         onChange={e => setShowCompanyLogo(e.target.checked)}
-                                        className="rounded border-gray-300 text-[#065F46] focus:ring-[#065F46]" />
+                                        className="rounded border-gray-300 text-purple-600 focus:ring-purple-500" />
                                     <span className="text-sm text-gray-600">{t('settings.showLogoOnPdf')}</span>
                                 </label>
                             </div>
@@ -632,7 +632,7 @@ export default function CompanyInitPage() {
                                     <input type="checkbox" checked={showSignatureOnPdf}
                                         onChange={e => setShowSignatureOnPdf(e.target.checked)}
                                         disabled={!signaturePreview}
-                                        className="rounded border-gray-300 text-[#065F46] focus:ring-[#065F46]" />
+                                        className="rounded border-gray-300 text-purple-600 focus:ring-purple-500" />
                                     <span className={cn("text-sm", signaturePreview ? "text-gray-600" : "text-gray-400")}>
                                         {t('settings.showSignatureOnPdf')}
                                     </span>
@@ -645,7 +645,7 @@ export default function CompanyInitPage() {
                                     <label className="text-sm font-medium text-gray-700">{t('settings.pdfSignature')}</label>
                                     <input type="text" value={pdfSignatureText} onChange={e => setPdfSignatureText(e.target.value)}
                                         maxLength={100}
-                                        className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#065F46] outline-none"
+                                        className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
                                         placeholder={t('settings.signaturePlaceholder')} />
                                     <p className="text-xs text-gray-400">{t('settings.signatureTextHelp')}</p>
                                 </div>
@@ -653,7 +653,7 @@ export default function CompanyInitPage() {
                                     <label className="text-sm font-medium text-gray-700">{t('settings.pdfSignerPosition')}</label>
                                     <input type="text" value={pdfSignerPosition} onChange={e => setPdfSignerPosition(e.target.value)}
                                         maxLength={100}
-                                        className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#065F46] outline-none"
+                                        className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
                                         placeholder={t('settings.signerPositionPlaceholder')} />
                                     <p className="text-xs text-gray-400">{t('settings.signerPositionHelp')}</p>
                                 </div>
@@ -699,7 +699,7 @@ export default function CompanyInitPage() {
                             <div className="space-y-1">
                                 <label className="text-sm font-medium text-gray-700">{t('settings.pdfFooter')}</label>
                                 <textarea value={pdfFooterText} onChange={e => setPdfFooterText(e.target.value)} rows={2}
-                                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#065F46] outline-none"
+                                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
                                     placeholder={t('companyInit.pdfFooterPlaceholder')} />
                             </div>
 
@@ -713,7 +713,7 @@ export default function CompanyInitPage() {
                                         <Globe className="h-4 w-4" /> {t('settings.language')}
                                     </label>
                                     <select value={invoiceLanguage} onChange={e => setInvoiceLanguage(e.target.value)}
-                                        className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#065F46] outline-none">
+                                        className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none">
                                         <option value="fr">Français</option>
                                         <option value="en">English</option>
                                         <option value="de">Deutsch</option>
@@ -728,7 +728,7 @@ export default function CompanyInitPage() {
                                             "w-full px-3 py-2.5 border rounded-lg text-sm",
                                             fileSystemLanguageLocked
                                                 ? "bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed"
-                                                : "border-gray-200 focus:ring-2 focus:ring-[#065F46] outline-none"
+                                                : "border-gray-200 focus:ring-2 focus:ring-purple-500 outline-none"
                                         )}>
                                         <option value="fr">Français (Factures, Devis)</option>
                                         <option value="en">English (Invoices, Quotes)</option>
@@ -768,7 +768,7 @@ export default function CompanyInitPage() {
                                 </label>
                                 <div className="flex gap-2">
                                     <input value={baseStoragePath} onChange={e => { setBaseStoragePath(e.target.value); setPathTestResult(null); }}
-                                        className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent outline-none bg-gray-50/50 focus:bg-white font-mono text-sm"
+                                        className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none bg-gray-50/50 focus:bg-white font-mono text-sm"
                                         placeholder={t('companyInit.placeholders.baseStoragePath')} />
                                     <button type="button" onClick={handleBrowseFolder}
                                         className="px-4 py-3 rounded-xl font-medium transition-colors flex items-center gap-2 border border-gray-200 text-gray-600 hover:bg-gray-50">
@@ -858,13 +858,13 @@ export default function CompanyInitPage() {
 
                         {currentStep < totalSteps ? (
                             <button type="button" onClick={handleNext}
-                                className="px-6 py-3 bg-[#065F46] text-white font-semibold rounded-xl shadow-lg hover:bg-[#047857] transition-all transform hover:scale-[1.02] active:scale-[0.98]">
+                                className="px-6 py-3 bg-purple-600 text-white font-semibold rounded-xl shadow-lg hover:bg-purple-700 transition-all transform hover:scale-[1.02] active:scale-[0.98]">
                                 {t('companyInit.continue')}
                             </button>
                         ) : (
                             <button type="button" onClick={handleSubmit} disabled={saving}
                                 className={cn(
-                                    "px-8 py-3 bg-[#065F46] text-white font-semibold rounded-xl shadow-lg transition-all transform hover:scale-[1.02] active:scale-[0.98]",
+                                    "px-8 py-3 bg-purple-600 text-white font-semibold rounded-xl shadow-lg transition-all transform hover:scale-[1.02] active:scale-[0.98]",
                                     saving && "opacity-70 cursor-not-allowed"
                                 )}>
                                 <div className="flex items-center gap-2">

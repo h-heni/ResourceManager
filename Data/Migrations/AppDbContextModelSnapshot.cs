@@ -17,7 +17,7 @@ namespace ResourceManager.API.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.24")
+                .HasAnnotation("ProductVersion", "8.0.25")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -2112,6 +2112,46 @@ namespace ResourceManager.API.Data.Migrations
                     b.ToTable("SupplierInvoices");
                 });
 
+            modelBuilder.Entity("ResourceManager.Models.SupplierInvoiceFileData", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<byte[]>("CompressedData")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<long>("CompressedSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("CompressionType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("MimeType")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<long>("OriginalSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("SupplierInvoiceId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SupplierInvoiceId")
+                        .IsUnique();
+
+                    b.ToTable("SupplierInvoiceFileData");
+                });
+
             modelBuilder.Entity("ResourceManager.Models.SupplierInvoiceItem", b =>
                 {
                     b.Property<int>("Id")
@@ -2898,6 +2938,17 @@ namespace ResourceManager.API.Data.Migrations
                     b.Navigation("CreatedByUser");
 
                     b.Navigation("Supplier");
+                });
+
+            modelBuilder.Entity("ResourceManager.Models.SupplierInvoiceFileData", b =>
+                {
+                    b.HasOne("ResourceManager.Models.SupplierInvoice", "SupplierInvoice")
+                        .WithOne()
+                        .HasForeignKey("ResourceManager.Models.SupplierInvoiceFileData", "SupplierInvoiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SupplierInvoice");
                 });
 
             modelBuilder.Entity("ResourceManager.Models.SupplierInvoiceItem", b =>

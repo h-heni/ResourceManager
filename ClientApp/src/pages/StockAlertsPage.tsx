@@ -33,7 +33,7 @@ export default function StockAlertsPage() {
     <div className="p-4 md:p-6 max-w-[1200px] mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          <Bell className="text-[#065F46]" />
+          <Bell className="text-purple-600" />
           {t('inventory.stockAlerts', 'Stock Alerts')}
         </h1>
         <p className="text-sm text-slate-500 mt-1">{t('inventory.alertsSubtitle', 'Monitor low stock and out of stock products')}</p>
@@ -71,7 +71,7 @@ export default function StockAlertsPage() {
       </div>
 
       {isLoading ? (
-        <div className="flex justify-center py-12"><Loader2 className="animate-spin text-[#065F46]" size={32} /></div>
+        <div className="flex justify-center py-12"><Loader2 className="animate-spin text-purple-600" size={32} /></div>
       ) : !activeAlerts.length ? (
         <div className="text-center py-12 text-slate-500 bg-white rounded-xl shadow-sm border border-slate-200">
           <CheckCircle2 size={48} className="mx-auto mb-3 text-emerald-400" />

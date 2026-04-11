@@ -182,7 +182,7 @@ export default function WhatsAppShareModal({
             </div>
             <button
               onClick={handleModalClose}
-              className="w-full bg-[#065F46] hover:bg-[#047857] text-white font-medium py-2.5 px-4 rounded-lg transition-colors"
+              className="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-2.5 px-4 rounded-lg transition-colors"
             >
               {t('common.close')}
             </button>

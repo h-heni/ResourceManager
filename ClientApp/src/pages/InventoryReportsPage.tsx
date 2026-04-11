@@ -17,7 +17,7 @@ export default function InventoryReportsPage() {
   if (loadingReport || loadingVal) {
     return (
       <div className="flex justify-center items-center h-64">
-        <Loader2 className="animate-spin text-[#065F46]" size={32} />
+        <Loader2 className="animate-spin text-purple-600" size={32} />
       </div>
     );
   }
@@ -26,7 +26,7 @@ export default function InventoryReportsPage() {
     <div className="p-4 md:p-6 max-w-[1400px] mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          <BarChart3 className="text-[#065F46]" />
+          <BarChart3 className="text-purple-600" />
           {t('inventory.reports', 'Inventory Reports')}
         </h1>
         <p className="text-sm text-slate-500 mt-1">{t('inventory.reportsSubtitle', 'Valuation, stock health, and insights')}</p>
@@ -37,7 +37,7 @@ export default function InventoryReportsPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-[#ECFDF5] rounded-lg"><Package size={20} className="text-[#065F46]" /></div>
+              <div className="p-2 bg-[#ECFDF5] rounded-lg"><Package size={20} className="text-purple-600" /></div>
               <div>
                 <p className="text-2xl font-bold text-slate-900">{report.totalProducts}</p>
                 <p className="text-xs text-slate-500">{t('inventory.totalProducts', 'Total Products')}</p>

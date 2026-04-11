@@ -173,6 +173,9 @@ builder.Services.AddScoped<ResourceManager.Services.IMailKitEmailService, Resour
 // Local PDF Storage Service
 builder.Services.AddScoped<ResourceManager.Services.ILocalPdfStorageService, ResourceManager.Services.LocalPdfStorageService>();
 
+// DB-compressed blob storage for supplier invoice files (GZip-compressed BYTEA in PostgreSQL)
+builder.Services.AddScoped<ResourceManager.Services.IDbFileStorageService, ResourceManager.Services.DbFileStorageService>();
+
 // WhatsApp Cloud API Service (Meta Business Platform)
 builder.Services.AddHttpClient<ResourceManager.Services.IWhatsAppService, ResourceManager.Services.WhatsAppService>();
 

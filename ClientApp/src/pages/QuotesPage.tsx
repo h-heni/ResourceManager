@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Search, FileText, Calendar, Download, Trash2, Filter, Archive, Eye, Edit, X, User, MapPin, Hash, Mail, MessageSquare } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Plus, Search, FileText, Calendar, Download, Trash2, Eye, Edit, X, User, MapPin, Hash, Mail, MessageSquare, Check, Pencil } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -61,6 +62,7 @@ export default function QuotesPage() {
     const [showWhatsApp, setShowWhatsApp] = useState(false);
     const [showEmail, setShowEmail] = useState(false);
     const [historyRefresh, setHistoryRefresh] = useState(0);
+    const [selectedRows, setSelectedRows] = useState<number[]>([]);
     const navigate = useNavigate();
     const { isManager } = useAuth();
 
@@ -134,182 +136,248 @@ export default function QuotesPage() {
     const activeCount = (quotes || []).filter(q => !q.treated).length;
     const archivedCount = (quotes || []).filter(q => q.treated === true).length;
 
+    const toggleRow = (id: number) => {
+        setSelectedRows(prev => prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]);
+    };
+
+    const handleTabChange = (mode: 'active' | 'archived') => {
+        setViewMode(mode);
+        setSelectedRows([]);
+    };
+
     return (
-        <div className="space-y-6">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="w-full flex flex-col gap-6">
             <NotifyBanner />
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+
+            {/* ── Page Header ── */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-900">{t('quote.title')}</h1>
-                    <p className="text-gray-500 mt-1">{t('quote.pageDescription')}</p>
+                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight">{t('quote.title')}</h1>
+                    <p className="text-sm text-slate-500 mt-1">{t('quote.pageDescription')}</p>
                 </div>
-                <button
-                    onClick={() => navigate('/quotes/create')}
-                    className="flex items-center px-4 py-2 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all transform hover:scale-105"
-                >
-                    <Plus size={20} className="mr-2" />
-                    {t('quote.create')}
-                </button>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-                <div className="relative flex-1 w-full">
-                    <Search className="absolute left-4 top-3.5 h-5 w-5 text-gray-400" />
-                    <input
-                        type="text"
-                        placeholder={t('quote.searchPlaceholder')}
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent outline-none transition-all"
-                    />
-                </div>
-                {isManager && (
-                    <div className="flex flex-wrap p-1 bg-gray-100 rounded-xl">
+            {/* ── Main Container ── */}
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col p-6">
+
+                {/* Tabs */}
+                <div className="flex gap-6 border-b border-slate-200 mb-6">
+                    <button
+                        onClick={() => handleTabChange('active')}
+                        className={`pb-3 text-sm font-semibold transition-colors relative ${
+                            viewMode === 'active' ? 'text-purple-600' : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                    >
+                        {t('quote.active')} ({activeCount})
+                        {viewMode === 'active' && (
+                            <motion.div layoutId="quoteTabIndicator" className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600" />
+                        )}
+                    </button>
+                    {isManager && (
                         <button
-                            onClick={() => setViewMode('active')}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                                viewMode === 'active' ? 'bg-white shadow-sm text-[#065F46]' : 'text-gray-500 hover:text-gray-700'
+                            onClick={() => handleTabChange('archived')}
+                            className={`pb-3 text-sm font-semibold transition-colors relative ${
+                                viewMode === 'archived' ? 'text-purple-600' : 'text-slate-500 hover:text-slate-800'
                             }`}
                         >
-                            <Filter size={16} />
-                            {t('quote.active')} ({activeCount})
-                        </button>
-                        <button
-                            onClick={() => setViewMode('archived')}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                                viewMode === 'archived' ? 'bg-white shadow-sm text-emerald-600' : 'text-gray-500 hover:text-gray-700'
-                            }`}
-                        >
-                            <Archive size={16} />
                             {t('quote.archived')} ({archivedCount})
+                            {viewMode === 'archived' && (
+                                <motion.div layoutId="quoteTabIndicator" className="absolute bottom-0 left-0 right-0 h-0.5 bg-purple-600" />
+                            )}
                         </button>
+                    )}
+                </div>
+
+                {/* Action Bar / Search */}
+                <div className="flex items-center justify-between mb-6 h-12">
+                    <div className="flex-1 flex items-center gap-4">
+                        {selectedRows.length > 0 ? (
+                            <motion.div
+                                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                className="flex items-center gap-1 p-1 bg-white rounded-full border border-slate-200 shadow-sm"
+                            >
+                                <div className="px-3 py-1.5 text-xs font-bold text-purple-700 bg-purple-50 rounded-full flex items-center gap-2 border border-purple-100/50">
+                                    <span className="w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center text-white text-[10px] shadow-inner">{selectedRows.length}</span>
+                                    {t('common.selected', 'Selected')}
+                                </div>
+                                {selectedRows.length === 1 && (() => {
+                                    const q = filteredQuotes.find(q => q.id === selectedRows[0]);
+                                    return q && q.status === 'Draft' && !q.treated ? (
+                                        <button
+                                            onClick={() => navigate(`/quotes/edit/${q.id}`)}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-purple-50 text-slate-600 hover:text-purple-700 rounded-full text-xs font-medium transition-colors"
+                                        >
+                                            <Pencil size={14} className="text-purple-500" /> {t('common.edit')}
+                                        </button>
+                                    ) : null;
+                                })()}
+                                {selectedRows.length === 1 && (
+                                    <button
+                                        onClick={() => {
+                                            const q = filteredQuotes.find(q => q.id === selectedRows[0]);
+                                            if (q) { setDetailQuote(q); }
+                                        }}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-purple-50 text-slate-600 hover:text-purple-700 rounded-full text-xs font-medium transition-colors"
+                                    >
+                                        <Eye size={14} className="text-purple-500" /> {t('common.viewDetails')}
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => {
+                                        selectedRows.forEach(id => {
+                                            const q = filteredQuotes.find(q => q.id === id);
+                                            if (q) handleDownloadPdf(q.id, getQuoteNumber(q));
+                                        });
+                                    }}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-purple-50 text-slate-600 hover:text-purple-700 rounded-full text-xs font-medium transition-colors"
+                                >
+                                    <Download size={14} className="text-purple-500" /> {t('common.export', 'Export')}
+                                </button>
+                                <div className="w-px h-4 bg-slate-200 mx-1" />
+                                <button
+                                    onClick={() => { selectedRows.forEach(id => handleDeleteQuote(id)); setSelectedRows([]); }}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-red-50 text-slate-600 hover:text-red-600 rounded-full text-xs font-medium transition-colors"
+                                >
+                                    <Trash2 size={14} className="text-red-500" /> {t('common.delete')}
+                                </button>
+                            </motion.div>
+                        ) : (
+                            <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="relative max-w-sm w-full">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                <input
+                                    type="text"
+                                    placeholder={t('quote.searchPlaceholder')}
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    className="w-full pl-10 pr-4 py-2.5 bg-white/50 border border-slate-200/60 hover:border-purple-300 focus:bg-white focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 rounded-full text-sm font-medium outline-none transition-all placeholder:text-slate-400 text-slate-900 shadow-sm"
+                                />
+                            </motion.div>
+                        )}
+                    </div>
+                    {!selectedRows.length && viewMode === 'active' && (
+                        <motion.button
+                            initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+                            onClick={() => navigate('/quotes/create')}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-full text-sm font-semibold transition-all shadow-sm hover:shadow-md active:scale-95"
+                        >
+                            <Plus size={16} /> {t('quote.create')}
+                        </motion.button>
+                    )}
+                </div>
+
+                {/* ── Cards Grid ── */}
+                {loading ? (
+                    <div className="text-center py-20 text-slate-400">{t('quote.loading')}</div>
+                ) : filteredQuotes.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                        <AnimatePresence mode="popLayout">
+                            {filteredQuotes.map((quote) => {
+                                const isSelected = selectedRows.includes(quote.id);
+                                return (
+                                    <motion.div
+                                        key={quote.id}
+                                        layout
+                                        initial={{ opacity: 0, scale: 0.95 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        exit={{ opacity: 0, scale: 0.95 }}
+                                        onClick={() => toggleRow(quote.id)}
+                                        className={`group relative flex flex-col bg-white border rounded-xl p-5 transition-all duration-200 cursor-pointer overflow-hidden ${
+                                            isSelected
+                                                ? 'border-purple-500 shadow-md ring-1 ring-purple-500'
+                                                : 'border-slate-200 hover:border-purple-300 shadow-sm hover:shadow'
+                                        }`}
+                                    >
+                                        {/* Card Header */}
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div className="flex flex-col">
+                                                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">#{getQuoteNumber(quote)}</span>
+                                                <span className="text-base font-bold text-slate-800 mt-1">{quote.clientName || t('common.unknown')}</span>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest border ${
+                                                    quote.status === 'Accepted' || quote.status === 'Completed' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' :
+                                                    quote.status === 'Active' ? 'bg-blue-50 text-blue-600 border-blue-200' :
+                                                    quote.status === 'Rejected' ? 'bg-red-50 text-red-600 border-red-200' :
+                                                    'bg-slate-100 text-slate-600 border-slate-200'
+                                                }`}>
+                                                    {quote.status ? t(`quote.status.${quote.status}`, quote.status) : t('invoice.draft')}
+                                                </span>
+                                                <div
+                                                    className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${
+                                                        isSelected
+                                                            ? 'bg-purple-600 border-purple-600 text-white shadow-sm'
+                                                            : 'border-slate-300 bg-white text-transparent group-hover:border-purple-400'
+                                                    }`}
+                                                >
+                                                    <Check size={12} strokeWidth={3} />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {(quote.invoiceId != null || quote.status === 'Completed') && (
+                                            <p className="mb-3 text-xs text-amber-700">{t('document.lockedInvoiceGenerated', 'Document is locked: Invoice already generated.')}</p>
+                                        )}
+
+                                        {/* Items preview */}
+                                        {quote.quoteItems && quote.quoteItems.length > 0 ? (
+                                            <div className="space-y-1 mb-2 flex-1">
+                                                {quote.quoteItems.slice(0, 2).map((item, idx) => (
+                                                    <div key={item.id || idx} className="bg-slate-50 px-2 py-1.5 rounded text-xs">
+                                                        <p className="font-medium text-slate-800 truncate">{item.description}</p>
+                                                        <div className="flex justify-between text-[10px] text-slate-500 mt-0.5">
+                                                            <span>{t('quote.qtyLabel', { value: item.quantity || 0 })}</span>
+                                                            <span>{formatCurrency(item.price, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {quote.quoteItems.length > 2 && (
+                                                    <p className="text-[10px] text-slate-400 text-center">+{quote.quoteItems.length - 2} {t('quote.items').toLowerCase()}</p>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <p className="text-xs text-slate-400 italic mb-2 flex-1">{t('quote.noItemsInQuote')}</p>
+                                        )}
+
+                                        {/* Card Footer */}
+                                        <div className="mt-auto pt-4 border-t border-slate-100 flex items-end justify-between">
+                                            <div className="flex flex-col gap-1.5">
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                                                    <Calendar size={12} /> {t('invoice.date')}
+                                                </span>
+                                                <span className="text-sm font-semibold text-slate-600">
+                                                    {quote.date ? new Date(quote.date).toLocaleDateString() : '-'}
+                                                </span>
+                                            </div>
+                                            <div className="flex flex-col items-end gap-1">
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('invoice.total')}</span>
+                                                <span className="text-xl font-bold text-slate-900 tracking-tight">
+                                                    {formatCurrency(quote.totalAmount, quote.currencySymbol || DEFAULT_CURRENCY)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                );
+                            })}
+                        </AnimatePresence>
+                    </div>
+                ) : (
+                    <div className="py-16 flex flex-col items-center justify-center text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                        <div className="w-12 h-12 bg-white border border-slate-200 rounded-xl shadow-sm flex items-center justify-center mb-3">
+                            <FileText className="text-slate-400" size={20} />
+                        </div>
+                        <h3 className="text-sm font-bold text-slate-800">{t('quote.noData')}</h3>
+                        <p className="text-xs text-slate-500 mt-1">{t('quote.createFirst')}</p>
                     </div>
                 )}
             </div>
-
-            {loading ? (
-                <div className="text-center py-20 text-gray-500">{t('quote.loading')}</div>
-            ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {filteredQuotes.map((quote) => (
-                        <div key={quote.id} className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow flex flex-col">
-                            {/* Header: Client + Quote# + Status */}
-                            <div className="flex items-start justify-between mb-2">
-                                <div className="min-w-0 flex-1">
-                                    <h3 className="text-sm font-bold text-gray-900 truncate">{quote.clientName || t('common.unknown')}</h3>
-                                    <span className="text-xs text-gray-500">#{getQuoteNumber(quote)}</span>
-                                </div>
-                                <div className="flex items-center space-x-1">
-                                    <button
-                                        onClick={() => setDetailQuote(quote)}
-                                        className="p-1.5 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
-                                        title={t('common.viewDetails')}
-                                    >
-                                        <Eye size={16} />
-                                    </button>
-                                    <button
-                                        onClick={() => handleDownloadPdf(quote.id, getQuoteNumber(quote))}
-                                        className="p-1.5 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
-                                        title={t('quote.downloadPdf')}
-                                    >
-                                        <Download size={16} />
-                                    </button>
-                                    {/* Edit - only if Draft */}
-                                    {quote.status === 'Draft' && !quote.treated && (
-                                        <button
-                                            onClick={() => navigate(`/quotes/edit/${quote.id}`)}
-                                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                            title={t('common.edit')}
-                                        >
-                                            <Edit size={16} />
-                                        </button>
-                                    )}
-                                    {/* Delete allowed for Draft and Active quotes (not Completed or Accepted) */}
-                                    {(quote.status === 'Draft' || quote.status === 'Active') && (
-                                        <button
-                                            onClick={() => handleDeleteQuote(quote.id)}
-                                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                            title={t('quote.deleteQuote')}
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
-                                    )}
-                                    <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full ${getStatusColor(quote.status)}`}>
-                                        {quote.status ? t(`quote.status.${quote.status}`, quote.status) : t('invoice.draft')}
-                                    </span>
-                                </div>
-                            </div>
-                            {(quote.invoiceId != null || quote.status === 'Completed') && (
-                                <p className="mb-3 text-xs text-amber-700">{t('document.lockedInvoiceGenerated', 'Document is locked: Invoice already generated.')}</p>
-                            )}
-
-                            {/* Date */}
-                            <div className="flex items-center text-xs text-gray-400 mb-2">
-                                <Calendar size={12} className="mr-1" />
-                                {quote.date ? new Date(quote.date).toLocaleDateString() : t('quote.notAvailable')}
-                            </div>
-
-                            {/* Items metadata: Qty / Unit Price / Tax */}
-                            {quote.quoteItems && quote.quoteItems.length > 0 ? (
-                                <div className="space-y-1 mb-2 flex-1">
-                                    {quote.quoteItems.slice(0, 3).map((item, idx) => (
-                                        <div key={item.id || idx} className="bg-gray-50 px-2 py-1.5 rounded text-xs">
-                                            <p className="font-medium text-gray-800 truncate">{item.description}</p>
-                                            <div className="flex justify-between text-[10px] text-gray-500 mt-0.5">
-                                                <span>{t('quote.qtyLabel', { value: item.quantity || 0 })}</span>
-                                                <span>{formatCurrency(item.price, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
-                                                {item.tva && <span className="text-orange-500">{((item.vatRate ?? 0.19) * 100).toFixed(0)}%</span>}
-                                            </div>
-                                        </div>
-                                    ))}
-                                    {quote.quoteItems.length > 3 && (
-                                        <p className="text-[10px] text-gray-400 text-center">+{quote.quoteItems.length - 3} {t('quote.items').toLowerCase()}</p>
-                                    )}
-                                </div>
-                            ) : (
-                                <p className="text-xs text-gray-400 italic mb-2 flex-1">{t('quote.noItemsInQuote')}</p>
-                            )}
-
-                            {/* Totals */}
-                            <div className="pt-2 border-t border-gray-100 space-y-0.5 text-xs">
-                                <div className="flex justify-between text-gray-500">
-                                    <span>{t('invoice.subtotal')}</span>
-                                    <span>{formatCurrency(quote.subTotal, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
-                                </div>
-                                <div className="flex justify-between text-gray-500">
-                                    <span>{t('invoice.tax')}</span>
-                                    <span>{formatCurrency(quote.taxAmount, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
-                                </div>
-                                {quote.tfiscal != null && quote.tfiscal > 0 && (
-                                    <div className="flex justify-between text-gray-500">
-                                        <span>{quote.tfiscalName || t('invoice.timbre')}</span>
-                                        <span>{formatCurrency(quote.tfiscal, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
-                                    </div>
-                                )}
-                                <div className="flex justify-between font-bold text-[#065F46]">
-                                    <span>{t('invoice.total')}</span>
-                                    <span>{formatCurrency(quote.totalAmount, quote.currencySymbol || DEFAULT_CURRENCY)}</span>
-                                </div>
-                            </div>
-
-                        </div>
-                    ))}
-
-                    {filteredQuotes.length === 0 && (
-                        <div className="col-span-full text-center py-12 bg-[#065F46]/5 rounded-2xl border border-dashed border-[#065F46]/20">
-                            <FileText size={48} className="mx-auto text-[#065F46]/30 mb-4" />
-                            <p className="text-gray-500 font-medium">{t('quote.noData')}</p>
-                            <p className="text-sm text-gray-400 mt-1">{t('quote.createFirst')}</p>
-                        </div>
-                    )}
-                </div>
-            )}
 
             {/* Detail Modal */}
             {detailQuote && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setDetailQuote(null)}>
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
                         {/* Modal Header */}
-                        <div className="flex items-center justify-between px-6 py-4 border-b bg-[#065F46]/5">
+                        <div className="flex items-center justify-between px-6 py-4 border-b bg-purple-600/5">
                             <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2 flex-wrap">
                                     <h3 className="text-lg font-bold text-gray-900">{t('quote.title')} #{getQuoteNumber(detailQuote)}</h3>
@@ -415,7 +483,7 @@ export default function QuotesPage() {
                                         <span>{formatCurrency(detailQuote.tfiscal, detailQuote.currencySymbol || DEFAULT_CURRENCY)}</span>
                                     </div>
                                 )}
-                                <div className="flex justify-between text-base font-bold text-[#065F46] pt-1 border-t border-gray-200">
+                                <div className="flex justify-between text-base font-bold text-purple-600 pt-1 border-t border-gray-200">
                                     <span>{t('invoice.total')}</span>
                                     <span>{formatCurrency(detailQuote.totalAmount, detailQuote.currencySymbol || DEFAULT_CURRENCY)}</span>
                                 </div>
@@ -435,7 +503,7 @@ export default function QuotesPage() {
                         <div className="flex items-center gap-2 px-6 py-4 border-t bg-gray-50 flex-wrap">
                             <button
                                 onClick={() => handleViewPdf(detailQuote.id)}
-                                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-[#065F46] text-white rounded-xl hover:bg-[#047857] transition-colors text-sm font-medium"
+                                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors text-sm font-medium"
                             >
                                 <Eye size={16} />
                                 {t('invoice.viewPdf')}
@@ -501,6 +569,6 @@ export default function QuotesPage() {
                     onSuccess={() => setHistoryRefresh(n => n + 1)}
                 />
             )}
-        </div>
+        </motion.div>
     );
 }

@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { motion } from 'motion/react';
 import {
-    Plus, Trash2, Edit2, Search, Package, X,
-    Loader2, Check, AlertCircle, PackagePlus, BarChart3
+    Plus, Trash2, Search, Package, X,
+    Loader2, Check, AlertCircle, PackagePlus, BarChart3, Pencil
 } from 'lucide-react';
 import api from '../services/api';
 import { useSettings } from '../hooks/useSettings';
@@ -34,6 +35,7 @@ export default function ProductServicesPage() {
     const { t } = useTranslation();
     const { currencySymbol } = useSettings();
     const [search, setSearch] = useState('');
+    const [selectedRows, setSelectedRows] = useState<number[]>([]);
     const [page, setPage] = useState(1);
     const [size, setSize] = useState(20);
 
@@ -90,6 +92,11 @@ export default function ProductServicesPage() {
 
         return matchesSearch;
     });
+
+    const toggleRow = (id: number) => {
+        setSelectedRows(prev => prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]);
+    };
+
     const openCreateModal = () => {
         setEditingItem(null);
         const defaultVatInt = Math.round(taxSettings.defaultVatRate * 100);
@@ -158,102 +165,139 @@ export default function ProductServicesPage() {
     if (loading) {
         return (
             <div className="flex items-center justify-center h-64">
-                <Loader2 className="animate-spin text-[#065F46]" size={32} />
+                <Loader2 className="animate-spin text-purple-600" size={32} />
             </div>
         );
     }
 
     return (
-        <div className="space-y-6">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="w-full flex flex-col gap-6">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">{t('product.title', 'Products & Services')}</h1>
-                    <p className="text-sm text-gray-500 mt-1">
+                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight">{t('product.title', 'Products & Services')}</h1>
+                    <p className="text-sm text-slate-500 mt-1">
                         {items.length} {t('product.title', 'products').toLowerCase()} &middot; {t('product.sortedAZ', 'Sorted A → Z')}
                     </p>
                 </div>
-                <button
-                    onClick={openCreateModal}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-[#065F46] text-white rounded-xl hover:bg-[#047857] shadow-lg hover:shadow-xl transition-all font-medium"
-                >
-                    <Plus size={18} />
-                    {t('product.newProduct', 'New Product')}
-                </button>
             </div>
 
-            {/* Search Bar (filter saved products) */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-                <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                    <input
-                        type="text"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        placeholder={t('product.searchPlaceholder', 'Filter saved products...')}
-                        className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#065F46] focus:border-[#065F46] transition"
-                    />
+            {/* Main Container */}
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col p-6">
+                {/* Action Bar / Search */}
+                <div className="flex items-center justify-between mb-6 h-12">
+                    <div className="flex-1 flex items-center gap-4">
+                        {selectedRows.length > 0 ? (
+                            <motion.div
+                                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                className="flex items-center gap-1 p-1 bg-white rounded-full border border-slate-200 shadow-sm"
+                            >
+                                <div className="px-3 py-1.5 text-xs font-bold text-purple-700 bg-purple-50 rounded-full flex items-center gap-2 border border-purple-100/50">
+                                    <span className="w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center text-white text-[10px] shadow-inner">{selectedRows.length}</span>
+                                    {t('common.selected', 'Selected')}
+                                </div>
+                                {selectedRows.length === 1 && (
+                                    <button
+                                        onClick={() => { const i = filteredItems.find(i => i.id === selectedRows[0]); if (i) openEditModal(i); }}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-purple-50 text-slate-600 hover:text-purple-700 rounded-full text-xs font-medium transition-colors"
+                                    >
+                                        <Pencil size={14} className="text-purple-500" /> {t('common.edit')}
+                                    </button>
+                                )}
+                                <div className="w-px h-4 bg-slate-200 mx-1" />
+                                <button
+                                    onClick={() => { selectedRows.forEach(id => handleDelete(id)); setSelectedRows([]); }}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-red-50 text-slate-600 hover:text-red-600 rounded-full text-xs font-medium transition-colors"
+                                >
+                                    <Trash2 size={14} className="text-red-500" /> {t('common.delete')}
+                                </button>
+                            </motion.div>
+                        ) : (
+                            <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="relative max-w-sm w-full">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                <input
+                                    type="text"
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    placeholder={t('product.searchPlaceholder', 'Filter saved products...')}
+                                    className="w-full pl-10 pr-4 py-2.5 bg-white/50 border border-slate-200/60 hover:border-purple-300 focus:bg-white focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 rounded-full text-sm font-medium outline-none transition-all placeholder:text-slate-400 text-slate-900 shadow-sm"
+                                />
+                            </motion.div>
+                        )}
+                    </div>
+                    {!selectedRows.length && (
+                        <motion.button
+                            initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+                            onClick={openCreateModal}
+                            className="flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-full text-sm font-semibold transition-all shadow-sm hover:shadow-md active:scale-95"
+                        >
+                            <Plus size={16} /> {t('product.newProduct', 'New Product')}
+                        </motion.button>
+                    )}
                 </div>
-            </div>
 
-            {/* Items List (alphabetically sorted) */}
+            {/* Items List */}
             {filteredItems.length === 0 ? (
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
-                    <Package size={48} className="mx-auto text-gray-300 mb-4" />
-                    <p className="text-gray-500">{t('product.noProducts', 'No products found')}</p>
-                    <p className="text-sm text-gray-400 mt-1">{t('product.addFirst', 'Click "New Product" to search and add products')}</p>
+                <div className="py-16 flex flex-col items-center justify-center text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                    <div className="w-12 h-12 bg-white border border-slate-200 rounded-xl shadow-sm flex items-center justify-center mb-3">
+                        <Package className="text-slate-400" size={20} />
+                    </div>
+                    <h3 className="text-sm font-bold text-slate-800">{t('product.noProducts', 'No products found')}</h3>
+                    <p className="text-xs text-slate-500 mt-1">{t('product.addFirst', 'Click "New Product" to search and add products')}</p>
                 </div>
             ) : (
-                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    {filteredItems.map((item, idx) => (
-                        <div
-                            key={item.id}
-                            className={`flex items-center gap-4 px-5 py-3 hover:bg-gray-50 transition-colors ${idx > 0 ? 'border-t border-gray-100' : ''}`}
-                        >
-                            <div className="p-2 rounded-lg bg-blue-100 shrink-0">
-                                <Package size={16} className="text-blue-600" />
-                            </div>
-                            <div className="flex-1 min-w-0 flex items-center gap-3">
-                                <span className="font-semibold text-gray-900 truncate">{item.name}</span>
-                                {item.category && (
-                                    <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded-full shrink-0">{item.category}</span>
-                                )}
-                                {item.description && (
-                                    <span className="text-sm text-gray-400 truncate hidden lg:inline">{item.description}</span>
-                                )}
-                            </div>
-                            <div className="flex items-center gap-3 shrink-0">
-                                {item.isStockTracked && (
-                                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-xs rounded-full font-medium flex items-center gap-1">
-                                        <BarChart3 size={12} />
-                                        {item.currentStock ?? 0} {t('product.inStock', 'in stock')}
+                <div>
+                    {filteredItems.map((item, idx) => {
+                        const isSelected = selectedRows.includes(item.id);
+                        return (
+                            <motion.div
+                                key={item.id}
+                                initial={{ opacity: 0, y: 6 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: idx * 0.03 }}
+                                onClick={() => toggleRow(item.id)}
+                                className={`flex items-center gap-4 px-5 py-3 cursor-pointer transition-colors ${idx > 0 ? 'border-t border-slate-100' : ''} ${
+                                    isSelected ? 'bg-purple-50/50' : 'hover:bg-slate-50/80'
+                                }`}
+                            >
+                                <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all shrink-0 ${
+                                    isSelected ? 'bg-purple-600 border-purple-600 text-white shadow-sm' : 'border-slate-300 bg-white text-transparent'
+                                }`}>
+                                    <Check size={12} strokeWidth={3} />
+                                </div>
+                                <div className="p-2 rounded-lg bg-purple-50 shrink-0">
+                                    <Package size={16} className="text-purple-600" />
+                                </div>
+                                <div className="flex-1 min-w-0 flex items-center gap-3">
+                                    <span className="font-semibold text-slate-900 truncate">{item.name}</span>
+                                    {item.category && (
+                                        <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-[10px] font-bold uppercase tracking-widest rounded-full shrink-0 border border-slate-200">{item.category}</span>
+                                    )}
+                                    {item.description && (
+                                        <span className="text-sm text-slate-400 truncate hidden lg:inline">{item.description}</span>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-3 shrink-0">
+                                    {item.isStockTracked && (
+                                        <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-bold uppercase tracking-widest rounded-full border border-blue-200 flex items-center gap-1">
+                                            <BarChart3 size={12} />
+                                            {item.currentStock ?? 0} {t('product.inStock', 'in stock')}
+                                        </span>
+                                    )}
+                                    {item.vatApplicable && (
+                                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 text-[10px] font-bold rounded-full border border-emerald-200">{item.tvaRate}%</span>
+                                    )}
+                                    <span className="text-sm font-bold text-slate-900 w-28 text-right">
+                                        {item.defaultUnitPrice.toFixed(3)} {currencySymbol}
                                     </span>
-                                )}
-                                {item.vatApplicable && (
-                                    <span className="px-2 py-0.5 bg-green-50 text-green-600 text-xs rounded-full font-medium">{item.tvaRate}%</span>
-                                )}
-                                <span className="text-sm font-bold text-gray-900 w-28 text-right">
-                                    {item.defaultUnitPrice.toFixed(3)} {currencySymbol}
-                                </span>
-                                <button
-                                    onClick={() => openEditModal(item)}
-                                    className="p-1.5 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
-                                    title={t('common.edit', 'Edit')}
-                                >
-                                    <Edit2 size={14} />
-                                </button>
-                                <button
-                                    onClick={() => handleDelete(item.id)}
-                                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                    title={t('common.delete', 'Delete')}
-                                >
-                                    <Trash2 size={14} />
-                                </button>
-                            </div>
-                        </div>
-                    ))}
+                                </div>
+                            </motion.div>
+                        );
+                    })}
                 </div>
             )}
+            </div>
 
             {/* Pagination */}
             {!search && (
@@ -422,6 +466,6 @@ export default function ProductServicesPage() {
                     </div>
                 </div>
             )}
-        </div>
+        </motion.div>
     );
 }

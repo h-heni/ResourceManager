@@ -51,6 +51,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<SupplierInvoice> SupplierInvoices { get; set; }
     public DbSet<SupplierInvoiceItem> SupplierInvoiceItems { get; set; }
     public DbSet<SupplierPayment> SupplierPayments { get; set; }
+    public DbSet<SupplierInvoiceFileData> SupplierInvoiceFileData { get; set; }
     public DbSet<Company> Companies { get; set; }
     public DbSet<UserProfile> UserProfiles { get; set; }
     public DbSet<InvoiceEmail> InvoiceEmails { get; set; }
@@ -121,6 +122,17 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         builder.Entity<InvoiceEmail>().HasQueryFilter(e => _isSuperAdmin || e.Invoice!.CompanyId == _currentCompanyId);
         builder.Entity<SupplierInvoiceItem>().HasQueryFilter(i => _isSuperAdmin || i.SupplierInvoice!.CompanyId == _currentCompanyId);
         builder.Entity<SupplierPayment>().HasQueryFilter(p => _isSuperAdmin || p.SupplierInvoice!.CompanyId == _currentCompanyId);
+        builder.Entity<SupplierInvoiceFileData>().HasQueryFilter(f => _isSuperAdmin || f.SupplierInvoice!.CompanyId == _currentCompanyId);
+
+        // SupplierInvoiceFileData: unique 1-to-1 FK to SupplierInvoice
+        builder.Entity<SupplierInvoiceFileData>()
+            .HasOne(f => f.SupplierInvoice)
+            .WithOne()
+            .HasForeignKey<SupplierInvoiceFileData>(f => f.SupplierInvoiceId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Entity<SupplierInvoiceFileData>()
+            .HasIndex(f => f.SupplierInvoiceId)
+            .IsUnique();
 
         // RefreshToken indexes for fast lookup
         builder.Entity<RefreshToken>().HasIndex(e => e.Token).IsUnique();

@@ -521,7 +521,7 @@ export default function DeliveryNoteCreatePage() {
                 <button
                     onClick={handleSubmit}
                     disabled={loading || loadingNote || (!isEditMode && allFullyDelivered)}
-                    className="w-full sm:w-auto flex items-center justify-center px-6 py-3 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full sm:w-auto flex items-center justify-center px-6 py-3 bg-purple-600 text-white rounded-xl shadow-lg hover:bg-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <Save size={20} className="mr-2" />
                     {loading ? t('common.saving') : isEditMode ? t('common.save') : t('deliveryNote.create')}
@@ -563,7 +563,7 @@ export default function DeliveryNoteCreatePage() {
 
                 {/* Currency & Language (inherited from Quote - read-only) */}
                 {selectedQuoteId && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-[#065F46]/5 border border-emerald-100 rounded-xl">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-purple-600/5 border border-emerald-100 rounded-xl">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">{t('createPage.documentCurrency')}</label>
                             <div className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-600">
@@ -591,7 +591,7 @@ export default function DeliveryNoteCreatePage() {
                             value={selectedQuoteId}
                             onChange={e => handleQuoteSelection(e.target.value)}
                             onBlur={() => handleBlur('quoteId')}
-                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none ${errors.quoteId && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-purple-500 outline-none ${errors.quoteId && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
                                 }`}
                             required
                         >
@@ -612,14 +612,14 @@ export default function DeliveryNoteCreatePage() {
 
                     {/* Show selected quote info - Enhanced compact format */}
                     {selectedQuote && (
-                        <div className="md:col-span-2 p-4 bg-[#065F46]/5 border border-[#065F46]/20 rounded-xl">
+                        <div className="md:col-span-2 p-4 bg-purple-600/5 border border-purple-600/20 rounded-xl">
                             <div className="flex items-start space-x-3">
-                                <FileText className="text-[#065F46] mt-1 flex-shrink-0" size={20} />
+                                <FileText className="text-purple-600 mt-1 flex-shrink-0" size={20} />
                                 <div className="flex-1">
                                     <div className="flex items-center justify-between mb-2">
-                                        <h4 className="font-semibold text-[#065F46]">Quote: {selectedQuote.number}</h4>
+                                        <h4 className="font-semibold text-purple-600">Quote: {selectedQuote.number}</h4>
                                         {selectedQuote.createdByUser && (
-                                            <span className="text-xs text-[#065F46] flex items-center">
+                                            <span className="text-xs text-purple-600 flex items-center">
                                                 <User size={12} className="mr-1" />
                                                 {(selectedQuote.createdByUser.firstName || selectedQuote.createdByUser.lastName)
                                                     ? `${selectedQuote.createdByUser.firstName || ''} ${selectedQuote.createdByUser.lastName || ''}`.trim()
@@ -630,7 +630,7 @@ export default function DeliveryNoteCreatePage() {
                                     {/* Quote items list */}
                                     {selectedQuote.quoteItems && selectedQuote.quoteItems.length > 0 && (
                                         <div className="mt-2 space-y-1">
-                                            <p className="text-xs font-semibold text-[#065F46] uppercase">{t('deliveryNote.items')}:</p>
+                                            <p className="text-xs font-semibold text-purple-600 uppercase">{t('deliveryNote.items')}:</p>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-1">
                                                 {selectedQuote.quoteItems.map((item, idx) => {
                                                     const key = item.description.toLowerCase().trim();
@@ -641,7 +641,7 @@ export default function DeliveryNoteCreatePage() {
                                                     return (
                                                         <div
                                                             key={idx}
-                                                            className={`flex items-center justify-between text-sm px-2 py-1 rounded ${fullyDelivered ? 'bg-green-100 text-green-800' : 'bg-[#065F46]/10 text-[#065F46]'
+                                                            className={`flex items-center justify-between text-sm px-2 py-1 rounded ${fullyDelivered ? 'bg-green-100 text-green-800' : 'bg-purple-600/10 text-purple-600'
                                                                 }`}
                                                         >
                                                             <span className="truncate">{item.description}</span>
@@ -688,7 +688,7 @@ export default function DeliveryNoteCreatePage() {
                             value={date}
                             onChange={e => setDate(e.target.value)}
                             onBlur={() => handleBlur('date')}
-                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none ${errors.date && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-purple-500 outline-none ${errors.date && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
                                 }`}
                         />
                         {errors.date && submitted && (
@@ -780,7 +780,7 @@ export default function DeliveryNoteCreatePage() {
                                                 searchProducts(e.target.value, index);
                                             }}
                                             onBlur={() => { handleBlur('items'); dismissSuggestions(); }}
-                                            className={`w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-[#065F46] ${
+                                            className={`w-full px-3 py-2 border rounded-lg outline-none focus:ring-2 focus:ring-purple-500 ${
                                                 item.description.trim() !== '' && !item.fromCatalog && submitted
                                                     ? 'border-red-400 bg-red-50'
                                                     : item.description.trim() === '' && touched.items
@@ -798,7 +798,7 @@ export default function DeliveryNoteCreatePage() {
                                                         key={product.id}
                                                         type="button"
                                                         onMouseDown={() => selectProduct(product, index)}
-                                                        className="w-full px-3 py-2 text-left hover:bg-[#065F46]/5 flex justify-between items-center text-sm border-b border-gray-50 last:border-0"
+                                                        className="w-full px-3 py-2 text-left hover:bg-purple-600/5 flex justify-between items-center text-sm border-b border-gray-50 last:border-0"
                                                     >
                                                         <div>
                                                             <span className="font-medium text-gray-900">{product.name}</span>
@@ -806,7 +806,7 @@ export default function DeliveryNoteCreatePage() {
                                                                 <span className="text-gray-400 ml-1 text-xs">— {product.description}</span>
                                                             )}
                                                         </div>
-                                                        <span className="text-[#065F46] font-medium text-xs whitespace-nowrap ml-2">
+                                                        <span className="text-purple-600 font-medium text-xs whitespace-nowrap ml-2">
                                                             {product.defaultUnitPrice.toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}
                                                         </span>
                                                     </button>
@@ -845,7 +845,7 @@ export default function DeliveryNoteCreatePage() {
                                     <div className="col-span-1 md:col-span-2">
                                         <label className="text-xs font-semibold text-gray-500 mb-1 block">
                                             Qty {item.remainingQuantity > 0 && (
-                                                <span className="text-[#065F46]">(quoted: {item.remainingQuantity})</span>
+                                                <span className="text-purple-600">(quoted: {item.remainingQuantity})</span>
                                             )}
                                         </label>
                                         <input
@@ -853,7 +853,7 @@ export default function DeliveryNoteCreatePage() {
                                             min="1"
                                             value={item.quantity}
                                             onChange={e => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
-                                            className={`w-full px-3 py-2 border rounded-lg text-right focus:ring-2 focus:ring-[#065F46] ${exceedsRemaining ? 'border-amber-400 bg-amber-50' :
+                                            className={`w-full px-3 py-2 border rounded-lg text-right focus:ring-2 focus:ring-purple-500 ${exceedsRemaining ? 'border-amber-400 bg-amber-50' :
                                                     item.quantity <= 0 ? 'border-red-500 bg-red-50' : 'border-gray-200'
                                                 }`}
                                         />
@@ -878,7 +878,7 @@ export default function DeliveryNoteCreatePage() {
                         })}
                     </div>
 
-                    <button onClick={addItem} className="mt-4 flex items-center text-sm font-semibold text-[#065F46]">
+                    <button onClick={addItem} className="mt-4 flex items-center text-sm font-semibold text-purple-600">
                         <Plus size={18} className="mr-1" /> {t('invoice.addItem')}
                     </button>
                 </div>

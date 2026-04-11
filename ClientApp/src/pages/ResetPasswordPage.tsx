@@ -68,7 +68,7 @@ export default function ResetPasswordPage() {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-600 via-indigo-600 to-blue-700 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-purple-600 via-purple-600 to-blue-700 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
           <div className="text-center">
             <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
@@ -84,7 +84,7 @@ export default function ResetPasswordPage() {
             </p>
             <Link
               to="/login"
-              className="inline-flex items-center text-indigo-600 hover:text-indigo-700 font-medium"
+              className="inline-flex items-center text-purple-600 hover:text-purple-700 font-medium"
             >
               {t('auth.loginNow')}
             </Link>
@@ -96,7 +96,7 @@ export default function ResetPasswordPage() {
 
   if (!email || !token) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-600 via-indigo-600 to-blue-700 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-purple-600 via-purple-600 to-blue-700 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
           <div className="text-center">
             <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
@@ -112,7 +112,7 @@ export default function ResetPasswordPage() {
             </p>
             <Link
               to="/forgot-password"
-              className="inline-flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+              className="inline-flex items-center justify-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
             >
               {t('auth.requestNewLink')}
             </Link>
@@ -123,10 +123,10 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-indigo-600 to-blue-700 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-purple-600 to-blue-700 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-purple-600 bg-clip-text text-transparent">
             {t('auth.resetPasswordTitle')}
           </h1>
           <p className="text-gray-600 mt-2">
@@ -153,7 +153,7 @@ export default function ResetPasswordPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={8}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all pr-12"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all pr-12"
                 placeholder={t('auth.newPasswordPlaceholder')}
               />
               <button
@@ -188,7 +188,7 @@ export default function ResetPasswordPage() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all"
               placeholder={t('auth.confirmPasswordPlaceholder')}
             />
           </div>
@@ -196,7 +196,7 @@ export default function ResetPasswordPage() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-3 px-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full py-3 px-4 bg-gradient-to-r from-purple-600 to-purple-600 text-white font-semibold rounded-lg hover:from-purple-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isLoading ? (
               <span className="flex items-center justify-center">
@@ -214,7 +214,7 @@ export default function ResetPasswordPage() {
           <div className="text-center">
             <Link
               to="/login"
-              className="text-indigo-600 hover:text-indigo-700 text-sm font-medium"
+              className="text-purple-600 hover:text-purple-700 text-sm font-medium"
             >
               {t('auth.backToLogin')}
             </Link>

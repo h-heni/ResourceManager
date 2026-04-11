@@ -222,7 +222,7 @@ export default function InvoiceDetailView({
         return (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
                 <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#065F46] border-t-transparent"></div>
+                    <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-600 border-t-transparent"></div>
                 </div>
             </div>
         );
@@ -258,7 +258,7 @@ export default function InvoiceDetailView({
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-0 md:p-4">
             <div className="bg-white rounded-none md:rounded-2xl shadow-2xl w-full h-full md:max-w-5xl md:h-[90vh] flex flex-col overflow-hidden animate-scale-up">
                 {/* Header */}
-                <div className="bg-[#065F46] px-6 py-4 flex items-center justify-between">
+                <div className="bg-purple-600 px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center space-x-4">
                         <div className="bg-white/20 p-3 rounded-xl">
                             <Receipt className="text-white" size={24} />
@@ -288,7 +288,7 @@ export default function InvoiceDetailView({
                     {canEdit ? (
                         <button
                             onClick={() => onEdit?.(invoice.id)}
-                            className="flex items-center px-3 sm:px-4 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#047857] transition-colors text-sm whitespace-nowrap"
+                            className="flex items-center px-3 sm:px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm whitespace-nowrap"
                         >
                             <Edit2 size={16} className="me-2" />
                             {t('common.edit')}
@@ -301,7 +301,7 @@ export default function InvoiceDetailView({
                     ) : null}
                     <button
                         onClick={() => onDownloadPdf?.(invoice.id, resolveInvoiceNumber(invoice))}
-                        className="flex items-center px-3 sm:px-4 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#047857] transition-colors text-sm whitespace-nowrap"
+                        className="flex items-center px-3 sm:px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm whitespace-nowrap"
                     >
                         <Download size={16} className="me-2" />
                         <span className="hidden sm:inline">{t('common.download')}</span> PDF
@@ -344,7 +344,7 @@ export default function InvoiceDetailView({
                                 }
                             }}
                             disabled={downloadingRemainingPdf}
-                            className="flex items-center px-3 sm:px-4 py-2 bg-[#059669] text-white rounded-lg hover:bg-[#047857] transition-colors disabled:opacity-60 disabled:cursor-not-allowed text-sm whitespace-nowrap"
+                            className="flex items-center px-3 sm:px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed text-sm whitespace-nowrap"
                             title={t('invoice.remainingPaymentPdf', 'Remaining Payment Notice')}
                         >
                             <FileWarning size={16} className="me-2" />
@@ -373,7 +373,7 @@ export default function InvoiceDetailView({
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
                                 className={`flex items-center space-x-2 px-4 py-3 border-b-2 font-medium transition-colors ${activeTab === tab.id
-                                    ? 'border-[#065F46] text-[#065F46]'
+                                    ? 'border-purple-600 text-purple-600'
                                     : 'border-transparent text-gray-500 hover:text-gray-700'
                                     }`}
                             >
@@ -392,7 +392,7 @@ export default function InvoiceDetailView({
                             {/* Invoice Info */}
                             <div className="bg-gray-50 rounded-xl p-5">
                                 <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
-                                    <FileText size={18} className="me-2 text-[#065F46]" />
+                                    <FileText size={18} className="me-2 text-purple-600" />
                                     {t('invoice.info')}
                                 </h3>
                                 <div className="space-y-3">
@@ -434,7 +434,7 @@ export default function InvoiceDetailView({
                             {/* Client Info */}
                             <div className="bg-gray-50 rounded-xl p-5">
                                 <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
-                                    <User size={18} className="me-2 text-[#065F46]" />
+                                    <User size={18} className="me-2 text-purple-600" />
                                     {t('common.client')}
                                 </h3>
                                 <div className="space-y-3">
@@ -451,7 +451,7 @@ export default function InvoiceDetailView({
                                     {invoice.clientEmail && (
                                         <div className="flex justify-between">
                                             <span className="text-gray-600">{t('common.email')}:</span>
-                                            <a href={`mailto:${invoice.clientEmail}`} className="font-medium text-[#065F46] hover:underline">
+                                            <a href={`mailto:${invoice.clientEmail}`} className="font-medium text-purple-600 hover:underline">
                                                 {invoice.clientEmail}
                                             </a>
                                         </div>
@@ -466,9 +466,9 @@ export default function InvoiceDetailView({
                             </div>
 
                             {/* Financial Summary */}
-                            <div className="bg-[#065F46]/5 rounded-xl p-5 lg:col-span-2">
+                            <div className="bg-purple-600/5 rounded-xl p-5 lg:col-span-2">
                                 <h3 className="font-semibold text-gray-900 mb-4 flex items-center">
-                                    <DollarSign size={18} className="me-2 text-[#065F46]" />
+                                    <DollarSign size={18} className="me-2 text-purple-600" />
                                     {t('invoice.financial')}
                                 </h3>
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -486,7 +486,7 @@ export default function InvoiceDetailView({
                                             <p className="text-xl font-bold text-gray-900">{formatCurrency(invoice.timbreFiscal)}</p>
                                         </div>
                                     )}
-                                    <div className="bg-[#065F46] rounded-lg p-4 shadow-sm">
+                                    <div className="bg-purple-600 rounded-lg p-4 shadow-sm">
                                         <p className="text-sm text-white/70">{t('invoice.totalTTC')}</p>
                                         <p className="text-xl font-bold text-white">{formatCurrency(invoice.totalAmount)}</p>
                                     </div>
@@ -570,7 +570,7 @@ export default function InvoiceDetailView({
                                 <tfoot className="bg-gray-50">
                                     <tr>
                                         <td colSpan={5} className="px-4 py-3 text-end font-semibold">{t('invoice.total')}:</td>
-                                        <td className="px-4 py-3 text-end font-bold text-[#065F46]">{formatCurrency(invoice.totalAmount)}</td>
+                                        <td className="px-4 py-3 text-end font-bold text-purple-600">{formatCurrency(invoice.totalAmount)}</td>
                                     </tr>
                                 </tfoot>
                             </table>
@@ -581,9 +581,9 @@ export default function InvoiceDetailView({
                         <div className="space-y-4">
                             {/* Payment Summary */}
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                                <div className="bg-[#065F46]/5 rounded-xl p-4 text-center">
-                                    <p className="text-sm text-[#065F46]">{t('invoice.totalTTC')}</p>
-                                    <p className="text-2xl font-bold text-[#065F46]">{formatCurrency(invoice.totalAmount)}</p>
+                                <div className="bg-purple-600/5 rounded-xl p-4 text-center">
+                                    <p className="text-sm text-purple-600">{t('invoice.totalTTC')}</p>
+                                    <p className="text-2xl font-bold text-purple-600">{formatCurrency(invoice.totalAmount)}</p>
                                 </div>
                                 <div className="bg-emerald-50 rounded-xl p-4 text-center">
                                     <p className="text-sm text-emerald-600">{t('invoice.totalPaid')}</p>
@@ -603,7 +603,7 @@ export default function InvoiceDetailView({
                             {/* Payment History */}
                             <div className="bg-white rounded-xl border">
                                 <div className="px-4 py-3 border-b flex items-center">
-                                    <History size={18} className="me-2 text-[#065F46]" />
+                                    <History size={18} className="me-2 text-purple-600" />
                                     <h3 className="font-semibold">{t('invoice.paymentHistory', 'Payment History')}</h3>
                                 </div>
                                 {invoice.payments && invoice.payments.length > 0 ? (
@@ -729,9 +729,9 @@ export default function InvoiceDetailView({
 
                             {/* Related Delivery Notes */}
                             <div className="bg-white rounded-xl border overflow-hidden">
-                                <div className="px-4 py-3 border-b flex items-center bg-[#065F46]/5">
-                                    <Truck size={18} className="me-2 text-[#065F46]" />
-                                    <h3 className="font-semibold text-[#065F46]">{t('invoice.relatedDeliveryNotes', 'Related Delivery Notes')}</h3>
+                                <div className="px-4 py-3 border-b flex items-center bg-purple-600/5">
+                                    <Truck size={18} className="me-2 text-purple-600" />
+                                    <h3 className="font-semibold text-purple-600">{t('invoice.relatedDeliveryNotes', 'Related Delivery Notes')}</h3>
                                 </div>
                                 {invoice.relatedDeliveryNotes && invoice.relatedDeliveryNotes.length > 0 ? (
                                     <div className="divide-y">
@@ -751,7 +751,7 @@ export default function InvoiceDetailView({
                                                         )}
                                                     </div>
                                                 </div>
-                                                <span className="px-3 py-1 rounded-full text-sm font-medium bg-[#065F46]/10 text-[#065F46]">
+                                                <span className="px-3 py-1 rounded-full text-sm font-medium bg-purple-600/10 text-purple-600">
                                                     {note.status || 'Delivered'}
                                                 </span>
                                             </div>

@@ -48,10 +48,10 @@ export default function CompanySetupPage() {
             <div className="w-full max-w-lg bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden animate-fade-in">
                 <div className="p-8">
                     <div className="text-center mb-8">
-                        <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-[#065F46] to-[#14B8A6] rounded-full mb-4">
+                        <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-purple-600 to-purple-500 rounded-full mb-4">
                             <Building className="w-8 h-8 text-white" />
                         </div>
-                        <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-[#065F46]">
+                        <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-purple-600">
                             {t('companySetup.title')}
                         </h1>
                         <p className="text-gray-500 mt-2">{t('companySetup.subtitle')}</p>
@@ -67,7 +67,7 @@ export default function CompanySetupPage() {
                                     value={formData.companyName}
                                     onChange={handleChange}
                                     required
-                                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
+                                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
                                     placeholder={t('companySetup.placeholders.companyName')}
                                 />
                             </div>
@@ -82,7 +82,7 @@ export default function CompanySetupPage() {
                                     value={formData.address}
                                     onChange={handleChange}
                                     required
-                                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
+                                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
                                     placeholder={t('companySetup.placeholders.address')}
                                 />
                             </div>
@@ -98,7 +98,7 @@ export default function CompanySetupPage() {
                                         value={formData.taxId}
                                         onChange={handleChange}
                                         required
-                                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
+                                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
                                         placeholder={t('companySetup.placeholders.matriculeFiscal')}
                                     />
                                 </div>
@@ -111,7 +111,7 @@ export default function CompanySetupPage() {
                                         name="phone"
                                         value={formData.phone}
                                         onChange={handleChange}
-                                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
+                                        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
                                         placeholder={t('companySetup.placeholders.phone')}
                                     />
                                 </div>
@@ -129,7 +129,7 @@ export default function CompanySetupPage() {
                             disabled={loading}
                             className={cn(
                                 "w-full py-3 px-4 rounded-xl text-white font-semibold shadow-lg transition-all transform hover:scale-[1.02] active:scale-[0.98]",
-                                "bg-[#065F46] hover:bg-[#047857]",
+                                "bg-purple-600 hover:bg-purple-700",
                                 loading && "opacity-70 cursor-not-allowed"
                             )}
                         >

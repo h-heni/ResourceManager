@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 import {
   Package, Search, ArrowUpDown, ArrowDown, ArrowUp,
@@ -105,38 +106,39 @@ export default function InventoryPage() {
   };
 
   return (
-    <div className="p-4 md:p-6 max-w-[1400px] mx-auto">
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="w-full flex flex-col gap-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Package className="text-[#065F46]" />
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+            <Package className="text-purple-600" />
             {t('inventory.title', 'Inventory Management')}
           </h1>
           <p className="text-sm text-slate-500 mt-1">{t('inventory.subtitle', 'Track stock levels, movements, and alerts')}</p>
         </div>
         <div className="flex gap-2">
-          <button
+          <motion.button
+            initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
             onClick={() => setMovModal(true)}
-            className="px-4 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#064E3B] transition-colors text-sm font-medium"
+            className="flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-full text-sm font-semibold transition-all shadow-sm hover:shadow-md active:scale-95"
           >
             {t('inventory.recordMovement', 'Record Movement')}
-          </button>
+          </motion.button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-slate-200 mb-4">
+      <div className="border-b border-slate-200">
         <nav className="flex gap-6">
           <button
             onClick={() => setActiveTab('stock')}
-            className={`pb-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'stock' ? 'border-[#065F46] text-[#065F46]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+            className={`pb-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'stock' ? 'border-purple-600 text-purple-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
           >
             {t('inventory.stockLevels', 'Stock Levels')}
           </button>
           <button
             onClick={() => setActiveTab('movements')}
-            className={`pb-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'movements' ? 'border-[#065F46] text-[#065F46]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+            className={`pb-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'movements' ? 'border-purple-600 text-purple-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
           >
             {t('inventory.movements', 'Movements')}
           </button>
@@ -147,7 +149,7 @@ export default function InventoryPage() {
       {activeTab === 'stock' && (
         <>
           {/* Filters */}
-          <div className="flex flex-col sm:flex-row gap-3 mb-4">
+          <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -155,7 +157,7 @@ export default function InventoryPage() {
                 placeholder={t('common.search', 'Search...')}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-[#065F46] focus:border-transparent"
+                className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-full text-sm focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 outline-none transition-all"
               />
             </div>
             <div className="flex items-center gap-2">
@@ -163,7 +165,7 @@ export default function InventoryPage() {
               <select
                 value={statusFilter}
                 onChange={e => setStatusFilter(e.target.value)}
-                className="border border-slate-300 rounded-lg text-sm px-3 py-2 focus:ring-2 focus:ring-[#065F46]"
+                className="border border-slate-200 rounded-full text-sm px-3 py-2.5 focus:ring-4 focus:ring-purple-500/10 focus:border-purple-500 outline-none"
               >
                 <option value="">{t('common.all', 'All')}</option>
                 <option value="InStock">{t('inventory.status.InStock', 'In Stock')}</option>
@@ -175,7 +177,7 @@ export default function InventoryPage() {
           </div>
 
           {loadingStock ? (
-            <div className="flex justify-center py-12"><Loader2 className="animate-spin text-[#065F46]" size={32} /></div>
+            <div className="flex justify-center py-12"><Loader2 className="animate-spin text-purple-600" size={32} /></div>
           ) : !stockLevels.length ? (
             <div className="text-center py-12 text-slate-500">
               <Package size={48} className="mx-auto mb-3 text-slate-300" />
@@ -185,50 +187,53 @@ export default function InventoryPage() {
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-slate-50 border-b border-slate-200">
+                  <thead>
                     <tr>
-                      <th className="text-start px-4 py-3 font-medium text-slate-600">{t('inventory.product', 'Product')}</th>
-                      <th className="text-end px-4 py-3 font-medium text-slate-600">{t('inventory.currentStock', 'Current Stock')}</th>
-                      <th className="text-end px-4 py-3 font-medium text-slate-600">{t('inventory.reorderPoint', 'Reorder Point')}</th>
-                      <th className="text-end px-4 py-3 font-medium text-slate-600">{t('inventory.stockValue', 'Stock Value')}</th>
-                      <th className="text-center px-4 py-3 font-medium text-slate-600">{t('common.status', 'Status')}</th>
-                      <th className="text-center px-4 py-3 font-medium text-slate-600">{t('common.actions', 'Actions')}</th>
+                      <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left">{t('inventory.product', 'Product')}</th>
+                      <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-right">{t('inventory.currentStock', 'Current Stock')}</th>
+                      <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-right">{t('inventory.reorderPoint', 'Reorder Point')}</th>
+                      <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-right">{t('inventory.stockValue', 'Stock Value')}</th>
+                      <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-center">{t('common.status', 'Status')}</th>
+                      <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-center">{t('common.actions', 'Actions')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {stockLevels.map(item => (
+                    {stockLevels.map((item, idx) => (
                       <>
-                        <tr
+                        <motion.tr
                           key={item.productServiceId}
-                          className="hover:bg-slate-50 cursor-pointer transition-colors"
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: idx * 0.05 }}
+                          className="hover:bg-slate-50/80 cursor-pointer transition-colors"
                           onClick={() => setExpandedRow(expandedRow === item.productServiceId ? null : item.productServiceId)}
                         >
-                          <td className="px-4 py-3 font-medium text-slate-900">
+                          <td className="px-4 py-3.5 font-medium text-slate-900">
                             <div className="flex items-center gap-2">
                               {expandedRow === item.productServiceId ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                               {item.productName}
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-end font-semibold">
+                          <td className="px-4 py-3.5 text-end font-semibold">
                             <span className={item.currentStock <= 0 ? 'text-red-600' : item.stockStatus === 'LowStock' ? 'text-amber-600' : 'text-slate-900'}>
                               {item.currentStock}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-end text-slate-500">{item.reorderPoint ?? '—'}</td>
-                          <td className="px-4 py-3 text-end text-slate-700">
+                          <td className="px-4 py-3.5 text-end text-slate-500">{item.reorderPoint ?? '—'}</td>
+                          <td className="px-4 py-3.5 text-end text-slate-700">
                             {currencySymbol} {item.stockValue.toFixed(2)}
                           </td>
-                          <td className="px-4 py-3 text-center">{statusBadge(item.stockStatus)}</td>
-                          <td className="px-4 py-3 text-center">
+                          <td className="px-4 py-3.5 text-center">{statusBadge(item.stockStatus)}</td>
+                          <td className="px-4 py-3.5 text-center">
                             <button
                               onClick={e => { e.stopPropagation(); setAdjustModal(item); setAdjustQty(String(item.currentStock)); }}
-                              className="text-[#065F46] hover:text-[#064E3B] text-xs font-medium"
+                              className="text-purple-600 hover:text-purple-700 text-xs font-medium p-2 hover:bg-purple-50 rounded-full transition-colors"
                               title={t('inventory.adjustStock', 'Adjust Stock')}
                             >
                               <RotateCcw size={16} />
                             </button>
                           </td>
-                        </tr>
+                        </motion.tr>
                         {expandedRow === item.productServiceId && (
                           <tr key={`${item.productServiceId}-detail`}>
                             <td colSpan={6} className="bg-slate-50 px-6 py-3 text-xs text-slate-600">
@@ -262,11 +267,11 @@ export default function InventoryPage() {
       {/* ═══ MOVEMENTS TAB ═══ */}
       {activeTab === 'movements' && (
         <>
-          <div className="flex gap-3 mb-4">
+          <div className="flex gap-3">
             <select
               value={movType}
               onChange={e => { setMovType(e.target.value); setMovPage(1); }}
-              className="border border-slate-300 rounded-lg text-sm px-3 py-2 focus:ring-2 focus:ring-[#065F46]"
+              className="border border-slate-200 rounded-full text-sm px-3 py-2.5 focus:ring-4 focus:ring-purple-500/10 focus:border-purple-500 outline-none"
             >
               <option value="">{t('common.all', 'All')}</option>
               <option value="In">{t('inventory.movType.In', 'Stock In')}</option>
@@ -278,7 +283,7 @@ export default function InventoryPage() {
           </div>
 
           {loadingMov ? (
-            <div className="flex justify-center py-12"><Loader2 className="animate-spin text-[#065F46]" size={32} /></div>
+            <div className="flex justify-center py-12"><Loader2 className="animate-spin text-purple-600" size={32} /></div>
           ) : !movementsData?.data?.length ? (
             <div className="text-center py-12 text-slate-500">
               <ArrowUpDown size={48} className="mx-auto mb-3 text-slate-300" />
@@ -289,15 +294,15 @@ export default function InventoryPage() {
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <thead className="bg-slate-50 border-b border-slate-200">
+                    <thead>
                       <tr>
-                        <th className="text-start px-4 py-3 font-medium text-slate-600">{t('inventory.date', 'Date')}</th>
-                        <th className="text-start px-4 py-3 font-medium text-slate-600">{t('inventory.product', 'Product')}</th>
-                        <th className="text-center px-4 py-3 font-medium text-slate-600">{t('inventory.type', 'Type')}</th>
-                        <th className="text-end px-4 py-3 font-medium text-slate-600">{t('inventory.quantity', 'Qty')}</th>
-                        <th className="text-end px-4 py-3 font-medium text-slate-600">{t('inventory.stockAfter', 'Stock After')}</th>
-                        <th className="text-start px-4 py-3 font-medium text-slate-600">{t('inventory.reference', 'Reference')}</th>
-                        <th className="text-start px-4 py-3 font-medium text-slate-600">{t('inventory.notes', 'Notes')}</th>
+                        <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left">{t('inventory.date', 'Date')}</th>
+                        <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left">{t('inventory.product', 'Product')}</th>
+                        <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-center">{t('inventory.type', 'Type')}</th>
+                        <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-right">{t('inventory.quantity', 'Qty')}</th>
+                        <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-right">{t('inventory.stockAfter', 'Stock After')}</th>
+                        <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left">{t('inventory.reference', 'Reference')}</th>
+                        <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left">{t('inventory.notes', 'Notes')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -375,7 +380,7 @@ export default function InventoryPage() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
             <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <RotateCcw size={18} className="text-[#065F46]" />
+              <RotateCcw size={18} className="text-purple-600" />
               {t('inventory.adjustStock', 'Adjust Stock')}
             </h3>
             <p className="text-sm text-slate-500 mb-4">
@@ -390,7 +395,7 @@ export default function InventoryPage() {
                   type="number"
                   value={adjustQty}
                   onChange={e => setAdjustQty(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#065F46]"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-600"
                 />
               </div>
               <div>
@@ -402,7 +407,7 @@ export default function InventoryPage() {
                   value={adjustReason}
                   onChange={e => setAdjustReason(e.target.value)}
                   placeholder={t('inventory.reasonPlaceholder', 'e.g. Physical count correction')}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#065F46]"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-600"
                 />
               </div>
             </div>
@@ -413,7 +418,7 @@ export default function InventoryPage() {
               <button
                 onClick={handleAdjust}
                 disabled={adjustMutation.isPending}
-                className="px-4 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#064E3B] text-sm font-medium disabled:opacity-50 flex items-center gap-2"
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium disabled:opacity-50 flex items-center gap-2"
               >
                 {adjustMutation.isPending && <Loader2 size={14} className="animate-spin" />}
                 {t('common.save', 'Save')}
@@ -428,7 +433,7 @@ export default function InventoryPage() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
             <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <ArrowUpDown size={18} className="text-[#065F46]" />
+              <ArrowUpDown size={18} className="text-purple-600" />
               {t('inventory.recordMovement', 'Record Movement')}
             </h3>
             <div className="space-y-3">
@@ -441,12 +446,12 @@ export default function InventoryPage() {
                   placeholder={t('inventory.searchProduct', 'Search products...')}
                   value={productSearch}
                   onChange={e => setProductSearch(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#065F46] mb-1"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-600 mb-1"
                 />
                 <select
                   value={movForm.productServiceId}
                   onChange={e => setMovForm(f => ({ ...f, productServiceId: e.target.value }))}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#065F46]"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-600"
                 >
                   <option value="">{t('inventory.selectProduct', '-- Select a product --')}</option>
                   {(productOptions || [])
@@ -466,7 +471,7 @@ export default function InventoryPage() {
                 <select
                   value={movForm.movementType}
                   onChange={e => setMovForm(f => ({ ...f, movementType: e.target.value }))}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#065F46]"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-600"
                 >
                   <option value="In">{t('inventory.movType.In', 'Stock In')}</option>
                   <option value="Out">{t('inventory.movType.Out', 'Stock Out')}</option>
@@ -480,7 +485,7 @@ export default function InventoryPage() {
                   type="number"
                   value={movForm.quantity}
                   onChange={e => setMovForm(f => ({ ...f, quantity: e.target.value }))}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#065F46]"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-600"
                 />
               </div>
               <div>
@@ -492,7 +497,7 @@ export default function InventoryPage() {
                   step="0.01"
                   value={movForm.unitCost}
                   onChange={e => setMovForm(f => ({ ...f, unitCost: e.target.value }))}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#065F46]"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-600"
                 />
               </div>
               <div>
@@ -503,7 +508,7 @@ export default function InventoryPage() {
                   value={movForm.notes}
                   onChange={e => setMovForm(f => ({ ...f, notes: e.target.value }))}
                   rows={2}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#065F46]"
+                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-600"
                 />
               </div>
             </div>
@@ -514,7 +519,7 @@ export default function InventoryPage() {
               <button
                 onClick={handleRecordMovement}
                 disabled={movMutation.isPending}
-                className="px-4 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#064E3B] text-sm font-medium disabled:opacity-50 flex items-center gap-2"
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium disabled:opacity-50 flex items-center gap-2"
               >
                 {movMutation.isPending && <Loader2 size={14} className="animate-spin" />}
                 {t('common.save', 'Save')}
@@ -523,6 +528,6 @@ export default function InventoryPage() {
           </div>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }

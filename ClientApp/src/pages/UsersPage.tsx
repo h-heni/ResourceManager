@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { motion } from 'motion/react';
 import api from '../services/api';
 import { getErrorMessage, getErrorStatus, getAxiosResponseData } from '../utils/errorUtils';
 import { useAuth } from '../context/AuthContext';
@@ -276,7 +277,7 @@ export default function UsersPage() {
             <p className="text-red-600 font-medium">{error}</p>
             <button 
                 onClick={fetchUsers}
-                className="mt-4 px-4 py-2 bg-[#065F46] text-white rounded-xl hover:bg-[#047857]"
+                className="mt-4 px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700"
             >
                 {t('users.messages.retry')}
             </button>
@@ -291,146 +292,148 @@ export default function UsersPage() {
     );
 
     return (
-        <div className="animate-fade-in">
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="w-full flex flex-col gap-6">
             <NotifyBanner />
-            <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="mb-2 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-900">{t('users.title')}</h1>
-                    <p className="text-gray-500 mt-1">
+                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight">{t('users.title')}</h1>
+                    <p className="text-sm text-slate-500 mt-1">
                         {isSuperAdmin 
                             ? t('users.messages.manageSuperAdmin')
                             : t('users.messages.manageManager')}
                     </p>
-                    {/* Capacity counter for Manager view */}
                     {isManager && !isSuperAdmin && employeeLimit > 0 && (
                         <div className="mt-2 flex items-center gap-2">
                             <Shield size={16} className={employeeCount >= employeeLimit + 1 ? 'text-red-500' : 'text-emerald-600'} />
-                            <span className={`text-sm font-medium ${employeeCount >= employeeLimit + 1 ? 'text-red-600' : 'text-gray-600'}`}>
+                            <span className={`text-sm font-medium ${employeeCount >= employeeLimit + 1 ? 'text-red-600' : 'text-slate-600'}`}>
                                 {t('users.capacity.label')}: {employeeCount} / {employeeLimit + 1}
                             </span>
                             {employeeCount >= employeeLimit + 1 && (
-                                <span className="text-xs text-red-500 bg-red-50 px-2 py-0.5 rounded-full">{t('users.capacity.full')}</span>
+                                <span className="text-[10px] font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded-full border border-red-200 uppercase tracking-widest">{t('users.capacity.full')}</span>
                             )}
                         </div>
                     )}
                 </div>
                 <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
                     {isSuperAdmin && (
-                        <button
+                        <motion.button
+                            initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
                             onClick={() => setShowTenantModal(true)}
-                            className="flex items-center space-x-2 bg-[#065F46] text-white px-4 py-2 rounded-xl shadow-lg hover:shadow-xl transition-all"
+                            className="flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-full text-sm font-semibold transition-all shadow-sm hover:shadow-md active:scale-95"
                         >
-                            <Building2 size={20} />
+                            <Building2 size={16} />
                             <span>{t('users.actions.addTenant')}</span>
-                        </button>
+                        </motion.button>
                     )}
-                    <button
+                    <motion.button
+                        initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
                         onClick={() => setShowEmployeeModal(true)}
-                        className="flex items-center space-x-2 bg-[#065F46] text-white px-4 py-2 rounded-xl shadow-lg hover:shadow-xl transition-all"
+                        className="flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-full text-sm font-semibold transition-all shadow-sm hover:shadow-md active:scale-95"
                     >
-                        <Plus size={20} />
+                        <Plus size={16} />
                         <span>{t('users.actions.addEmployee')}</span>
-                    </button>
+                    </motion.button>
                 </div>
             </div>
 
-            <div className="rm-table-card">
-                <table className="rm-table min-w-[700px]">
-                    <colgroup>
-                        <col style={{ width: '35%' }} />{/* User */}
-                        {isSuperAdmin && <col style={{ width: '15%' }} />}{/* Company */}
-                        <col style={{ width: '18%' }} />{/* Role */}
-                        <col style={{ width: '15%' }} />{/* Status */}
-                        <col style={{ width: isSuperAdmin ? '17%' : '32%' }} />{/* Actions */}
-                    </colgroup>
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col p-6">
+                <div className="overflow-x-auto">
+                <table className="w-full min-w-[700px]">
                     <thead>
                         <tr>
-                            <th>{t('users.table.user')}</th>
+                            <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left">{t('users.table.user')}</th>
                             {isSuperAdmin && (
-                                <th>{t('users.table.company')}</th>
+                                <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left">{t('users.table.company')}</th>
                             )}
-                            <th>{t('users.table.role')}</th>
-                            <th>{t('users.table.status')}</th>
-                            <th className="rm-th-actions">{t('common.actions')}</th>
+                            <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left">{t('users.table.role')}</th>
+                            <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left">{t('users.table.status')}</th>
+                            <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-right">{t('common.actions')}</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {users.map((u) => (
-                            <tr key={u.id}>
-                                <td className="rm-cell-text">
+                        {users.map((u, idx) => (
+                            <motion.tr
+                                key={u.id}
+                                initial={{ opacity: 0, y: 6 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: idx * 0.05 }}
+                                className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors"
+                            >
+                                <td className="py-3.5 px-4">
                                     <div className="flex items-center">
-                                        <div className="h-10 w-10 rounded-full bg-[#065F46]/10 flex items-center justify-center text-[#065F46] font-bold">
+                                        <div className="w-10 h-10 rounded-full bg-purple-50 border border-purple-200 flex items-center justify-center text-purple-600 font-bold text-sm">
                                             {u.firstName?.[0] || u.email[0].toUpperCase()}
                                         </div>
                                         <div className="ms-4">
-                                            <div className="text-sm font-medium text-gray-900">{u.firstName} {u.lastName}</div>
-                                            <div className="text-sm text-gray-500">{u.email}</div>
+                                            <div className="text-sm font-semibold text-slate-900">{u.firstName} {u.lastName}</div>
+                                            <div className="text-xs text-slate-500">{u.email}</div>
                                         </div>
                                     </div>
                                 </td>
                                 {isSuperAdmin && (
-                                    <td className="rm-cell-text">
-                                        <span className="text-sm text-gray-700">{u.company || t('users.table.notAvailable')}</span>
+                                    <td className="py-3.5 px-4">
+                                        <span className="text-sm text-slate-700">{u.company || t('users.table.notAvailable')}</span>
                                     </td>
                                 )}
-                                <td className="rm-cell-text">
-                                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                        u.role === 'SuperAdmin' ? 'bg-red-50 text-red-600' :
-                                        u.role === 'Manager' || u.role === 'FreeUser' ? 'bg-[#065F46]/5 text-[#065F46]' :
-                                        'bg-blue-50 text-blue-600'
+                                <td className="py-3.5 px-4">
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest border ${
+                                        u.role === 'SuperAdmin' ? 'bg-red-50 text-red-600 border-red-200' :
+                                        u.role === 'Manager' || u.role === 'FreeUser' ? 'bg-purple-50 text-purple-600 border-purple-200' :
+                                        'bg-blue-50 text-blue-600 border-blue-200'
                                     }`}>
                                         {u.role || t('users.roles.Employee')}
                                     </span>
                                 </td>
-                                <td className="rm-cell-text">
-                                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-50 text-green-600">
+                                <td className="py-3.5 px-4">
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest border bg-emerald-50 text-emerald-600 border-emerald-200">
                                         {t('users.status.active')}
                                     </span>
                                 </td>
-                                <td className="rm-cell-actions">
+                                <td className="py-3.5 px-4">
                                     <div className="flex items-center justify-end space-x-2">
                                         {canResetPassword(u) && (
                                             <button
                                                 onClick={() => openResetPasswordModal(u)}
-                                                className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                                                className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-full transition-colors"
                                                 title={t('users.actions.resetPassword')}
                                             >
-                                                <KeyRound size={18} />
+                                                <KeyRound size={16} />
                                             </button>
                                         )}
                                         {canResetSettings(u) && (
                                             <button
                                                 onClick={() => handleResetSettings(u)}
                                                 disabled={actionLoading}
-                                                className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors disabled:opacity-50"
+                                                className="p-2 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-full transition-colors disabled:opacity-50"
                                                 title={t('users.actions.resetSettings')}
                                             >
-                                                <Settings size={18} />
+                                                <Settings size={16} />
                                             </button>
                                         )}
                                         {canDeleteUser(u) && (
                                             <button
                                                 onClick={() => handleDeleteUser(u)}
                                                 disabled={actionLoading}
-                                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors disabled:opacity-50"
                                                 title={t('users.actions.deleteUser')}
                                             >
-                                                <Trash2 size={18} />
+                                                <Trash2 size={16} />
                                             </button>
                                         )}
                                     </div>
                                 </td>
-                            </tr>
+                            </motion.tr>
                         ))}
                         {users.length === 0 && (
                             <tr>
-                                <td colSpan={isSuperAdmin ? 5 : 4} className="px-4 py-10 text-center text-gray-500">
+                                <td colSpan={isSuperAdmin ? 5 : 4} className="px-4 py-10 text-center text-slate-400">
                                     {t('users.messages.empty')}
                                 </td>
                             </tr>
                         )}
                     </tbody>
                 </table>
+                </div>
             </div>
 
             {/* Add Employee Modal */}
@@ -496,7 +499,7 @@ export default function UsersPage() {
                                 <button
                                     type="submit"
                                     disabled={actionLoading}
-                                    className="px-4 py-2 rounded-xl bg-[#065F46] text-white hover:bg-[#047857] shadow-md disabled:opacity-50"
+                                    className="px-4 py-2 rounded-xl bg-purple-600 text-white hover:bg-purple-700 shadow-md disabled:opacity-50"
                                 >
                                     {actionLoading ? t('users.actions.creating') : t('users.actions.createEmployee')}
                                 </button>
@@ -883,6 +886,6 @@ export default function UsersPage() {
                     </div>
                 </div>
             )}
-        </div>
+        </motion.div>
     );
 }

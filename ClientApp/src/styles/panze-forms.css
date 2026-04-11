@@ -1,0 +1,532 @@
+/* ==========================================================
+   PANZE DESIGN SYSTEM — Form Component Styles
+   Ported from Design/src/app/styles/panze-forms.css
+   
+   Scoped with "panze-form-" prefix to avoid RM conflicts.
+   DESIGN DIRECTION: laxi.ai / Linear / Stripe
+   ========================================================== */
+
+/* ── Form Card Container ── */
+.panze-form-card {
+  background: #ffffff;
+  border: 1px solid #E4E4E7;
+  border-radius: 16px;
+  padding: 24px 48px;
+  max-width: 800px;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s ease;
+}
+
+.panze-form-card:hover {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+}
+
+.panze-form-heading {
+  font-size: 20px;
+  font-weight: 700;
+  color: #09090B;
+  margin-bottom: 4px;
+  letter-spacing: -0.3px;
+}
+
+.panze-form-subtext {
+  font-size: 14px;
+  color: #52525B;
+  margin-bottom: 24px;
+}
+
+/* ── Form Layout ── */
+.panze-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.panze-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.panze-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ── Label ── */
+.panze-form-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #09090B;
+  letter-spacing: 0.1px;
+}
+
+/* ── Input ── */
+.panze-form-input {
+  width: 100%;
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: 1px solid #E4E4E7;
+  background: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  color: #09090B;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  outline: none;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.panze-form-input::placeholder {
+  color: #71717A;
+  font-weight: 400;
+}
+
+.panze-form-input:focus {
+  border-color: #7C3AED;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+/* ── Textarea ── */
+.panze-form-textarea {
+  width: 100%;
+  padding: 16px 24px;
+  border-radius: 12px;
+  border: 1px solid #E4E4E7;
+  background: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  color: #09090B;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  outline: none;
+  resize: vertical;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  min-height: 120px;
+}
+
+.panze-form-textarea::placeholder {
+  color: #71717A;
+  font-weight: 400;
+}
+
+.panze-form-textarea:focus {
+  border-color: #7C3AED;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+/* ── Pill Selectors ── */
+.panze-form-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.panze-form-pill {
+  padding: 8px 20px;
+  border-radius: 9999px;
+  border: 1px solid #E4E4E7;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  color: #52525B;
+  cursor: pointer;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  transition: all 0.15s ease;
+}
+
+.panze-form-pill:hover {
+  border-color: #7C3AED;
+  color: #7C3AED;
+}
+
+.panze-form-pill.active {
+  background: #7C3AED;
+  color: #ffffff;
+  border-color: #7C3AED;
+}
+
+/* ── Submit Button ── */
+.panze-form-submit {
+  align-self: flex-start;
+  padding: 10px 28px;
+  border-radius: 8px;
+  border: none;
+  background: #09090B;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  transition: all 0.2s;
+}
+
+.panze-form-submit:hover {
+  background: #7C3AED;
+  transform: translateY(-1px);
+}
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  .panze-form-card {
+    padding: 20px 18px;
+  }
+  .panze-form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================
+   EXTENDED FORM STYLES
+   ========================================================== */
+
+.panze-form-showcase {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.panze-form-section-header {
+  margin-bottom: 4px;
+}
+
+.panze-form-card--full {
+  max-width: 100%;
+}
+
+.panze-form-card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #09090B;
+  margin-bottom: 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #E4E4E7;
+  letter-spacing: -0.1px;
+}
+
+/* ── Input with icon wrapper ── */
+.panze-input-icon-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.panze-input-icon-wrap .panze-form-input {
+  padding-right: 44px;
+}
+
+.panze-input-icon-btn {
+  position: absolute;
+  right: 14px;
+  background: none;
+  border: none;
+  color: #71717A;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 0;
+  transition: color 0.2s;
+}
+
+.panze-input-icon-btn:hover {
+  color: #09090B;
+}
+
+/* Left icon variant */
+.panze-input-icon-left .panze-input-icon-static {
+  position: absolute;
+  left: 14px;
+  color: #71717A;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.panze-form-input--icon-left {
+  padding-left: 42px !important;
+}
+
+/* Disabled */
+.panze-form-input--disabled {
+  background: #FAFAFA;
+  color: #71717A;
+  border-color: #E4E4E7;
+  cursor: not-allowed;
+}
+
+/* ── Select / Dropdown ── */
+.panze-select-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.panze-form-select {
+  width: 100%;
+  padding: 10px 44px 10px 20px;
+  border-radius: 8px;
+  border: 1px solid #E4E4E7;
+  background: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  color: #09090B;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.panze-form-select:focus {
+  border-color: #7C3AED;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.panze-select-icon {
+  position: absolute;
+  right: 14px;
+  color: #52525B;
+  pointer-events: none;
+}
+
+/* ── Checkbox ── */
+.panze-form-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #09090B;
+  font-weight: 500;
+}
+
+.panze-form-checkbox {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 1px solid #E4E4E7;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.panze-form-checkbox.checked {
+  background: #7C3AED;
+  border-color: #7C3AED;
+}
+
+/* ── Radio ── */
+.panze-form-radio {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid #E4E4E7;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.panze-form-radio.checked {
+  border-color: #7C3AED;
+}
+
+.panze-form-radio-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #7C3AED;
+}
+
+/* ── Toggle Switch ── */
+.panze-form-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+}
+
+.panze-form-toggle {
+  width: 44px;
+  height: 24px;
+  border-radius: 9999px;
+  border: none;
+  background: #E4E4E7;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.25s ease;
+  padding: 0;
+}
+
+.panze-form-toggle.active {
+  background: #7C3AED;
+}
+
+.panze-form-toggle-knob {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.panze-form-toggle.active .panze-form-toggle-knob {
+  transform: translateX(20px);
+}
+
+/* ── Range Slider ── */
+.panze-form-range {
+  width: 100%;
+  height: 8px;
+  border-radius: 9999px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.panze-form-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #7C3AED;
+  border: 3px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+}
+
+.panze-form-range::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #7C3AED;
+  border: 3px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+}
+
+/* ── File Upload / Dropzone ── */
+.panze-form-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 32px 24px;
+  border: 1px dashed #A1A1AA;
+  border-radius: 12px;
+  background: #FAFAFA;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.panze-form-dropzone:hover,
+.panze-form-dropzone.active {
+  border-color: #7C3AED;
+  background: rgba(79, 70, 229, 0.02);
+}
+
+.panze-form-dropzone-text {
+  font-size: 14px;
+  color: #52525B;
+  font-weight: 500;
+}
+
+.panze-form-dropzone-link {
+  color: #7C3AED;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.panze-form-dropzone-hint {
+  font-size: 12px;
+  color: #71717A;
+}
+
+/* ── Button Variants ── */
+.panze-form-btn-secondary {
+  padding: 10px 28px;
+  border-radius: 8px;
+  border: none;
+  background: #7C3AED;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  transition: all 0.2s;
+}
+
+.panze-form-btn-secondary:hover {
+  background: #6D28D9;
+  transform: translateY(-1px);
+}
+
+.panze-form-btn-outline {
+  padding: 10px 28px;
+  border-radius: 8px;
+  border: 1px solid #E4E4E7;
+  background: transparent;
+  color: #09090B;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  transition: all 0.2s;
+}
+
+.panze-form-btn-outline:hover {
+  background: #FAFAFA;
+  border-color: #A1A1AA;
+}
+
+.panze-form-btn-ghost {
+  padding: 10px 28px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: #52525B;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  transition: all 0.15s;
+}
+
+.panze-form-btn-ghost:hover {
+  background: #FAFAFA;
+  color: #09090B;
+}
+
+.panze-form-btn-danger {
+  padding: 10px 28px;
+  border-radius: 8px;
+  border: none;
+  background: #EF4444;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  transition: all 0.2s;
+}
+
+.panze-form-btn-danger:hover {
+  background: #DC2626;
+  transform: translateY(-1px);
+}

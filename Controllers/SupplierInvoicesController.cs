@@ -17,19 +17,22 @@ namespace ResourceManager.Controllers
         private readonly ILogger<SupplierInvoicesController> _logger;
         private readonly ILocalPdfStorageService _pdfStorage;
         private readonly InventoryService _inventoryService;
+        private readonly IDbFileStorageService _dbFileStorage;
 
         public SupplierInvoicesController(
             AppDbContext context,
             UserManager<ApplicationUser> userManager,
             ILogger<SupplierInvoicesController> logger,
             ILocalPdfStorageService pdfStorage,
-            InventoryService inventoryService)
+            InventoryService inventoryService,
+            IDbFileStorageService dbFileStorage)
         {
             _context = context;
             _userManager = userManager;
             _logger = logger;
             _pdfStorage = pdfStorage;
             _inventoryService = inventoryService;
+            _dbFileStorage = dbFileStorage;
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -285,7 +288,17 @@ namespace ResourceManager.Controllers
         {
             var invoice = await _context.SupplierInvoices.FindAsync(id);
             if (invoice == null) return NotFound();
-            if (string.IsNullOrEmpty(invoice.FilePath)) return NotFound(new { message = "No file associated" });
+
+            // Primary: load from DB compressed blob
+            var dbFile = await _dbFileStorage.GetAsync(id);
+            if (dbFile.HasValue)
+            {
+                return File(dbFile.Value.Data, dbFile.Value.MimeType, invoice.FileName ?? "supplier-invoice.pdf");
+            }
+
+            // Fallback: serve from disk for invoices saved before the migration
+            if (string.IsNullOrEmpty(invoice.FilePath))
+                return NotFound(new { message = "No file associated" });
 
             string fullPath;
             if (invoice.FilePath.StartsWith("/"))
@@ -487,24 +500,24 @@ namespace ResourceManager.Controllers
             _context.SupplierInvoices.Add(invoice);
             await _context.SaveChangesAsync();
 
-            // Move temp file → organized storage
+            // Store file as GZip-compressed blob in the database
             try
             {
                 var fileBytes = await System.IO.File.ReadAllBytesAsync(tempFullPath);
-                var company = await _context.Companies.FindAsync(user.CompanyId);
-                var companyName = company?.Name ?? "Default";
-                var docDate = dto.InvoiceDate ?? DateTime.UtcNow;
-                var pdfInfo = await _pdfStorage.SaveSupplierPdfAsync(
-                    fileBytes, dto.FileName ?? $"supplier_{invoice.Id}",
-                    supplierName, companyName, docDate, invoice.Id);
-                invoice.FilePath = pdfInfo.RelativePath;
-                _logger.LogInformation("Supplier invoice stored: {Path}", pdfInfo.RelativePath);
-                System.IO.File.Delete(tempFullPath);
+                var mimeType = (dto.FileType ?? "application/pdf").ToLowerInvariant();
+                await _dbFileStorage.SaveAsync(invoice.Id, fileBytes, mimeType);
+                // No disk path needed — clear the temp path reference
+                invoice.FilePath = string.Empty;
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("Supplier invoice {Id} file stored compressed in DB", invoice.Id);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Organized storage failed, keeping temp path");
+                _logger.LogWarning(ex, "DB compressed storage failed for invoice {Id}, keeping temp path as fallback", invoice.Id);
             }
+
+            // Remove temp file now that data is in the database
+            try { System.IO.File.Delete(tempFullPath); } catch { /* best-effort */ }
 
             // Add line items
             if (dto.Items != null)
@@ -799,7 +812,10 @@ namespace ResourceManager.Controllers
                 }
                 else
                 {
-                    invIssues.Add("No file path recorded");
+                    // Check DB blob for new-style storage
+                    var hasDbBlob = await _dbFileStorage.ExistsAsync(inv.Id);
+                    if (!hasDbBlob)
+                        invIssues.Add("No file recorded (neither on disk nor in database)");
                 }
 
                 if (invIssues.Any())

@@ -614,7 +614,7 @@ export default function SuperAdminDashboard() {
             <div className="space-y-4">
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
                     <h3 className="text-lg font-semibold text-gray-800 mb-2 flex items-center gap-2">
-                        <Globe size={20} className="text-[#065F46]" /> Users by Country
+                        <Globe size={20} className="text-purple-600" /> Users by Country
                     </h3>
                     <p className="text-sm text-gray-500 mb-4">
                         Based on {totalLogins.toLocaleString()} login records (IP geolocation)
@@ -637,7 +637,7 @@ export default function SuperAdminDashboard() {
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <span className="bg-[#065F46] text-white text-xs font-bold px-2.5 py-1 rounded-full">
+                                        <span className="bg-purple-600 text-white text-xs font-bold px-2.5 py-1 rounded-full">
                                             {c.count}
                                         </span>
                                         <div className="text-[10px] text-gray-400 mt-0.5">{c.percentage.toFixed(1)}%</div>
@@ -807,7 +807,7 @@ export default function SuperAdminDashboard() {
                 {globalCurrencyMap.size > 0 && (
                     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
                         <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                            <BarChart3 size={20} className="text-[#065F46]" />
+                            <BarChart3 size={20} className="text-purple-600" />
                             {t('dashboard.globalSummary', 'Global Financial Summary')}
                         </h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -848,7 +848,7 @@ export default function SuperAdminDashboard() {
                 {/* Per-Company Breakdown */}
                 <div>
                     <h2 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                        <Briefcase size={20} className="text-[#065F46]" />
+                        <Briefcase size={20} className="text-purple-600" />
                         {t('dashboard.companyBreakdown', 'Per-Company Breakdown')}
                     </h2>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -947,7 +947,7 @@ export default function SuperAdminDashboard() {
                 <AlertTriangle size={48} className="text-red-400 mb-4" />
                 <p className="text-red-600 font-medium">{error}</p>
                 <button onClick={manualRefresh}
-                    className="mt-4 px-4 py-2 bg-[#065F46] text-white rounded-xl hover:bg-[#047857]">
+                    className="mt-4 px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-700">
                     Retry
                 </button>
             </div>
@@ -992,7 +992,7 @@ export default function SuperAdminDashboard() {
                                 key={tab.key}
                                 onClick={() => setActiveTab(tab.key)}
                                 className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${isActive
-                                    ? 'border-[#065F46] text-[#065F46]'
+                                    ? 'border-purple-600 text-purple-600'
                                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                                     }`}
                             >

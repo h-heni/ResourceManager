@@ -231,7 +231,7 @@ export default function SubscriptionManagementPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                        <Shield size={24} className="text-[#065F46]" />
+                        <Shield size={24} className="text-purple-600" />
                         {t('subscription.title', 'Subscription Management')}
                     </h1>
                     <p className="text-sm text-gray-500 mt-1">
@@ -241,7 +241,7 @@ export default function SubscriptionManagementPage() {
                 <button
                     onClick={fetchCompanies}
                     disabled={loading}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#065F46] text-white hover:bg-[#047857] disabled:opacity-50 transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 transition-colors"
                 >
                     <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
                     {t('common.refresh', 'Refresh')}
@@ -285,7 +285,7 @@ export default function SubscriptionManagementPage() {
                         placeholder={t('subscription.search', 'Search by name, email, or ID...')}
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
-                        className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none text-sm"
+                        className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-sm"
                     />
                 </div>
                 <div className="flex items-center gap-2">
@@ -296,7 +296,7 @@ export default function SubscriptionManagementPage() {
                             onClick={() => setStatusFilter(s)}
                             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                                 statusFilter === s
-                                    ? 'bg-[#065F46] text-white'
+                                    ? 'bg-purple-600 text-white'
                                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                             }`}
                         >
@@ -318,7 +318,7 @@ export default function SubscriptionManagementPage() {
             {/* Table */}
             {loading ? (
                 <div className="flex items-center justify-center py-16">
-                    <Loader2 className="animate-spin h-8 w-8 text-[#065F46]" />
+                    <Loader2 className="animate-spin h-8 w-8 text-purple-600" />
                 </div>
             ) : (
                 <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -481,7 +481,7 @@ export default function SubscriptionManagementPage() {
                         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
                             <div>
                                 <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                                    <Building2 size={20} className="text-[#065F46]" />
+                                    <Building2 size={20} className="text-purple-600" />
                                     {editingCompany.name}
                                 </h3>
                                 <p className="text-xs text-gray-400 mt-0.5">ID: {editingCompany.id}</p>
@@ -500,7 +500,7 @@ export default function SubscriptionManagementPage() {
                                     {t('subscription.field.status', 'Account Status')}
                                 </label>
                                 <select
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none bg-white"
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none bg-white"
                                     value={editForm.accountStatus}
                                     onChange={e => setEditForm({ ...editForm, accountStatus: e.target.value })}
                                 >
@@ -518,7 +518,7 @@ export default function SubscriptionManagementPage() {
                                 </label>
                                 <input
                                     type="date"
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
                                     value={editForm.expiryDate}
                                     onChange={e => setEditForm({ ...editForm, expiryDate: e.target.value })}
                                 />
@@ -558,7 +558,7 @@ export default function SubscriptionManagementPage() {
                                     <input
                                         type="number"
                                         min={0}
-                                        className="w-24 text-center px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                                        className="w-24 text-center px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
                                         value={editForm.employeeLimit}
                                         onChange={e => setEditForm({ ...editForm, employeeLimit: Math.max(0, parseInt(e.target.value) || 0) })}
                                     />
@@ -613,7 +613,7 @@ export default function SubscriptionManagementPage() {
                             <button
                                 onClick={handleSaveEdit}
                                 disabled={saving}
-                                className="px-5 py-2 rounded-xl bg-[#065F46] text-white hover:bg-[#047857] disabled:opacity-50 text-sm font-medium flex items-center gap-2 transition-colors"
+                                className="px-5 py-2 rounded-xl bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 text-sm font-medium flex items-center gap-2 transition-colors"
                             >
                                 {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
                                 {t('common.save', 'Save')}

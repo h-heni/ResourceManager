@@ -232,8 +232,8 @@ export default function SetupAccountPage() {
 
                 <form onSubmit={handleSubmit} className="space-y-6">
                     {/* Language Selection — FIRST STEP */}
-                    <div className="p-5 bg-indigo-50 rounded-xl border border-indigo-200">
-                        <h3 className="font-semibold text-indigo-800 mb-3 flex items-center gap-2">
+                    <div className="p-5 bg-purple-50 rounded-xl border border-purple-200">
+                        <h3 className="font-semibold text-purple-800 mb-3 flex items-center gap-2">
                             <Globe size={18} />
                             {t('invitation.languageSection', 'Choose Your Language')}
                         </h3>
@@ -241,7 +241,7 @@ export default function SetupAccountPage() {
                             {t('invitation.languageSectionDesc', 'Select your preferred language. The entire form and application will switch immediately.')}
                         </p>
                         <select
-                            className="w-full px-4 py-3 border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white text-base"
+                            className="w-full px-4 py-3 border border-purple-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none bg-white text-base"
                             value={form.defaultLanguage}
                             onChange={handleLanguageChange}
                         >
@@ -253,8 +253,8 @@ export default function SetupAccountPage() {
                     </div>
 
                     {/* Profile Section */}
-                    <div className="p-5 bg-[#065F46]/5 rounded-xl border border-[#065F46]/20">
-                        <h3 className="font-semibold text-[#065F46] mb-4 flex items-center gap-2">
+                    <div className="p-5 bg-purple-600/5 rounded-xl border border-purple-600/20">
+                        <h3 className="font-semibold text-purple-600 mb-4 flex items-center gap-2">
                             <User size={18} />
                             {t('invitation.profileSection', 'Profile Information')}
                         </h3>
@@ -265,7 +265,7 @@ export default function SetupAccountPage() {
                                 </label>
                                 <input
                                     type="text"
-                                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
                                     value={form.firstName}
                                     onChange={handleChange('firstName')}
                                     required
@@ -277,7 +277,7 @@ export default function SetupAccountPage() {
                                 </label>
                                 <input
                                     type="text"
-                                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
                                     value={form.lastName}
                                     onChange={handleChange('lastName')}
                                     required
@@ -289,7 +289,7 @@ export default function SetupAccountPage() {
                                 </label>
                                 <input
                                     type="tel"
-                                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
                                     value={form.phone}
                                     onChange={handleChange('phone')}
                                 />
@@ -303,7 +303,7 @@ export default function SetupAccountPage() {
                                 </label>
                                 <input
                                     type="password"
-                                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
                                     value={form.password}
                                     onChange={handleChange('password')}
                                     required
@@ -317,7 +317,7 @@ export default function SetupAccountPage() {
                                 </label>
                                 <input
                                     type="password"
-                                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                                    className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
                                     value={form.confirmPassword}
                                     onChange={handleChange('confirmPassword')}
                                     required
@@ -387,7 +387,7 @@ export default function SetupAccountPage() {
                     <button
                         type="submit"
                         disabled={submitting}
-                        className="w-full py-3 px-6 rounded-xl bg-[#065F46] text-white font-semibold hover:bg-[#047857] shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 transition-all"
+                        className="w-full py-3 px-6 rounded-xl bg-purple-600 text-white font-semibold hover:bg-purple-700 shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 transition-all"
                     >
                         {submitting ? (
                             <>

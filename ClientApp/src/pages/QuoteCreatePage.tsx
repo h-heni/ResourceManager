@@ -471,7 +471,7 @@ export default function QuoteCreatePage() {
                 <button
                     onClick={handleSubmit}
                     disabled={loading || loadingQuote}
-                    className="w-full sm:w-auto flex items-center justify-center px-6 py-3 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full sm:w-auto flex items-center justify-center px-6 py-3 bg-purple-600 text-white rounded-xl shadow-lg hover:bg-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <Save size={20} className="mr-2" />
                     {loading ? t('common.saving') : isEditMode ? t('common.save') : t('invoice.save')}
@@ -498,7 +498,7 @@ export default function QuoteCreatePage() {
                 )}
 
                 {/* Currency & Language Selection */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-[#065F46]/5 border border-[#065F46]/10 rounded-xl">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-purple-600/5 border border-purple-600/10 rounded-xl">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">{t('createPage.documentCurrency')}</label>
                         <select
@@ -507,7 +507,7 @@ export default function QuoteCreatePage() {
                                 setPdfCurrency(e.target.value);
                                 setPdfCurrencySymbol(getCurrencySymbol(e.target.value));
                             }}
-                            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none transition-all"
+                            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none transition-all"
                         >
                             {CURRENCY_OPTIONS.map(opt => (
                                 <option key={opt.code} value={opt.code}>{opt.label}</option>
@@ -520,7 +520,7 @@ export default function QuoteCreatePage() {
                         <select
                             value={pdfLanguage}
                             onChange={e => setPdfLanguage(e.target.value)}
-                            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none transition-all"
+                            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none transition-all"
                         >
                             <option value="fr">{t('language.fr')}</option>
                             <option value="en">{t('language.en')}</option>
@@ -540,11 +540,11 @@ export default function QuoteCreatePage() {
                             type="text"
                             value={quoteNumber}
                             onChange={e => setQuoteNumber(e.target.value)}
-                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                            className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
                         />
                         {(lastQuoteNumber || suggestedQuoteNumber) && (
                             <p className="text-xs text-gray-500 mt-1">
-                                {lastQuoteNumber && <span>{t('createPage.lastInvoice')} <span className="font-medium text-[#065F46]">{lastQuoteNumber}</span></span>}
+                                {lastQuoteNumber && <span>{t('createPage.lastInvoice')} <span className="font-medium text-purple-600">{lastQuoteNumber}</span></span>}
                                 {suggestedQuoteNumber && (
                                     <span> — {t('createPage.suggested')} <span className="font-medium text-green-600">{suggestedQuoteNumber}</span></span>
                                 )}
@@ -559,7 +559,7 @@ export default function QuoteCreatePage() {
                             value={clientId}
                             onChange={e => setClientId(e.target.value)}
                             onBlur={() => handleBlur('clientId')}
-                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none ${errors.clientId && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-purple-500 outline-none ${errors.clientId && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
                                 }`}
                         >
                             <option value="">{t('createPage.selectClient')}</option>
@@ -580,7 +580,7 @@ export default function QuoteCreatePage() {
                             value={date}
                             onChange={e => setDate(e.target.value)}
                             onBlur={() => handleBlur('date')}
-                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none ${errors.date && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                            className={`w-full px-4 py-3 bg-gray-50 border rounded-xl focus:ring-2 focus:ring-purple-500 outline-none ${errors.date && submitted ? 'border-red-500 bg-red-50' : 'border-gray-200'
                                 }`}
                         />
                         {errors.date && submitted && (
@@ -591,7 +591,7 @@ export default function QuoteCreatePage() {
 
                 <div className="border-t border-gray-100 pt-6">
                     <h3 className="text-lg font-bold text-gray-900 flex items-center mb-4">
-                        <FileText className="mr-2 text-[#065F46]" size={20} />
+                        <FileText className="mr-2 text-purple-600" size={20} />
                         Quote Items <span className="text-red-500 ml-1">*</span>
                     </h3>
 
@@ -617,7 +617,7 @@ export default function QuoteCreatePage() {
                                             searchProducts(e.target.value, index);
                                         }}
                                         onBlur={() => { handleBlur('items'); dismissSuggestions(); }}
-                                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-[#065F46] outline-none ${item.description.trim() === '' && touched.items ? 'border-amber-400' : 'border-gray-200'
+                                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 outline-none ${item.description.trim() === '' && touched.items ? 'border-amber-400' : 'border-gray-200'
                                             }`}
                                         placeholder={t('quote.descriptionPlaceholder', 'Type to search products...')}
                                         autoComplete="off"
@@ -630,7 +630,7 @@ export default function QuoteCreatePage() {
                                                     key={product.id}
                                                     type="button"
                                                     onMouseDown={() => selectProduct(product, index)}
-                                                    className="w-full px-3 py-2 text-left hover:bg-[#065F46]/5 flex justify-between items-center text-sm border-b border-gray-50 last:border-0"
+                                                    className="w-full px-3 py-2 text-left hover:bg-purple-600/5 flex justify-between items-center text-sm border-b border-gray-50 last:border-0"
                                                 >
                                                     <div>
                                                         <span className="font-medium text-gray-900">{product.name}</span>
@@ -639,7 +639,7 @@ export default function QuoteCreatePage() {
                                                         )}
                                                     </div>
                                                     <div className="text-right ml-2">
-                                                        <span className="text-[#065F46] font-medium text-xs whitespace-nowrap">
+                                                        <span className="text-purple-600 font-medium text-xs whitespace-nowrap">
                                                             {product.defaultUnitPrice.toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}
                                                         </span>
                                                         {product.isStockTracked && (
@@ -682,7 +682,7 @@ export default function QuoteCreatePage() {
                                         min="1"
                                         value={item.quantity}
                                         onChange={e => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
-                                        className={`w-full px-3 py-2 border rounded-lg text-right focus:ring-2 focus:ring-[#065F46] outline-none ${item.quantity <= 0 && item.description.trim() ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                                        className={`w-full px-3 py-2 border rounded-lg text-right focus:ring-2 focus:ring-purple-500 outline-none ${item.quantity <= 0 && item.description.trim() ? 'border-red-500 bg-red-50' : 'border-gray-200'
                                             }`}
                                     />
                                     {item.isStockTracked && item.quantity > (item.currentStock ?? 0) && (
@@ -699,7 +699,7 @@ export default function QuoteCreatePage() {
                                         step="0.001"
                                         value={item.price}
                                         onChange={e => updateItem(index, 'price', parseFloat(e.target.value) || 0)}
-                                        className={`w-full px-3 py-2 border rounded-lg text-right focus:ring-2 focus:ring-[#065F46] outline-none ${item.price < 0 && item.description.trim() ? 'border-red-500 bg-red-50' : 'border-gray-200'
+                                        className={`w-full px-3 py-2 border rounded-lg text-right focus:ring-2 focus:ring-purple-500 outline-none ${item.price < 0 && item.description.trim() ? 'border-red-500 bg-red-50' : 'border-gray-200'
                                             }`}
                                     />
                                 </div>
@@ -714,7 +714,7 @@ export default function QuoteCreatePage() {
                                             newItems[index].vatRate = rate;
                                             setItems(newItems);
                                         }}
-                                        className="w-full px-2 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-[#065F46] outline-none bg-white"
+                                        className="w-full px-2 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white"
                                     >
                                         {taxSettings.availableVatRates.map(rate => (
                                             <option key={rate} value={rate}>
@@ -732,7 +732,7 @@ export default function QuoteCreatePage() {
                         ))}
                     </div>
 
-                    <button onClick={addItem} className="mt-4 flex items-center text-sm font-semibold text-[#065F46]">
+                    <button onClick={addItem} className="mt-4 flex items-center text-sm font-semibold text-purple-600">
                         <Plus size={18} className="mr-1" /> {t('invoice.addItem')}
                     </button>
                 </div>
@@ -749,7 +749,7 @@ export default function QuoteCreatePage() {
                         </div>
                         <div className="border-t border-gray-200 pt-3 flex justify-between text-xl font-bold text-gray-900">
                             <span>{t('invoice.total')}:</span>
-                            <span className="text-[#065F46]">{calculateTotal().toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}</span>
+                            <span className="text-purple-600">{calculateTotal().toFixed(3)} {pdfCurrencySymbol || DEFAULT_CURRENCY}</span>
                         </div>
                     </div>
                 </div>

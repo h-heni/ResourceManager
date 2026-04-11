@@ -1,0 +1,51 @@
+# dependencies
+/node_modules
+/.expo/
+/dist/
+/npm-debug.log
+/yarn-error.log
+yarn-debug.log
+yarn-error.log
+
+# testing
+/coverage
+
+# production
+/build
+/.env.local
+/.env.production
+
+# misc
+.DS_Store
+*.pem
+*.suo
+*.user
+*.sln.docstates
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Watchman
+.watchmanconfig
+
+# expo
+.expo-shared
+*.orig.*
+web-build/
+
+# Temporary files
+*.tmp
+*.temp

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 import {
     Upload, FileText, Loader2, CheckCircle, AlertTriangle, Trash2,
@@ -585,82 +586,83 @@ export default function SupplierInvoicesPage() {
 
     if (view === 'list') {
         return (
-            <div className="space-y-6">
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="w-full flex flex-col gap-6">
                 <NotifyBanner />
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold text-gray-900">{t('supplierInvoice.title', 'Supplier Invoices')}</h1>
-                        <p className="text-gray-500 mt-1">{t('supplierInvoice.subtitle', 'Upload PDFs or photos, extract data via OCR, and manage supplier invoices')}</p>
+                        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">{t('supplierInvoice.title', 'Supplier Invoices')}</h1>
+                        <p className="text-sm text-slate-500 mt-1">{t('supplierInvoice.subtitle', 'Upload PDFs or photos, extract data via OCR, and manage supplier invoices')}</p>
                     </div>
                     <div className="flex items-center gap-3">
-                        <button
+                        <motion.button
+                            initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
                             onClick={runConsistencyCheck}
-                            className="flex items-center px-4 py-2 bg-emerald-600 text-white rounded-xl shadow-md hover:bg-emerald-700 transition-all transform hover:scale-105"
+                            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-full text-sm font-semibold transition-all shadow-sm hover:shadow-md hover:bg-emerald-700 active:scale-95"
                         >
-                            <ShieldCheck size={18} className="me-2" />
+                            <ShieldCheck size={16} />
                             {t('supplierInvoice.consistencyCheck', 'Check')}
-                        </button>
-                        <button
+                        </motion.button>
+                        <motion.button
+                            initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
                             onClick={() => { resetReviewState(); setView('upload'); }}
-                            className="flex items-center px-4 py-2 bg-[#065F46] text-white rounded-xl shadow-lg hover:bg-[#047857] transition-all transform hover:scale-105"
+                            className="flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-full text-sm font-semibold transition-all shadow-sm hover:shadow-md active:scale-95"
                         >
-                            <Upload size={20} className="me-2" />
+                            <Upload size={16} />
                             {t('supplierInvoice.upload', 'Upload Invoice')}
-                        </button>
+                        </motion.button>
                     </div>
                 </div>
 
                 <div className="relative">
-                    <Search className="absolute start-4 top-3.5 h-5 w-5 text-gray-400" />
+                    <Search className="absolute start-4 top-3.5 h-4 w-4 text-slate-400" />
                     <input
                         type="text"
                         placeholder={t('supplierInvoice.searchPlaceholder', 'Search by file name, invoice number, or supplier...')}
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        className="w-full ps-12 pe-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent outline-none transition-all"
+                        className="w-full ps-11 pe-4 py-3 bg-white border border-slate-200 rounded-full focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 outline-none transition-all text-sm"
                     />
                 </div>
 
-                {/* Active / Archived Toggle Identical to InvoicesPage */}
+                {/* Active / Archived Toggle */}
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                    <div className="flex p-1 bg-gray-100 rounded-xl">
+                    <div className="flex p-1 bg-slate-100 rounded-full">
                         <button
                             onClick={() => { setViewMode('active'); setActivePage(1); }}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                            className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
                                 viewMode === 'active'
-                                    ? 'bg-white shadow-sm text-[#065F46]'
-                                    : 'text-gray-500 hover:text-gray-700'
+                                    ? 'bg-white shadow-sm text-purple-600'
+                                    : 'text-slate-500 hover:text-slate-700'
                             }`}
                         >
-                            <Filter size={16} />
+                            <Filter size={14} />
                             {t('supplierInvoice.activeInvoices', 'Active')} ({activeTotalCount})
                         </button>
                         {isManager && (
                             <button
                                 onClick={() => { setViewMode('archived'); setArchivedPage(1); }}
-                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                                className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
                                     viewMode === 'archived'
                                         ? 'bg-white shadow-sm text-emerald-600'
-                                        : 'text-gray-500 hover:text-gray-700'
+                                        : 'text-slate-500 hover:text-slate-700'
                                 }`}
                             >
-                                <Archive size={16} />
+                                <Archive size={14} />
                                 {t('quote.archived', 'Archived')} ({archivedTotalCount})
                             </button>
                         )}
                     </div>
 
-                    {/* Year filter dropdown */}
                     {viewMode === 'archived' && availableYears.length > 0 && (
                         <div className="flex items-center gap-2">
-                            <label htmlFor="year-select" className="text-sm font-medium text-gray-600">
+                            <label htmlFor="year-select" className="text-sm font-medium text-slate-600">
                                 {t('common.year', 'Year')}:
                             </label>
                             <select
                                 id="year-select"
                                 value={selectedYear || ''}
                                 onChange={(e) => { setArchivedPage(1); setSelectedYear(parseInt(e.target.value)); }}
-                                className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
+                                className="px-3 py-2 bg-white border border-slate-200 rounded-full text-sm focus:ring-4 focus:ring-purple-500/10 focus:border-purple-500 outline-none"
                             >
                                 {availableYears.map(year => (
                                     <option key={year} value={year}>{year}</option>
@@ -670,65 +672,62 @@ export default function SupplierInvoicesPage() {
                     )}
                 </div>
 
-                {/* Table View exactly mirroring InvoicesPage.tsx */}
+                {/* Table */}
                 {currentLoading ? (
-                    <div className="text-center py-20 text-gray-500">
+                    <div className="text-center py-20 text-slate-500">
                         <Loader2 className="animate-spin mx-auto mb-3" size={32} />
                         {t('common.loadingData', 'Loading...')}
                     </div>
                 ) : (
-                    <div className="rm-table-card">
-                        <table className="rm-table min-w-[850px]">
-                            <colgroup>
-                                <col style={{ width: '12%' }} />
-                                <col style={{ width: '15%' }} />
-                                <col style={{ width: '11%' }} />
-                                <col style={{ width: '13%' }} />
-                                <col style={{ width: '13%' }} />
-                                <col style={{ width: '13%' }} />
-                                <col style={{ width: '12%' }} />
-                                <col style={{ width: '11%' }} />
-                            </colgroup>
+                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col p-6">
+                        <div className="overflow-x-auto">
+                        <table className="w-full min-w-[850px]">
                             <thead>
                                 <tr>
                                     <th
-                                        className="rm-th-id cursor-pointer select-none"
+                                        className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left cursor-pointer select-none"
                                         onClick={() => setInvoiceNumberSort(prev => prev === 'asc' ? 'desc' : 'asc')}
                                     >
                                         {t('supplierInvoice.invoiceNumber', 'Invoice #')} {invoiceNumberSort === 'asc' ? '↑' : '↓'}
                                     </th>
-                                    <th>{t('supplierInvoice.supplier', 'Supplier')}</th>
-                                    <th className="rm-th-date">{t('invoice.date', 'Date')}</th>
-                                    <th className="rm-th-number">{t('invoice.total', 'Total TTC')}</th>
-                                    <th className="rm-th-number">{t('invoice.amountPaid', 'Paid')}</th>
-                                    <th className="rm-th-number">{t('invoice.remaining', 'Remaining')}</th>
-                                    <th className="rm-th-status text-center">{t('common.status', 'Status')}</th>
-                                    <th className="rm-th-actions">{t('common.actions', 'Actions')}</th>
+                                    <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left">{t('supplierInvoice.supplier', 'Supplier')}</th>
+                                    <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left">{t('invoice.date', 'Date')}</th>
+                                    <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-right">{t('invoice.total', 'Total TTC')}</th>
+                                    <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-right">{t('invoice.amountPaid', 'Paid')}</th>
+                                    <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-right">{t('invoice.remaining', 'Remaining')}</th>
+                                    <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-center">{t('common.status', 'Status')}</th>
+                                    <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-right">{t('common.actions', 'Actions')}</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {sortedInvoices.map((inv) => (
-                                    <tr key={inv.id} className="group">
-                                        <td className="rm-cell-text font-semibold text-[#065F46] whitespace-nowrap">
-                                            <span className="inline-block" title={inv.fileName}>
+                                {sortedInvoices.map((inv, idx) => (
+                                    <motion.tr
+                                        key={inv.id}
+                                        initial={{ opacity: 0, y: 6 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: idx * 0.05 }}
+                                        className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors"
+                                    >
+                                        <td className="py-3.5 px-4">
+                                            <span className="font-semibold text-purple-600 whitespace-nowrap">
                                                 #{inv.invoiceNumber || t('common.unknown', 'Unknown')}
                                             </span>
-                                            {inv.fileName && <div className="text-xs text-gray-400 font-normal truncate max-w-[120px]">{inv.fileName}</div>}
+                                            {inv.fileName && <div className="text-xs text-slate-400 font-normal truncate max-w-[120px]">{inv.fileName}</div>}
                                         </td>
-                                        <td className="rm-cell-text">
-                                            <span title={inv.supplierName || undefined}>
+                                        <td className="py-3.5 px-4">
+                                            <span className="text-sm text-slate-700" title={inv.supplierName || undefined}>
                                                 {inv.supplierName || '—'}
                                             </span>
                                         </td>
-                                        <td className="rm-cell-date">
+                                        <td className="py-3.5 px-4 text-sm text-slate-600">
                                             {inv.invoiceDate ? new Date(inv.invoiceDate).toLocaleDateString() : '—'}
                                         </td>
-                                        <td className="rm-cell-currency">
+                                        <td className="py-3.5 px-4 text-right text-sm font-semibold text-slate-900">
                                             {formatCurrency(inv.totalTTC || 0, inv.currencySymbol || DEFAULT_CURRENCY)}
                                         </td>
-                                        <td className="rm-cell-currency">
+                                        <td className="py-3.5 px-4 text-right">
                                             <div className="flex flex-col items-end">
-                                                <span className="text-emerald-600 font-medium">
+                                                <span className="text-sm text-emerald-600 font-medium">
                                                     {formatCurrency(inv.amountPaid, inv.currencySymbol || DEFAULT_CURRENCY)}
                                                 </span>
                                                 {(inv.pendingAmount || 0) > 0 && (
@@ -739,25 +738,25 @@ export default function SupplierInvoicesPage() {
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="rm-cell-currency text-amber-600">
+                                        <td className="py-3.5 px-4 text-right text-sm text-amber-600">
                                             {inv.remainingAmount > 0 ? formatCurrency(inv.remainingAmount, inv.currencySymbol || DEFAULT_CURRENCY) : '—'}
                                         </td>
-                                        <td className="rm-cell-status text-center">
-                                            <span className={`px-3 py-1 text-xs font-semibold rounded-full inline-block ${getInvoiceStatusColor(inv.paymentStatus)}`}>
+                                        <td className="py-3.5 px-4 text-center">
+                                            <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest border ${getInvoiceStatusColor(inv.paymentStatus)}`}>
                                                 {t(`supplierInvoice.paymentStatus.${inv.paymentStatus}`, inv.paymentStatus)}
                                             </span>
                                             {inv.paymentCount > 0 && (!inv.payments || inv.payments.length === 0) && (
-                                                <div className="mt-1 text-[10px] text-gray-400 cursor-pointer hover:underline" >
+                                                <div className="mt-1 text-[10px] text-slate-400 cursor-pointer hover:underline">
                                                     {inv.paymentCount} {t('supplierInvoice.payments', 'payment(s)')}
                                                 </div>
                                             )}
                                         </td>
-                                        <td className="rm-cell-actions">
+                                        <td className="py-3.5 px-4">
                                             <div className="flex items-center justify-end gap-0.5">
                                                 {inv.paymentStatus !== 'Paid' && (
                                                     <button
                                                         onClick={() => openPaymentModal(inv)}
-                                                        className="p-1 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                                        className="p-2 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-full transition-colors"
                                                         title={t('supplierInvoice.addPayment', 'Add Payment')}
                                                     >
                                                         <DollarSign size={15} />
@@ -765,7 +764,7 @@ export default function SupplierInvoicesPage() {
                                                 )}
                                                 <button
                                                     onClick={() => handleViewDetail(inv.id)}
-                                                    className="p-1 text-gray-400 hover:text-[#065F46] hover:bg-[#065F46]/5 rounded-lg transition-colors"
+                                                    className="p-2 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-full transition-colors"
                                                     title={t('common.viewDetails', 'View Details')}
                                                 >
                                                     <Eye size={15} />
@@ -773,7 +772,7 @@ export default function SupplierInvoicesPage() {
                                                 {(inv.paymentStatus === 'Pending' || inv.paymentStatus === 'Unpaid') && (
                                                     <button
                                                         onClick={() => handleViewInvoice(inv.id)}
-                                                        className="p-1 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                                                        className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-full transition-colors"
                                                         title={t('common.edit', 'Edit')}
                                                     >
                                                         <Edit2 size={15} />
@@ -782,7 +781,7 @@ export default function SupplierInvoicesPage() {
                                                 {isManager && (
                                                     <button
                                                         onClick={() => handleDelete(inv.id)}
-                                                        className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
                                                         title={t('common.delete', 'Delete')}
                                                     >
                                                         <Trash2 size={15} />
@@ -790,17 +789,17 @@ export default function SupplierInvoicesPage() {
                                                 )}
                                             </div>
                                         </td>
-                                    </tr>
+                                    </motion.tr>
                                 ))}
                                 {sortedInvoices.length === 0 && (
                                     <tr>
-                                        <td colSpan={8} className="px-4 py-12 text-center text-gray-500">
+                                        <td colSpan={8} className="px-4 py-12 text-center text-slate-400">
                                             {t('supplierInvoice.noInvoices', 'No supplier invoices found.')}
                                         </td>
                                     </tr>
                                 )}
                             </tbody>
-                            <tfoot className="bg-gray-50 border-t-2 border-gray-200">
+                            <tfoot className="bg-slate-50/50 border-t-2 border-slate-200">
                                 {(() => {
                                     const byCurrency: Record<string, { totalTTC: number; paid: number; remaining: number }> = {};
                                     currentList.forEach(inv => {
@@ -814,16 +813,16 @@ export default function SupplierInvoicesPage() {
                                     if (currencies.length === 0) return null;
                                     return currencies.map(cur => (
                                         <tr key={cur}>
-                                            <td colSpan={3} className="rm-cell-number font-semibold">
+                                            <td colSpan={3} className="py-3.5 px-4 font-semibold text-sm text-slate-700">
                                                 {currencies.length > 1 ? `${t('common.total', 'Total')} (${cur})` : t('common.total', 'Total')}
                                             </td>
-                                            <td className="rm-cell-currency font-bold">
+                                            <td className="py-3.5 px-4 text-right font-bold text-sm text-slate-900">
                                                 {formatCurrency(byCurrency[cur].totalTTC, cur)}
                                             </td>
-                                            <td className="rm-cell-currency font-semibold text-emerald-600">
+                                            <td className="py-3.5 px-4 text-right font-semibold text-sm text-emerald-600">
                                                 {formatCurrency(byCurrency[cur].paid, cur)}
                                             </td>
-                                            <td className="rm-cell-currency font-semibold text-amber-600">
+                                            <td className="py-3.5 px-4 text-right font-semibold text-sm text-amber-600">
                                                 {formatCurrency(byCurrency[cur].remaining, cur)}
                                             </td>
                                             <td className="px-4 py-3"></td>
@@ -833,6 +832,7 @@ export default function SupplierInvoicesPage() {
                                 })()}
                             </tfoot>
                         </table>
+                        </div>
                         
                         {!search && (
                             <Pagination
@@ -882,7 +882,7 @@ export default function SupplierInvoicesPage() {
                                         type="button"
                                         onClick={() => setIsScheduledPayment(false)}
                                         className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg transition-all ${
-                                            !isScheduledPayment ? 'bg-white shadow-sm text-[#065F46] font-medium' : 'text-gray-600 hover:text-gray-800'
+                                            !isScheduledPayment ? 'bg-white shadow-sm text-purple-600 font-medium' : 'text-gray-600 hover:text-gray-800'
                                         }`}
                                     >
                                         <DollarSign size={16} />
@@ -892,7 +892,7 @@ export default function SupplierInvoicesPage() {
                                         type="button"
                                         onClick={() => setIsScheduledPayment(true)}
                                         className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg transition-all ${
-                                            isScheduledPayment ? 'bg-white shadow-sm text-[#065F46] font-medium' : 'text-gray-600 hover:text-gray-800'
+                                            isScheduledPayment ? 'bg-white shadow-sm text-purple-600 font-medium' : 'text-gray-600 hover:text-gray-800'
                                         }`}
                                     >
                                         <Clock size={16} />
@@ -922,14 +922,14 @@ export default function SupplierInvoicesPage() {
                                     <input
                                         type="number" step="0.001" min="0" max={selectedInvoice.remainingAmount}
                                         value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)}
-                                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
                                     />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">{t('invoice.notes', 'Notes')} ({t('common.optional', 'optional')})</label>
                                     <input
                                         type="text" value={paymentNotes} onChange={(e) => setPaymentNotes(e.target.value)}
-                                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
                                     />
                                 </div>
                             </div>
@@ -961,7 +961,7 @@ export default function SupplierInvoicesPage() {
                         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
                             <div className="p-6 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl z-10">
                                 <h3 className="text-lg font-bold flex items-center gap-2">
-                                    <FileText size={20} className="text-[#065F46]" />
+                                    <FileText size={20} className="text-purple-600" />
                                     {t('supplierInvoice.invoiceDetails', 'Invoice Details')}
                                 </h3>
                                 <div className="flex items-center gap-2">
@@ -1008,9 +1008,9 @@ export default function SupplierInvoicesPage() {
                                         <p className="text-xs text-gray-500">{t('invoice.tax', 'TVA')}</p>
                                         <p className="text-lg font-bold text-gray-900">{detailInvoice.tva != null ? `${detailInvoice.tva.toFixed(3)}` : '—'}</p>
                                     </div>
-                                    <div className="p-3 bg-[#065F46]/5 rounded-xl text-center">
-                                        <p className="text-xs text-[#065F46]">{t('invoice.totalTTC', 'Total TTC')}</p>
-                                        <p className="text-lg font-bold text-[#065F46]">{detailInvoice.totalTTC != null ? formatCurrency(detailInvoice.totalTTC, detailInvoice.currencySymbol || DEFAULT_CURRENCY) : '—'}</p>
+                                    <div className="p-3 bg-purple-600/5 rounded-xl text-center">
+                                        <p className="text-xs text-purple-600">{t('invoice.totalTTC', 'Total TTC')}</p>
+                                        <p className="text-lg font-bold text-purple-600">{detailInvoice.totalTTC != null ? formatCurrency(detailInvoice.totalTTC, detailInvoice.currencySymbol || DEFAULT_CURRENCY) : '—'}</p>
                                     </div>
                                 </div>
                                 {/* Payment status */}
@@ -1109,7 +1109,7 @@ export default function SupplierInvoicesPage() {
                             <div className="p-6 overflow-y-auto flex-1">
                                 {consistencyLoading ? (
                                     <div className="text-center py-12">
-                                        <Loader2 size={32} className="animate-spin mx-auto text-[#065F46] mb-3" />
+                                        <Loader2 size={32} className="animate-spin mx-auto text-purple-600 mb-3" />
                                         <p className="text-gray-500">{t('supplierInvoice.runningCheck', 'Running consistency check...')}</p>
                                     </div>
                                 ) : consistencyResult ? (
@@ -1152,7 +1152,7 @@ export default function SupplierInvoicesPage() {
                                                         </ul>
                                                         <button
                                                             onClick={() => { setShowConsistencyModal(false); handleViewInvoice(issue.invoiceId); }}
-                                                            className="mt-2 text-xs text-[#065F46] hover:text-[#065F46] font-medium"
+                                                            className="mt-2 text-xs text-purple-600 hover:text-purple-600 font-medium"
                                                         >
                                                             {t('supplierInvoice.fixNow', 'Fix now →')}
                                                         </button>
@@ -1166,7 +1166,7 @@ export default function SupplierInvoicesPage() {
                         </div>
                     </div>
                 )}
-            </div>
+            </motion.div>
         );
     }
 
@@ -1198,7 +1198,7 @@ export default function SupplierInvoicesPage() {
 
                 <div
                     className={`border-2 border-dashed rounded-2xl p-12 text-center transition-all ${
-                        uploading ? 'border-[#065F46] bg-[#065F46]/5' : 'border-gray-300 hover:border-[#065F46] hover:bg-[#065F46]/5 cursor-pointer'
+                        uploading ? 'border-purple-600 bg-purple-600/5' : 'border-gray-300 hover:border-purple-600 hover:bg-purple-600/5 cursor-pointer'
                     }`}
                     onClick={() => !uploading && fileInputRef.current?.click()}
                 >
@@ -1206,16 +1206,16 @@ export default function SupplierInvoicesPage() {
 
                     {uploading ? (
                         <div className="space-y-4">
-                            <Loader2 size={48} className="mx-auto text-[#065F46] animate-spin" />
-                            <p className="text-lg font-medium text-[#065F46]">{uploadProgress}</p>
-                            <div className="w-64 mx-auto bg-[#065F46]/20 rounded-full h-2">
-                                <div className="bg-[#065F46] h-2 rounded-full animate-pulse w-3/4"></div>
+                            <Loader2 size={48} className="mx-auto text-purple-600 animate-spin" />
+                            <p className="text-lg font-medium text-purple-600">{uploadProgress}</p>
+                            <div className="w-64 mx-auto bg-purple-600/20 rounded-full h-2">
+                                <div className="bg-purple-600 h-2 rounded-full animate-pulse w-3/4"></div>
                             </div>
                         </div>
                     ) : (
                         <div className="space-y-4">
-                            <div className="w-20 h-20 mx-auto bg-[#065F46]/10 rounded-2xl flex items-center justify-center">
-                                <Upload size={40} className="text-[#065F46]" />
+                            <div className="w-20 h-20 mx-auto bg-purple-600/10 rounded-2xl flex items-center justify-center">
+                                <Upload size={40} className="text-purple-600" />
                             </div>
                             <div>
                                 <p className="text-lg font-semibold text-gray-700">{t('supplierInvoice.dropHere', 'Drop your PDF or photo here, or click to browse')}</p>
@@ -1327,7 +1327,7 @@ export default function SupplierInvoicesPage() {
                         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden sticky top-4">
                             <div className="flex items-center justify-between p-3 bg-gray-50 border-b border-gray-100">
                                 <span className="text-sm font-medium text-gray-700 flex items-center">
-                                    <Eye size={16} className="me-2 text-[#065F46]" />
+                                    <Eye size={16} className="me-2 text-purple-600" />
                                     {t('supplierInvoice.documentPreview', 'Document Preview')}
                                 </span>
                                 <button onClick={() => setShowDocPreview(!showDocPreview)} className="text-xs px-2 py-1 bg-gray-200 text-gray-600 rounded hover:bg-gray-300">
@@ -1350,7 +1350,7 @@ export default function SupplierInvoicesPage() {
                 <div className="flex-1 space-y-6">
                     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
                         <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                            <FileText size={20} className="me-2 text-[#065F46]" />
+                            <FileText size={20} className="me-2 text-purple-600" />
                             {t('supplierInvoice.invoiceDetails', 'Invoice Details')}
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1368,7 +1368,7 @@ export default function SupplierInvoicesPage() {
                                                 if (s) setHeaderData(prev => ({ ...prev, supplierName: s.name, supplierAddress: s.address || prev.supplierAddress, supplierPhone: s.phone || prev.supplierPhone }));
                                             }
                                         }}
-                                        className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                                        className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
                                     >
                                         <option value="">-- {t('supplierInvoice.selectSupplier', 'Select existing or create new')} --</option>
                                         {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -1378,7 +1378,7 @@ export default function SupplierInvoicesPage() {
                                     <input
                                         type="text" value={headerData.supplierName} onChange={e => setHeaderData(prev => ({ ...prev, supplierName: e.target.value }))}
                                         placeholder={t('supplierInvoice.newSupplierName', 'Or type new supplier name')}
-                                        className="w-full mt-2 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                                        className="w-full mt-2 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
                                     />
                                 )}
                             </div>
@@ -1387,7 +1387,7 @@ export default function SupplierInvoicesPage() {
                                 <select
                                     value={selectedPurchaseOrderId || ''}
                                     onChange={e => setSelectedPurchaseOrderId(e.target.value ? parseInt(e.target.value) : null)}
-                                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none"
+                                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none"
                                 >
                                     <option value="">— {t('inventory.nonePO', 'None')} —</option>
                                     {purchaseOrders.filter(po => {
@@ -1404,26 +1404,26 @@ export default function SupplierInvoicesPage() {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('supplierInvoice.invoiceNumber', 'Invoice Number')}</label>
-                                <input type="text" value={headerData.invoiceNumber} onChange={e => setHeaderData(prev => ({ ...prev, invoiceNumber: e.target.value }))} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none" />
+                                <input type="text" value={headerData.invoiceNumber} onChange={e => setHeaderData(prev => ({ ...prev, invoiceNumber: e.target.value }))} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none" />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">{t('supplierInvoice.invoiceDate', 'Invoice Date')}</label>
-                                <input type="date" value={headerData.invoiceDate} onChange={e => setHeaderData(prev => ({ ...prev, invoiceDate: e.target.value }))} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none" />
+                                <input type="date" value={headerData.invoiceDate} onChange={e => setHeaderData(prev => ({ ...prev, invoiceDate: e.target.value }))} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none" />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
                                     <Calendar size={14} className="me-1 text-gray-400" />
                                     {t('supplierInvoice.dueDate', 'Due Date')}
                                 </label>
-                                <input type="date" value={headerData.dueDate} onChange={e => setHeaderData(prev => ({ ...prev, dueDate: e.target.value }))} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none" />
+                                <input type="date" value={headerData.dueDate} onChange={e => setHeaderData(prev => ({ ...prev, dueDate: e.target.value }))} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none" />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">📞 {t('common.phone', 'Phone')}</label>
-                                <input type="text" value={headerData.supplierPhone} onChange={e => setHeaderData(prev => ({ ...prev, supplierPhone: e.target.value }))} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none" />
+                                <input type="text" value={headerData.supplierPhone} onChange={e => setHeaderData(prev => ({ ...prev, supplierPhone: e.target.value }))} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none" />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">📍 {t('common.address', 'Address')}</label>
-                                <input type="text" value={headerData.supplierAddress} onChange={e => setHeaderData(prev => ({ ...prev, supplierAddress: e.target.value }))} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none" />
+                                <input type="text" value={headerData.supplierAddress} onChange={e => setHeaderData(prev => ({ ...prev, supplierAddress: e.target.value }))} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none" />
                             </div>
                         </div>
 
@@ -1433,7 +1433,7 @@ export default function SupplierInvoicesPage() {
                                 <select
                                     value={supplierCurrency}
                                     onChange={e => { setSupplierCurrency(e.target.value); setSupplierCurrencySymbol(getCurrencySymbol(e.target.value)); }}
-                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] outline-none transition-all"
+                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none transition-all"
                                 >
                                     {CURRENCY_OPTIONS.map(opt => <option key={opt.code} value={opt.code}>{opt.label}</option>)}
                                 </select>
@@ -1458,10 +1458,10 @@ export default function SupplierInvoicesPage() {
                     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                                <Edit2 size={20} className="me-2 text-[#065F46]" />
+                                <Edit2 size={20} className="me-2 text-purple-600" />
                                 {t('supplierInvoice.lineItems', 'Line Items')}
                             </h3>
-                            <button onClick={addLineItem} className="flex items-center px-3 py-1.5 bg-[#065F46]/5 text-[#065F46] rounded-lg hover:bg-[#065F46]/10 transition-colors text-sm font-medium">
+                            <button onClick={addLineItem} className="flex items-center px-3 py-1.5 bg-purple-600/5 text-purple-600 rounded-lg hover:bg-purple-600/10 transition-colors text-sm font-medium">
                                 <Plus size={16} className="me-1" />
                                 {t('supplierInvoice.addItem', 'Add Item')}
                             </button>
@@ -1470,7 +1470,7 @@ export default function SupplierInvoicesPage() {
                         {lineItems.length === 0 ? (
                             <div className="text-center py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
                                 <p className="text-gray-500">{t('supplierInvoice.noLineItems', 'No line items extracted.')}</p>
-                                <button onClick={addLineItem} className="mt-3 px-4 py-2 bg-[#065F46] text-white rounded-lg hover:bg-[#047857] text-sm">
+                                <button onClick={addLineItem} className="mt-3 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm">
                                     {t('supplierInvoice.addFirstItem', 'Add First Item')}
                                 </button>
                             </div>
@@ -1489,13 +1489,13 @@ export default function SupplierInvoicesPage() {
                                         {lineItems.map(item => (
                                             <tr key={item.id} className="group hover:bg-gray-50">
                                                 <td className="px-3 py-2 text-left">
-                                                    <input type="text" value={item.description} onChange={e => updateLineItem(item.id, 'description', e.target.value)} className="w-full px-2 py-1.5 bg-transparent border border-transparent hover:border-gray-300 focus:border-[#065F46] rounded focus:ring-1 focus:ring-[#065F46] outline-none text-sm" />
+                                                    <input type="text" value={item.description} onChange={e => updateLineItem(item.id, 'description', e.target.value)} className="w-full px-2 py-1.5 bg-transparent border border-transparent hover:border-gray-300 focus:border-purple-600 rounded focus:ring-1 focus:ring-purple-500 outline-none text-sm" />
                                                 </td>
                                                 <td className="px-3 py-2 text-center">
-                                                    <input type="number" min="1" value={item.quantity} onChange={e => updateLineItem(item.id, 'quantity', parseInt(e.target.value) || 1)} className="w-full px-2 py-1.5 bg-transparent border border-transparent hover:border-gray-300 focus:border-[#065F46] rounded focus:ring-1 focus:ring-[#065F46] outline-none text-sm text-center" />
+                                                    <input type="number" min="1" value={item.quantity} onChange={e => updateLineItem(item.id, 'quantity', parseInt(e.target.value) || 1)} className="w-full px-2 py-1.5 bg-transparent border border-transparent hover:border-gray-300 focus:border-purple-600 rounded focus:ring-1 focus:ring-purple-500 outline-none text-sm text-center" />
                                                 </td>
                                                 <td className="px-3 py-2 text-right">
-                                                    <input type="number" step="0.001" value={item.unitPrice} onChange={e => updateLineItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1.5 bg-transparent border border-transparent hover:border-gray-300 focus:border-[#065F46] rounded focus:ring-1 focus:ring-[#065F46] outline-none text-sm text-right" />
+                                                    <input type="number" step="0.001" value={item.unitPrice} onChange={e => updateLineItem(item.id, 'unitPrice', parseFloat(e.target.value) || 0)} className="w-full px-2 py-1.5 bg-transparent border border-transparent hover:border-gray-300 focus:border-purple-600 rounded focus:ring-1 focus:ring-purple-500 outline-none text-sm text-right" />
                                                 </td>
                                                 <td className="px-3 py-2">
                                                     <button onClick={() => removeLineItem(item.id)} className="p-1 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16} /></button>
@@ -1512,7 +1512,7 @@ export default function SupplierInvoicesPage() {
 
             <div className="sticky bottom-0 bg-white border-t border-gray-200 p-4 -mx-6 px-6 rounded-b-2xl flex justify-between items-center shadow-lg">
                 <div className="text-sm text-gray-500">
-                    {lineItems.length} {t('supplierInvoice.itemsCount', 'item(s)')} | {t('common.total', 'Total')}: <span className="font-bold text-[#065F46]">{formatCurrency(parseFloat(headerData.totalTTC) || 0, supplierCurrencySymbol || DEFAULT_CURRENCY)}</span>
+                    {lineItems.length} {t('supplierInvoice.itemsCount', 'item(s)')} | {t('common.total', 'Total')}: <span className="font-bold text-purple-600">{formatCurrency(parseFloat(headerData.totalTTC) || 0, supplierCurrencySymbol || DEFAULT_CURRENCY)}</span>
                 </div>
                 <div className="flex gap-3">
                     <button onClick={handleDiscard} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200">{t('common.discard', 'Discard')}</button>

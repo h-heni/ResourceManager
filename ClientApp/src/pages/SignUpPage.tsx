@@ -68,7 +68,7 @@ export default function SignUpPage() {
             <div className="w-full max-w-md bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden">
                 <div className="p-8">
                     <div className="text-center mb-8">
-                        <Link to="/login" className="text-sm text-[#065F46] hover:underline mb-4 inline-block">
+                        <Link to="/login" className="text-sm text-purple-600 hover:underline mb-4 inline-block">
                             &larr; {t('auth.messages.backToLogin')}
                         </Link>
                         <h1 className="text-2xl font-bold text-gray-900">{t('auth.messages.createAccountTitle')}</h1>
@@ -89,7 +89,7 @@ export default function SignUpPage() {
                                 <button
                                     type="button"
                                     onClick={() => navigate('/login')}
-                                    className="mt-2 px-6 py-2.5 rounded-xl bg-[#065F46] text-white font-semibold hover:bg-[#047857] transition-colors"
+                                    className="mt-2 px-6 py-2.5 rounded-xl bg-purple-600 text-white font-semibold hover:bg-purple-700 transition-colors"
                                 >
                                     {t('auth.login')}
                                 </button>
@@ -106,7 +106,7 @@ export default function SignUpPage() {
                                     value={formData.companyName}
                                     onChange={handleChange}
                                     required
-                                    className="w-full ps-10 pe-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
+                                    className="w-full ps-10 pe-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
                                     placeholder={t('auth.placeholders.companyName')}
                                 />
                             </div>
@@ -123,7 +123,7 @@ export default function SignUpPage() {
                                         value={formData.userFirstName}
                                         onChange={handleChange}
                                         required
-                                        className="w-full ps-10 pe-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
+                                        className="w-full ps-10 pe-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
                                         placeholder={t('auth.placeholders.firstName')}
                                     />
                                 </div>
@@ -137,7 +137,7 @@ export default function SignUpPage() {
                                         value={formData.userLastName}
                                         onChange={handleChange}
                                         required
-                                        className="w-full ps-10 pe-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
+                                        className="w-full ps-10 pe-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
                                         placeholder={t('auth.placeholders.lastName')}
                                     />
                                 </div>
@@ -155,7 +155,7 @@ export default function SignUpPage() {
                                     value={formData.userEmail}
                                     onChange={handleChange}
                                     required
-                                    className="w-full ps-10 pe-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#065F46] focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
+                                    className="w-full ps-10 pe-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all outline-none bg-gray-50/50 focus:bg-white"
                                     placeholder={t('auth.placeholders.email')}
                                 />
                             </div>
@@ -205,7 +205,7 @@ export default function SignUpPage() {
                             disabled={loading}
                             className={cn(
                                 'w-full py-3 px-4 rounded-xl text-white font-semibold shadow-sm transition-all',
-                                'bg-[#065F46] hover:bg-[#047857]',
+                                'bg-purple-600 hover:bg-purple-700',
                                 loading && 'opacity-70 cursor-not-allowed'
                             )}
                         >
