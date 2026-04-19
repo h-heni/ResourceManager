@@ -166,6 +166,8 @@ services:
       - DOTNET_GCHeapCount=2
       - Logging__LogLevel__Default=Warning
       - Logging__LogLevel__Microsoft=Warning
+      - Groq__ApiKey=${GROQ_API_KEY:-}
+      - Groq__Model=${GROQ_MODEL:-meta-llama/llama-4-scout-17b-16e-instruct}
       - DEPLOYMENT_ENV=blue
     volumes:
       - blue-api-logs:/app/Logs
@@ -283,6 +285,8 @@ services:
       - DOTNET_GCHeapCount=2
       - Logging__LogLevel__Default=Warning
       - Logging__LogLevel__Microsoft=Warning
+      - Groq__ApiKey=${GROQ_API_KEY:-}
+      - Groq__Model=${GROQ_MODEL:-meta-llama/llama-4-scout-17b-16e-instruct}
       - DEPLOYMENT_ENV=green
     volumes:
       - green-api-logs:/app/Logs
