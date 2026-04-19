@@ -117,6 +117,9 @@ services:
 
   blue-api:
     image: ${API_IMAGE:-resourcemanager-api:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: blue-api
     deploy:
       resources:
@@ -190,6 +193,9 @@ services:
 
   blue-web:
     image: ${WEB_IMAGE:-resourcemanager-web:latest}
+    build:
+      context: ./ClientApp
+      dockerfile: Dockerfile
     container_name: blue-web
     deploy:
       resources:
@@ -228,6 +234,9 @@ services:
 
   green-api:
     image: ${API_IMAGE:-resourcemanager-api:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: green-api
     deploy:
       resources:
@@ -301,6 +310,9 @@ services:
 
   green-web:
     image: ${WEB_IMAGE:-resourcemanager-web:latest}
+    build:
+      context: ./ClientApp
+      dockerfile: Dockerfile
     container_name: green-web
     deploy:
       resources:

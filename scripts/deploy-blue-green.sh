@@ -81,11 +81,11 @@ fi
 
 log_info "Active: $ACTIVE_ENV → Deploying to: $TARGET_ENV"
 
-# ── Pull images (while old env still serves traffic) ──
+# ── Build images (while old env still serves traffic) ──
 
-log_info "Pulling latest images..."
-$DC -f "$COMPOSE_FILE" pull ${TARGET_ENV}-api ${TARGET_ENV}-web 2>/dev/null || { log_error "Pull failed"; exit 2; }
-log_success "Images pulled"
+log_info "Building latest images..."
+$DC -f "$COMPOSE_FILE" build --no-cache ${TARGET_ENV}-api ${TARGET_ENV}-web || { log_error "Build failed"; exit 2; }
+log_success "Images built"
 
 # ── Ensure PostgreSQL is running ──
 
