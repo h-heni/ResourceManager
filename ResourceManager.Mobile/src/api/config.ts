@@ -9,7 +9,7 @@ const getApiBaseUrl = () => {
   if (__DEV__) {
     return 'http://192.168.178.26:5249/api';
   }
-  return 'https://your-api-domain.com/api';
+  return 'https://rscmanager.com/api';
 };
 
 export const API_BASE_URL = getApiBaseUrl();

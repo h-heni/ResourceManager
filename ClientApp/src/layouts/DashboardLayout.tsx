@@ -355,17 +355,11 @@ export default function DashboardLayout() {
         <>
             {/* Panze Logo / Company Header */}
             <div className="panze-sidebar-top">
-                {companyLogo ? (
-                    <img
-                        src={companyLogo}
-                        alt="Company Logo"
-                        className="h-[30px] w-[30px] object-contain rounded-full flex-shrink-0"
-                    />
-                ) : (
-                    <div className="panze-logo-icon">
-                        <LayoutDashboard size={16} />
-                    </div>
-                )}
+                <img
+                    src={companyLogo || '/logo.jpeg'}
+                    alt="Company Logo"
+                    className="h-[30px] w-[30px] object-contain rounded-full flex-shrink-0"
+                />
                 <span className="panze-logo truncate">
                     {companyName || t('common.appName')}
                 </span>

@@ -630,9 +630,7 @@ export default function LandingPage() {
         <div className="mx-auto flex h-20 w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-purple-600 to-[#10B981] shadow-lg shadow-emerald-200">
-              <BarChart3 className="h-6 w-6 text-white" />
-            </div>
+            <img src="/logo.jpeg" alt={t('common.appName')} className="h-10 w-10 rounded-xl object-contain" />
             <span className="text-lg font-bold text-gray-900">{t('common.appName')}</span>
           </Link>
 
@@ -1323,9 +1321,7 @@ export default function LandingPage() {
             {/* Brand Column */}
             <div className="lg:col-span-2">
               <div className="flex items-center gap-2 mb-4">
-                <div className="w-10 h-10 bg-gradient-to-br from-purple-600 to-[#10B981] rounded-xl flex items-center justify-center">
-                  <BarChart3 className="w-6 h-6 text-white" />
-                </div>
+                <img src="/logo.jpeg" alt={t('common.appName')} className="w-10 h-10 rounded-xl object-contain" />
                 <span className="text-xl font-bold">{t('common.appName')}</span>
               </div>
               <p className="text-gray-400 text-sm mb-6 max-w-sm">

@@ -4,10 +4,10 @@
     "slug": "resource-manager-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/logo.jpeg",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/logo.jpeg",
       "resizeMode": "contain",
       "backgroundColor": "#7C3AED"
     },
@@ -28,8 +28,9 @@
       "bundleIdentifier": "com.resourcemanager.mobile"
     },
     "android": {
+      "newArchEnabled": false,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/logo.jpeg",
         "backgroundColor": "#7C3AED"
       },
       "package": "com.resourcemanager.mobile",
@@ -41,7 +42,7 @@
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/logo.jpeg"
     },
     "plugins": [
       "expo-localization",

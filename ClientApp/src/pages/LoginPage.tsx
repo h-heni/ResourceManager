@@ -106,6 +106,7 @@ export default function LoginPage() {
             <div className="w-full max-w-md bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden animate-fade-in">
                 <div className="p-8">
                     <div className="text-center mb-10">
+                        <img src="/logo.jpeg" alt={t('common.appName')} className="h-16 w-16 mx-auto mb-4 rounded-xl object-contain" />
                         <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-purple-600">
                             {t('common.appName')}
                         </h1>

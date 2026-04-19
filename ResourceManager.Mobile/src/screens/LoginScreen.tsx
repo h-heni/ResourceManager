@@ -8,6 +8,7 @@ import {
   Platform,
   TouchableOpacity,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -66,9 +67,7 @@ export default function LoginScreen({ navigation }: any) {
           <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: 24 + insets.bottom }]} showsVerticalScrollIndicator={false}>
             {/* Logo */}
             <View style={styles.logoSection}>
-              <LinearGradient colors={[colors.primary, colors.accent]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.logoContainer, { borderRadius: borderRadius.lg }]}>
-                <Text style={styles.logoText}>RM</Text>
-              </LinearGradient>
+              <Image source={require('../../assets/logo.jpeg')} style={[styles.logoContainer, { borderRadius: borderRadius.lg }]} resizeMode="contain" />
               <Text style={[styles.welcomeText, { color: colors.text.primary, fontSize: typography.fontSize.h1 }]}>{t('auth.welcomeBack')}</Text>
               <Text style={{ color: colors.text.tertiary, fontSize: typography.fontSize.body, textAlign: 'center' }}>{t('auth.signInSubtitle')}</Text>
             </View>
