@@ -1375,7 +1375,7 @@ Best regards,
                             <button
                                 onClick={() => {
                                     setShowBasePathLockConfirm(false);
-                                    handleSave(true);
+                                    handleSave();
                                 }}
                                 className="px-4 py-2 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-700 font-medium transition-colors"
                             >
