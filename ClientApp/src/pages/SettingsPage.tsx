@@ -4,8 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import {
     Settings, Building2, Mail, Save, Loader2, Upload, X, Image, Info,
     CheckCircle, Eye, PenTool, Trash2, Lock, User, LogOut,
-    FileText, FolderOpen, HardDrive, Palette, DollarSign,
-    AlertTriangle, RefreshCw, MessageCircle, Unlink
+    FileText, Palette, DollarSign,
+    AlertTriangle, MessageCircle, Unlink
 } from 'lucide-react';
 import api from '../services/api';
 import { invalidateSettingsCache } from '../hooks/useSettings';
@@ -84,7 +84,7 @@ type PdfTab = 'signature' | 'branding' | 'financial';
 
 export default function SettingsPage() {
     const { t } = useTranslation();
-    const { canManageSettings, logout, user, displayName, updateProfileComplete } = useAuth();
+    const { canManageSettings, logout, user, displayName } = useAuth();
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -115,16 +115,6 @@ export default function SettingsPage() {
     // PDF Preview
     const [generatingPreview, setGeneratingPreview] = useState(false);
     const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
-
-    // PDF Storage
-    const [consistencyReport, setConsistencyReport] = useState<{ missingFiles?: number; MissingFiles?: number; totalFiles?: number; TotalFiles?: number; existingFiles?: number; ExistingFiles?: number; missingFileDetails?: Array<{ id: number; documentType: string; documentNumber: string; fileName: string }> } | null>(null);
-    const [checkingConsistency, setCheckingConsistency] = useState(false);
-    const [newBasePath, setNewBasePath] = useState('');
-    const [browsingFolders, setBrowsingFolders] = useState(false);
-    const [folderBrowser, setFolderBrowser] = useState<{ currentPath?: string; parent?: string; items?: Array<{ path: string; name: string; type: string }> } | null>(null);
-    const [browseTarget, setBrowseTarget] = useState<'basePath'>('basePath');
-    const [recovering, setRecovering] = useState(false);
-    const [recoveryProgress, setRecoveryProgress] = useState<{ current: number; total: number; message: string } | null>(null);
 
     // Confirmation dialog for locking base storage path
     const [showBasePathLockConfirm, setShowBasePathLockConfirm] = useState(false);
@@ -261,7 +251,6 @@ Best regards,
                 whatsAppDisplayPhone: res.data.whatsAppDisplayPhone || '',
                 whatsAppEnabled: res.data.whatsAppEnabled ?? false,
             });
-            setNewBasePath(res.data.baseStoragePath || '');
             return { hasLogoData, hasSignatureImage };
         } catch {
             setStatus({ type: 'error', message: t('settings.loadFailed', 'Failed to load settings') });
@@ -293,7 +282,7 @@ Best regards,
         setSettings(prev => ({ ...prev, [key]: value }));
     };
 
-    const handleSave = async (skipConfirm = false) => {
+    const handleSave = async () => {
         setSaving(true);
         setStatus(null);
         try {
@@ -558,150 +547,6 @@ Best regards,
             setPdfPreviewUrl(url);
         } catch { setStatus({ type: 'error', message: 'Failed to generate PDF preview' }); }
         finally { setGeneratingPreview(false); }
-    };
-
-    // Storage
-    const handleCheckConsistency = async () => {
-        setCheckingConsistency(true);
-        try {
-            const res = await api.get('/pdf-storage/check-consistency');
-            setConsistencyReport(res.data);
-        } catch { setStatus({ type: 'error', message: 'Failed to check consistency' }); }
-        finally { setCheckingConsistency(false); }
-    };
-
-    const handleRecoverFiles = async () => {
-        if (!consistencyReport) return;
-        setRecovering(true);
-        setStatus(null);
-        setRecoveryProgress({ current: 0, total: 0, message: 'Analyzing missing files...' });
-
-        try {
-            // Step 1: Get fresh consistency report with details
-            const checkRes = await api.get('/pdf-storage/check-consistency');
-            const report = checkRes.data;
-            const missingFiles = report.missingFileDetails || [];
-
-            if (missingFiles.length === 0) {
-                setStatus({ type: 'success', message: t('settings.allFilesPresent', 'All files are already present on disk.') });
-                setRecoveryProgress(null);
-                setRecovering(false);
-                await handleCheckConsistency();
-                return;
-            }
-
-            const total = missingFiles.length;
-            let regenerated = 0;
-            let failed = 0;
-            let skippedUploaded = 0;
-            const errors: string[] = [];
-
-            // Step 2: Group missing files by document type
-            const byType: Record<string, typeof missingFiles> = {};
-            for (const f of missingFiles) {
-                const dtype = f.documentType || 'Unknown';
-                if (!byType[dtype]) byType[dtype] = [];
-                byType[dtype].push(f);
-            }
-
-            // Step 3: For each type, fetch entity list and regenerate PDFs
-            const typeConfig: Record<string, { listEndpoint: string; pdfEndpoint: (id: number) => string; label: string }> = {
-                'Invoice': { listEndpoint: '/Invoices?page=1&size=9999', pdfEndpoint: (id) => `/Invoices/${id}/pdf`, label: 'Invoice' },
-                'Quote': { listEndpoint: '/Quotes?page=1&size=9999', pdfEndpoint: (id) => `/Quotes/${id}/pdf`, label: 'Quote' },
-                'DeliveryNote': { listEndpoint: '/DeliveryNotes?page=1&size=9999', pdfEndpoint: (id) => `/DeliveryNotes/${id}/pdf`, label: 'Delivery Note' },
-            };
-
-            for (const [docType, files] of Object.entries(byType)) {
-                const config = typeConfig[docType];
-                if (!config) {
-                    // SupplierInvoice or unknown - uploaded files cannot be regenerated
-                    for (const f of files) {
-                        skippedUploaded++;
-                        errors.push(`${f.documentNumber || f.fileName}: Uploaded file (${docType}) — cannot be regenerated, must be re-uploaded manually`);
-                        setRecoveryProgress({ current: regenerated + failed + skippedUploaded, total, message: `Skipping uploaded file: ${f.documentNumber || f.fileName}` });
-                    }
-                    continue;
-                }
-
-                let entities: Array<Record<string, unknown>> = [];
-                try {
-                    const listRes = await api.get(config.listEndpoint);
-                    const data = listRes.data;
-                    entities = Array.isArray(data) ? data : (data.data || data.Data || data.items || []);
-                } catch {
-                    for (const f of files) {
-                        failed++;
-                        errors.push(`${f.documentNumber}: Failed to fetch ${config.label} list from server`);
-                    }
-                    setRecoveryProgress({ current: regenerated + failed + skippedUploaded, total, message: `Failed to fetch ${config.label} list` });
-                    continue;
-                }
-
-                // For each missing file, match by document number and regenerate
-                for (const missing of files) {
-                    setRecoveryProgress({ current: regenerated + failed + skippedUploaded, total, message: `Regenerating ${missing.documentNumber}...` });
-
-                    // Match by document number (try multiple field names for robustness)
-                    const entity = entities.find((e: Record<string, unknown>) => {
-                        const num = e.number || e.Number || e.invoiceNumber || e.quoteNumber || '';
-                        return num === missing.documentNumber;
-                    });
-
-                    if (!entity) {
-                        failed++;
-                        errors.push(`${missing.documentNumber}: ${config.label} not found in database — may have been deleted`);
-                        continue;
-                    }
-
-                    try {
-                        const entityId = (entity.id || entity.Id) as number;
-                        // Delete the stale PDF record first
-                        await api.delete(`/pdf-storage/files/${missing.id}`).catch(() => {});
-                        // Regenerate PDF by calling the PDF endpoint (backend auto-saves to disk)
-                        await api.get(config.pdfEndpoint(entityId), { responseType: 'blob' });
-                        regenerated++;
-                    } catch (pdfErr: unknown) {
-                        failed++;
-                        const detail = getErrorMessage(pdfErr, 'Server error during PDF generation');
-                        errors.push(`${missing.documentNumber}: ${detail}`);
-                    }
-                }
-            }
-
-            // Step 4: Report results with clear summary
-            setRecoveryProgress(null);
-            const parts: string[] = [];
-            if (regenerated > 0) parts.push(`${regenerated} PDF(s) regenerated`);
-            if (skippedUploaded > 0) parts.push(`${skippedUploaded} uploaded file(s) skipped (must be re-uploaded)`);
-            if (failed > 0) parts.push(`${failed} failed`);
-
-            if (failed === 0 && skippedUploaded === 0) {
-                setStatus({ type: 'success', message: t('settings.recoveryComplete', 'Recovery complete: {{summary}}.', { summary: parts.join(', ') }) });
-            } else if (regenerated > 0) {
-                setStatus({ type: 'warning', message: `${parts.join(', ')}. ${errors.slice(0, 2).join('; ')}` });
-            } else if (skippedUploaded > 0 && failed === 0) {
-                setStatus({ type: 'warning', message: `${parts.join(', ')}. ${errors.slice(0, 2).join('; ')}` });
-            } else {
-                setStatus({ type: 'error', message: `Recovery failed: ${errors.slice(0, 3).join('; ')}` });
-            }
-
-            // Refresh consistency report
-            await handleCheckConsistency();
-        } catch {
-            setStatus({ type: 'error', message: t('settings.recoveryUnexpectedError', 'Recovery failed: unexpected error. Please check your connection and try again.') });
-            setRecoveryProgress(null);
-        } finally {
-            setRecovering(false);
-        }
-    };
-
-    const handleBrowseFolders = async (path?: string) => {
-        setBrowsingFolders(true);
-        try {
-            const res = await api.get('/pdf-storage/browse', { params: { path } });
-            setFolderBrowser(res.data);
-        } catch { setStatus({ type: 'error', message: 'Failed to browse folders' }); }
-        finally { setBrowsingFolders(false); }
     };
 
     const insertPlaceholder = (placeholder: string, field: 'defaultEmailBody' | 'emailSignature') => {

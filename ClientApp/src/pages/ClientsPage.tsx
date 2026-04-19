@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import { Plus, Search, Trash2, Pencil, Download, Building, FileText, Mail, Phone, MapPin, Check } from 'lucide-react';
+import { Plus, Search, Trash2, Pencil, Building, FileText, Mail, Phone, MapPin, Check } from 'lucide-react';
 import { getErrorMessage } from '../utils/errorUtils';
 import SlideOverPanel from '../components/SlideOverPanel';
 import Pagination from '../components/Pagination';
