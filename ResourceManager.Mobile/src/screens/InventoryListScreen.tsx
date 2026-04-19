@@ -22,8 +22,10 @@ export default function InventoryListScreen({ navigation }: any) {
   const [adjustQty, setAdjustQty] = useState('');
   const [adjustReason, setAdjustReason] = useState('');
 
-  const { data: stockLevels = [], isLoading, refetch, isRefetching } = useStockLevels();
+  const { data: stockData, isLoading, refetch, isRefetching } = useStockLevels();
   const adjustMutation = useAdjustStock();
+
+  const stockLevels = Array.isArray(stockData) ? stockData : (stockData?.items ?? []);
 
   const filtered = stockLevels.filter((s) => {
     if (!search) return true;

@@ -13,10 +13,13 @@ interface FormSelectProps {
   placeholder?: string;
   value?: string | number;
   options: SelectOption[];
-  onSelect: (value: string | number) => void;
+  onSelect?: (value: string | number) => void;
   error?: string;
   disabled?: boolean;
   searchable?: boolean;
+  // Legacy aliases for backwards-compat
+  selectedValue?: string | number;
+  onValueChange?: (value: string) => void;
 }
 
 export default function FormSelect({
@@ -28,12 +31,20 @@ export default function FormSelect({
   error,
   disabled = false,
   searchable = false,
+  selectedValue,
+  onValueChange,
 }: FormSelectProps) {
   const { colors, spacing, borderRadius, typography } = useAppTheme();
   const [visible, setVisible] = useState(false);
   const [search, setSearch] = useState('');
 
-  const selectedOption = options.find((o) => o.value === value);
+  const effectiveValue = value ?? selectedValue;
+  const handleSelect = (v: string | number) => {
+    onSelect?.(v);
+    onValueChange?.(String(v));
+  };
+
+  const selectedOption = options.find((o) => o.value === effectiveValue);
   const filtered = searchable && search
     ? options.filter((o) => o.label.toLowerCase().includes(search.toLowerCase()))
     : options;
@@ -71,10 +82,10 @@ export default function FormSelect({
                 renderItem={({ item }) => (
                   <TouchableOpacity
                     style={[styles.option, { borderBottomColor: colors.border }]}
-                    onPress={() => { onSelect(item.value); setVisible(false); }}
+                    onPress={() => { handleSelect(item.value); setVisible(false); }}
                   >
-                    <Text style={[styles.optionText, { color: item.value === value ? colors.primary : colors.text.primary }]}>{item.label}</Text>
-                    {item.value === value && <Ionicons name="checkmark" size={20} color={colors.primary} />}
+                    <Text style={[styles.optionText, { color: item.value === effectiveValue ? colors.primary : colors.text.primary }]}>{item.label}</Text>
+                    {item.value === effectiveValue && <Ionicons name="checkmark" size={20} color={colors.primary} />}
                   </TouchableOpacity>
                 )}
                 style={{ maxHeight: 350 }}

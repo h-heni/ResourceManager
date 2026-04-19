@@ -22,7 +22,13 @@ namespace ResourceManager.Services
         /// Scan an image (photo / uploaded image) and extract invoice data via OCR
         /// </summary>
         Task<SupplierScanResult> ScanImageAsync(Stream imageStream, string fileName);
-        
+
+        /// <summary>
+        /// Parse pre-extracted text (e.g. from on-device ML Kit OCR on the mobile client)
+        /// and run the standard field-extraction pipeline. Skips Tesseract entirely.
+        /// </summary>
+        Task<SupplierScanResult> ScanRawTextAsync(string extractedText, string fileName);
+
         /// <summary>
         /// Save the scanned/corrected data to database
         /// </summary>
@@ -80,6 +86,41 @@ namespace ResourceManager.Services
             }
 
             return result;
+        }
+
+        public Task<SupplierScanResult> ScanRawTextAsync(string extractedText, string fileName)
+        {
+            var result = new SupplierScanResult
+            {
+                FileName = fileName,
+                ScannedAt = DateTime.UtcNow,
+                RawExtractedText = extractedText ?? string.Empty
+            };
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(extractedText))
+                {
+                    result.Success = false;
+                    result.Warnings.Add("No text was provided by the on-device OCR. Please retake the photo with better lighting.");
+                    return Task.FromResult(result);
+                }
+
+                _logger.LogInformation("ML Kit pre-extracted {Length} characters for: {FileName}", extractedText.Length, fileName);
+
+                ParseExtractedText(extractedText, result);
+
+                result.Success = true;
+                result.RequiresReview = result.Warnings.Any() || result.ConfidenceScore < 0.7;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error parsing pre-extracted text: {FileName}", fileName);
+                result.Success = false;
+                result.Errors.Add($"Failed to parse extracted text: {ex.Message}");
+            }
+
+            return Task.FromResult(result);
         }
 
         /// <summary>

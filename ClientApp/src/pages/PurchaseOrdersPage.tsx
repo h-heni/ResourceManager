@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 import {
   ShoppingCart, Plus, Eye, Loader2, Trash2, Check, X,
@@ -48,6 +49,8 @@ export default function PurchaseOrdersPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState<number | null>(null);
   const [collapsedYears, setCollapsedYears] = useState<Set<number>>(new Set());
+  const [selectedRows, setSelectedRows] = useState<number[]>([]);
+  const [search, setSearch] = useState('');
   const [showWhatsApp, setShowWhatsApp] = useState(false);
   const [showEmail, setShowEmail] = useState(false);
   const [historyRefresh, setHistoryRefresh] = useState(0);
@@ -165,7 +168,17 @@ export default function PurchaseOrdersPage() {
     });
   };
 
-  const groupedOrders = orders.reduce((acc, po) => {
+  const toggleRow = (id: number) => {
+    setSelectedRows(prev => prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]);
+  };
+
+  const filteredOrders = orders.filter(po =>
+    !search ||
+    po.number.toLowerCase().includes(search.toLowerCase()) ||
+    (po.supplierName || '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  const groupedOrders = filteredOrders.reduce((acc, po) => {
     const year = new Date(po.date).getFullYear();
     if (!acc[year]) acc[year] = [];
     acc[year].push(po);
@@ -191,24 +204,115 @@ export default function PurchaseOrdersPage() {
 
       {isLoading ? (
         <div className="flex justify-center py-12"><Loader2 className="animate-spin text-purple-600" size={32} /></div>
-      ) : !orders.length ? (
+      ) : !filteredOrders.length ? (
         <div className="text-center py-12 text-slate-500">
           <ShoppingCart size={48} className="mx-auto mb-3 text-slate-300" />
           <p>{t('inventory.noPO', 'No purchase orders yet')}</p>
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          {/* Action Bar */}
+          <div className="p-4 border-b border-slate-100 flex items-center h-14">
+            {selectedRows.length > 0 ? (
+              <motion.div
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                className="flex items-center gap-1 p-1 bg-white rounded-full border border-slate-200 shadow-sm overflow-x-auto"
+              >
+                <div className="px-3 py-1.5 text-xs font-bold text-purple-700 bg-purple-50 rounded-full flex items-center gap-2 border border-purple-100/50 flex-shrink-0">
+                  <span className="w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center text-white text-[10px] shadow-inner">{selectedRows.length}</span>
+                  {t('common.selected', 'Selected')}
+                </div>
+                {selectedRows.length === 1 && (() => {
+                  const po = orders.find(o => o.id === selectedRows[0]);
+                  return po ? (
+                    <button onClick={() => setViewId(po.id)} className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 hover:bg-purple-50 text-slate-600 hover:text-purple-700 rounded-full text-xs font-medium transition-colors">
+                      <Eye size={14} className="text-purple-500" /> {t('common.view', 'View')}
+                    </button>
+                  ) : null;
+                })()}
+                {selectedRows.length === 1 && (() => {
+                  const po = orders.find(o => o.id === selectedRows[0]);
+                  return po ? (
+                    <button
+                      onClick={() => handleDownloadPdf(po.id, po.number)}
+                      disabled={downloadingPdf === po.id}
+                      className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 hover:bg-purple-50 text-slate-600 hover:text-purple-700 rounded-full text-xs font-medium transition-colors disabled:opacity-50"
+                    >
+                      {downloadingPdf === po.id ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} className="text-purple-500" />}
+                      {t('inventory.downloadPdf', 'Download PDF')}
+                    </button>
+                  ) : null;
+                })()}
+                {selectedRows.length === 1 && (() => {
+                  const po = orders.find(o => o.id === selectedRows[0]);
+                  return po && (po.status === 'Sent' || po.status === 'PartiallyReceived' || po.status === 'Draft') ? (
+                    <button onClick={() => openReceive(po)} className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 rounded-full text-xs font-medium transition-colors">
+                      <Package size={14} className="text-emerald-500" /> {t('inventory.receive', 'Receive')}
+                    </button>
+                  ) : null;
+                })()}
+                {selectedRows.length === 1 && (() => {
+                  const po = orders.find(o => o.id === selectedRows[0]);
+                  return po && po.status === 'Draft' ? (
+                    <button onClick={() => statusMut.mutateAsync({ id: po.id, status: 'Sent' })} className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 hover:bg-blue-50 text-slate-600 hover:text-blue-700 rounded-full text-xs font-medium transition-colors">
+                      <Check size={14} className="text-blue-500" /> {t('inventory.submit', 'Submit')}
+                    </button>
+                  ) : null;
+                })()}
+                {selectedRows.length === 1 && (() => {
+                  const po = orders.find(o => o.id === selectedRows[0]);
+                  return po && po.status === 'Draft' ? (
+                    <>
+                      <div className="w-px h-4 bg-slate-200 mx-1 flex-shrink-0" />
+                      <button onClick={() => { setDeleteConfirm(po.id); }} className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 hover:bg-red-50 text-slate-600 hover:text-red-600 rounded-full text-xs font-medium transition-colors">
+                        <Trash2 size={14} className="text-red-500" /> {t('common.delete', 'Delete')}
+                      </button>
+                    </>
+                  ) : null;
+                })()}
+              </motion.div>
+            ) : (
+              <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="relative max-w-sm w-full">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                <input
+                  type="text"
+                  placeholder={t('inventory.searchPO', 'Search by PO # or supplier...')}
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-white/50 border border-slate-200/60 hover:border-purple-300 focus:bg-white focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 rounded-full text-sm font-medium outline-none transition-all placeholder:text-slate-400 text-slate-900 shadow-sm"
+                />
+              </motion.div>
+            )}
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
+                  <th className="px-4 py-3 w-12">
+                    <button
+                      onClick={() => {
+                        if (selectedRows.length === filteredOrders.length && filteredOrders.length > 0) {
+                          setSelectedRows([]);
+                        } else {
+                          setSelectedRows(filteredOrders.map(po => po.id));
+                        }
+                      }}
+                      className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${
+                        selectedRows.length > 0 && selectedRows.length === filteredOrders.length
+                          ? 'bg-purple-600 border-purple-600 text-white shadow-sm'
+                          : 'border-slate-300 hover:border-purple-400 bg-white text-transparent'
+                      }`}
+                    >
+                      <Check size={12} strokeWidth={3} />
+                    </button>
+                  </th>
                   <th className="text-start px-4 py-3 font-medium text-slate-600">{t('inventory.poNumber', 'PO #')}</th>
                   <th className="text-start px-4 py-3 font-medium text-slate-600">{t('inventory.supplier', 'Supplier')}</th>
                   <th className="text-start px-4 py-3 font-medium text-slate-600">{t('inventory.orderDate', 'Order Date')}</th>
                   <th className="text-start px-4 py-3 font-medium text-slate-600">{t('inventory.expectedDelivery', 'Expected Delivery')}</th>
                   <th className="text-center px-4 py-3 font-medium text-slate-600">{t('common.status', 'Status')}</th>
                   <th className="text-start px-4 py-3 font-medium text-slate-600">{t('inventory.supplierInvoice', 'Supplier Invoice')}</th>
-                  <th className="text-center px-4 py-3 font-medium text-slate-600">{t('common.actions', 'Actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -227,7 +331,18 @@ export default function PurchaseOrdersPage() {
                         </td>
                       </tr>
                       {!isCollapsed && yearOrders.map(po => (
-                  <tr key={po.id} className="hover:bg-slate-50">
+                  <tr key={po.id} onClick={() => toggleRow(po.id)} className={`group cursor-pointer border-b border-slate-100 transition-colors ${
+                    selectedRows.includes(po.id) ? 'bg-purple-50/50' : 'hover:bg-slate-50'
+                  }`}>
+                    <td className="px-4 py-3 w-12">
+                      <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${
+                        selectedRows.includes(po.id)
+                          ? 'bg-purple-600 border-purple-600 text-white shadow-sm'
+                          : 'border-slate-300 bg-white text-transparent group-hover:border-purple-400'
+                      }`}>
+                        <Check size={12} strokeWidth={3} />
+                      </div>
+                    </td>
                     <td className="px-4 py-3 font-medium text-purple-600">{po.number}</td>
                     <td className="px-4 py-3 text-slate-900">{po.supplierName}</td>
                     <td className="px-4 py-3 text-slate-500">{new Date(po.date).toLocaleDateString()}</td>
@@ -243,58 +358,6 @@ export default function PurchaseOrdersPage() {
                         <span className="text-slate-400 text-xs">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => setViewId(po.id)} className="p-1.5 text-slate-400 hover:text-purple-600" title={t('common.view', 'View')}>
-                          <Eye size={15} />
-                        </button>
-                        <button
-                          onClick={() => handleDownloadPdf(po.id, po.number)}
-                          disabled={downloadingPdf === po.id}
-                          className="p-1.5 text-slate-400 hover:text-purple-600 disabled:opacity-50"
-                          title={t('inventory.downloadPdf', 'Download PDF')}
-                        >
-                          {downloadingPdf === po.id ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
-                        </button>
-                        {(po.status === 'Sent' || po.status === 'PartiallyReceived') && (
-                          <button onClick={() => openReceive(po)} className="p-1.5 text-slate-400 hover:text-emerald-600" title={t('inventory.receive', 'Receive')}>
-                            <Package size={15} />
-                          </button>
-                        )}
-                        {po.status === 'Draft' && (
-                          <>
-                            <button
-                              onClick={() => openReceive(po)}
-                              className="p-1.5 text-slate-400 hover:text-emerald-600"
-                              title={t('inventory.confirmAndReceive', 'Confirm & Receive')}
-                            >
-                              <Package size={15} />
-                            </button>
-                            <button
-                              onClick={() => statusMut.mutateAsync({ id: po.id, status: 'Sent' })}
-                              className="p-1.5 text-slate-400 hover:text-blue-600"
-                              title={t('inventory.submit', 'Submit')}
-                            >
-                              <Check size={15} />
-                            </button>
-                            <button
-                              onClick={() => setDeleteConfirm(po.id)}
-                              className="p-1.5 text-slate-400 hover:text-red-600"
-                              title={t('common.delete', 'Delete')}
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                      {deleteConfirm === po.id && (
-                        <div className="flex items-center gap-1 mt-1 justify-center">
-                          <button onClick={() => handleDelete(po.id)} className="text-xs text-red-600 hover:underline">{t('common.yes', 'Yes')}</button>
-                          <span className="text-xs text-slate-400">/</span>
-                          <button onClick={() => setDeleteConfirm(null)} className="text-xs text-slate-500 hover:underline">{t('common.no', 'No')}</button>
-                        </div>
-                      )}
-                    </td>
                   </tr>
                 ))}
                     </React.Fragment>
@@ -302,6 +365,20 @@ export default function PurchaseOrdersPage() {
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ DELETE CONFIRM MODAL ═══ */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6">
+            <h3 className="text-lg font-semibold mb-2">{t('common.confirmDelete', 'Confirm Delete')}</h3>
+            <p className="text-sm text-slate-500 mb-6">{t('inventory.deletePOConfirm', 'Are you sure you want to delete this purchase order?')}</p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setDeleteConfirm(null)} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">{t('common.cancel', 'Cancel')}</button>
+              <button onClick={() => handleDelete(deleteConfirm)} className="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700">{t('common.delete', 'Delete')}</button>
+            </div>
           </div>
         </div>
       )}

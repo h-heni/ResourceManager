@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
-import { theme } from '../theme';
+import { useAppTheme } from '../theme/ThemeContext';
 
 interface EmptyStateProps {
   icon?: React.ReactNode;
@@ -15,20 +15,22 @@ export default function EmptyState({
   message = 'There are no items to display.',
   action,
 }: EmptyStateProps) {
+  const { colors, spacing, typography, shadows } = useAppTheme();
+
   return (
-    <View style={styles.container}>
-      <View style={styles.iconContainer}>
+    <View style={[styles.container, { padding: spacing.xl }]}>
+      <View style={{ marginBottom: spacing.xl }}>
         {icon || (
-          <View style={styles.defaultIcon}>
+          <View style={[styles.defaultIcon, { backgroundColor: colors.offWhite }, shadows.card]}>
             <Text style={styles.defaultIconText}>📭</Text>
           </View>
         )}
       </View>
 
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.message}>{message}</Text>
+      <Text style={{ fontSize: typography.fontSize.h2, fontWeight: typography.fontWeight.semiBold, color: colors.text.primary, marginBottom: spacing.sm, textAlign: 'center' }}>{title}</Text>
+      <Text style={{ fontSize: typography.fontSize.body, color: colors.text.tertiary, textAlign: 'center', marginBottom: spacing.lg }}>{message}</Text>
 
-      {action && <View style={styles.actionContainer}>{action}</View>}
+      {action && <View style={{ marginTop: spacing.lg }}>{action}</View>}
     </View>
   );
 }
@@ -38,38 +40,16 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: theme.spacing.xl,
     minHeight: 300,
-  },
-  iconContainer: {
-    marginBottom: theme.spacing.xl,
   },
   defaultIcon: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: theme.colors.offWhite,
     justifyContent: 'center',
     alignItems: 'center',
-    ...theme.shadows.card,
   },
   defaultIconText: {
     fontSize: 40,
-  },
-  title: {
-    fontSize: theme.typography.fontSize.h2,
-    fontWeight: theme.typography.fontWeight.semiBold,
-    color: theme.colors.text.primary,
-    marginBottom: theme.spacing.sm,
-    textAlign: 'center',
-  },
-  message: {
-    fontSize: theme.typography.fontSize.body,
-    color: theme.colors.text.tertiary,
-    textAlign: 'center',
-    marginBottom: theme.spacing.lg,
-  },
-  actionContainer: {
-    marginTop: theme.spacing.lg,
   },
 });

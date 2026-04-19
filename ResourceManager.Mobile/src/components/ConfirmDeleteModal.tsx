@@ -7,7 +7,8 @@ import Button from './Button';
 
 interface ConfirmDeleteModalProps {
   visible: boolean;
-  onClose: () => void;
+  onClose?: () => void;
+  onCancel?: () => void;
   onConfirm: () => void;
   loading?: boolean;
   title?: string;
@@ -17,6 +18,7 @@ interface ConfirmDeleteModalProps {
 export default function ConfirmDeleteModal({
   visible,
   onClose,
+  onCancel,
   onConfirm,
   loading = false,
   title,
@@ -24,15 +26,16 @@ export default function ConfirmDeleteModal({
 }: ConfirmDeleteModalProps) {
   const { colors } = useAppTheme();
   const { t } = useTranslation();
+  const handleClose = onClose ?? onCancel ?? (() => {});
 
   return (
     <Modal
       visible={visible}
-      onClose={onClose}
+      onClose={handleClose}
       title={title || t('form.confirmDelete')}
       footer={
         <View style={styles.footer}>
-          <Button title={t('common.cancel')} variant="secondary" onPress={onClose} style={{ flex: 1, marginRight: 8 }} />
+          <Button title={t('common.cancel')} variant="secondary" onPress={handleClose} style={{ flex: 1, marginRight: 8 }} />
           <Button title={t('common.delete')} variant="danger" onPress={onConfirm} loading={loading} style={{ flex: 1 }} />
         </View>
       }

@@ -7,7 +7,9 @@
     "start:android": "npx expo start --android",
     "start:ios": "npx expo start --ios",
     "start:web": "npx expo start --web",
-    "clean": "rmdir /s /q .expo 2>nul & rmdir /s /q node_modules 2>nul & del package-lock.json"
+    "clean": "rmdir /s /q .expo 2>nul & rmdir /s /q node_modules 2>nul & del package-lock.json",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
@@ -15,6 +17,7 @@
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/datetimepicker": "8.4.4",
     "@react-native-community/netinfo": "11.4.1",
+    "@react-native-ml-kit/text-recognition": "^1.5.2",
     "@react-navigation/bottom-tabs": "^6.6.1",
     "@react-navigation/native": "^6.1.18",
     "@react-navigation/native-stack": "^6.11.0",
@@ -24,6 +27,7 @@
     "expo-camera": "~17.0.10",
     "expo-image-manipulator": "~14.0.8",
     "expo-image-picker": "~17.0.10",
+    "expo-intent-launcher": "~13.0.8",
     "expo-linear-gradient": "~15.0.8",
     "expo-localization": "~17.0.8",
     "expo-sharing": "~14.0.8",

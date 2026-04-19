@@ -289,11 +289,28 @@ namespace ResourceManager.Controllers
             var invoice = await _context.SupplierInvoices.FindAsync(id);
             if (invoice == null) return NotFound();
 
+            // Build download filename from invoice number (or fallback)
+            string baseName = !string.IsNullOrWhiteSpace(invoice.InvoiceNumber)
+                ? invoice.InvoiceNumber.Trim()
+                : $"supplier-invoice-{id}";
+            // Sanitize filename — remove illegal path characters
+            foreach (var c in Path.GetInvalidFileNameChars()) baseName = baseName.Replace(c, '_');
+
             // Primary: load from DB compressed blob
             var dbFile = await _dbFileStorage.GetAsync(id);
             if (dbFile.HasValue)
             {
-                return File(dbFile.Value.Data, dbFile.Value.MimeType, invoice.FileName ?? "supplier-invoice.pdf");
+                var mime = dbFile.Value.MimeType?.ToLowerInvariant() ?? "application/pdf";
+                var ext = mime switch
+                {
+                    "image/jpeg" or "image/jpg" => ".jpg",
+                    "image/png" => ".png",
+                    "image/webp" => ".webp",
+                    "image/bmp" => ".bmp",
+                    "image/tiff" => ".tiff",
+                    _ => ".pdf"
+                };
+                return File(dbFile.Value.Data, mime, baseName + ext);
             }
 
             // Fallback: serve from disk for invoices saved before the migration
@@ -313,10 +330,22 @@ namespace ResourceManager.Controllers
             {
                 "image/png" => "image/png",
                 "image/jpeg" or "image/jpg" => "image/jpeg",
+                "image/webp" => "image/webp",
+                "image/bmp" => "image/bmp",
+                "image/tiff" => "image/tiff",
                 _ => "application/pdf"
             };
+            var diskExt = contentType switch
+            {
+                "image/jpeg" => ".jpg",
+                "image/png" => ".png",
+                "image/webp" => ".webp",
+                "image/bmp" => ".bmp",
+                "image/tiff" => ".tiff",
+                _ => ".pdf"
+            };
             var bytes = await System.IO.File.ReadAllBytesAsync(fullPath);
-            return File(bytes, contentType, invoice.FileName ?? "supplier-invoice.pdf");
+            return File(bytes, contentType, baseName + diskExt);
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -327,7 +356,9 @@ namespace ResourceManager.Controllers
         public async Task<IActionResult> UploadAndExtract(
             IFormFile file,
             [FromQuery] int? supplierId,
-            [FromServices] ISupplierPdfScannerService scannerService)
+            [FromForm] string? extractedText,
+            [FromServices] ISupplierPdfScannerService scannerService,
+            [FromServices] IGeminiInvoiceExtractor geminiExtractor)
         {
             if (file == null || file.Length == 0)
                 return BadRequest(new { message = "No file uploaded" });
@@ -351,13 +382,85 @@ namespace ResourceManager.Controllers
                 await file.CopyToAsync(memoryStream);
                 var pdfBytes = memoryStream.ToArray();
 
-                SupplierScanResult scanResult;
-                if (isImage)
+                SupplierScanResult scanResult = new()
+                {
+                    FileName = file.FileName,
+                    ScannedAt = DateTime.UtcNow
+                };
+
+                var imageMimeType = isImage
+                    ? $"image/{(fileExtension == ".jpg" ? "jpeg" : fileExtension.TrimStart('.'))}"
+                    : "application/pdf";
+
+                // ─── Priority 1: Groq vision LLM for images ───
+                bool geminiSucceeded = false;
+                if (isImage && geminiExtractor.IsConfigured)
+                {
+                    var geminiData = await geminiExtractor.ExtractAsync(pdfBytes, imageMimeType);
+                    if (geminiData != null)
+                    {
+                        scanResult.ExtractedData = geminiData;
+                        scanResult.RawExtractedText = extractedText ?? string.Empty;
+                        scanResult.ConfidenceScore = 0.95;
+                        scanResult.RequiresReview = false;
+                        scanResult.Success = true;
+                        geminiSucceeded = true;
+                        _logger.LogInformation("Groq vision extraction succeeded for {File}", file.FileName);
+                    }
+                    else
+                    {
+                        _logger.LogInformation("Groq vision returned no data for {File} — falling back", file.FileName);
+                    }
+                }
+
+                // ─── Priority 1b: Groq text-based LLM for PDFs ───
+                if (!geminiSucceeded && !isImage && geminiExtractor.IsConfigured)
+                {
+                    // First extract raw text from the PDF
+                    using var textStream = new MemoryStream(pdfBytes);
+                    var pdfScan = await scannerService.ScanPdfAsync(textStream, file.FileName);
+                    var pdfRawText = pdfScan.RawExtractedText;
+
+                    if (!string.IsNullOrWhiteSpace(pdfRawText))
+                    {
+                        var groqData = await geminiExtractor.ExtractFromTextAsync(pdfRawText);
+                        if (groqData != null)
+                        {
+                            scanResult.ExtractedData = groqData;
+                            scanResult.RawExtractedText = pdfRawText;
+                            scanResult.ConfidenceScore = 0.90;
+                            scanResult.RequiresReview = false;
+                            scanResult.Success = true;
+                            geminiSucceeded = true;
+                            _logger.LogInformation("Groq text extraction succeeded for PDF {File}", file.FileName);
+                        }
+                        else
+                        {
+                            // Groq failed but we have the text scan — use it as fallback
+                            scanResult = pdfScan;
+                            geminiSucceeded = false;
+                            _logger.LogInformation("Groq text extraction returned no data for {File} — using regex fallback", file.FileName);
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogInformation("No text extracted from PDF {File} — falling back to OCR", file.FileName);
+                    }
+                }
+
+                // ─── Priority 2: ML Kit text from mobile (skips Tesseract) ───
+                if (!geminiSucceeded && !string.IsNullOrWhiteSpace(extractedText))
+                {
+                    scanResult = await scannerService.ScanRawTextAsync(extractedText, file.FileName);
+                }
+                // ─── Priority 3: Tesseract OCR for images ───
+                else if (!geminiSucceeded && isImage)
                 {
                     using var extractStream = new MemoryStream(pdfBytes);
                     scanResult = await scannerService.ScanImageAsync(extractStream, file.FileName);
                 }
-                else
+                // ─── Priority 4: PDF text extraction (no Groq key configured) ───
+                else if (!geminiSucceeded)
                 {
                     using var extractStream = new MemoryStream(pdfBytes);
                     scanResult = await scannerService.ScanPdfAsync(extractStream, file.FileName);

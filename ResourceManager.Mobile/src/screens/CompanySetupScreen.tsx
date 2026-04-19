@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, KeyboardAvoidingView,
   Platform, TouchableOpacity, ActivityIndicator,
@@ -9,12 +9,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../theme/ThemeContext';
 import Input from '../components/Input';
-import { useSetupCompany } from '../hooks/useSettings';
+import { useSetupCompany, useSettings } from '../hooks/useSettings';
 
 export default function CompanySetupScreen({ navigation }: any) {
   const { colors, borderRadius, typography } = useAppTheme();
   const { t } = useTranslation();
   const setupMutation = useSetupCompany();
+  const { data: existingCompany } = useSettings();
 
   const [form, setForm] = useState({
     name: '',
@@ -24,6 +25,18 @@ export default function CompanySetupScreen({ navigation }: any) {
     address: '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (existingCompany) {
+      setForm({
+        name: existingCompany.companyName || '',
+        industry: (existingCompany as any).industry || '',
+        phone: (existingCompany as any).phone || '',
+        email: (existingCompany as any).email || '',
+        address: (existingCompany as any).address || '',
+      });
+    }
+  }, [existingCompany]);
 
   const updateField = (field: string, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }));

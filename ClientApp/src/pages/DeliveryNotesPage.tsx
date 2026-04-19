@@ -224,17 +224,6 @@ export default function DeliveryNotesPage() {
                                         <Eye size={14} className="text-purple-500" /> {t('common.viewDetails')}
                                     </button>
                                 )}
-                                <button
-                                    onClick={() => {
-                                        selectedRows.forEach(id => {
-                                            const n = filteredNotes.find(n => n.id === id);
-                                            if (n) handleDownloadPdf(n.id, n.number);
-                                        });
-                                    }}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-purple-50 text-slate-600 hover:text-purple-700 rounded-full text-xs font-medium transition-colors"
-                                >
-                                    <Download size={14} className="text-purple-500" /> {t('common.export', 'Export')}
-                                </button>
                                 <div className="w-px h-4 bg-slate-200 mx-1" />
                                 <button
                                     onClick={() => { selectedRows.forEach(id => handleDelete(id)); setSelectedRows([]); }}

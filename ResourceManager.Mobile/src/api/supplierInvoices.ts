@@ -1,6 +1,7 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL, DEFAULT_PAGE_SIZE, API_TIMEOUT } from './config';
-import { authApi } from './auth';
+import { authApi, refreshAccessToken, STORAGE_KEYS } from './auth';
 
 // Create axios instance for supplier invoices
 const supplierInvoicesClient = axios.create({
@@ -16,6 +17,27 @@ supplierInvoicesClient.interceptors.request.use(async (config) => {
   }
   return config;
 });
+
+// Response interceptor — auto-refresh expired JWT and retry
+supplierInvoicesClient.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const originalRequest = error.config as any;
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      try {
+        const newToken = await refreshAccessToken();
+        if (newToken) {
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+          return supplierInvoicesClient(originalRequest);
+        }
+      } catch {
+        await AsyncStorage.multiRemove([STORAGE_KEYS.TOKEN, STORAGE_KEYS.REFRESH_TOKEN, STORAGE_KEYS.USER]);
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 // Interfaces
 export interface SupplierInvoice {
@@ -161,7 +183,8 @@ export const supplierInvoicesApi = {
     fileUri: string,
     fileName: string,
     fileType: 'image/jpeg' | 'image/png' | 'application/pdf',
-    supplierId?: number
+    supplierId?: number,
+    extractedText?: string
   ): Promise<UploadResponse> => {
     try {
       // Create FormData for file upload
@@ -174,6 +197,10 @@ export const supplierInvoicesApi = {
 
       if (supplierId) {
         formData.append('supplierId', supplierId.toString());
+      }
+
+      if (extractedText && extractedText.trim().length > 0) {
+        formData.append('extractedText', extractedText);
       }
 
       const response = await supplierInvoicesClient.post<UploadResponse>(

@@ -1,5 +1,6 @@
 import React from 'react';
 import { ActivityIndicator, View } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AppNavigator from './src/navigation/AppNavigator';
@@ -38,7 +39,8 @@ function AppContent() {
 export default function App() {
   return (
     <ThemeProvider>
-      <SafeAreaProvider>
+      <SafeAreaProvider style={{ backgroundColor: '#000000' }}>
+        <StatusBar style="light" backgroundColor="#000000" translucent={false} />
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <AppContent />

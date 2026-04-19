@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Alert, Te
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppTheme, useThemeMode } from '../theme/ThemeContext';
 import { useAuth } from '../hooks/useAuth';
 import { useSettings, useChangePassword } from '../hooks/useSettings';
@@ -10,9 +11,10 @@ import Card from '../components/Card';
 import Button from '../components/Button';
 import Input from '../components/Input';
 import Modal from '../components/Modal';
+import { LANGUAGE_KEY } from '../i18n';
 
 export default function SettingsScreen({ navigation }: any) {
-  const { colors, spacing, borderRadius, shadows, typography } = useAppTheme();
+  const { colors, spacing, borderRadius, shadows, typography, dark } = useAppTheme();
   const { t, i18n } = useTranslation();
   const { user, logout } = useAuth();
   const { themeMode, setThemeMode } = useThemeMode();
@@ -50,6 +52,7 @@ export default function SettingsScreen({ navigation }: any) {
 
   const handleLanguageChange = (lang: string) => {
     i18n.changeLanguage(lang);
+    AsyncStorage.setItem(LANGUAGE_KEY, lang);
     setShowLanguage(false);
   };
 
@@ -98,7 +101,7 @@ export default function SettingsScreen({ navigation }: any) {
               {user?.firstName ? `${user.firstName} ${user.lastName ?? ''}`.trim() : 'User'}
             </Text>
             <Text style={{ color: colors.text.tertiary, marginTop: 2 }}>{user?.email ?? ''}</Text>
-            {user?.role && <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '600', marginTop: 4 }}>{user.role}</Text>}
+            {user?.roles && user.roles.length > 0 && <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '600', marginTop: 4 }}>{user.roles.join(', ')}</Text>}
           </View>
         </View>
 
@@ -128,25 +131,15 @@ export default function SettingsScreen({ navigation }: any) {
           <SettingRow
             icon="moon-outline"
             title={t('settings.darkMode')}
-            onPress={() => setThemeMode(themeMode === 'dark' ? 'light' : 'dark')}
+            onPress={() => setThemeMode(dark ? 'light' : 'dark')}
             trailing={
               <Switch
-                value={themeMode === 'dark'}
+                value={dark}
                 onValueChange={(v) => setThemeMode(v ? 'dark' : 'light')}
-                thumbColor={themeMode === 'dark' ? colors.primary : '#f4f3f4'}
+                thumbColor={dark ? colors.primary : '#f4f3f4'}
                 trackColor={{ false: '#767577', true: colors.primary + '60' }}
               />
             }
-          />
-        </View>
-
-        {/* About */}
-        <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: borderRadius.lg, margin: spacing.md }, shadows.card]}>
-          <SettingRow
-            icon="information-circle-outline"
-            title={t('settings.about')}
-            subtitle="ResourceManager Mobile v1.0.0"
-            onPress={() => Alert.alert(t('settings.about'), 'ResourceManager Mobile\nVersion 1.0.0\n\nBuilt with React Native & Expo')}
           />
         </View>
 

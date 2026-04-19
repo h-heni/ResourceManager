@@ -5,8 +5,9 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "allowSyntheticDefaultImports": true,
+    "ignoreDeprecations": "5.0",
     "jsx": "react-native",
     "baseUrl": "./",
     "paths": {
@@ -20,6 +21,10 @@
     "**/*.tsx"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "app",
+    "entry-point.tsx",
+    "test.tsx",
+    "test-app"
   ]
 }

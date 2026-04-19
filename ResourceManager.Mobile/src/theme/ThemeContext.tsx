@@ -31,6 +31,17 @@ interface ThemeModeContext {
 const ThemeContext = createContext<AppTheme | null>(null);
 const ThemeModeCtx = createContext<ThemeModeContext>({ themeMode: 'system', setThemeMode: () => {} });
 
+/** Build dark-mode-aware shadows (lighter, purple-tinted for dark) */
+function buildShadows(isDark: boolean): typeof shadows {
+  if (!isDark) return shadows;
+  return {
+    ...shadows,
+    card: { ...shadows.card, shadowColor: '#000', shadowOpacity: 0.4, elevation: 3 },
+    elevated: { ...shadows.elevated, shadowColor: '#7C3AED', shadowOpacity: 0.15, elevation: 5 },
+    hover: { ...shadows.hover, shadowColor: '#7C3AED', shadowOpacity: 0.2, elevation: 7 },
+  };
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const scheme = useColorScheme();
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
@@ -43,7 +54,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       typography: { fontFamily, fontSize, fontWeight, lineHeight, letterSpacing },
       spacing,
       borderRadius,
-      shadows,
+      shadows: buildShadows(isDark),
     }),
     [isDark],
   );

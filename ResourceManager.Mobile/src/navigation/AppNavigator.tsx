@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../theme/ThemeContext';
 import { authApi } from '../api';
 
@@ -128,6 +129,8 @@ function ScanTabButton({ onPress }: { onPress?: (...args: any[]) => void }) {
 function MainTabs() {
   const { colors, typography } = useAppTheme();
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, Platform.OS === 'ios' ? 16 : 10);
 
   return (
     <Tab.Navigator
@@ -139,8 +142,8 @@ function MainTabs() {
           backgroundColor: colors.card,
           borderTopWidth: 1,
           borderTopColor: colors.border,
-          height: Platform.OS === 'ios' ? 88 : 64,
-          paddingBottom: Platform.OS === 'ios' ? 28 : 8,
+          height: 56 + bottomInset,
+          paddingBottom: bottomInset,
           paddingTop: 6,
           elevation: 8,
         },
@@ -158,6 +161,12 @@ function MainTabs() {
           tabBarLabel: t('nav.dashboard'),
           tabBarIcon: ({ color, size }) => <Ionicons name="grid-outline" size={size} color={color} />,
         }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.navigate('DashboardTab', { screen: 'DashboardHome' });
+          },
+        })}
       />
       <Tab.Screen
         name="SalesTab"
@@ -166,6 +175,12 @@ function MainTabs() {
           tabBarLabel: t('nav.sales'),
           tabBarIcon: ({ color, size }) => <Ionicons name="document-text-outline" size={size} color={color} />,
         }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.navigate('SalesTab', { screen: 'InvoicesList' });
+          },
+        })}
       />
       <Tab.Screen
         name="ScanTab"
@@ -174,6 +189,12 @@ function MainTabs() {
           tabBarLabel: '',
           tabBarButton: (props) => <ScanTabButton onPress={props.onPress} />,
         }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.navigate('ScanTab', { screen: 'ScanInvoice' });
+          },
+        })}
       />
       <Tab.Screen
         name="PurchasesTab"
@@ -182,6 +203,12 @@ function MainTabs() {
           tabBarLabel: t('nav.purchases'),
           tabBarIcon: ({ color, size }) => <Ionicons name="receipt-outline" size={size} color={color} />,
         }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.navigate('PurchasesTab', { screen: 'SupplierInvoicesList' });
+          },
+        })}
       />
       <Tab.Screen
         name="MoreTab"
@@ -190,6 +217,12 @@ function MainTabs() {
           tabBarLabel: t('nav.more'),
           tabBarIcon: ({ color, size }) => <Ionicons name="ellipsis-horizontal" size={size} color={color} />,
         }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.navigate('MoreTab', { screen: 'MoreMenu' });
+          },
+        })}
       />
     </Tab.Navigator>
   );
@@ -198,7 +231,7 @@ function MainTabs() {
 // ── Auth Stack ──
 function AuthStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
+    <Stack.Navigator initialRouteName="Login" screenOptions={{ headerShown: false, animation: 'fade' }}>
       <Stack.Screen name="Login" component={LoginScreen} options={{ gestureEnabled: false }} />
       <Stack.Screen name="SignUp" component={SignUpScreen} />
       <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />

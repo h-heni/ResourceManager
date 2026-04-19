@@ -15,6 +15,8 @@ import Card from '../components/Card';
 import Button from '../components/Button';
 import Input from '../components/Input';
 import StatusBadge from '../components/StatusBadge';
+import { useTranslation } from 'react-i18next';
+import { useAppTheme } from '../theme/ThemeContext';
 import { theme } from '../theme';
 
 export default function ConfirmSupplierInvoiceScreen({ route, navigation }: any) {
@@ -24,6 +26,9 @@ export default function ConfirmSupplierInvoiceScreen({ route, navigation }: any)
     fileName,
     fileType,
   } = route.params;
+
+  const { t } = useTranslation();
+  const { colors, spacing, borderRadius, typography } = useAppTheme();
 
   const [loading, setLoading] = useState(false);
   const [invoiceNumber, setInvoiceNumber] = useState(extractedData?.invoiceNumber || '');
@@ -50,15 +55,15 @@ export default function ConfirmSupplierInvoiceScreen({ route, navigation }: any)
     const newErrors: Record<string, string> = {};
 
     if (!invoiceNumber) {
-      newErrors.invoiceNumber = 'Invoice number is required';
+      newErrors.invoiceNumber = t('scan.invoiceNumberRequired');
     }
 
     if (!invoiceDate) {
-      newErrors.invoiceDate = 'Invoice date is required';
+      newErrors.invoiceDate = t('scan.invoiceDateRequired');
     }
 
     if (!totalTTC) {
-      newErrors.totalTTC = 'Total amount is required';
+      newErrors.totalTTC = t('scan.totalRequired');
     }
 
     setErrors(newErrors);
@@ -97,17 +102,25 @@ export default function ConfirmSupplierInvoiceScreen({ route, navigation }: any)
       await supplierInvoicesApi.confirmNew(requestData);
 
       Alert.alert(
-        'Success',
-        'Supplier invoice saved successfully!',
+        t('common.success'),
+        t('scan.saveSuccess'),
         [
           {
             text: 'OK',
-            onPress: () => navigation.navigate('MainTabs', { screen: 'Invoices' }),
+            onPress: () => {
+              // Reset the ScanStack so pressing ScanTab again shows fresh ScanInvoice
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'ScanInvoice' }],
+              });
+              // Then switch to PurchasesTab
+              navigation.navigate('PurchasesTab', { screen: 'SupplierInvoicesList' });
+            },
           },
         ]
       );
     } catch (error) {
-      Alert.alert('Error', (error as Error).message || 'Failed to save invoice.');
+      Alert.alert(t('common.error'), (error as Error).message || t('scan.saveFailed'));
     } finally {
       setLoading(false);
     }
@@ -117,8 +130,8 @@ export default function ConfirmSupplierInvoiceScreen({ route, navigation }: any)
     try {
       await supplierInvoicesApi.discard(tempFilePath);
       Alert.alert(
-        'Discarded',
-        'Invoice scan has been discarded.',
+        t('scan.discardedTitle'),
+        t('scan.discardedMessage'),
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
     } catch (error) {
@@ -132,14 +145,14 @@ export default function ConfirmSupplierInvoiceScreen({ route, navigation }: any)
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color={theme.colors.text.primary} />
+          <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
         </TouchableOpacity>
-        <Text style={styles.title}>Confirm Invoice</Text>
+        <Text style={[styles.title, { color: colors.text.primary }]}>{t('scan.confirmTitle')}</Text>
         <TouchableOpacity onPress={handleDiscard}>
-          <Ionicons name="trash-outline" size={24} color={theme.colors.error} />
+          <Ionicons name="trash-outline" size={24} color={colors.error} />
         </TouchableOpacity>
       </View>
 
@@ -147,13 +160,13 @@ export default function ConfirmSupplierInvoiceScreen({ route, navigation }: any)
         <Card style={styles.card} padding="lg">
           {/* Scan Status */}
           <View style={styles.statusSection}>
-            <View style={styles.statusIcon}>
-              <Ionicons name="scan-outline" size={24} color={theme.colors.primary} />
+            <View style={[styles.statusIcon, { backgroundColor: colors.primary }]}>
+              <Ionicons name="scan-outline" size={24} color="#FFF" />
             </View>
             <View style={styles.statusContent}>
-              <Text style={styles.statusTitle}>Scan Complete</Text>
-              <Text style={styles.statusMessage}>
-                Please review and confirm the extracted data
+              <Text style={[styles.statusTitle, { color: colors.primary }]}>{t('scan.scanComplete')}</Text>
+              <Text style={[styles.statusMessage, { color: colors.text.secondary }]}>
+                {t('scan.confirmSubtitle')}
               </Text>
             </View>
           </View>
@@ -161,61 +174,61 @@ export default function ConfirmSupplierInvoiceScreen({ route, navigation }: any)
 
         {/* Invoice Details */}
         <Card style={styles.card} padding="md">
-          <Text style={styles.sectionTitle}>Invoice Details</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>{t('scan.invoiceDetails')}</Text>
 
           <Input
-            label="Invoice Number"
+            label={t('scan.invoiceNumber')}
             placeholder="INV-001"
             value={invoiceNumber}
             onChangeText={(text) => {
               setInvoiceNumber(text);
-              if (errors.invoiceNumber) setErrors({ ...errors, invoiceNumber: undefined });
+              if (errors.invoiceNumber) { const { invoiceNumber: _omit, ...rest } = errors; setErrors(rest); }
             }}
             error={errors.invoiceNumber}
           />
 
           <Input
-            label="Invoice Date"
-            placeholder="Select date"
+            label={t('scan.invoiceDate')}
+            placeholder={t('scan.selectDate')}
             value={invoiceDate}
             onChangeText={(text) => {
               setInvoiceDate(text);
-              if (errors.invoiceDate) setErrors({ ...errors, invoiceDate: undefined });
+              if (errors.invoiceDate) { const { invoiceDate: _omit, ...rest } = errors; setErrors(rest); }
             }}
             error={errors.invoiceDate}
           />
 
           <Input
-            label="Due Date (Optional)"
-            placeholder="Select due date"
+            label={t('scan.dueDateOptional')}
+            placeholder={t('scan.selectDueDate')}
             value={dueDate}
             onChangeText={setDueDate}
           />
 
           <Input
-            label="Total HT"
+            label={t('scan.totalHT')}
             placeholder="0.00"
             value={totalHT}
             onChangeText={setTotalHT}
             keyboardType="decimal-pad"
-            leftIcon={<Ionicons name="pricetag-outline" size={20} color={theme.colors.text.light} />}
+            leftIcon={<Ionicons name="pricetag-outline" size={20} color={colors.text.light} />}
           />
 
           <Input
-            label="Total TTC"
+            label={t('scan.totalTTC')}
             placeholder="0.00"
             value={totalTTC}
             onChangeText={(text) => {
               setTotalTTC(text);
-              if (errors.totalTTC) setErrors({ ...errors, totalTTC: undefined });
+              if (errors.totalTTC) { const { totalTTC: _omit, ...rest } = errors; setErrors(rest); }
             }}
             error={errors.totalTTC}
             keyboardType="decimal-pad"
-            leftIcon={<Ionicons name="wallet-outline" size={20} color={theme.colors.text.light} />}
+            leftIcon={<Ionicons name="wallet-outline" size={20} color={colors.text.light} />}
           />
 
           <Input
-            label="TVA"
+            label={t('scan.tva')}
             placeholder="0.00"
             value={TVA}
             onChangeText={setTVA}
@@ -225,35 +238,35 @@ export default function ConfirmSupplierInvoiceScreen({ route, navigation }: any)
 
         {/* Supplier Details */}
         <Card style={styles.card} padding="md">
-          <Text style={styles.sectionTitle}>Supplier Details</Text>
+          <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>{t('scan.supplierDetails')}</Text>
 
           <Input
-            label="Supplier Name"
-            placeholder="Enter supplier name"
+            label={t('scan.supplierName')}
+            placeholder={t('scan.supplierNamePlaceholder')}
             value={supplierName}
             onChangeText={setSupplierName}
-            leftIcon={<Ionicons name="business-outline" size={20} color={theme.colors.text.light} />}
+            leftIcon={<Ionicons name="business-outline" size={20} color={colors.text.light} />}
           />
 
           <Input
-            label="Address (Optional)"
-            placeholder="Enter address"
+            label={t('scan.addressOptional')}
+            placeholder={t('scan.addressPlaceholder')}
             value={supplierAddress}
             onChangeText={setSupplierAddress}
-            leftIcon={<Ionicons name="location-outline" size={20} color={theme.colors.text.light} />}
+            leftIcon={<Ionicons name="location-outline" size={20} color={colors.text.light} />}
           />
         </Card>
 
         {/* Line Items Preview */}
         {extractedData?.lineItems && extractedData.lineItems.length > 0 && (
           <Card style={styles.card} padding="md">
-            <Text style={styles.sectionTitle}>Line Items</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>{t('scan.lineItems')}</Text>
             {extractedData.lineItems.map((item: any, index: number) => (
               <View key={index} style={styles.itemRow}>
                 <View style={styles.itemInfo}>
                   <Text style={styles.itemDesc}>{item.description}</Text>
-                  <Text style={styles.itemQty}>
-                    Qty: {item.quantity}
+                  <Text style={[styles.itemQty, { color: colors.text.tertiary }]}>
+                    {t('common.qty')}: {item.quantity}
                   </Text>
                 </View>
                 <Text style={styles.itemPrice}>
@@ -265,18 +278,17 @@ export default function ConfirmSupplierInvoiceScreen({ route, navigation }: any)
         )}
 
         {/* Actions */}
-        <View style={styles.actions}>
+        <Card style={{ margin: spacing.md }} padding="md">
           <Button
-            title="Save Invoice"
+            title={t('scan.saveInvoice')}
             variant="primary"
             onPress={handleConfirm}
             disabled={loading}
             loading={loading}
-            style={styles.saveButton}
             fullWidth
-            icon={<Ionicons name="checkmark" size={20} color={theme.colors.white} />}
+            icon={<Ionicons name="checkmark" size={20} color="#FFF" />}
           />
-        </View>
+        </Card>
       </ScrollView>
     </SafeAreaView>
   );

@@ -76,7 +76,7 @@ const EMAIL_PLACEHOLDERS = [
 
 type SidebarSection = 'personal' | 'email' | 'pdf' | 'whatsapp';
 type PersonalTab = 'company' | 'password' | 'userinfo';
-type PdfTab = 'signature' | 'branding' | 'financial' | 'storage';
+type PdfTab = 'signature' | 'branding' | 'financial';
 
 // ═══════════════════════════════════════════════════════════════
 // COMPONENT
@@ -294,11 +294,6 @@ Best regards,
     };
 
     const handleSave = async (skipConfirm = false) => {
-        // If baseStoragePath is being set for the first time, ask for confirmation
-        if (!skipConfirm && settings.baseStoragePath && !settings.isProfileComplete) {
-            setShowBasePathLockConfirm(true);
-            return;
-        }
         setSaving(true);
         setStatus(null);
         try {
@@ -336,7 +331,6 @@ Best regards,
                 showBankBIC: settings.showBankBIC,
                 showBankIBAN: settings.showBankIBAN,
                 fileSystemLanguage: settings.fileSystemLanguage || undefined,
-                baseStoragePath: settings.baseStoragePath || undefined,
                 whatsAppPhoneNumberId: settings.whatsAppPhoneNumberId || undefined,
                 whatsAppAccessToken: settings.whatsAppAccessToken || undefined,
                 whatsAppBusinessAccountId: settings.whatsAppBusinessAccountId || undefined,
@@ -344,11 +338,6 @@ Best regards,
             });
             setStatus({ type: 'success', message: t('common.success', 'Settings saved successfully!') });
             invalidateSettingsCache(); // Clear stale currency cache
-
-            // If baseStoragePath was just set, update auth context so SettingsGuard unlocks
-            if (settings.baseStoragePath) {
-                updateProfileComplete(true, settings.baseStoragePath);
-            }
         } catch {
             setStatus({ type: 'error', message: t('common.error', 'Failed to save settings') });
         } finally { setSaving(false); }
@@ -792,20 +781,18 @@ Best regards,
                 </div>
             )}
 
-            {/* Main layout: Top Tabs Grid + Content below */}
+            {/* Main layout: Compact Tabs + Content below */}
             <div className="space-y-6">
-                {/* ═══════════ SECTION TABS (3-column grid) ═══════════ */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* ═══════════ SECTION TABS (compact horizontal bar) ═══════════ */}
+                <div className="flex gap-1 bg-gray-100 p-1 rounded-xl overflow-x-auto">
                     {sections.map(sec => (
                         <button key={sec.key} onClick={() => setActiveSection(sec.key)}
-                            className={`flex items-center gap-3 p-5 rounded-2xl text-left transition-all text-sm font-semibold border-2 ${
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${
                                 activeSection === sec.key
-                                    ? 'bg-purple-600 text-white shadow-lg border-purple-600'
-                                    : 'bg-white text-gray-700 hover:bg-gray-50 border-gray-100 shadow-sm'
+                                    ? 'bg-white text-purple-600 shadow-sm'
+                                    : 'text-gray-600 hover:text-gray-900'
                             }`}>
-                            <div className={`p-2.5 rounded-xl ${activeSection === sec.key ? 'bg-white/20' : 'bg-purple-600/5'}`}>
-                                <sec.icon size={20} className={activeSection === sec.key ? 'text-white' : 'text-purple-600'} />
-                            </div>
+                            <sec.icon size={15} />
                             {sec.label}
                         </button>
                     ))}
@@ -1085,7 +1072,6 @@ Best regards,
                                     { key: 'signature' as PdfTab, label: t('settings.signature', 'Signature'), icon: PenTool },
                                     { key: 'branding' as PdfTab, label: t('settings.branding', 'Branding'), icon: Palette },
                                     { key: 'financial' as PdfTab, label: t('settings.financial', 'Financial'), icon: DollarSign },
-                                    { key: 'storage' as PdfTab, label: t('settings.storage', 'Storage'), icon: HardDrive },
                                 ]).map(tab => (
                                     <button key={tab.key} onClick={() => setPdfTab(tab.key)}
                                         className={`flex-shrink-0 sm:flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
@@ -1386,279 +1372,6 @@ Best regards,
                                     </div>
                                 )}
 
-                                {/* Storage Tab */}
-                                {pdfTab === 'storage' && (
-                                    <div className="space-y-6">
-                                        <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-                                            <HardDrive className="mr-2 text-purple-600" size={20} />
-                                            {t('settings.storage', 'PDF Storage')}
-                                        </h3>
-
-                                        {/* File System Language - set once, then locked */}
-                                        <div className={`p-5 rounded-xl border ${settings.fileSystemLanguageLocked ? 'bg-gray-50 border-gray-200' : 'bg-amber-50 border-amber-200'}`}>
-                                            <div className="flex items-center justify-between mb-2">
-                                                <label className="text-sm font-semibold text-gray-800">
-                                                    📂 File System Language
-                                                </label>
-                                                {settings.fileSystemLanguageLocked && (
-                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-700">
-                                                        🔒 Locked
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <p className="text-xs text-gray-500 mb-3">
-                                                {settings.fileSystemLanguageLocked
-                                                    ? 'This language is permanently set and cannot be changed. It determines folder names (e.g., "Factures" vs "Invoices") on disk.'
-                                                    : '⚠️ Choose carefully — this setting is permanent and cannot be changed once saved. It determines folder names on disk (e.g., "Factures" for French, "Invoices" for English).'}
-                                            </p>
-                                            <select
-                                                value={settings.fileSystemLanguage}
-                                                onChange={e => updateSetting('fileSystemLanguage', e.target.value)}
-                                                disabled={settings.fileSystemLanguageLocked}
-                                                className={`w-full px-4 py-3 border rounded-xl transition-all ${
-                                                    settings.fileSystemLanguageLocked
-                                                        ? 'bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed'
-                                                        : 'bg-white border-amber-300 focus:ring-2 focus:ring-amber-500 outline-none'
-                                                }`}
-                                            >
-                                                <option value="">-- Not Set --</option>
-                                                <option value="fr">Français (Factures, Devis, Bons de Livraison)</option>
-                                                <option value="en">English (Invoices, Quotes, Delivery Notes)</option>
-                                                <option value="de">Deutsch (Rechnungen, Angebote, Lieferscheine)</option>
-                                                <option value="ar">العربية (فواتير, عروض أسعار, إيصالات تسليم)</option>
-                                            </select>
-                                        </div>
-
-                                        {/* Base Storage Path - Manager local sync destination */}
-                                        <div className={`p-5 rounded-xl border ${settings.baseStoragePath ? 'bg-gray-50 border-gray-200' : 'bg-amber-50 border-amber-200'}`}>
-                                            <div className="flex items-center justify-between mb-2">
-                                                <label className="text-sm font-semibold text-gray-800">
-                                                    💾 {t('settings.baseStoragePath', 'Base Storage Path')}
-                                                </label>
-                                                {settings.baseStoragePath && (
-                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-700">
-                                                        🔒 Locked
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <p className="text-xs text-gray-500 mb-3">
-                                                {settings.baseStoragePath
-                                                    ? 'This path is permanently locked. Employee-uploaded invoices will be synced here. Contact Super Admin to reset.'
-                                                    : '⚠️ Set the local directory where employee-uploaded supplier invoices will be synced. This cannot be changed once saved.'}
-                                            </p>
-                                            <div className="flex gap-2">
-                                                <input
-                                                    type="text"
-                                                    value={settings.baseStoragePath}
-                                                    onChange={e => updateSetting('baseStoragePath', e.target.value)}
-                                                    disabled={!!settings.baseStoragePath}
-                                                    placeholder={t('settings.baseStoragePathPlaceholder', 'e.g. C:\\ResourceManager\\Invoices')}
-                                                    className={`flex-1 px-4 py-3 border rounded-xl font-mono text-sm transition-all ${
-                                                        settings.baseStoragePath
-                                                            ? 'bg-gray-100 border-gray-300 text-gray-500 cursor-not-allowed'
-                                                            : 'bg-white border-amber-300 focus:ring-2 focus:ring-amber-500 outline-none'
-                                                    }`}
-                                                />
-                                                {!settings.baseStoragePath && (
-                                                    <button
-                                                        onClick={() => {
-                                                            if (folderBrowser) {
-                                                                setFolderBrowser(null);
-                                                            } else {
-                                                                setBrowseTarget('basePath');
-                                                                handleBrowseFolders(settings.baseStoragePath || undefined);
-                                                            }
-                                                        }}
-                                                        disabled={browsingFolders}
-                                                        className="flex items-center gap-2 px-4 py-3 bg-purple-600 text-white rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-colors text-sm font-medium whitespace-nowrap"
-                                                    >
-                                                        {browsingFolders ? <Loader2 size={16} className="animate-spin" /> : <FolderOpen size={16} />}
-                                                        Browse
-                                                    </button>
-                                                )}
-                                            </div>
-                                            {!settings.baseStoragePath && (
-                                                <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
-                                                    <AlertTriangle size={12} />
-                                                    {t('settings.baseStoragePathWarning', 'You must set this path to complete your profile setup. Type the full path or use Browse to select a folder.')}
-                                                </p>
-                                            )}
-                                        </div>
-
-                                        {/* Folder Browser Modal */}
-                                        {folderBrowser && (
-                                            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setFolderBrowser(null)}>
-                                                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
-                                                    <div className="flex items-center justify-between px-5 py-3.5 bg-gradient-to-r from-purple-600/5 to-blue-50 border-b border-gray-200">
-                                                        <div className="flex items-center gap-2 min-w-0">
-                                                            <FolderOpen size={18} className="text-purple-600 flex-shrink-0" />
-                                                            <span className="font-semibold text-gray-800">{t('settings.selectFolder', 'Select a folder')}</span>
-                                                        </div>
-                                                        <button onClick={() => setFolderBrowser(null)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"><X size={18} /></button>
-                                                    </div>
-                                                    {folderBrowser.currentPath && (
-                                                        <div className="px-5 py-2 bg-gray-50 border-b border-gray-100">
-                                                            <p className="text-xs text-gray-500 font-mono truncate" title={folderBrowser.currentPath}>{folderBrowser.currentPath}</p>
-                                                        </div>
-                                                    )}
-                                                    <div className="p-2 max-h-80 overflow-y-auto">
-                                                        {folderBrowser.parent && (
-                                                            <button onClick={() => handleBrowseFolders(folderBrowser.parent)}
-                                                                className="w-full px-3 py-2.5 text-left hover:bg-purple-600/5 rounded-lg flex items-center gap-2 text-purple-600 text-sm font-medium group">
-                                                                <FolderOpen size={14} className="group-hover:scale-110 transition-transform" />
-                                                                {t('settings.parentFolder', '.. (Parent folder)')}
-                                                            </button>
-                                                        )}
-                                                        {folderBrowser.items?.length === 0 && (
-                                                            <p className="px-3 py-6 text-center text-gray-400 text-sm">{t('settings.noSubfolders', 'No subfolders found')}</p>
-                                                        )}
-                                                        {folderBrowser.items?.map((item: { path: string; name: string; type: string }) => (
-                                                            <button key={item.path}
-                                                                onClick={() => {
-                                                                    setNewBasePath(item.path);
-                                                                    if (browseTarget === 'basePath') {
-                                                                        updateSetting('baseStoragePath', item.path);
-                                                                    }
-                                                                    handleBrowseFolders(item.path);
-                                                                }}
-                                                                className={`w-full px-3 py-2.5 text-left hover:bg-purple-600/5 rounded-lg flex items-center gap-2 text-sm transition-colors ${
-                                                                    newBasePath === item.path ? 'bg-purple-600/5 text-purple-600 font-medium ring-1 ring-purple-600/20' : 'text-gray-700'
-                                                                }`}>
-                                                                <FolderOpen size={14} className={item.type === 'drive' ? 'text-blue-500' : 'text-amber-500'} />
-                                                                <span className="font-mono text-sm">{item.name}</span>
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                    <div className="px-5 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
-                                                        <p className="text-xs text-gray-600 font-mono truncate flex-1 mr-3" title={newBasePath || ''}>
-                                                            {newBasePath || t('settings.noFolderSelected', 'No folder selected')}
-                                                        </p>
-                                                        <div className="flex gap-2">
-                                                            <button onClick={() => setFolderBrowser(null)}
-                                                                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-200 rounded-lg transition-colors">
-                                                                {t('common.cancel', 'Cancel')}
-                                                            </button>
-                                                            <button onClick={() => {
-                                                                if (browseTarget === 'basePath' && newBasePath) {
-                                                                    updateSetting('baseStoragePath', newBasePath);
-                                                                }
-                                                                setFolderBrowser(null);
-                                                            }}
-                                                                disabled={!newBasePath}
-                                                                className="px-4 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-40 whitespace-nowrap font-medium transition-colors">
-                                                                {t('settings.useThisFolder', 'Use this folder')}
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* File Consistency Check */}
-                                        <div className="bg-white border border-gray-200 rounded-xl p-5">
-                                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
-                                                <div>
-                                                    <h4 className="font-semibold text-gray-800 flex items-center gap-2">
-                                                        <CheckCircle size={18} className="text-purple-600" />
-                                                        {t('settings.fileConsistencyCheck', 'File Consistency Check')}
-                                                    </h4>
-                                                    <p className="text-sm text-gray-500 mt-1">{t('settings.fileConsistencyDesc', 'Verify all registered PDF files exist on disk. Missing files can be regenerated from your data.')}</p>
-                                                </div>
-                                                <button onClick={handleCheckConsistency} disabled={checkingConsistency || recovering}
-                                                    className="w-full sm:w-auto px-5 py-2.5 bg-purple-600 text-white rounded-xl hover:bg-purple-700 disabled:opacity-50 flex items-center justify-center gap-2 text-sm whitespace-nowrap transition-colors">
-                                                    {checkingConsistency ? <><Loader2 size={16} className="animate-spin" />{t('settings.checking', 'Checking...')}</> : <><CheckCircle size={16} />{t('settings.checkNow', 'Check Now')}</>}
-                                                </button>
-                                            </div>
-
-                                            {/* Recovery progress indicator */}
-                                            {recovering && recoveryProgress && (
-                                                <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
-                                                    <div className="flex items-center gap-3 mb-2">
-                                                        <RefreshCw size={18} className="text-blue-600 animate-spin" />
-                                                        <span className="text-sm font-medium text-blue-800">
-                                                            {t('settings.regeneratingPdfs', 'Regenerating PDFs...')} ({recoveryProgress.current} / {recoveryProgress.total})
-                                                        </span>
-                                                    </div>
-                                                    <p className="text-xs text-blue-600 ml-7">{recoveryProgress.message}</p>
-                                                    {recoveryProgress.total > 0 && (
-                                                        <div className="mt-2 ml-7 h-2 bg-blue-100 rounded-full overflow-hidden">
-                                                            <div
-                                                                className="h-full bg-blue-500 rounded-full transition-all duration-500 ease-out"
-                                                                style={{ width: `${Math.round((recoveryProgress.current / recoveryProgress.total) * 100)}%` }}
-                                                            />
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-
-                                            {consistencyReport && !recovering && (
-                                                <div className="mt-4">
-                                                    {(() => {
-                                                        const missing = consistencyReport.missingFiles ?? consistencyReport.MissingFiles ?? 0;
-                                                        const total = consistencyReport.totalFiles ?? consistencyReport.TotalFiles ?? 0;
-                                                        const existing = consistencyReport.existingFiles ?? consistencyReport.ExistingFiles ?? 0;
-                                                        const hasMissing = missing > 0;
-
-                                                        // Count by document type for detailed info
-                                                        const details: Array<{ id: number; documentType: string; documentNumber: string; fileName: string }> = consistencyReport.missingFileDetails || [];
-                                                        const canRegenerate = details.filter((d: { documentType: string }) => ['Invoice', 'Quote', 'DeliveryNote'].includes(d.documentType)).length;
-                                                        const uploadedOnly = details.filter((d: { documentType: string }) => !['Invoice', 'Quote', 'DeliveryNote'].includes(d.documentType)).length;
-
-                                                        return (
-                                                            <div className={`p-4 rounded-xl ${hasMissing ? 'bg-amber-50 border border-amber-200' : 'bg-emerald-50 border border-emerald-200'}`}>
-                                                                <div className="grid grid-cols-3 gap-4 text-center mb-3">
-                                                                    <div>
-                                                                        <p className="text-2xl font-bold text-gray-900">{total}</p>
-                                                                        <p className="text-xs text-gray-500 font-medium">{t('settings.totalRegistered', 'Total Registered')}</p>
-                                                                    </div>
-                                                                    <div>
-                                                                        <p className="text-2xl font-bold text-emerald-600">{existing}</p>
-                                                                        <p className="text-xs text-gray-500 font-medium">{t('settings.onDisk', 'On Disk')}</p>
-                                                                    </div>
-                                                                    <div>
-                                                                        <p className={`text-2xl font-bold ${hasMissing ? 'text-red-600' : 'text-emerald-600'}`}>{missing}</p>
-                                                                        <p className="text-xs text-gray-500 font-medium">{t('settings.missing', 'Missing')}</p>
-                                                                    </div>
-                                                                </div>
-
-                                                                {hasMissing ? (
-                                                                    <div className="space-y-3">
-                                                                        {/* Type breakdown */}
-                                                                        <div className="p-3 bg-white/60 rounded-lg">
-                                                                            {canRegenerate > 0 && (
-                                                                                <p className="text-sm text-amber-800 flex items-center gap-1.5">
-                                                                                    <RefreshCw size={14} className="text-amber-600" />
-                                                                                    <strong>{canRegenerate}</strong> {t('settings.canBeRegenerated', 'file(s) can be regenerated from your invoice/quote/delivery data')}
-                                                                                </p>
-                                                                            )}
-                                                                            {uploadedOnly > 0 && (
-                                                                                <p className="text-sm text-orange-700 flex items-center gap-1.5 mt-1">
-                                                                                    <AlertTriangle size={14} className="text-orange-500" />
-                                                                                    <strong>{uploadedOnly}</strong> {t('settings.mustBeReuploaded', 'uploaded file(s) must be re-uploaded manually')}
-                                                                                </p>
-                                                                            )}
-                                                                        </div>
-
-                                                                        <button onClick={handleRecoverFiles} disabled={recovering}
-                                                                            className="w-full px-4 py-3 bg-amber-600 text-white rounded-xl hover:bg-amber-700 disabled:opacity-50 flex items-center justify-center gap-2 font-medium transition-colors">
-                                                                            <RefreshCw size={18} />
-                                                                            {t('settings.regenerateMissing', 'Regenerate {{count}} Missing PDF(s)', { count: missing })}
-                                                                        </button>
-                                                                    </div>
-                                                                ) : (
-                                                                    <div className="flex items-center justify-center gap-2 mt-1">
-                                                                        <CheckCircle size={18} className="text-emerald-600" />
-                                                                        <p className="text-sm text-emerald-700 font-medium">{t('settings.allFilesConsistent', 'All files are consistent and present on disk.')}</p>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        );
-                                                    })()}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
                             </div>
                         </div>
                     )}

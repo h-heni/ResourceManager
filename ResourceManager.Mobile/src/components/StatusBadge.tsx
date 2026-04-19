@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
-import { theme } from '../theme';
+import { useAppTheme } from '../theme/ThemeContext';
 
 type StatusType = 'success' | 'warning' | 'error' | 'info' | 'default';
 
@@ -19,56 +19,33 @@ export default function StatusBadge({
   style,
   icon,
 }: StatusBadgeProps) {
+  const { colors, spacing, borderRadius, typography, dark } = useAppTheme();
+
   const getStatusStyle = (): { bg: string; textColor: string } => {
+    // In dark mode use a lower-opacity tint so backgrounds don't wash out
+    const alpha = dark ? '22' : '';
     switch (status) {
       case 'success':
-        return {
-          bg: theme.colors.successBg,
-          textColor: theme.colors.success,
-        };
+        return { bg: dark ? colors.success + '22' : colors.successBg, textColor: colors.success };
       case 'warning':
-        return {
-          bg: theme.colors.warningBg,
-          textColor: theme.colors.warning,
-        };
+        return { bg: dark ? colors.warning + '22' : colors.warningBg, textColor: colors.warning };
       case 'error':
-        return {
-          bg: theme.colors.errorBg,
-          textColor: theme.colors.error,
-        };
+        return { bg: dark ? colors.error + '22' : colors.errorBg, textColor: colors.error };
       case 'info':
-        return {
-          bg: theme.colors.infoBg,
-          textColor: theme.colors.info,
-        };
+        return { bg: dark ? colors.info + '22' : colors.infoBg, textColor: colors.info };
       default:
-        return {
-          bg: theme.colors.divider,
-          textColor: theme.colors.text.tertiary,
-        };
+        return { bg: colors.divider, textColor: colors.text.tertiary };
     }
   };
 
   const getSizeStyle = () => {
     switch (size) {
       case 'small':
-        return {
-          paddingHorizontal: theme.spacing.sm,
-          paddingVertical: 4,
-          minHeight: 24,
-        };
+        return { paddingHorizontal: spacing.sm, paddingVertical: 4, minHeight: 24 };
       case 'large':
-        return {
-          paddingHorizontal: theme.spacing.lg,
-          paddingVertical: 8,
-          minHeight: 40,
-        };
+        return { paddingHorizontal: spacing.lg, paddingVertical: 8, minHeight: 40 };
       default:
-        return {
-          paddingHorizontal: theme.spacing.md,
-          paddingVertical: 6,
-          minHeight: 32,
-        };
+        return { paddingHorizontal: spacing.md, paddingVertical: 6, minHeight: 32 };
     }
   };
 
@@ -79,10 +56,7 @@ export default function StatusBadge({
     <View
       style={[
         styles.badge,
-        {
-          backgroundColor: bg,
-          ...sizeStyle,
-        },
+        { backgroundColor: bg, borderRadius: borderRadius.full, gap: spacing.xs, ...sizeStyle },
         style,
       ]}
     >
@@ -94,10 +68,11 @@ export default function StatusBadge({
             color: textColor,
             fontSize:
               size === 'small'
-                ? theme.typography.fontSize.small
+                ? typography.fontSize.small
                 : size === 'large'
-                ? theme.typography.fontSize.body
-                : theme.typography.fontSize.caption,
+                ? typography.fontSize.body
+                : typography.fontSize.caption,
+            fontWeight: typography.fontWeight.semiBold as any,
           },
         ]}
         numberOfLines={1}
@@ -110,16 +85,12 @@ export default function StatusBadge({
 
 const styles = StyleSheet.create({
   badge: {
-    borderRadius: theme.borderRadius.full,
     alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.xs,
   },
-  text: {
-    fontWeight: theme.typography.fontWeight.semiBold,
-  },
+  text: {},
   icon: {
-    fontSize: 12,
+    // fontSize removed — was invalid on View
   },
 });

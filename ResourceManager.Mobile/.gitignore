@@ -49,3 +49,20 @@ web-build/
 # Temporary files
 *.tmp
 *.temp
+
+# Android release signing (MUST NOT be committed)
+android/app/release.keystore
+android/app/*.keystore
+android/keystore.properties
+
+# Android build outputs
+android/app/build/
+android/build/
+android/.gradle/
+android/.cxx/
+android/local.properties
+
+# Built APK releases (large binaries)
+releases/
+*.apk
+*.aab

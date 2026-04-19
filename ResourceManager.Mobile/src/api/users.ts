@@ -22,10 +22,25 @@ export interface InviteUserRequest {
   role: string;
 }
 
+// Normalize backend user object → mobile UserInfo
+function normalizeUser(u: any): UserInfo {
+  return {
+    id: u.id ?? u.Id ?? '',
+    email: u.email ?? u.Email ?? '',
+    firstName: u.firstName ?? u.FirstName ?? '',
+    lastName: u.lastName ?? u.LastName ?? '',
+    roles: u.roles ?? (u.role ? [u.role] : u.Role ? [u.Role] : []),
+    isActive: u.isActive ?? u.IsActive ?? true,
+  };
+}
+
 export const usersApi = {
   list: async (): Promise<UserInfo[]> => {
     const response = await apiClient.get('/Users');
-    return response.data;
+    const d = response.data;
+    // Backend wraps in { data: [...], ... }
+    const raw = Array.isArray(d) ? d : (d?.data ?? d?.Data ?? []);
+    return raw.map((u: any) => normalizeUser(u));
   },
 
   updateRole: async (id: string, role: string): Promise<void> => {

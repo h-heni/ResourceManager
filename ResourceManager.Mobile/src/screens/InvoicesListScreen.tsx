@@ -56,12 +56,7 @@ export default function InvoicesListScreen({ navigation }: any) {
     >
       <View style={styles.row}>
         <Text style={[styles.number, { color: colors.primary }]}>#{item.number}</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <TouchableOpacity onPress={() => navigation.navigate('InvoiceCreate', { invoiceId: item.id })} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons name="create-outline" size={20} color={colors.text.tertiary} />
-          </TouchableOpacity>
-          <StatusBadge status={getStatusType(item.status)} text={item.status} />
-        </View>
+        <StatusBadge status={getStatusType(item.status)} text={item.status} />
       </View>
       <View style={styles.row}>
         <View style={{ flex: 1 }}>

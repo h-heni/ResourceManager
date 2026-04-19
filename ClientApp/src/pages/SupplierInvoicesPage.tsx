@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import {
     Upload, FileText, Loader2, CheckCircle, AlertTriangle, Trash2,
     Plus, Save, ArrowLeft, Eye, X, Edit2, Search, DollarSign, ShieldCheck, Calendar,
-    Clock, Filter, Archive
+    Clock, Filter, Archive, Check, Download
 } from 'lucide-react';
 import api from '../services/api';
 import { queryClient } from '../lib/queryClient';
@@ -114,6 +114,7 @@ export default function SupplierInvoicesPage() {
 
     // View state
     const [view, setView] = useState<'list' | 'upload' | 'review'>('list');
+    const [selectedRows, setSelectedRows] = useState<number[]>([]);
 
     // Identical List & Archive State to InvoicesPage.tsx
     const[viewMode, setViewMode] = useState<'active' | 'archived'>('active');
@@ -580,6 +581,18 @@ export default function SupplierInvoicesPage() {
         return aValue < bValue ? 1 : -1;
     });
 
+    const toggleRow = (id: number) => {
+        setSelectedRows(prev => prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]);
+    };
+
+    const toggleAll = () => {
+        if (selectedRows.length === sortedInvoices.length && sortedInvoices.length > 0) {
+            setSelectedRows([]);
+        } else {
+            setSelectedRows(sortedInvoices.map(i => i.id));
+        }
+    };
+
     // ═══════════════════════════════════════════════════════════════
     // RENDER: LIST VIEW
     // ═══════════════════════════════════════════════════════════════
@@ -611,17 +624,6 @@ export default function SupplierInvoicesPage() {
                             {t('supplierInvoice.upload', 'Upload Invoice')}
                         </motion.button>
                     </div>
-                </div>
-
-                <div className="relative">
-                    <Search className="absolute start-4 top-3.5 h-4 w-4 text-slate-400" />
-                    <input
-                        type="text"
-                        placeholder={t('supplierInvoice.searchPlaceholder', 'Search by file name, invoice number, or supplier...')}
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="w-full ps-11 pe-4 py-3 bg-white border border-slate-200 rounded-full focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 outline-none transition-all text-sm"
-                    />
                 </div>
 
                 {/* Active / Archived Toggle */}
@@ -680,10 +682,115 @@ export default function SupplierInvoicesPage() {
                     </div>
                 ) : (
                     <div className="bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col p-6">
+                        {/* Action Bar */}
+                        <div className="flex items-center justify-between mb-6 h-12">
+                            <div className="flex-1 flex items-center gap-4">
+                                {selectedRows.length > 0 ? (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                        className="flex items-center gap-1 p-1 bg-white rounded-full border border-slate-200 shadow-sm overflow-x-auto"
+                                    >
+                                        <div className="px-3 py-1.5 text-xs font-bold text-purple-700 bg-purple-50 rounded-full flex items-center gap-2 border border-purple-100/50 flex-shrink-0">
+                                            <span className="w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center text-white text-[10px] shadow-inner">{selectedRows.length}</span>
+                                            {t('common.selected', 'Selected')}
+                                        </div>
+                                        {selectedRows.length === 1 && (() => {
+                                            const inv = sortedInvoices.find(i => i.id === selectedRows[0]);
+                                            return inv && inv.paymentStatus !== 'Paid' ? (
+                                                <button
+                                                    onClick={() => openPaymentModal(inv)}
+                                                    className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 rounded-full text-xs font-medium transition-colors"
+                                                >
+                                                    <DollarSign size={14} className="text-emerald-500" /> {t('supplierInvoice.addPayment', 'Add Payment')}
+                                                </button>
+                                            ) : null;
+                                        })()}
+                                        {selectedRows.length === 1 && (
+                                            <button
+                                                onClick={() => handleViewDetail(selectedRows[0])}
+                                                className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 hover:bg-purple-50 text-slate-600 hover:text-purple-700 rounded-full text-xs font-medium transition-colors"
+                                            >
+                                                <Eye size={14} className="text-purple-500" /> {t('common.viewDetails', 'View Details')}
+                                            </button>
+                                        )}
+                                        {selectedRows.length >= 1 && (
+                                            <button
+                                                onClick={async () => {
+                                                    for (const id of selectedRows) {
+                                                        try {
+                                                            const res = await api.get(`/SupplierInvoices/${id}/file`, { responseType: 'blob' });
+                                                            const disposition = res.headers['content-disposition'];
+                                                            const match = disposition?.match(/filename[^;=\n]*=(['"]?)([^'"\n;]*)/i);
+                                                            const inv = sortedInvoices.find(i => i.id === id);
+                                                            const mimeExt = (res.headers['content-type'] || '').includes('image/') ? '.jpg' : '.pdf';
+                                                            const fallbackName = inv?.invoiceNumber ? `${inv.invoiceNumber}${mimeExt}` : `supplier-invoice-${id}${mimeExt}`;
+                                                            const fileName = match?.[2] || fallbackName;
+                                                            const url = URL.createObjectURL(new Blob([res.data]));
+                                                            const a = document.createElement('a');
+                                                            a.href = url; a.download = fileName; document.body.appendChild(a); a.click();
+                                                            URL.revokeObjectURL(url); a.remove();
+                                                        } catch { notify('error', t('common.downloadFailed', 'Download failed')); }
+                                                    }
+                                                }}
+                                                className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 hover:bg-blue-50 text-slate-600 hover:text-blue-700 rounded-full text-xs font-medium transition-colors"
+                                            >
+                                                <Download size={14} className="text-blue-500" /> {t('common.download', 'Download')}
+                                            </button>
+                                        )}
+                                        {selectedRows.length === 1 && (() => {
+                                            const inv = sortedInvoices.find(i => i.id === selectedRows[0]);
+                                            return inv && (inv.paymentStatus === 'Pending' || inv.paymentStatus === 'Unpaid') ? (
+                                                <button
+                                                    onClick={() => handleViewInvoice(inv.id)}
+                                                    className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 hover:bg-amber-50 text-slate-600 hover:text-amber-700 rounded-full text-xs font-medium transition-colors"
+                                                >
+                                                    <Edit2 size={14} className="text-amber-500" /> {t('common.edit', 'Edit')}
+                                                </button>
+                                            ) : null;
+                                        })()}
+                                        {isManager && (
+                                            <>
+                                                <div className="w-px h-4 bg-slate-200 mx-1 flex-shrink-0" />
+                                                <button
+                                                    onClick={() => { selectedRows.forEach(id => handleDelete(id)); setSelectedRows([]); }}
+                                                    className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 hover:bg-red-50 text-slate-600 hover:text-red-600 rounded-full text-xs font-medium transition-colors"
+                                                >
+                                                    <Trash2 size={14} className="text-red-500" /> {t('common.delete', 'Delete')}
+                                                </button>
+                                            </>
+                                        )}
+                                    </motion.div>
+                                ) : (
+                                    <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="relative max-w-sm w-full">
+                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                        <input
+                                            type="text"
+                                            placeholder={t('supplierInvoice.searchPlaceholder', 'Search by invoice number or supplier...')}
+                                            value={search}
+                                            onChange={(e) => setSearch(e.target.value)}
+                                            className="w-full pl-10 pr-4 py-2.5 bg-white/50 border border-slate-200/60 hover:border-purple-300 focus:bg-white focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 rounded-full text-sm font-medium outline-none transition-all placeholder:text-slate-400 text-slate-900 shadow-sm"
+                                        />
+                                    </motion.div>
+                                )}
+                            </div>
+                        </div>
                         <div className="overflow-x-auto">
                         <table className="w-full min-w-[850px]">
                             <thead>
                                 <tr>
+                                    <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest w-12">
+                                        <button
+                                            onClick={toggleAll}
+                                            className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${
+                                                selectedRows.length > 0 && selectedRows.length === sortedInvoices.length
+                                                    ? 'bg-purple-600 border-purple-600 text-white shadow-sm'
+                                                    : 'border-slate-300 hover:border-purple-400 bg-white text-transparent'
+                                            }`}
+                                        >
+                                            <Check size={12} strokeWidth={3} />
+                                        </button>
+                                    </th>
                                     <th
                                         className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-left cursor-pointer select-none"
                                         onClick={() => setInvoiceNumberSort(prev => prev === 'asc' ? 'desc' : 'asc')}
@@ -696,7 +803,6 @@ export default function SupplierInvoicesPage() {
                                     <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-right">{t('invoice.amountPaid', 'Paid')}</th>
                                     <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-right">{t('invoice.remaining', 'Remaining')}</th>
                                     <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-center">{t('common.status', 'Status')}</th>
-                                    <th className="py-4 px-4 border-b border-purple-100/50 font-bold text-purple-900/50 text-[11px] uppercase tracking-widest text-right">{t('common.actions', 'Actions')}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -706,8 +812,20 @@ export default function SupplierInvoicesPage() {
                                         initial={{ opacity: 0, y: 6 }}
                                         animate={{ opacity: 1, y: 0 }}
                                         transition={{ delay: idx * 0.05 }}
-                                        className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors"
+                                        onClick={() => toggleRow(inv.id)}
+                                        className={`group border-b border-slate-100 cursor-pointer transition-colors ${
+                                            selectedRows.includes(inv.id) ? 'bg-purple-50/50' : 'hover:bg-slate-50'
+                                        }`}
                                     >
+                                        <td className="py-3.5 px-4 w-12">
+                                            <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${
+                                                selectedRows.includes(inv.id)
+                                                    ? 'bg-purple-600 border-purple-600 text-white shadow-sm'
+                                                    : 'border-slate-300 bg-white text-transparent group-hover:border-purple-400'
+                                            }`}>
+                                                <Check size={12} strokeWidth={3} />
+                                            </div>
+                                        </td>
                                         <td className="py-3.5 px-4">
                                             <span className="font-semibold text-purple-600 whitespace-nowrap">
                                                 #{inv.invoiceNumber || t('common.unknown', 'Unknown')}
@@ -746,48 +864,10 @@ export default function SupplierInvoicesPage() {
                                                 {t(`supplierInvoice.paymentStatus.${inv.paymentStatus}`, inv.paymentStatus)}
                                             </span>
                                             {inv.paymentCount > 0 && (!inv.payments || inv.payments.length === 0) && (
-                                                <div className="mt-1 text-[10px] text-slate-400 cursor-pointer hover:underline">
+                                                <div className="mt-1 text-[10px] text-slate-400">
                                                     {inv.paymentCount} {t('supplierInvoice.payments', 'payment(s)')}
                                                 </div>
                                             )}
-                                        </td>
-                                        <td className="py-3.5 px-4">
-                                            <div className="flex items-center justify-end gap-0.5">
-                                                {inv.paymentStatus !== 'Paid' && (
-                                                    <button
-                                                        onClick={() => openPaymentModal(inv)}
-                                                        className="p-2 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-full transition-colors"
-                                                        title={t('supplierInvoice.addPayment', 'Add Payment')}
-                                                    >
-                                                        <DollarSign size={15} />
-                                                    </button>
-                                                )}
-                                                <button
-                                                    onClick={() => handleViewDetail(inv.id)}
-                                                    className="p-2 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-full transition-colors"
-                                                    title={t('common.viewDetails', 'View Details')}
-                                                >
-                                                    <Eye size={15} />
-                                                </button>
-                                                {(inv.paymentStatus === 'Pending' || inv.paymentStatus === 'Unpaid') && (
-                                                    <button
-                                                        onClick={() => handleViewInvoice(inv.id)}
-                                                        className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-full transition-colors"
-                                                        title={t('common.edit', 'Edit')}
-                                                    >
-                                                        <Edit2 size={15} />
-                                                    </button>
-                                                )}
-                                                {isManager && (
-                                                    <button
-                                                        onClick={() => handleDelete(inv.id)}
-                                                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
-                                                        title={t('common.delete', 'Delete')}
-                                                    >
-                                                        <Trash2 size={15} />
-                                                    </button>
-                                                )}
-                                            </div>
                                         </td>
                                     </motion.tr>
                                 ))}
@@ -813,7 +893,7 @@ export default function SupplierInvoicesPage() {
                                     if (currencies.length === 0) return null;
                                     return currencies.map(cur => (
                                         <tr key={cur}>
-                                            <td colSpan={3} className="py-3.5 px-4 font-semibold text-sm text-slate-700">
+                                            <td colSpan={4} className="py-3.5 px-4 font-semibold text-sm text-slate-700">
                                                 {currencies.length > 1 ? `${t('common.total', 'Total')} (${cur})` : t('common.total', 'Total')}
                                             </td>
                                             <td className="py-3.5 px-4 text-right font-bold text-sm text-slate-900">
@@ -825,7 +905,6 @@ export default function SupplierInvoicesPage() {
                                             <td className="py-3.5 px-4 text-right font-semibold text-sm text-amber-600">
                                                 {formatCurrency(byCurrency[cur].remaining, cur)}
                                             </td>
-                                            <td className="px-4 py-3"></td>
                                             <td className="px-4 py-3"></td>
                                         </tr>
                                     ));

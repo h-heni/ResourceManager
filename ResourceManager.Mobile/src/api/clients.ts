@@ -31,7 +31,15 @@ export interface SaveClientRequest {
 export const clientsApi = {
   list: async (page = 1, size = DEFAULT_PAGE_SIZE): Promise<ClientsListResponse> => {
     const response = await apiClient.get('/Clients', { params: { page, size } });
-    return response.data;
+    const d = response.data;
+    // Backend returns { data, page, size, totalCount, totalPages } — map "data" → "items"
+    if (d && !Array.isArray(d) && (d.data || d.Data)) {
+      return { items: d.data ?? d.Data ?? [], page: d.page ?? d.Page ?? page, size: d.size ?? d.Size ?? size, totalCount: d.totalCount ?? d.TotalCount ?? 0, totalPages: d.totalPages ?? d.TotalPages ?? 0 };
+    }
+    if (Array.isArray(d)) {
+      return { items: d, page: 1, size: d.length, totalCount: d.length, totalPages: 1 };
+    }
+    return d;
   },
 
   getById: async (id: number): Promise<Client> => {

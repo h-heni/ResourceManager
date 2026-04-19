@@ -1,12 +1,12 @@
 import React from 'react';
-import { View, StyleSheet, ViewStyle } from 'react-native';
-import { theme } from '../theme';
+import { View, StyleSheet, ViewStyle, StyleProp } from 'react-native';
+import { useAppTheme, type AppTheme } from '../theme/ThemeContext';
 
 interface CardProps {
   children: React.ReactNode;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   variant?: 'default' | 'elevated' | 'transparent';
-  padding?: keyof typeof theme.spacing;
+  padding?: keyof AppTheme['spacing'];
   noShadow?: boolean;
 }
 
@@ -17,12 +17,14 @@ export default function Card({
   padding = 'lg',
   noShadow = false,
 }: CardProps) {
+  const { colors, spacing, borderRadius, shadows } = useAppTheme();
+
   const getVariantStyle = (): ViewStyle => {
     switch (variant) {
       case 'elevated':
         return {
-          ...theme.shadows.elevated,
-          backgroundColor: theme.colors.card.elevated,
+          ...shadows.elevated,
+          backgroundColor: colors.cardElevated,
         };
       case 'transparent':
         return {
@@ -31,8 +33,8 @@ export default function Card({
         };
       default:
         return {
-          ...!noShadow && theme.shadows.card,
-          backgroundColor: theme.colors.card.default,
+          ...!noShadow && shadows.card,
+          backgroundColor: colors.card,
         };
     }
   };
@@ -42,10 +44,11 @@ export default function Card({
       style={[
         styles.card,
         {
-          padding: theme.spacing[padding],
-          borderRadius: theme.borderRadius.md,
+          backgroundColor: colors.card,
+          padding: spacing[padding],
+          borderRadius: borderRadius.md,
           borderWidth: variant !== 'transparent' ? 1 : 0,
-          borderColor: variant !== 'transparent' ? theme.colors.border : 'transparent',
+          borderColor: variant !== 'transparent' ? colors.border : 'transparent',
         },
         getVariantStyle(),
         style,
@@ -57,7 +60,5 @@ export default function Card({
 }
 
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: theme.colors.white,
-  },
+  card: {},
 });

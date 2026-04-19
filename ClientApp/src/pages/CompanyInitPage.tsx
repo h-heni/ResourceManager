@@ -2,8 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Building2, MapPin, Phone, Mail, Hash, DollarSign, Upload,
-    Loader2, CheckCircle, PenTool, FolderOpen, Image, AlertCircle,
-    FolderCheck, FolderSearch, Palette, Globe, Landmark
+    Loader2, CheckCircle, PenTool, Image, AlertCircle,
+    Palette, Globe, Landmark
 } from 'lucide-react';
 import { useNotify } from '../hooks/useNotify';
 import { useTranslation } from 'react-i18next';
@@ -73,15 +73,11 @@ export default function CompanyInitPage() {
     const [fileSystemLanguage, setFileSystemLanguage] = useState('fr');
     const [fileSystemLanguageLocked, setFileSystemLanguageLocked] = useState(false);
 
-    // Storage
-    const [baseStoragePath, setBaseStoragePath] = useState('');
-    const [testingPath, setTestingPath] = useState(false);
-    const [pathTestResult, setPathTestResult] = useState<{ success: boolean; message: string } | null>(null);
+    // Storage state removed — PDFs are not stored locally
 
-    // Loading state for data hydration
     const [loading, setLoading] = useState(true);
 
-    const totalSteps = 4;
+    const totalSteps = 3;
 
     // ═══════════════════════════════════════════════════════════════
     // DATA HYDRATION - Fetch existing company data on mount
@@ -128,8 +124,7 @@ export default function CompanyInitPage() {
                 if (data.fileSystemLanguage) setFileSystemLanguage(data.fileSystemLanguage);
                 if (data.fileSystemLanguageLocked != null) setFileSystemLanguageLocked(data.fileSystemLanguageLocked);
                 
-                // Pre-fill storage path
-                if (data.baseStoragePath) setBaseStoragePath(data.baseStoragePath);
+                // Pre-fill storage path removed
                 
                 // Fetch logo as blob if exists (img tags can't send JWT headers)
                 if (data.hasLogoData) {
@@ -159,81 +154,10 @@ export default function CompanyInitPage() {
         fetchExistingData();
     }, []);
 
-    // ═══════════════════════════════════════════════════════════════
-    // BROWSE FOLDER - Native OS folder picker
-    // ═══════════════════════════════════════════════════════════════
-    const handleBrowseFolder = async () => {
-        try {
-            // Use the native OS folder picker dialog (same look as file browse)
-            const dirHandle = await (window as unknown as { showDirectoryPicker: (opts?: object) => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker({
-                mode: 'readwrite',
-            });
-            const folderName = dirHandle.name;
-
-            // Collect entry names (files + subfolders) as a fingerprint to identify the exact folder
-            const entries: string[] = [];
-            try {
-                for await (const [name] of (dirHandle as unknown as AsyncIterable<[string, unknown]>)) {
-                    entries.push(name);
-                    if (entries.length >= 15) break;
-                }
-            } catch { /* empty folder or permission issue */ }
-
-            // Ask the server to find the full path using name + fingerprint
-            try {
-                const res = await api.post('/pdf-storage/resolve-folder', { name: folderName, entries });
-                if (res.data.fullPath) {
-                    setBaseStoragePath(res.data.fullPath);
-                    setPathTestResult(null);
-                    return;
-                }
-            } catch { /* resolve failed */ }
-
-            // Fallback: just set the folder name
-            setBaseStoragePath(folderName);
-            setPathTestResult(null);
-        } catch (err: unknown) {
-            // User cancelled the dialog - ignore
-            if (err instanceof DOMException && err.name === 'AbortError') return;
-            logger.error('Folder picker error:', err);
-        }
-    };
-
-    // ═══════════════════════════════════════════════════════════════
-    // TEST PATH - Validate storage path is writable
-    // ═══════════════════════════════════════════════════════════════
-    const handleTestPath = async () => {
-        if (!baseStoragePath.trim()) {
-            setPathTestResult({ success: false, message: t('companyInit.validation.storagePathRequired') });
-            return;
-        }
-        
-        setTestingPath(true);
-        setPathTestResult(null);
-        
-        try {
-            const res = await api.post('/pdf-storage/test-path', { path: baseStoragePath.trim() });
-            setPathTestResult({ 
-                success: true, 
-                message: res.data.message || t('companyInit.pathTestSuccess')
-            });
-        } catch (err: unknown) {
-            setPathTestResult({ 
-                success: false, 
-                message: getErrorMessage(err, t('companyInit.pathTestFailed'))
-            });
-        } finally {
-            setTestingPath(false);
-        }
-    };
-
     const validateStep = (step: number): string | null => {
         if (step === 1) {
             if (!companyName.trim()) return t('companyInit.validation.companyNameRequired');
             if (!companyAddress.trim()) return t('companyInit.validation.companyAddressRequired');
-        }
-        if (step === 4) {
-            if (!baseStoragePath.trim()) return t('companyInit.validation.storagePathRequired');
         }
         return null;
     };
@@ -315,8 +239,6 @@ export default function CompanyInitPage() {
                 invoiceLanguage,
                 // File system language
                 fileSystemLanguage: fileSystemLanguage || undefined,
-                // Storage
-                baseStoragePath,
             });
 
             // Step 3: Upload logo if selected
@@ -335,12 +257,11 @@ export default function CompanyInitPage() {
 
             // Update localStorage so the app knows profile is complete
             localStorage.setItem('user_isProfileComplete', 'true');
-            localStorage.setItem('user_baseStoragePath', baseStoragePath);
 
             notify('success', t('companyInit.toast.success'));
 
             // Update AuthContext state so SettingsGuard unlocks the dashboard
-            updateProfileComplete(true, baseStoragePath);
+            updateProfileComplete(true, '');
 
             navigate('/dashboard', { replace: true });
         } catch (err: unknown) {
@@ -357,7 +278,6 @@ export default function CompanyInitPage() {
         t('companyInit.steps.companyInfo'),
         t('companyInit.steps.financial'),
         t('companyInit.steps.brandingPdf'),
-        t('companyInit.steps.storageFinish')
     ];
 
     // Show loading state while fetching existing data
@@ -744,96 +664,6 @@ export default function CompanyInitPage() {
                                     {fileSystemLanguageLocked && (
                                         <p className="text-xs text-gray-400">{t('companyInit.fileSystemLanguageLocked')}</p>
                                     )}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Step 4: Storage */}
-                    {currentStep === 4 && (
-                        <div className="space-y-5 animate-fade-in">
-                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
-                                <div className="flex items-start gap-2">
-                                    <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
-                                    <div>
-                                        <p className="font-medium">{t('companyInit.storageRequiredTitle')}</p>
-                                        <p className="mt-1">{t('companyInit.storageRequiredMessage')}</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                                    <FolderOpen className="h-4 w-4" /> {t('settings.baseStoragePath')} *
-                                </label>
-                                <div className="flex gap-2">
-                                    <input value={baseStoragePath} onChange={e => { setBaseStoragePath(e.target.value); setPathTestResult(null); }}
-                                        className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none bg-gray-50/50 focus:bg-white font-mono text-sm"
-                                        placeholder={t('companyInit.placeholders.baseStoragePath')} />
-                                    <button type="button" onClick={handleBrowseFolder}
-                                        className="px-4 py-3 rounded-xl font-medium transition-colors flex items-center gap-2 border border-gray-200 text-gray-600 hover:bg-gray-50">
-                                        <FolderSearch className="h-5 w-5" />
-                                        <span className="hidden sm:inline">{t('companyInit.browse')}</span>
-                                    </button>
-                                    <button type="button" onClick={handleTestPath} disabled={testingPath}
-                                        className={cn(
-                                            "px-4 py-3 rounded-xl font-medium transition-colors flex items-center gap-2",
-                                            pathTestResult?.success 
-                                                ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
-                                                : "border border-gray-200 text-gray-600 hover:bg-gray-50"
-                                        )}>
-                                        {testingPath ? (
-                                            <Loader2 className="h-5 w-5 animate-spin" />
-                                        ) : pathTestResult?.success ? (
-                                            <FolderCheck className="h-5 w-5" />
-                                        ) : (
-                                            <FolderOpen className="h-5 w-5" />
-                                        )}
-                                        <span className="hidden sm:inline">{t('companyInit.testPath')}</span>
-                                    </button>
-                                </div>
-                                <p className="text-xs text-gray-500">{t('companyInit.storagePathExample')}</p>
-                                
-                                {/* Path test result */}
-                                {pathTestResult && (
-                                    <div className={cn(
-                                        "mt-2 p-3 rounded-lg text-sm flex items-center gap-2",
-                                        pathTestResult.success 
-                                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                            : "bg-red-50 text-red-700 border border-red-200"
-                                    )}>
-                                        {pathTestResult.success ? (
-                                            <CheckCircle className="h-4 w-4 shrink-0" />
-                                        ) : (
-                                            <AlertCircle className="h-4 w-4 shrink-0" />
-                                        )}
-                                        <span>{pathTestResult.message}</span>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Summary */}
-                            <div className="mt-6 bg-gray-50 rounded-xl p-5 space-y-3">
-                                <h3 className="font-medium text-gray-700 text-sm">{t('companyInit.setupSummary')}</h3>
-                                <div className="grid grid-cols-2 gap-2 text-sm">
-                                    <div className="text-gray-500">{t('common.company')}</div>
-                                    <div className="font-medium">{companyName || t('companyInit.notSet')}</div>
-                                    <div className="text-gray-500">{t('settings.address')}</div>
-                                    <div className="font-medium">{companyAddress || t('companyInit.notSet')}</div>
-                                    <div className="text-gray-500">{t('settings.currency')}</div>
-                                    <div className="font-medium">{currency}</div>
-                                    <div className="text-gray-500">{t('companyInit.defaultVatRate')}</div>
-                                    <div className="font-medium">{(defaultVatRate * 100).toFixed(0)}%</div>
-                                    <div className="text-gray-500">{t('settings.pdfBankDetails')}</div>
-                                    <div className="font-medium">{bankName || t('companyInit.notSet')}</div>
-                                    <div className="text-gray-500">{t('settings.logo')}</div>
-                                    <div className="font-medium">{logoPreview ? (logoFile ? t('companyInit.selected') : t('companyInit.existing')) : t('companyInit.none')}</div>
-                                    <div className="text-gray-500">{t('settings.signature')}</div>
-                                    <div className="font-medium">{signaturePreview ? (signatureFile ? t('companyInit.selected') : t('companyInit.existing')) : t('companyInit.none')}</div>
-                                    <div className="text-gray-500">{t('settings.language')}</div>
-                                    <div className="font-medium">{invoiceLanguage === 'fr' ? 'Français' : invoiceLanguage === 'en' ? 'English' : invoiceLanguage === 'de' ? 'Deutsch' : 'العربية'}</div>
-                                    <div className="text-gray-500">{t('settings.baseStoragePath')}</div>
-                                    <div className="font-medium font-mono text-xs break-all">{baseStoragePath || t('companyInit.notSet')}</div>
                                 </div>
                             </div>
                         </div>

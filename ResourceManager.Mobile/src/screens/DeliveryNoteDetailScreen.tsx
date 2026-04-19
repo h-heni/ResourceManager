@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, ActivityIndicator, TouchableOpacity, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as IntentLauncher from 'expo-intent-launcher';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppTheme } from '../theme/ThemeContext';
 import { useDeliveryNoteDetail, useDeleteDeliveryNote } from '../hooks/useSales';
 import { deliveryNotesApi } from '../api/deliveryNotes';
+import Card from '../components/Card';
 import StatusBadge from '../components/StatusBadge';
 import Button from '../components/Button';
 import { ConfirmDeleteModal } from '../components';
@@ -34,8 +36,21 @@ export default function DeliveryNoteDetailScreen({ route, navigation }: any) {
     try {
       const pdfUrl = deliveryNotesApi.getPdfUrl(note.id);
       const fileUri = FileSystem.documentDirectory + `dn_${note.number}.pdf`;
-      await FileSystem.downloadAsync(pdfUrl, fileUri);
-      await Sharing.shareAsync(fileUri, { mimeType: 'application/pdf', dialogTitle: `DN #${note.number}` });
+      const token = await AsyncStorage.getItem('@auth_token');
+      const { uri } = await FileSystem.downloadAsync(pdfUrl, fileUri, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (Platform.OS === 'android') {
+        const contentUri = await FileSystem.getContentUriAsync(uri);
+        await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+          data: contentUri,
+          flags: 1,
+          type: 'application/pdf',
+        });
+      } else {
+        const Sharing = await import('expo-sharing');
+        await Sharing.shareAsync(uri, { mimeType: 'application/pdf' });
+      }
     } catch {
       Alert.alert(t('common.error'), t('deliveryNote.pdfError'));
     }
@@ -54,9 +69,6 @@ export default function DeliveryNoteDetailScreen({ route, navigation }: any) {
               <Ionicons name="arrow-back" size={22} color={colors.text.primary} />
             </TouchableOpacity>
             <Text style={[styles.number, { color: colors.primary, flex: 1 }]}>#{note.number}</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('DeliveryNoteCreate', { noteId: note.id })} style={{ marginRight: 8 }}>
-              <Ionicons name="create-outline" size={22} color={colors.primary} />
-            </TouchableOpacity>
             <StatusBadge status={note.status === 'Delivered' ? 'success' : 'warning'} text={note.status} />
           </View>
           <View style={styles.infoGrid}>
@@ -71,19 +83,20 @@ export default function DeliveryNoteDetailScreen({ route, navigation }: any) {
           <View key={item.id} style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: borderRadius.md }, shadows.card]}>
             <Text style={{ color: colors.text.primary, fontWeight: '500' }}>{item.description}</Text>
             <View style={[styles.row, { marginTop: 8, marginBottom: 0 }]}>
-              <Text style={{ color: colors.text.tertiary, fontSize: 13 }}>Qty: {item.quantity} x {item.price.toLocaleString()}</Text>
+              <Text style={{ color: colors.text.tertiary, fontSize: 13 }}>{t('common.qty')}: {item.quantity} x {item.price.toLocaleString()}</Text>
               <Text style={{ color: colors.text.primary, fontWeight: '600' }}>{item.totalItemHT.toLocaleString()}</Text>
             </View>
           </View>
         ))}
 
         {/* Actions */}
-        <View style={{ gap: spacing.sm, marginTop: spacing.md }}>
+        <Card style={{ marginTop: spacing.md }} padding="md">
           <Button
             title={t('deliveryNote.downloadPdf')}
             variant="secondary"
             onPress={handleDownloadPdf}
             icon={<Ionicons name="download-outline" size={20} color={colors.text.secondary} />}
+            style={{ marginBottom: spacing.sm }}
           />
           <Button
             title={t('common.delete')}
@@ -91,7 +104,7 @@ export default function DeliveryNoteDetailScreen({ route, navigation }: any) {
             onPress={() => setShowDelete(true)}
             icon={<Ionicons name="trash-outline" size={20} color="#FFF" />}
           />
-        </View>
+        </Card>
       </ScrollView>
 
       <ConfirmDeleteModal

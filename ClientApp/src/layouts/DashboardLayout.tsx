@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Outlet, useNavigate, useLocation, NavLink } from 'react-router-dom';
+import { Outlet, useLocation, NavLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import LanguageSelector from '../components/LanguageSelector';
@@ -50,7 +50,6 @@ interface NavItem {
 
 export default function DashboardLayout() {
     // Hooks must be called before any derived values that depend on them
-    const navigate = useNavigate();
     const location = useLocation();
     const { logout, canManageUsers, canManageSettings, displayName, isSuperAdmin, isManager, isEmployee, isAuthenticated } = useAuth();
     const { t } = useTranslation();
@@ -409,23 +408,10 @@ export default function DashboardLayout() {
                         <div className="panze-sidebar-user-name">{userName}</div>
                     </div>
                 )}
-                <div className="flex items-center gap-1">
-                    <LanguageSelector />
-                    <button
-                        onClick={() => navigate('/settings')}
-                        className="panze-sidebar-settings-btn"
-                        title={t('nav.settings')}
-                    >
-                        <Settings size={14} />
-                    </button>
-                    <button
-                        onClick={handleLogout}
-                        className="panze-sidebar-settings-btn hover:!bg-red-50 hover:!text-red-500"
-                        title={t('nav.signOut')}
-                    >
-                        <LogOut size={14} />
-                    </button>
-                </div>
+                <button onClick={handleLogout} className="panze-sidebar-logout-btn">
+                    <LogOut size={14} />
+                    <span>{t('nav.signOut', 'Déconnexion')}</span>
+                </button>
             </div>
         </>
     );

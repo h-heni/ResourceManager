@@ -1,29 +1,27 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as IntentLauncher from 'expo-intent-launcher';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../theme/ThemeContext';
-import { useInvoiceDetail, useDeleteInvoice, useRecordPayment, useArchiveInvoice } from '../hooks/useInvoice';
+import { useInvoice, useRecordPayment } from '../hooks/useInvoice';
 import { invoicesApi } from '../api';
 import Card from '../components/Card';
 import Button from '../components/Button';
 import StatusBadge from '../components/StatusBadge';
-import { ConfirmDeleteModal, PaymentRecordModal } from '../components';
+import { PaymentRecordModal } from '../components';
 
 export default function InvoiceDetailScreen({ route, navigation }: any) {
   const { invoiceId } = route.params;
   const { colors, spacing, borderRadius, shadows, typography } = useAppTheme();
   const { t } = useTranslation();
   const [showPayment, setShowPayment] = useState(false);
-  const [showDelete, setShowDelete] = useState(false);
 
-  const { data: invoice, isLoading } = useInvoiceDetail(invoiceId);
-  const deleteMutation = useDeleteInvoice();
+  const { data: invoice, isLoading } = useInvoice(invoiceId);
   const paymentMutation = useRecordPayment();
-  const archiveMutation = useArchiveInvoice();
 
   const getStatusType = (status: string): any => {
     const map: Record<string, any> = { Paid: 'success', PartiallyPaid: 'warning', Pending: 'warning', Overdue: 'error', Archived: 'default' };
@@ -40,28 +38,29 @@ export default function InvoiceDetailScreen({ route, navigation }: any) {
     try {
       const pdfUrl = invoicesApi.getPdfUrl(invoice.id);
       const fileUri = FileSystem.documentDirectory + `invoice_${invoice.number}.pdf`;
-      await FileSystem.downloadAsync(pdfUrl, fileUri);
-      await Sharing.shareAsync(fileUri, { mimeType: 'application/pdf', dialogTitle: `Invoice #${invoice.number}` });
+      const token = await AsyncStorage.getItem('@auth_token');
+      const { uri } = await FileSystem.downloadAsync(pdfUrl, fileUri, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (Platform.OS === 'android') {
+        const contentUri = await FileSystem.getContentUriAsync(uri);
+        await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+          data: contentUri,
+          flags: 1,
+          type: 'application/pdf',
+        });
+      } else {
+        // iOS: use Sharing as fallback since IntentLauncher is Android-only
+        const Sharing = await import('expo-sharing');
+        await Sharing.shareAsync(uri, { mimeType: 'application/pdf' });
+      }
     } catch {
       Alert.alert(t('common.error'), t('invoice.pdfError'));
     }
   };
 
-  const handleDelete = () => {
-    deleteMutation.mutate(invoiceId, {
-      onSuccess: () => { setShowDelete(false); navigation.goBack(); },
-    });
-  };
-
-  const handleArchive = () => {
-    Alert.alert(t('invoice.archiveTitle'), t('invoice.archiveMessage'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      { text: t('common.confirm'), onPress: () => archiveMutation.mutate(invoiceId) },
-    ]);
-  };
-
-  const handleRecordPayment = (data: { amount: number; date: string; method: string; notes?: string }) => {
-    paymentMutation.mutate({ invoiceId, data }, {
+  const handleRecordPayment = (data: { amount: number; paymentDate: string; notes?: string; isScheduled?: boolean }) => {
+    paymentMutation.mutate({ invoiceId, data: { amount: data.amount, paymentDate: data.paymentDate, notes: data.notes } }, {
       onSuccess: () => setShowPayment(false),
     });
   };
@@ -93,12 +92,7 @@ export default function InvoiceDetailScreen({ route, navigation }: any) {
             <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
           </TouchableOpacity>
           <Text style={[styles.invoiceNumber, { color: colors.text.primary }]}>#{invoice.number}</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <TouchableOpacity onPress={() => navigation.navigate('InvoiceCreate', { invoiceId: invoice.id })} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="create-outline" size={22} color={colors.primary} />
-            </TouchableOpacity>
-            <StatusBadge status={getStatusType(invoice.status)} text={invoice.status} />
-          </View>
+          <StatusBadge status={getStatusType(invoice.status)} text={invoice.status} />
         </View>
 
         {/* Client Info */}
@@ -175,17 +169,18 @@ export default function InvoiceDetailScreen({ route, navigation }: any) {
           </Card>
         )}
 
-        {/* Action Buttons */}
-        <View style={{ padding: spacing.lg, gap: spacing.sm }}>
+        {/* Action Buttons — inside a Card so they stay within the scrollable content */}
+        <Card style={{ margin: spacing.md }} padding="md">
           {!isFullyPaid && (
             <Button
               title={t('invoice.recordPayment')}
               variant="primary"
               onPress={() => setShowPayment(true)}
               icon={<Ionicons name="cash-outline" size={20} color="#FFF" />}
+              style={{ marginBottom: spacing.sm }}
             />
           )}
-          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+          <View style={{ flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm }}>
             <Button
               title={t('invoice.sendEmail')}
               variant="secondary"
@@ -201,24 +196,8 @@ export default function InvoiceDetailScreen({ route, navigation }: any) {
               style={{ flex: 1 }}
             />
           </View>
-          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-            <Button
-              title={t('invoice.archive')}
-              variant="secondary"
-              onPress={handleArchive}
-              loading={archiveMutation.isPending}
-              icon={<Ionicons name="archive-outline" size={20} color={colors.text.secondary} />}
-              style={{ flex: 1 }}
-            />
-            <Button
-              title={t('common.delete')}
-              variant="danger"
-              onPress={() => setShowDelete(true)}
-              icon={<Ionicons name="trash-outline" size={20} color="#FFF" />}
-              style={{ flex: 1 }}
-            />
-          </View>
-        </View>
+        </Card>
+        <View style={{ height: spacing.xxl }} />
       </ScrollView>
 
       <PaymentRecordModal
@@ -229,14 +208,7 @@ export default function InvoiceDetailScreen({ route, navigation }: any) {
         maxAmount={remainingAmount}
         currency={invoice.currencySymbol || 'TND'}
       />
-      <ConfirmDeleteModal
-        visible={showDelete}
-        onClose={() => setShowDelete(false)}
-        onConfirm={handleDelete}
-        loading={deleteMutation.isPending}
-        title={t('invoice.deleteTitle')}
-        message={t('invoice.deleteMessage')}
-      />
+
     </SafeAreaView>
   );
 }

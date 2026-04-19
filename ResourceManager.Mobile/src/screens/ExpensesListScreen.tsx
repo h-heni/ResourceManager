@@ -18,7 +18,10 @@ export default function ExpensesListScreen() {
   const currentYear = new Date().getFullYear();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
-  const { data: expenses = [], isLoading, refetch, isRefetching } = useExpenses(currentYear);
+  const { data: expensesResponse, isLoading, refetch, isRefetching } = useExpenses(1, 50, currentYear);
+  const expenses: Expense[] = Array.isArray(expensesResponse)
+    ? (expensesResponse as Expense[])
+    : (expensesResponse?.items ?? []);
   const createMutation = useCreateExpense();
   const updateMutation = useUpdateExpense();
   const deleteMutation = useDeleteExpense();
@@ -28,8 +31,8 @@ export default function ExpensesListScreen() {
   const [editingItem, setEditingItem] = useState<Expense | null>(null);
   const [form, setForm] = useState({ description: '', amount: '', category: '', date: new Date(), notes: '' });
 
-  const categories = useMemo(() => {
-    const cats = new Set(expenses.map((e) => e.category));
+  const categories = useMemo<string[]>(() => {
+    const cats = new Set<string>(expenses.map((e) => e.category));
     return ['All', ...Array.from(cats)];
   }, [expenses]);
 
@@ -49,7 +52,7 @@ export default function ExpensesListScreen() {
     if (!form.description.trim()) { Alert.alert(t('common.error'), t('expense.descriptionRequired')); return; }
     try {
       const payload = { description: form.description, amount: parseFloat(form.amount) || 0, category: form.category, date: form.date.toISOString(), notes: form.notes };
-      if (editingItem) { await updateMutation.mutateAsync({ id: editingItem.id, ...payload }); }
+      if (editingItem) { await updateMutation.mutateAsync({ id: editingItem.id, data: payload }); }
       else { await createMutation.mutateAsync(payload); }
       setFormVisible(false);
     } catch (error) { Alert.alert(t('common.error'), (error as Error).message); }

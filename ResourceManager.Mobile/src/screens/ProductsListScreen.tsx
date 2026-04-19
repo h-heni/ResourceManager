@@ -15,10 +15,12 @@ export default function ProductsListScreen() {
   const { colors, spacing, borderRadius, shadows, typography } = useAppTheme();
   const { t } = useTranslation();
   const [search, setSearch] = useState('');
-  const { data: products = [], isLoading, refetch, isRefetching } = useProductServices();
+  const { data: productsData, isLoading, refetch, isRefetching } = useProductServices();
   const createMutation = useCreateProduct();
   const updateMutation = useUpdateProduct();
   const deleteMutation = useDeleteProduct();
+
+  const products = Array.isArray(productsData) ? productsData : (productsData?.items ?? []);
 
   const [formVisible, setFormVisible] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ProductService | null>(null);
@@ -36,8 +38,8 @@ export default function ProductsListScreen() {
   const handleSave = async () => {
     if (!form.name.trim()) { Alert.alert(t('common.error'), t('product.nameRequired')); return; }
     try {
-      const payload = { name: form.name, description: form.description, defaultUnitPrice: parseFloat(form.defaultUnitPrice) || 0, type: form.type, vatApplicable: form.vatApplicable };
-      if (editingItem) { await updateMutation.mutateAsync({ id: editingItem.id, ...payload }); }
+      const payload = { name: form.name, description: form.description, price: parseFloat(form.defaultUnitPrice) || 0, type: form.type, vatApplicable: form.vatApplicable };
+      if (editingItem) { await updateMutation.mutateAsync({ id: editingItem.id, data: payload }); }
       else { await createMutation.mutateAsync(payload); }
       setFormVisible(false);
     } catch (error) { Alert.alert(t('common.error'), (error as Error).message); }
@@ -110,8 +112,8 @@ export default function ProductsListScreen() {
               <FormSelect
                 label={t('product.type')}
                 options={[{ label: 'Product', value: 'Product' }, { label: 'Service', value: 'Service' }]}
-                selectedValue={form.type}
-                onValueChange={(v) => setForm(p => ({ ...p, type: v }))}
+                value={form.type}
+                onSelect={(v) => setForm(p => ({ ...p, type: String(v) }))}
               />
               <View style={styles.switchRow}>
                 <Text style={{ color: colors.text.primary, flex: 1 }}>{t('product.vatApplicable')}</Text>
@@ -125,7 +127,7 @@ export default function ProductsListScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      <ConfirmDeleteModal visible={!!deleteTarget} title={t('product.deleteConfirm')} message={deleteTarget?.name || ''} onCancel={() => setDeleteTarget(null)} onConfirm={handleDelete} loading={deleteMutation.isPending} />
+      <ConfirmDeleteModal visible={!!deleteTarget} title={t('product.deleteConfirm')} message={deleteTarget?.name || ''} onClose={() => setDeleteTarget(null)} onConfirm={handleDelete} loading={deleteMutation.isPending} />
     </SafeAreaView>
   );
 }

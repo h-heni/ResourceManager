@@ -14,9 +14,13 @@ import { invoicesApi, type SendEmailRequest } from '../api';
 import Button from '../components/Button';
 import Card from '../components/Card';
 import { theme } from '../theme';
+import { useTranslation } from 'react-i18next';
+import { useAppTheme } from '../theme/ThemeContext';
 
 export default function EmailComposerScreen({ route, navigation }: any) {
   const { invoice } = route.params;
+  const { t } = useTranslation();
+  const { colors } = useAppTheme();
   const [to, setTo] = useState(invoice?.clientEmail || '');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
@@ -38,12 +42,12 @@ export default function EmailComposerScreen({ route, navigation }: any) {
 
   const handleSend = async () => {
     if (!to) {
-      Alert.alert('Error', 'Please enter recipient email');
+      Alert.alert(t('common.error'), t('email.recipientRequired'));
       return;
     }
 
     if (!subject) {
-      Alert.alert('Error', 'Please enter subject');
+      Alert.alert(t('common.error'), t('email.subjectRequired'));
       return;
     }
 
@@ -59,8 +63,8 @@ export default function EmailComposerScreen({ route, navigation }: any) {
       await invoicesApi.sendEmail(invoice.id, emailData);
 
       Alert.alert(
-        'Success',
-        'Email sent successfully!',
+        t('common.success'),
+        t('email.sentSuccess'),
         [
           {
             text: 'OK',
@@ -69,8 +73,8 @@ export default function EmailComposerScreen({ route, navigation }: any) {
         ]
       );
     } catch (error) {
-      const errorMessage = (error as Error).message || 'Failed to send email';
-      Alert.alert('Error', errorMessage);
+      const errorMessage = (error as Error).message || t('email.sendFailed');
+      Alert.alert(t('common.error'), errorMessage);
     } finally {
       setSending(false);
     }
@@ -80,7 +84,7 @@ export default function EmailComposerScreen({ route, navigation }: any) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading...</Text>
+          <Text style={styles.loadingText}>{t('common.loading')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -95,9 +99,9 @@ export default function EmailComposerScreen({ route, navigation }: any) {
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color={theme.colors.text.primary} />
+            <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
           </TouchableOpacity>
-          <Text style={styles.title}>Send Invoice</Text>
+          <Text style={styles.title}>{t('email.sendInvoice')}</Text>
           <View style={styles.placeholder} />
         </View>
 
@@ -134,10 +138,10 @@ export default function EmailComposerScreen({ route, navigation }: any) {
 
         {/* Email Fields Card */}
         <Card style={styles.card} padding="lg">
-          <Text style={styles.sectionTitle}>Compose Email</Text>
+          <Text style={styles.sectionTitle}>{t('email.compose')}</Text>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>To</Text>
+            <Text style={styles.fieldLabel}>{t('email.to')}</Text>
             <TextInput
               style={styles.textInput}
               placeholder="recipient@email.com"
@@ -151,7 +155,7 @@ export default function EmailComposerScreen({ route, navigation }: any) {
           </View>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>Subject</Text>
+            <Text style={styles.fieldLabel}>{t('email.subject')}</Text>
             <TextInput
               style={[styles.textInput, styles.subjectInput]}
               placeholder="Enter subject"
@@ -162,7 +166,7 @@ export default function EmailComposerScreen({ route, navigation }: any) {
           </View>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>Message</Text>
+            <Text style={styles.fieldLabel}>{t('email.message')}</Text>
             <TextInput
               style={[styles.textInput, styles.bodyInput]}
               placeholder="Enter your message..."
@@ -188,7 +192,7 @@ export default function EmailComposerScreen({ route, navigation }: any) {
                 <Ionicons name="checkmark" size={14} color={theme.colors.white} />
               )}
             </View>
-            <Text style={styles.attachmentText}>Attach Invoice PDF</Text>
+            <Text style={styles.attachmentText}>{t('email.attachPdf')}</Text>
             <Text style={styles.attachmentNote}>
               ({attachPdf ? 'Yes' : 'No'})
             </Text>
@@ -198,7 +202,7 @@ export default function EmailComposerScreen({ route, navigation }: any) {
         {/* Send Button */}
         <View style={styles.actions}>
           <Button
-            title="Send Email"
+            title={t('email.send')}
             variant="primary"
             onPress={handleSend}
             disabled={sending}

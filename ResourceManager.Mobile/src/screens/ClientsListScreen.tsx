@@ -49,7 +49,7 @@ export default function ClientsListScreen() {
     if (!form.name.trim()) { Alert.alert(t('common.error'), t('client.nameRequired')); return; }
     try {
       if (editingClient) {
-        await updateMutation.mutateAsync({ id: editingClient.id, ...form });
+        await updateMutation.mutateAsync({ id: editingClient.id, data: form });
       } else {
         await createMutation.mutateAsync(form);
       }
@@ -165,7 +165,7 @@ export default function ClientsListScreen() {
         visible={!!deleteTarget}
         title={t('client.deleteConfirm')}
         message={deleteTarget?.name || ''}
-        onCancel={() => setDeleteTarget(null)}
+        onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
         loading={deleteMutation.isPending}
       />

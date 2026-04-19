@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { useAppTheme } from '../theme/ThemeContext';
 import { supplierInvoicesApi, type SupplierInvoice } from '../api/supplierInvoices';
 import StatusBadge from '../components/StatusBadge';
+import Card from '../components/Card';
 import Button from '../components/Button';
 import { PaymentRecordModal } from '../components';
 
@@ -105,13 +106,14 @@ export default function SupplierInvoiceDetailScreen({ route, navigation }: any) 
         </View>
 
         {/* Actions */}
-        <View style={{ gap: spacing.sm, marginBottom: 32 }}>
+        <Card style={{ marginBottom: 32 }} padding="md">
           {invoice.remainingAmount > 0 && (
             <Button
               title={t('supplierInvoice.recordPayment')}
               variant="primary"
               onPress={() => setShowPayment(true)}
               icon={<Ionicons name="cash-outline" size={20} color="#FFF" />}
+              style={{ marginBottom: spacing.sm }}
             />
           )}
           <TouchableOpacity
@@ -121,7 +123,7 @@ export default function SupplierInvoiceDetailScreen({ route, navigation }: any) 
             <Ionicons name="document-text-outline" size={20} color="#FFF" />
             <Text style={styles.actionBtnText}>{t('supplierInvoice.viewFile')}</Text>
           </TouchableOpacity>
-        </View>
+        </Card>
       </ScrollView>
 
       <PaymentRecordModal

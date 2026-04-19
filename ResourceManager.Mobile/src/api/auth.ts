@@ -1,9 +1,10 @@
 import axios, { AxiosError } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Buffer } from 'buffer';
 import { API_BASE_URL, API_TIMEOUT } from './config';
 
 // Storage keys
-const STORAGE_KEYS = {
+export const STORAGE_KEYS = {
   TOKEN: '@auth_token',
   REFRESH_TOKEN: '@refresh_token',
   USER: '@user_data',
@@ -111,7 +112,45 @@ export interface AuthError {
   errors?: Record<string, string[]>;
 }
 
+const isJwtExpired = (token: string): boolean => {
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) {
+      return true;
+    }
+
+    const base64Payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const decodedPayload = typeof atob === 'function'
+      ? atob(base64Payload)
+      : Buffer.from(base64Payload, 'base64').toString('utf8');
+    const payload = JSON.parse(decodedPayload);
+    if (!payload?.exp || typeof payload.exp !== 'number') {
+      return true;
+    }
+
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    return payload.exp <= nowSeconds;
+  } catch {
+    return true;
+  }
+};
+
 // Auth API functions
+// Shared helper — used by other axios instances to refresh the access token
+export async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = await AsyncStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+  if (!refreshToken) return null;
+  const response = await apiClient.post<{ token?: string; accessToken?: string; refreshToken?: string }>(
+    '/auth/refresh',
+    { refreshToken },
+  );
+  const newToken = response.data.token ?? response.data.accessToken ?? '';
+  const newRefreshToken = response.data.refreshToken ?? '';
+  await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, newToken);
+  if (newRefreshToken) await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, newRefreshToken);
+  return newToken;
+}
+
 export const authApi = {
   login: async (data: LoginRequest): Promise<LoginResponse> => {
     try {
@@ -184,7 +223,25 @@ export const authApi = {
 
   isAuthenticated: async (): Promise<boolean> => {
     const token = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
-    return !!token;
+    return !!token && !isJwtExpired(token);
+  },
+
+  validateStoredSession: async (): Promise<{ token: string; user: LoginResponse['user'] } | null> => {
+    const [token, userStr] = await AsyncStorage.multiGet([STORAGE_KEYS.TOKEN, STORAGE_KEYS.USER]);
+    const storedToken = token[1];
+    const storedUser = userStr[1];
+
+    if (!storedToken || !storedUser || isJwtExpired(storedToken)) {
+      await AsyncStorage.multiRemove([STORAGE_KEYS.TOKEN, STORAGE_KEYS.REFRESH_TOKEN, STORAGE_KEYS.USER]);
+      return null;
+    }
+
+    try {
+      return { token: storedToken, user: JSON.parse(storedUser) };
+    } catch {
+      await AsyncStorage.multiRemove([STORAGE_KEYS.TOKEN, STORAGE_KEYS.REFRESH_TOKEN, STORAGE_KEYS.USER]);
+      return null;
+    }
   },
 
   signUp: async (data: SignUpRequest): Promise<LoginResponse> => {

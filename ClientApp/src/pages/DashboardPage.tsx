@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { DollarSign, FileText, Users, TrendingUp, AlertTriangle, CheckCircle, RefreshCw, X, Globe, Package } from 'lucide-react';
+import { DollarSign, FileText, Users, TrendingUp, AlertTriangle, Globe, Package } from 'lucide-react';
 import {
     BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid,
     Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -112,7 +112,7 @@ interface PurchasesSummary {
 
 export default function DashboardPage() {
     const { t } = useTranslation();
-    const { isManager, isSuperAdmin } = useAuth();
+    const { isSuperAdmin } = useAuth();
 
     // Inventory hooks
     const { data: inventoryReport } = useInventoryReport();
@@ -127,8 +127,6 @@ export default function DashboardPage() {
     const [loading, setLoading] = useState(true);
     const [fetchError, setFetchError] = useState<string | null>(null);
     const [activeCurrency, setActiveCurrency] = useState<string | null>(null);
-    const [recoveryStatus, setRecoveryStatus] = useState<{ type: 'running' | 'success' | 'warning' | 'error'; message: string } | null>(null);
-    const recoveryRunRef = useRef(false);
     const initialFetchDoneRef = useRef(false);
 
     /* ─── Mixed-currency mode state ─── */
@@ -321,102 +319,6 @@ export default function DashboardPage() {
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeCurrency]);
-
-    /* ─── PDF recovery (manager only, existing logic) ─── */
-    useEffect(() => {
-        if (!isManager || isSuperAdmin) return;
-        const sessionKey = 'pdf_consistency_checked';
-        if (sessionStorage.getItem(sessionKey)) return;
-        if (recoveryRunRef.current) return;
-        recoveryRunRef.current = true;
-        sessionStorage.setItem(sessionKey, 'true');
-
-        const runConsistencyCheckAndRecover = async () => {
-            try {
-                const checkRes = await api.get('/pdf-storage/check-consistency');
-                const report = checkRes.data;
-                const missingCount = report.missingFiles ?? report.MissingFiles ?? 0;
-                if (missingCount === 0) return;
-
-                const missingFiles: Array<{ id: number; documentType: string; documentNumber: string; fileName: string }> = report.missingFileDetails || [];
-                if (missingFiles.length === 0) return;
-
-                const typeConfig: Record<string, { listEndpoint: string; pdfEndpoint: (id: number) => string }> = {
-                    'Invoice': { listEndpoint: '/Invoices?page=1&size=9999', pdfEndpoint: (id) => `/Invoices/${id}/pdf` },
-                    'Quote': { listEndpoint: '/Quotes?page=1&size=9999', pdfEndpoint: (id) => `/Quotes/${id}/pdf` },
-                    'DeliveryNote': { listEndpoint: '/DeliveryNotes?page=1&size=9999', pdfEndpoint: (id) => `/DeliveryNotes/${id}/pdf` },
-                };
-
-                const regeneratable = missingFiles.filter(f => typeConfig[f.documentType]);
-                const uploaded = missingFiles.filter(f => !typeConfig[f.documentType]);
-
-                if (regeneratable.length === 0) {
-                    if (uploaded.length > 0) {
-                        setRecoveryStatus({ type: 'warning', message: t('dashboard.uploadedFilesMissing', '{{count}} uploaded file(s) missing — must be re-uploaded manually. Check Settings > PDF Storage.', { count: uploaded.length }) });
-                        setTimeout(() => setRecoveryStatus(prev => prev?.type !== 'running' ? null : prev), 10000);
-                    }
-                    return;
-                }
-
-                setRecoveryStatus({ type: 'running', message: t('dashboard.regenerating', 'Regenerating {{count}} missing PDF(s)...', { count: regeneratable.length }) });
-
-                let regenerated = 0;
-                let failed = 0;
-
-                const byType: Record<string, Array<{ id: number; documentType: string; documentNumber: string; fileName: string }>> = {};
-                for (const f of regeneratable) {
-                    if (!byType[f.documentType]) byType[f.documentType] = [];
-                    byType[f.documentType].push(f);
-                }
-
-                for (const [docType, files] of Object.entries(byType)) {
-                    const config = typeConfig[docType];
-                    let entities: Array<Record<string, unknown>> = [];
-                    try {
-                        const listRes = await api.get(config.listEndpoint);
-                        const data = listRes.data;
-                        entities = Array.isArray(data) ? data : (data.data || data.Data || data.items || []);
-                    } catch {
-                        failed += files.length;
-                        continue;
-                    }
-
-                    for (const missing of files) {
-                        const entity = entities.find((e: Record<string, unknown>) => {
-                            const num = e.number || e.Number || e.invoiceNumber || e.quoteNumber || '';
-                            return num === missing.documentNumber;
-                        });
-                        if (!entity) { failed++; continue; }
-                        try {
-                            await api.delete(`/pdf-storage/files/${missing.id}`).catch(() => { });
-                            await api.get(config.pdfEndpoint((entity.id || entity.Id) as number), { responseType: 'blob' });
-                            regenerated++;
-                        } catch { failed++; }
-                    }
-                }
-
-                const parts: string[] = [];
-                if (regenerated > 0) parts.push(t('dashboard.regeneratedPdf', { count: regenerated }));
-                if (failed > 0) parts.push(t('dashboard.failedPdf', { count: failed }));
-                if (uploaded.length > 0) parts.push(t('dashboard.manualUploadNeeded', { count: uploaded.length }));
-
-                if (failed === 0 && regenerated > 0) {
-                    setRecoveryStatus({ type: 'success', message: `${t('dashboard.autoRecoveryDone')}: ${parts.join(', ')}.` });
-                } else if (regenerated > 0 && failed > 0) {
-                    setRecoveryStatus({ type: 'warning', message: `${t('dashboard.partialRecovery')}: ${parts.join(', ')}.` });
-                } else if (failed > 0 && regenerated === 0) {
-                    setRecoveryStatus({ type: 'error', message: `${t('dashboard.autoRecoveryFailed')}: ${parts.join(', ')}. ${t('dashboard.checkSettings')}` });
-                }
-
-                setTimeout(() => setRecoveryStatus(prev => {
-                    if (prev && prev.type !== 'running' && prev.type !== 'error') return null;
-                    return prev;
-                }), 10000);
-            } catch { /* Silent failure - non-critical */ }
-        };
-
-        runConsistencyCheckAndRecover();
-    }, [isManager, isSuperAdmin, t]);
 
     /* ─── Helpers ─── */
     const cur = stats?.selectedCurrency || activeCurrency || DEFAULT_CURRENCY;
@@ -704,26 +606,6 @@ export default function DashboardPage() {
                             ))}
                         </div>
                     </div>
-                </div>
-            )}
-
-            {/* Auto-recovery status banner */}
-            {recoveryStatus && (
-                <div className={`p-3 rounded-lg flex items-center justify-between text-sm ${recoveryStatus.type === 'running' ? 'bg-blue-50 border border-blue-200 text-blue-800' :
-                    recoveryStatus.type === 'success' ? 'bg-green-50 border border-green-200 text-green-800' :
-                        recoveryStatus.type === 'warning' ? 'bg-amber-50 border border-amber-200 text-amber-800' :
-                            'bg-red-50 border border-red-200 text-red-800'
-                    }`}>
-                    <div className="flex items-center gap-2">
-                        {recoveryStatus.type === 'running' && <RefreshCw size={16} className="animate-spin" />}
-                        {recoveryStatus.type === 'success' && <CheckCircle size={16} />}
-                        {recoveryStatus.type === 'warning' && <AlertTriangle size={16} />}
-                        {recoveryStatus.type === 'error' && <AlertTriangle size={16} />}
-                        <span>{recoveryStatus.message}</span>
-                    </div>
-                    {recoveryStatus.type !== 'running' && (
-                        <button onClick={() => setRecoveryStatus(null)} className="ms-2 p-1 rounded hover:bg-black/5"><X size={14} /></button>
-                    )}
                 </div>
             )}
 

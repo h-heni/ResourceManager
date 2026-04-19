@@ -182,6 +182,9 @@ builder.Services.AddHttpClient<ResourceManager.Services.IWhatsAppService, Resour
 // Supplier PDF Scanner Service (Part 4: PDF Upload + Data Extraction)
 builder.Services.AddScoped<ResourceManager.Services.ISupplierPdfScannerService, ResourceManager.Services.SupplierPdfScannerService>();
 
+// Groq Vision LLM — structured invoice extraction (preferred over Tesseract regex)
+builder.Services.AddHttpClient<ResourceManager.Services.IGeminiInvoiceExtractor, ResourceManager.Services.GeminiInvoiceExtractor>();
+
 // Inventory Management Service
 builder.Services.AddScoped<ResourceManager.Services.InventoryService>();
 

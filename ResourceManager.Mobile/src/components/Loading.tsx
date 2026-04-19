@@ -7,7 +7,7 @@ import {
   Modal,
   TouchableOpacity,
 } from 'react-native';
-import { theme } from '../theme';
+import { useAppTheme } from '../theme/ThemeContext';
 
 interface LoadingProps {
   visible?: boolean;
@@ -22,15 +22,17 @@ export default function Loading({
   overlay = true,
   size = 'large',
 }: LoadingProps) {
+  const { colors, spacing, borderRadius, shadows } = useAppTheme();
+
   if (!overlay) {
     return (
-      <View style={styles.inline}>
+      <View style={[styles.inline, { gap: spacing.sm, padding: spacing.lg }]}>
         <ActivityIndicator
           size={size}
-          color={theme.colors.primary}
+          color={colors.primary}
         />
         {text && (
-          <Text style={styles.text}>{text}</Text>
+          <Text style={{ fontSize: 14, color: colors.text.secondary, marginTop: spacing.sm, textAlign: 'center' }}>{text}</Text>
         )}
       </View>
     );
@@ -48,14 +50,14 @@ export default function Loading({
         activeOpacity={1}
         onPress={() => {}}
       >
-        <View style={styles.container}>
-          <View style={styles.content}>
+        <View style={{ padding: spacing.xl }}>
+          <View style={[styles.content, { backgroundColor: colors.card, borderRadius: borderRadius.lg, padding: spacing.xl, gap: spacing.md }, shadows.elevated]}>
             <ActivityIndicator
               size={size}
-              color={theme.colors.primary}
+              color={colors.primary}
             />
             {text && (
-              <Text style={styles.text}>{text}</Text>
+              <Text style={{ fontSize: 14, color: colors.text.secondary, marginTop: spacing.sm, textAlign: 'center' }}>{text}</Text>
             )}
           </View>
         </View>
@@ -68,8 +70,6 @@ const styles = StyleSheet.create({
   inline: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.sm,
-    padding: theme.spacing.lg,
   },
   overlay: {
     flex: 1,
@@ -77,21 +77,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  container: {
-    padding: theme.spacing.xl,
-  },
   content: {
-    backgroundColor: theme.colors.white,
-    borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.xl,
     alignItems: 'center',
-    gap: theme.spacing.md,
-    ...theme.shadows.modal,
-  },
-  text: {
-    fontSize: theme.typography.fontSize.body,
-    color: theme.colors.text.secondary,
-    marginTop: theme.spacing.sm,
-    textAlign: 'center',
   },
 });

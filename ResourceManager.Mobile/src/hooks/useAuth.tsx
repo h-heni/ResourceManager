@@ -45,15 +45,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loadUser = async () => {
     try {
-      const [userStr, token] = await AsyncStorage.multiGet([STORAGE_KEYS.USER, STORAGE_KEYS.TOKEN]);
-      if (userStr[1] && token[1]) {
-        setUser(JSON.parse(userStr[1]));
+      const session = await authApi.validateStoredSession();
+      if (session?.user) {
+        setUser(session.user as User);
       } else {
-        await AsyncStorage.multiRemove([STORAGE_KEYS.USER, STORAGE_KEYS.TOKEN, '@refresh_token']);
         setUser(null);
       }
     } catch (error) {
       console.error('Error loading user:', error);
+      await AsyncStorage.multiRemove([STORAGE_KEYS.USER, STORAGE_KEYS.TOKEN, '@refresh_token']);
+      setUser(null);
     } finally {
       setLoading(false);
     }

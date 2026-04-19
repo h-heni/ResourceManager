@@ -1,5 +1,5 @@
 import { apiClient } from './auth';
-import { DEFAULT_PAGE_SIZE } from './config';
+import { DEFAULT_PAGE_SIZE, API_BASE_URL } from './config';
 
 export interface Quote {
   id: number;
@@ -74,6 +74,6 @@ export const quotesApi = {
   },
 
   getPdfUrl: (id: number): string => {
-    return `/Quotes/${id}/pdf`;
+    return `${API_BASE_URL}/Quotes/${id}/pdf`;
   },
 };

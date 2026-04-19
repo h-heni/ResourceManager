@@ -8,7 +8,7 @@ import {
   ViewStyle,
   TextStyle,
 } from 'react-native';
-import { theme } from '../theme';
+import { useAppTheme } from '../theme/ThemeContext';
 
 interface ButtonProps {
   title: string;
@@ -35,57 +35,31 @@ export default function Button({
   icon,
   iconPosition = 'left',
 }: ButtonProps) {
+  const { colors, spacing, borderRadius, typography } = useAppTheme();
+
   const getVariantStyle = (): { bg: string; text: string; border?: string } => {
     switch (variant) {
       case 'primary':
-        return {
-          bg: theme.colors.button.primary,
-          text: theme.colors.white,
-        };
+        return { bg: colors.button.primary, text: colors.white };
       case 'secondary':
-        return {
-          bg: theme.colors.button.secondary,
-          text: theme.colors.text.secondary,
-          border: theme.colors.button.secondaryBorder,
-        };
+        return { bg: colors.button.secondary, text: colors.text.secondary, border: colors.button.secondaryBorder };
       case 'danger':
-        return {
-          bg: theme.colors.button.danger,
-          text: theme.colors.white,
-        };
+        return { bg: colors.button.danger, text: colors.white };
       case 'ghost':
-        return {
-          bg: 'transparent',
-          text: theme.colors.primary,
-        };
+        return { bg: 'transparent', text: colors.primary };
       default:
-        return {
-          bg: theme.colors.button.primary,
-          text: theme.colors.white,
-        };
+        return { bg: colors.button.primary, text: colors.white };
     }
   };
 
   const getSizeStyle = () => {
     switch (size) {
       case 'small':
-        return {
-          paddingVertical: theme.spacing.sm,
-          paddingHorizontal: theme.spacing.lg,
-          minHeight: 36,
-        };
+        return { paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, minHeight: 36 };
       case 'large':
-        return {
-          paddingVertical: theme.spacing.lg,
-          paddingHorizontal: theme.spacing.xl,
-          minHeight: 52,
-        };
+        return { paddingVertical: spacing.lg, paddingHorizontal: spacing.xl, minHeight: 52 };
       default:
-        return {
-          paddingVertical: 10,
-          paddingHorizontal: theme.spacing.lg,
-          minHeight: 44,
-        };
+        return { paddingVertical: 10, paddingHorizontal: spacing.lg, minHeight: 44 };
     }
   };
 
@@ -99,10 +73,11 @@ export default function Button({
         {
           backgroundColor: bg,
           borderColor: border,
+          borderRadius: borderRadius.sm,
           minWidth: fullWidth ? '100%' : 120,
           ...sizeStyle,
         },
-        disabled && styles.disabled,
+        disabled && { backgroundColor: colors.button.disabled, borderColor: 'transparent', opacity: 0.5 },
         style,
       ]}
       onPress={onPress}
@@ -112,24 +87,23 @@ export default function Button({
       {loading ? (
         <ActivityIndicator size="small" color={text} />
       ) : (
-        <View style={styles.content}>
+        <View style={[styles.content, { gap: spacing.xs }]}>
           {icon && iconPosition === 'left' && (
-            <View style={styles.iconLeft}>{icon}</View>
+            <View style={{ marginRight: spacing.xs }}>{icon}</View>
           )}
           <Text
-            style={[
-              styles.buttonText,
-              {
-                color: disabled ? theme.colors.text.light : text,
-                fontSize: size === 'small' ? theme.typography.fontSize.small : theme.typography.fontSize.body,
-              },
-            ]}
+            style={{
+              color: disabled ? colors.text.light : text,
+              fontSize: size === 'small' ? typography.fontSize.small : typography.fontSize.body,
+              fontWeight: typography.fontWeight.medium,
+              textAlign: 'center',
+            }}
             numberOfLines={1}
           >
             {title}
           </Text>
           {icon && iconPosition === 'right' && (
-            <View style={styles.iconRight}>{icon}</View>
+            <View style={{ marginLeft: spacing.xs }}>{icon}</View>
           )}
         </View>
       )}
@@ -141,28 +115,11 @@ const styles = StyleSheet.create({
   button: {
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: theme.borderRadius.sm,
     borderWidth: 1,
-  },
-  buttonText: {
-    fontWeight: theme.typography.fontWeight.medium,
-    textAlign: 'center',
   },
   content: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: theme.spacing.xs,
-  },
-  iconLeft: {
-    marginRight: theme.spacing.xs,
-  },
-  iconRight: {
-    marginLeft: theme.spacing.xs,
-  },
-  disabled: {
-    backgroundColor: theme.colors.button.disabled,
-    borderColor: 'transparent',
-    opacity: 0.5,
   },
 });

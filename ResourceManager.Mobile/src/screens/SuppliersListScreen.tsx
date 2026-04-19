@@ -37,7 +37,7 @@ export default function SuppliersListScreen({ navigation }: any) {
   const handleSave = async () => {
     if (!form.name.trim()) { Alert.alert(t('common.error'), t('supplier.nameRequired')); return; }
     try {
-      if (editingItem) { await updateMutation.mutateAsync({ id: editingItem.id, ...form }); }
+      if (editingItem) { await updateMutation.mutateAsync({ id: editingItem.id, data: form }); }
       else { await createMutation.mutateAsync(form); }
       setFormVisible(false);
     } catch (error) { Alert.alert(t('common.error'), (error as Error).message); }

@@ -11,12 +11,16 @@ export interface LineItem {
   quantity: number;
   price: number;
   taxRate: number;
+  // Legacy optional fields kept for backwards-compat with older screens
+  tva?: boolean;
+  vatRate?: number;
 }
 
 interface ItemsEditorProps {
   items: LineItem[];
   onChange: (items: LineItem[]) => void;
   productOptions?: SelectOption[];
+  error?: string;
 }
 
 let counter = 0;
@@ -51,7 +55,7 @@ export default function ItemsEditor({ items, onChange, productOptions }: ItemsEd
       </View>
 
       {items.map((item, idx) => (
-        <View key={item.key} style={[styles.itemCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: borderRadius.md }]}>
+        <View key={item.key ?? `_item_${idx}`} style={[styles.itemCard, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: borderRadius.md }]}>
           <View style={styles.itemHeader}>
             <Text style={{ color: colors.text.secondary, fontWeight: '600', fontSize: 13 }}>#{idx + 1}</Text>
             <TouchableOpacity onPress={() => removeItem(item.key)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>

@@ -7,60 +7,63 @@ import {
   Alert,
   Image,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
+import TextRecognition from '@react-native-ml-kit/text-recognition';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { supplierInvoicesApi } from '../api';
 import Button from '../components/Button';
 import { theme } from '../theme';
+import { useAppTheme } from '../theme/ThemeContext';
 
 export default function ScanInvoiceScreen({ route, navigation }: any) {
+  const { t } = useTranslation();
+  const { colors } = useAppTheme();
   const [scannedImage, setScannedImage] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [recognizedText, setRecognizedText] = useState<string>('');
   const [processing, setProcessing] = useState(false);
-  const [permission, requestPermission] = useCameraPermissions();
 
   const handleCapture = async () => {
-    if (!permission?.granted) {
-      const result = await requestPermission();
-      if (!result.granted) {
-        Alert.alert(
-          'Permission Required',
-          'Camera access is needed to scan invoices'
-        );
-        return;
-      }
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert(
+        t('scan.permissionRequired'),
+        t('scan.permissionMessage')
+      );
+      return;
     }
 
     try {
-      // Capture image using camera
+      // Capture full-resolution image — no cropping, no resize.
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        quality: 0.8,
-        aspect: [4, 3],
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 1.0,
       });
 
       if (!result.canceled && result.assets && result.assets[0]) {
-        // Compress/optimize image
-        const manipulatedImage = await ImageManipulator.manipulateAsync(
-          result.assets[0].uri,
-          [{ resize: { width: 1200, height: 900 } }],
-          { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
-        );
+        const uri = result.assets[0].uri;
+        setScannedImage(uri);
 
-        setScannedImage(manipulatedImage.uri);
+        // Run on-device OCR in background — don't block the user.
+        // If it finishes before they tap "Process", the text is sent along;
+        // otherwise the backend uses Gemini/Tesseract as fallback.
+        TextRecognition.recognize(uri)
+          .then((mlResult) => setRecognizedText(mlResult?.text ?? ''))
+          .catch(() => setRecognizedText(''));
       }
-    } catch (error) {
-      Alert.alert('Camera Error', 'Could not capture image. Please try again.');
+    } catch (error: any) {
+      console.error('Camera error:', error);
+      Alert.alert(t('scan.cameraError'), error?.message || t('scan.cameraErrorMessage'));
     }
   };
 
   const handleRetake = () => {
     setScannedImage(null);
+    setRecognizedText('');
   };
 
   const handleUpload = async () => {
@@ -71,11 +74,14 @@ export default function ScanInvoiceScreen({ route, navigation }: any) {
       // Get filename from URI
       const fileName = `invoice_${Date.now()}.jpg`;
 
-      // Upload to existing API
+      // Upload original image bytes + on-device OCR text.
+      // Backend will skip Tesseract when extractedText is provided.
       const response = await supplierInvoicesApi.upload(
         scannedImage,
         fileName,
-        'image/jpeg'
+        'image/jpeg',
+        undefined,
+        recognizedText
       );
 
       if (response.success) {
@@ -87,12 +93,12 @@ export default function ScanInvoiceScreen({ route, navigation }: any) {
         });
       } else {
         Alert.alert(
-          'Scan Failed',
-          response.message || 'Could not process invoice. Please try again.'
+          t('scan.scanFailed'),
+          response.message || t('scan.scanFailedMessage')
         );
       }
     } catch (error) {
-      Alert.alert('Upload Failed', (error as Error).message || 'Please try again.');
+      Alert.alert(t('scan.uploadFailed'), (error as Error).message || t('scan.tryAgain'));
     } finally {
       setProcessing(false);
     }
@@ -105,15 +111,15 @@ export default function ScanInvoiceScreen({ route, navigation }: any) {
     }
 
     Alert.alert(
-      'Discard Scan',
-      'Are you sure you want to discard this scan?',
+      t('scan.discardScanTitle'),
+      t('scan.discardScanMessage'),
       [
         {
-          text: 'Cancel',
+          text: t('common.cancel'),
           style: 'cancel',
         },
         {
-          text: 'Discard',
+          text: t('scan.discard'),
           style: 'destructive',
           onPress: () => {
             setScannedImage(null);
@@ -123,47 +129,53 @@ export default function ScanInvoiceScreen({ route, navigation }: any) {
     );
   };
 
-  if (permission === null) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="close" size={24} color={theme.colors.text.primary} />
         </TouchableOpacity>
-        <Text style={styles.title}>Scan Invoice</Text>
-        <View style={styles.placeholder} />
+        <Text style={styles.title}>{t('scan.title')}</Text>
+        <View style={styles.headerSpacer} />
       </View>
 
       {!scannedImage ? (
-        <View style={styles.cameraContainer}>
-          <View style={styles.placeholder}>
-            <Ionicons name="camera-outline" size={64} color={theme.colors.text.light} />
-            <Text style={styles.placeholderText}>
-              Capture invoice image
-            </Text>
-            <Text style={styles.placeholderSub}>
-              Position the invoice within the frame
-            </Text>
+        <ScrollView contentContainerStyle={styles.cameraContainer}>
+          <View style={styles.heroIconWrap}>
+            <Ionicons name="camera-outline" size={64} color={theme.colors.primary} />
+          </View>
+          <Text style={styles.placeholderText}>{t('scan.captureInvoiceTitle')}</Text>
+          <Text style={styles.placeholderSub}>{t('scan.captureInvoiceSub')}</Text>
+
+          <View style={styles.tipsBox}>
+            <Text style={styles.tipsTitle}>{t('scan.tips.title')}</Text>
+            <View style={styles.tipRow}>
+              <Ionicons name="sunny-outline" size={20} color={theme.colors.primary} />
+              <Text style={styles.tipText}>{t('scan.tips.lighting')}</Text>
+            </View>
+            <View style={styles.tipRow}>
+              <Ionicons name="phone-portrait-outline" size={20} color={theme.colors.primary} />
+              <Text style={styles.tipText}>{t('scan.tips.flat')}</Text>
+            </View>
+            <View style={styles.tipRow}>
+              <Ionicons name="scan-outline" size={20} color={theme.colors.primary} />
+              <Text style={styles.tipText}>{t('scan.tips.fullFrame')}</Text>
+            </View>
+            <View style={styles.tipRow}>
+              <Ionicons name="checkmark-circle-outline" size={20} color={theme.colors.primary} />
+              <Text style={styles.tipText}>{t('scan.tips.steady')}</Text>
+            </View>
           </View>
 
           <Button
-            title="Open Camera"
+            title={t('scan.openCamera')}
             variant="primary"
             onPress={handleCapture}
             style={styles.captureButton}
             fullWidth
             icon={<Ionicons name="camera" size={20} color={theme.colors.white} />}
           />
-        </View>
+        </ScrollView>
       ) : (
         <View style={styles.previewContainer}>
           <Image
@@ -174,14 +186,14 @@ export default function ScanInvoiceScreen({ route, navigation }: any) {
 
           <View style={styles.actions}>
             <Button
-              title="Retake"
+              title={t('scan.retake')}
               variant="secondary"
               onPress={handleRetake}
               style={styles.retakeButton}
               icon={<Ionicons name="refresh" size={20} color={theme.colors.text.secondary} />}
             />
             <Button
-              title="Process Invoice"
+              title={t('scan.processInvoice')}
               variant="primary"
               onPress={handleUpload}
               disabled={processing}
@@ -199,7 +211,7 @@ export default function ScanInvoiceScreen({ route, navigation }: any) {
           {processing && (
             <View style={styles.processingOverlay}>
               <ActivityIndicator size="large" color={theme.colors.primary} />
-              <Text style={styles.processingText}>Processing invoice...</Text>
+              <Text style={styles.processingText}>{t('scan.processing')}</Text>
             </View>
           )}
         </View>
@@ -232,18 +244,18 @@ const styles = StyleSheet.create({
     fontWeight: theme.typography.fontWeight.bold,
     color: theme.colors.text.primary,
   },
-  placeholder: {
+  headerSpacer: {
     width: 24,
   },
   cameraContainer: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: theme.spacing.xl,
   },
-  placeholder: {
+  heroIconWrap: {
     alignItems: 'center',
-    marginBottom: theme.spacing.xl,
+    marginBottom: theme.spacing.lg,
   },
   placeholderText: {
     fontSize: theme.typography.fontSize.h3,
@@ -256,6 +268,33 @@ const styles = StyleSheet.create({
     color: theme.colors.text.tertiary,
     marginTop: theme.spacing.xs,
     textAlign: 'center',
+  },
+  tipsBox: {
+    width: '100%',
+    backgroundColor: theme.colors.offWhite,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.md,
+    marginTop: theme.spacing.lg,
+    marginBottom: theme.spacing.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  tipsTitle: {
+    fontSize: theme.typography.fontSize.body,
+    fontWeight: theme.typography.fontWeight.bold,
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.sm,
+  },
+  tipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+  },
+  tipText: {
+    flex: 1,
+    fontSize: theme.typography.fontSize.body,
+    color: theme.colors.text.secondary,
   },
   captureButton: {
     minHeight: 52,

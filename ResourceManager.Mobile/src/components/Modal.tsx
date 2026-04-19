@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,7 @@ import {
   TouchableWithoutFeedback,
   TouchableOpacity,
 } from 'react-native';
-import { theme } from '../theme';
+import { useAppTheme } from '../theme/ThemeContext';
 
 interface ModalProps {
   visible: boolean;
@@ -28,6 +28,8 @@ export default function Modal({
   style,
   maxWidth = 400,
 }: ModalProps) {
+  const { colors, spacing, borderRadius, typography, shadows } = useAppTheme();
+
   return (
     <RNModal
       visible={visible}
@@ -36,34 +38,69 @@ export default function Modal({
       statusBarTranslucent
     >
       <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.overlay}>
-          <View
-            style={[
-              styles.container,
-              { maxWidth },
-              style,
-            ]}
-          >
-            {/* Header */}
-            {title && (
-              <View style={styles.header}>
-                <Text style={styles.title}>{title}</Text>
-                <TouchableOpacity
-                  style={styles.closeButton}
-                  onPress={onClose}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        <View style={[styles.overlay, { padding: spacing.lg }]}>
+          <TouchableWithoutFeedback>
+            <View
+              style={[
+                styles.container,
+                {
+                  maxWidth,
+                  backgroundColor: colors.card,
+                  borderRadius: borderRadius.lg,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  ...shadows.modal,
+                },
+                style,
+              ]}
+            >
+              {title && (
+                <View
+                  style={[
+                    styles.header,
+                    { padding: spacing.lg, borderBottomColor: colors.border },
+                  ]}
                 >
-                  <Text style={styles.closeIcon}>×</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+                  <Text
+                    style={[
+                      styles.title,
+                      {
+                        color: colors.text.primary,
+                        fontSize: typography.fontSize.h2,
+                        fontWeight: typography.fontWeight.semiBold,
+                      },
+                    ]}
+                  >
+                    {title}
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.closeButton, { padding: spacing.xs, marginLeft: spacing.sm }]}
+                    onPress={onClose}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Text style={[styles.closeIcon, { color: colors.text.tertiary }]}>x</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
 
-            {/* Content */}
-            <View style={styles.content}>{children}</View>
+              <View style={{ flexShrink: 1, padding: spacing.lg, overflow: 'hidden' }}>{children}</View>
 
-            {/* Footer */}
-            {footer && <View style={styles.footer}>{footer}</View>}
-          </View>
+              {footer && (
+                <View
+                  style={[
+                    styles.footer,
+                    {
+                      gap: spacing.sm,
+                      padding: spacing.lg,
+                      borderTopColor: colors.border,
+                    },
+                  ]}
+                >
+                  {footer}
+                </View>
+              )}
+            </View>
+          </TouchableWithoutFeedback>
         </View>
       </TouchableWithoutFeedback>
     </RNModal>
@@ -76,48 +113,30 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: theme.spacing.lg,
   },
   container: {
-    backgroundColor: theme.colors.white,
-    borderRadius: theme.borderRadius.lg,
     width: '100%',
     maxHeight: '80%',
-    ...theme.shadows.modal,
+    overflow: 'hidden',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: theme.spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
   },
   title: {
-    fontSize: theme.typography.fontSize.h2,
-    fontWeight: theme.typography.fontWeight.semiBold,
-    color: theme.colors.text.primary,
     flex: 1,
   },
-  closeButton: {
-    padding: theme.spacing.xs,
-    marginLeft: theme.spacing.sm,
-  },
+  closeButton: {},
   closeIcon: {
     fontSize: 32,
     lineHeight: 28,
-    color: theme.colors.text.tertiary,
-    fontWeight: theme.typography.fontWeight.light,
-  },
-  content: {
-    padding: theme.spacing.lg,
+    fontWeight: '300',
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
-    gap: theme.spacing.sm,
-    padding: theme.spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
   },
 });

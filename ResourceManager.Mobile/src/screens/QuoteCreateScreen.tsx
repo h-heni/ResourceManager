@@ -39,7 +39,7 @@ export default function QuoteCreateScreen({ navigation, route }: any) {
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const clientOptions: SelectOption[] = (clients || []).map((c: any) => ({
+  const clientOptions: SelectOption[] = (clients?.items ?? []).map((c: any) => ({
     label: c.name,
     value: c.id?.toString(),
   }));
@@ -65,15 +65,14 @@ export default function QuoteCreateScreen({ navigation, route }: any) {
       items: items.filter(i => i.description.trim()).map(i => ({
         description: i.description,
         quantity: i.quantity,
-        unitPrice: i.price,
-        vat: i.tva ? i.vatRate / 100 : 0,
-        vatRate: i.vatRate,
+        price: i.price,
+        taxRate: i.tva ? (i.vatRate ?? 0) / 100 : 0,
       })),
     };
 
     try {
       if (isEdit) {
-        await updateMutation.mutateAsync({ id: editData.id, ...payload });
+        await updateMutation.mutateAsync({ id: editData.id, data: payload });
       } else {
         await createMutation.mutateAsync(payload);
       }
@@ -150,7 +149,7 @@ export default function QuoteCreateScreen({ navigation, route }: any) {
             <View style={styles.totalRow}>
               <Text style={{ color: colors.text.secondary }}>{t('createPage.vat')}</Text>
               <Text style={{ color: colors.text.primary, fontWeight: '600' }}>
-                {items.reduce((s, i) => s + (i.tva ? i.quantity * i.price * (i.vatRate / 100) : 0), 0).toFixed(2)}
+                {items.reduce((s, i) => s + (i.tva ? i.quantity * i.price * ((i.vatRate ?? 0) / 100) : 0), 0).toFixed(2)}
               </Text>
             </View>
             <View style={[styles.totalRow, styles.totalFinal]}>
@@ -158,7 +157,7 @@ export default function QuoteCreateScreen({ navigation, route }: any) {
               <Text style={{ color: colors.primary, fontWeight: '700', fontSize: typography.fontSize.h3 }}>
                 {items.reduce((s, i) => {
                   const base = i.quantity * i.price;
-                  return s + base + (i.tva ? base * (i.vatRate / 100) : 0);
+                  return s + base + (i.tva ? base * ((i.vatRate ?? 0) / 100) : 0);
                 }, 0).toFixed(2)}
               </Text>
             </View>

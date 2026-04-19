@@ -63,7 +63,13 @@ export const settingsApi = {
     await apiClient.post('/Settings/whatsapp-disconnect');
   },
 
-  setupCompany: async (data: { companyName: string; industry?: string; size?: string }): Promise<void> => {
-    await apiClient.post('/Company', data);
+  setupCompany: async (data: { companyName: string; industry?: string; size?: string; phone?: string; email?: string; address?: string }): Promise<void> => {
+    // Backend expects PascalCase (no JsonNamingPolicy.CamelCase configured)
+    await apiClient.post('/Company/setup', {
+      CompanyName: data.companyName,
+      Address: data.address ?? '',
+      TaxId: '',
+      Phone: data.phone ?? '',
+    });
   },
 };

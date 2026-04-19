@@ -34,11 +34,19 @@ export interface SaveProductRequest {
 export const productsApi = {
   list: async (page = 1, size = DEFAULT_PAGE_SIZE): Promise<ProductsListResponse> => {
     const response = await apiClient.get('/ProductServices', { params: { page, size } });
+    const d = response.data;
     // Normalize array response
-    if (Array.isArray(response.data)) {
-      return { items: response.data, page: 1, size: response.data.length, totalCount: response.data.length, totalPages: 1 };
+    if (Array.isArray(d)) {
+      const items = d.map((p: any) => ({ ...p, price: p.price ?? p.defaultUnitPrice ?? p.DefaultUnitPrice ?? 0 }));
+      return { items, page: 1, size: items.length, totalCount: items.length, totalPages: 1 };
     }
-    return response.data;
+    // Backend returns { data/Data, page, size, totalCount, totalPages } — map "data" → "items"
+    if (d && (d.data || d.Data)) {
+      const raw = d.data ?? d.Data ?? [];
+      const items = raw.map((p: any) => ({ ...p, price: p.price ?? p.defaultUnitPrice ?? p.DefaultUnitPrice ?? 0 }));
+      return { items, page: d.page ?? d.Page ?? page, size: d.size ?? d.Size ?? size, totalCount: d.totalCount ?? d.TotalCount ?? 0, totalPages: d.totalPages ?? d.TotalPages ?? 0 };
+    }
+    return d;
   },
 
   getById: async (id: number): Promise<ProductService> => {

@@ -1,5 +1,5 @@
 import { apiClient } from './auth';
-import { DEFAULT_PAGE_SIZE } from './config';
+import { DEFAULT_PAGE_SIZE, API_BASE_URL } from './config';
 
 export interface DeliveryNote {
   id: number;
@@ -68,6 +68,6 @@ export const deliveryNotesApi = {
   },
 
   getPdfUrl: (id: number): string => {
-    return `/DeliveryNotes/${id}/pdf`;
+    return `${API_BASE_URL}/DeliveryNotes/${id}/pdf`;
   },
 };

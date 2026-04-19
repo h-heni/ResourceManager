@@ -31,7 +31,7 @@ export function useTestEmail() {
 
 export function useSetupCompany() {
   return useMutation({
-    mutationFn: (data: { companyName: string; industry?: string; size?: string }) =>
+    mutationFn: (data: { companyName: string; industry?: string; size?: string; phone?: string; email?: string; address?: string }) =>
       settingsApi.setupCompany(data),
   });
 }

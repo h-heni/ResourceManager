@@ -390,9 +390,11 @@
 .panze-sidebar-user-name {
   font-size: 11.5px;
   color: #52525B;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
+  text-align: center;
+  line-height: 1.3;
+  max-width: 100%;
 }
 
 .panze-sidebar-user-role {
@@ -400,20 +402,27 @@
   color: #71717A;
 }
 
-.panze-sidebar-settings-btn {
-  width: 28px; height: 28px;
+.panze-sidebar-logout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
   border-radius: 9999px;
   border: none;
   background: transparent;
   color: #71717A;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 500;
   transition: all 0.15s;
+  flex-shrink: 0;
 }
-.panze-sidebar-settings-btn:hover { background: #F4F4F5; color: #52525B; }
+.panze-sidebar-logout-btn:hover {
+  background: #FEF2F2;
+  color: #EF4444;
+}
 
 .panze-sidebar-collapse-btn {
   display: flex;
