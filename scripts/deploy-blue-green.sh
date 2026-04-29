@@ -86,7 +86,10 @@ log_info "Active: $ACTIVE_ENV → Deploying to: $TARGET_ENV"
 # CI workflow ci.yml builds and pushes API_IMAGE / WEB_IMAGE to ghcr.io on every push to master.
 
 log_info "Pulling latest images from registry..."
-$DC -f "$COMPOSE_FILE" --env-file "$ENV_FILE" pull postgres_db redis ${TARGET_ENV}-api ${TARGET_ENV}-web || { log_error "Pull failed"; exit 2; }
+# NOTE: postgres_db is intentionally excluded — it is a stateful service and its
+# image version is pinned. Pulling it during deploy risks recreating the container
+# with a mismatched password vs the existing data volume.
+$DC -f "$COMPOSE_FILE" --env-file "$ENV_FILE" pull redis ${TARGET_ENV}-api ${TARGET_ENV}-web || { log_error "Pull failed"; exit 2; }
 log_success "Images pulled"
 
 # ── Ensure PostgreSQL is running ──
