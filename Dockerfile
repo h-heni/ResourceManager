@@ -25,7 +25,10 @@ COPY . .
 
 # Publish in one step (skip separate build for smaller layers)
 FROM build AS publish
-RUN dotnet publish ResourceManager.API.csproj -c Release -o /app/publish /p:UseAppHost=false
+# COMMIT_SHA is passed by CI (--build-arg COMMIT_SHA=${{ github.sha }}).
+# dotnet bakes it into AssemblyInformationalVersion via SourceRevisionId.
+ARG COMMIT_SHA=unknown
+RUN dotnet publish ResourceManager.API.csproj -c Release -o /app/publish /p:UseAppHost=false /p:SourceRevisionId=${COMMIT_SHA}
 # Copy i18n locale files for dynamic category normalization
 RUN mkdir -p /app/publish/locales && cp /src/ClientApp/src/i18n/locales/*.json /app/publish/locales/
 

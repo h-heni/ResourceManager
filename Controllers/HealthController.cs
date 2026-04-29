@@ -42,7 +42,11 @@ public class HealthController : ControllerBase
                 status = "healthy",
                 timestamp = DateTime.UtcNow,
                 version = typeof(HealthController).Assembly
-                    .GetName().Version?.ToString() ?? "1.0.0"
+                    .GetName().Version?.ToString() ?? "1.0.0",
+                commit = typeof(HealthController).Assembly
+                    .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+                    .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
+                    .FirstOrDefault()?.InformationalVersion ?? "unknown"
             });
         }
         catch (Exception ex)
