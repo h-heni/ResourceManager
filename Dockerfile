@@ -83,8 +83,11 @@ ENV DOTNET_gcServer=0
 ENV DOTNET_ThreadPool_UnfairSemaphoreSpinLimit=6
 
 # Health check
+# Sends Host header matching AllowedHosts in appsettings.Production.json,
+# otherwise ASP.NET Core's host filtering returns HTTP 400 and the container
+# is marked unhealthy even though the app is running fine.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+    CMD curl -f -H "Host: rscmanager.com" http://localhost:8080/health || exit 1
 
 # Entry point
 ENTRYPOINT ["dotnet", "ResourceManager.API.dll"]
