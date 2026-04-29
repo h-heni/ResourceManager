@@ -81,11 +81,13 @@ fi
 
 log_info "Active: $ACTIVE_ENV → Deploying to: $TARGET_ENV"
 
-# ── Build images (while old env still serves traffic) ──
+# ── Pull pre-built images from GHCR (CI builds & pushes them) ──
+# The VPS does NOT build images locally — source code (Dockerfile, ClientApp/) is not shipped.
+# CI workflow ci.yml builds and pushes API_IMAGE / WEB_IMAGE to ghcr.io on every push to master.
 
-log_info "Building latest images..."
-$DC -f "$COMPOSE_FILE" build --no-cache ${TARGET_ENV}-api ${TARGET_ENV}-web || { log_error "Build failed"; exit 2; }
-log_success "Images built"
+log_info "Pulling latest images from registry..."
+$DC -f "$COMPOSE_FILE" --env-file "$ENV_FILE" pull postgres_db redis ${TARGET_ENV}-api ${TARGET_ENV}-web || { log_error "Pull failed"; exit 2; }
+log_success "Images pulled"
 
 # ── Ensure PostgreSQL is running ──
 

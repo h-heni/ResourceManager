@@ -117,9 +117,8 @@ services:
 
   blue-api:
     image: ${API_IMAGE:-resourcemanager-api:latest}
-    build:
-      context: .
-      dockerfile: Dockerfile
+    # NOTE: build is intentionally omitted. CI (.github/workflows/ci.yml) builds and
+    # pushes images to GHCR; the VPS only pulls. Source code is not shipped to the VPS.
     container_name: blue-api
     deploy:
       resources:
@@ -195,9 +194,7 @@ services:
 
   blue-web:
     image: ${WEB_IMAGE:-resourcemanager-web:latest}
-    build:
-      context: ./ClientApp
-      dockerfile: Dockerfile
+    # NOTE: build is intentionally omitted. See comment on blue-api.
     container_name: blue-web
     deploy:
       resources:
@@ -236,9 +233,7 @@ services:
 
   green-api:
     image: ${API_IMAGE:-resourcemanager-api:latest}
-    build:
-      context: .
-      dockerfile: Dockerfile
+    # NOTE: build is intentionally omitted. See comment on blue-api.
     container_name: green-api
     deploy:
       resources:
@@ -314,9 +309,7 @@ services:
 
   green-web:
     image: ${WEB_IMAGE:-resourcemanager-web:latest}
-    build:
-      context: ./ClientApp
-      dockerfile: Dockerfile
+    # NOTE: build is intentionally omitted. See comment on blue-api.
     container_name: green-web
     deploy:
       resources:
