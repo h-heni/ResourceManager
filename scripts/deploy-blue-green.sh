@@ -125,7 +125,9 @@ fi
 check_health() {
     local url=$1 name=$2
     for i in $(seq 1 $HEALTH_CHECK_RETRIES); do
-        CODE=$(curl -f -s -o /dev/null -w "%{http_code}" "$url" 2>/dev/null || echo "000")
+        # Send Host header so ASP.NET Core's AllowedHosts filter (rscmanager.com)
+        # doesn't reject the request with 400 when curl'd by IP/localhost.
+        CODE=$(curl -f -s -o /dev/null -w "%{http_code}" -H "Host: rscmanager.com" "$url" 2>/dev/null || echo "000")
         [ "$CODE" = "200" ] && { log_success "$name healthy"; return 0; }
         log_info "  $name attempt $i/$HEALTH_CHECK_RETRIES (HTTP $CODE)..."
         sleep $HEALTH_CHECK_INTERVAL
@@ -169,8 +171,8 @@ $DC -f "$COMPOSE_FILE" up -d --force-recreate nginx 2>/dev/null || true
 # ── Verify via proxy ──
 
 sleep 3
-curl -f -s -o /dev/null "http://localhost/health"     && log_success "Nginx proxy OK" || log_warn "Nginx proxy check failed"
-curl -f -s -o /dev/null "http://localhost/api/health"  && log_success "API via Nginx OK" || log_warn "API via Nginx check failed"
+curl -f -s -o /dev/null -H "Host: rscmanager.com" "http://localhost/health"     && log_success "Nginx proxy OK" || log_warn "Nginx proxy check failed"
+curl -f -s -o /dev/null -H "Host: rscmanager.com" "http://localhost/api/health"  && log_success "API via Nginx OK" || log_warn "API via Nginx check failed"
 
 # ── Cleanup ──
 
