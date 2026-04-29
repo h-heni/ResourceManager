@@ -71,12 +71,18 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // This enables UserManager, RoleManager, and links them to EF Core
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 {
-    options.Password.RequireDigit = true;
+    // Password policy: 8+ chars with digit + uppercase + special character
     options.Password.RequiredLength = 8;
+    options.Password.RequireDigit = true;
+    options.Password.RequireUppercase = true;
+    options.Password.RequireLowercase = true;
+    options.Password.RequireNonAlphanumeric = true;
+    options.Password.RequiredUniqueChars = 4;
     // Lockout: 5 failed attempts → 30-second lockout (matches rate-limiter RetryAfter)
     options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromSeconds(30);
     options.Lockout.MaxFailedAccessAttempts = 5;
     options.Lockout.AllowedForNewUsers = true;
+    options.User.RequireUniqueEmail = true;
 })
 .AddEntityFrameworkStores<AppDbContext>()
 .AddDefaultTokenProviders();
@@ -155,9 +161,11 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("Default", b => b
         .WithOrigins(allowedOrigins)
-        .AllowAnyMethod()
-        .AllowAnyHeader()
-        .AllowCredentials()); // Required for HttpOnly cookie refresh tokens
+        .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+        .WithHeaders("Authorization", "Content-Type", "Accept", "X-Requested-With", "X-Brevo-Secret")
+        .WithExposedHeaders("Retry-After", "X-Correlation-Id")
+        .AllowCredentials() // Required for HttpOnly cookie refresh tokens
+        .SetPreflightMaxAge(TimeSpan.FromMinutes(10)));
 });
 
 // Your Custom Services
@@ -193,6 +201,9 @@ builder.Services.AddScoped<ResourceManager.Services.InventoryService>();
 
 // Background Service for Scheduled Payments — DISABLED: no auto-completion
 // builder.Services.AddHostedService<ResourceManager.Services.ScheduledPaymentService>();
+
+// Refresh token cleanup — purges expired/revoked tokens older than 7 days (daily)
+builder.Services.AddHostedService<ResourceManager.Services.RefreshTokenCleanupService>();
 
 // This registers the system's real clock as the default
 builder.Services.AddSingleton(TimeProvider.System);
@@ -254,6 +265,18 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));
+
+    // Very strict limiter for unauthenticated token validation endpoints
+    // (invitation/validate, password-reset/confirm, etc.) to prevent token enumeration.
+    options.AddPolicy("TokenValidation", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
 });
 
 // RESPONSE COMPRESSION (gzip + brotli)
@@ -272,6 +295,14 @@ builder.Services.AddResponseCompression(options =>
 
 // IN-MEMORY CACHE for dashboard/read-heavy data
 builder.Services.AddMemoryCache();
+
+// HSTS options (1 year, includeSubDomains, preload)
+builder.Services.AddHsts(options =>
+{
+    options.Preload = true;
+    options.IncludeSubDomains = true;
+    options.MaxAge = TimeSpan.FromDays(365);
+});
 
 // 8. SWAGGER (Documentation)
 builder.Services.AddEndpointsApiExplorer();
@@ -343,12 +374,18 @@ app.UseMiddleware<MetricsMiddleware>();
 // Security monitoring middleware (rate + IP anomaly detection)
 app.UseMiddleware<SecurityMonitoringMiddleware>();
 
-// HTTPS redirection disabled temporarily for HTTP production deployment
-// if (!app.Environment.IsDevelopment())
-// {
-//     app.UseHttpsRedirection();
-//     app.UseHsts();
-// }
+// HTTPS redirection + HSTS — toggleable for staged HTTPS rollout.
+// Default: ON in non-Development. Disable only with Security:DisableHttps=true (dev/HTTP-only fallback).
+var disableHttps = builder.Configuration.GetValue<bool>("Security:DisableHttps", false);
+if (!app.Environment.IsDevelopment() && !disableHttps)
+{
+    app.UseHsts(); // 30-day HSTS by default; configure via builder.Services.Configure<HstsOptions> if needed
+    app.UseHttpsRedirection();
+}
+else if (!app.Environment.IsDevelopment() && disableHttps)
+{
+    Log.Warning("SECURITY: HTTPS redirection + HSTS are DISABLED via Security:DisableHttps=true. This is unsafe; enable HTTPS as soon as TLS is configured.");
+}
 
 // Security headers middleware
 app.Use(async (context, next) =>
@@ -359,8 +396,10 @@ app.Use(async (context, next) =>
     headers["Referrer-Policy"] = "strict-origin-when-cross-origin";
     headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()";
     headers["X-XSS-Protection"] = "1; mode=block";
+    headers["Cross-Origin-Opener-Policy"] = "same-origin";
+    headers["Cross-Origin-Resource-Policy"] = "same-site";
     // CSP: allow self + inline styles for Tailwind, block everything else
-    headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none';";
+    headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none';";
     await next();
 });
 

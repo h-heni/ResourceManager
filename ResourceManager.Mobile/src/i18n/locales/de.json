@@ -87,7 +87,14 @@
     "companyInit": "Firma initialisieren",
     "companyInitSubtitle": "Richten Sie Ihre neue Firma ein",
     "setupComplete": "Einrichtung abgeschlossen",
-    "setupCompleteMessage": "Ihre Firma ist einsatzbereit!"
+    "setupCompleteMessage": "Ihre Firma ist einsatzbereit!",
+    "biometricPrompt": "Identität zur Anmeldung bestätigen",
+    "biometricLoginFace": "Mit Face ID anmelden",
+    "biometricLoginFingerprint": "Mit Fingerabdruck anmelden",
+    "biometricEnableTitle": "Biometrische Anmeldung aktivieren",
+    "biometricEnableMessage": "Möchten Sie Face ID oder Fingerabdruck für schnellere Anmeldung nutzen?",
+    "biometricEnable": "Aktivieren",
+    "sessionExpiredBiometric": "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich mit Ihrem Passwort an."
   },
   "accountLocked": {
     "title": "Konto gesperrt",

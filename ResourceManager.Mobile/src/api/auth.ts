@@ -2,13 +2,21 @@ import axios, { AxiosError } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Buffer } from 'buffer';
 import { API_BASE_URL, API_TIMEOUT } from './config';
+import { secureStorage } from './secureStorage';
 
-// Storage keys
+// Storage keys.
+// TOKEN + REFRESH_TOKEN are stored in encrypted SecureStore (Keychain / AndroidKeyStore).
+// USER (non-secret profile cache) stays in AsyncStorage — it's just display data.
 export const STORAGE_KEYS = {
   TOKEN: '@auth_token',
   REFRESH_TOKEN: '@refresh_token',
   USER: '@user_data',
 };
+
+// Dev-only logger. In release builds this is a no-op so we never leak tokens or PII
+// to logcat / Console.app.
+const devLog = (...args: unknown[]) => { if (__DEV__) console.log(...args); };
+const devError = (...args: unknown[]) => { if (__DEV__) console.error(...args); };
 
 // Create axios instance with default config
 export const apiClient = axios.create({
@@ -21,7 +29,7 @@ export const apiClient = axios.create({
 
 // Request interceptor to add token
 apiClient.interceptors.request.use(async (config) => {
-  const token = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
+  const token = await secureStorage.getItem(STORAGE_KEYS.TOKEN);
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -37,7 +45,7 @@ apiClient.interceptors.response.use(
     // If 401 and not already refreshing
     if (error.response?.status === 401 && !originalRequest._retry) {
       try {
-        const refreshToken = await AsyncStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+        const refreshToken = await secureStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
 
         if (refreshToken) {
           // Attempt to refresh token
@@ -49,8 +57,10 @@ apiClient.interceptors.response.use(
           const newRefreshToken = response.data.refreshToken;
 
           // Store new tokens
-          await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, newToken);
-          await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, newRefreshToken);
+          await secureStorage.setItem(STORAGE_KEYS.TOKEN, newToken);
+          if (newRefreshToken) {
+            await secureStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, newRefreshToken);
+          }
 
           // Retry original request
           originalRequest._retry = true;
@@ -59,7 +69,8 @@ apiClient.interceptors.response.use(
         }
       } catch (refreshError) {
         // Refresh failed - logout user
-        await AsyncStorage.multiRemove([STORAGE_KEYS.TOKEN, STORAGE_KEYS.REFRESH_TOKEN, STORAGE_KEYS.USER]);
+        await secureStorage.multiRemove([STORAGE_KEYS.TOKEN, STORAGE_KEYS.REFRESH_TOKEN]);
+        await AsyncStorage.removeItem(STORAGE_KEYS.USER);
         return Promise.reject(refreshError);
       }
     }
@@ -129,7 +140,9 @@ const isJwtExpired = (token: string): boolean => {
     }
 
     const nowSeconds = Math.floor(Date.now() / 1000);
-    return payload.exp <= nowSeconds;
+    // Treat as expired 60 seconds before actual exp to absorb clock skew
+    // and avoid races where a token expires mid-request.
+    return payload.exp <= nowSeconds + 60;
   } catch {
     return true;
   }
@@ -138,7 +151,7 @@ const isJwtExpired = (token: string): boolean => {
 // Auth API functions
 // Shared helper — used by other axios instances to refresh the access token
 export async function refreshAccessToken(): Promise<string | null> {
-  const refreshToken = await AsyncStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+  const refreshToken = await secureStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
   if (!refreshToken) return null;
   const response = await apiClient.post<{ token?: string; accessToken?: string; refreshToken?: string }>(
     '/auth/refresh',
@@ -146,18 +159,18 @@ export async function refreshAccessToken(): Promise<string | null> {
   );
   const newToken = response.data.token ?? response.data.accessToken ?? '';
   const newRefreshToken = response.data.refreshToken ?? '';
-  await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, newToken);
-  if (newRefreshToken) await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, newRefreshToken);
+  await secureStorage.setItem(STORAGE_KEYS.TOKEN, newToken);
+  if (newRefreshToken) await secureStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, newRefreshToken);
   return newToken;
 }
 
 export const authApi = {
   login: async (data: LoginRequest): Promise<LoginResponse> => {
     try {
-      console.log('[AUTH] Attempting login to:', API_BASE_URL + '/auth/login');
+      devLog('[AUTH] Attempting login');
       const response = await apiClient.post<any>('/auth/login', data);
       const raw = response.data;
-      console.log('[AUTH] Raw response:', JSON.stringify(raw));
+      // NOTE: never log the raw response — it contains the access token.
 
       // Backend returns 'accessToken' (not 'token') and 'role' (string, not 'roles' array)
       // Map to our internal LoginResponse shape
@@ -178,21 +191,19 @@ export const authApi = {
           : [],
       };
 
-      console.log('[AUTH] Mapped user:', JSON.stringify(user));
+      devLog('[AUTH] Login success, user id:', user.id);
 
-      // Store tokens and user data
-      await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, token);
+      // Store tokens in encrypted SecureStore; user metadata in AsyncStorage.
+      await secureStorage.setItem(STORAGE_KEYS.TOKEN, token);
       if (refreshToken) {
-        await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
+        await secureStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
       }
       await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
 
       return { token, refreshToken, user };
     } catch (error) {
       const axiosError = error as AxiosError<AuthError>;
-      console.error('[AUTH] Login error status:', axiosError.response?.status);
-      console.error('[AUTH] Login error data:', JSON.stringify(axiosError.response?.data));
-      console.error('[AUTH] Network error message:', axiosError.message);
+      devError('[AUTH] Login error status:', axiosError.response?.status);
       throw new Error(
         axiosError.response?.data?.message ||
         axiosError.response?.data?.errors?.email?.[0] ||
@@ -205,15 +216,12 @@ export const authApi = {
 
   logout: async (): Promise<void> => {
     // Clear all auth data from storage
-    await AsyncStorage.multiRemove([
-      STORAGE_KEYS.TOKEN,
-      STORAGE_KEYS.REFRESH_TOKEN,
-      STORAGE_KEYS.USER,
-    ]);
+    await secureStorage.multiRemove([STORAGE_KEYS.TOKEN, STORAGE_KEYS.REFRESH_TOKEN]);
+    await AsyncStorage.removeItem(STORAGE_KEYS.USER);
   },
 
   getToken: async (): Promise<string | null> => {
-    return await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
+    return await secureStorage.getItem(STORAGE_KEYS.TOKEN);
   },
 
   getUser: async () => {
@@ -222,24 +230,25 @@ export const authApi = {
   },
 
   isAuthenticated: async (): Promise<boolean> => {
-    const token = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
+    const token = await secureStorage.getItem(STORAGE_KEYS.TOKEN);
     return !!token && !isJwtExpired(token);
   },
 
   validateStoredSession: async (): Promise<{ token: string; user: LoginResponse['user'] } | null> => {
-    const [token, userStr] = await AsyncStorage.multiGet([STORAGE_KEYS.TOKEN, STORAGE_KEYS.USER]);
-    const storedToken = token[1];
-    const storedUser = userStr[1];
+    const storedToken = await secureStorage.getItem(STORAGE_KEYS.TOKEN);
+    const storedUser = await AsyncStorage.getItem(STORAGE_KEYS.USER);
 
     if (!storedToken || !storedUser || isJwtExpired(storedToken)) {
-      await AsyncStorage.multiRemove([STORAGE_KEYS.TOKEN, STORAGE_KEYS.REFRESH_TOKEN, STORAGE_KEYS.USER]);
+      await secureStorage.multiRemove([STORAGE_KEYS.TOKEN, STORAGE_KEYS.REFRESH_TOKEN]);
+      await AsyncStorage.removeItem(STORAGE_KEYS.USER);
       return null;
     }
 
     try {
       return { token: storedToken, user: JSON.parse(storedUser) };
     } catch {
-      await AsyncStorage.multiRemove([STORAGE_KEYS.TOKEN, STORAGE_KEYS.REFRESH_TOKEN, STORAGE_KEYS.USER]);
+      await secureStorage.multiRemove([STORAGE_KEYS.TOKEN, STORAGE_KEYS.REFRESH_TOKEN]);
+      await AsyncStorage.removeItem(STORAGE_KEYS.USER);
       return null;
     }
   },
@@ -264,8 +273,8 @@ export const authApi = {
           ? [rawUser.Role]
           : [],
       };
-      await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, token);
-      if (refreshToken) await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
+      await secureStorage.setItem(STORAGE_KEYS.TOKEN, token);
+      if (refreshToken) await secureStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
       await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
       return { token, refreshToken, user };
     } catch (error) {

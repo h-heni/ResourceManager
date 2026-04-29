@@ -87,7 +87,14 @@
     "companyInit": "Initialize Company",
     "companyInitSubtitle": "Set up your new company",
     "setupComplete": "Setup Complete",
-    "setupCompleteMessage": "Your company is ready to go!"
+    "setupCompleteMessage": "Your company is ready to go!",
+    "biometricPrompt": "Verify your identity to sign in",
+    "biometricLoginFace": "Sign in with Face ID",
+    "biometricLoginFingerprint": "Sign in with Fingerprint",
+    "biometricEnableTitle": "Enable Biometric Login",
+    "biometricEnableMessage": "Would you like to use Face ID or Fingerprint to sign in faster next time?",
+    "biometricEnable": "Enable",
+    "sessionExpiredBiometric": "Your session has expired. Please sign in with your password."
   },
   "accountLocked": {
     "title": "Account Locked",

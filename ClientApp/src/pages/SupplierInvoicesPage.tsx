@@ -723,7 +723,7 @@ export default function SupplierInvoicesPage() {
                                                             const disposition = res.headers['content-disposition'];
                                                             const match = disposition?.match(/filename[^;=\n]*=(['"]?)([^'"\n;]*)/i);
                                                             const inv = sortedInvoices.find(i => i.id === id);
-                                                            const mimeExt = (res.headers['content-type'] || '').includes('image/') ? '.jpg' : '.pdf';
+                                                            const mimeExt = String(res.headers['content-type'] ?? '').includes('image/') ? '.jpg' : '.pdf';
                                                             const fallbackName = inv?.invoiceNumber ? `${inv.invoiceNumber}${mimeExt}` : `supplier-invoice-${id}${mimeExt}`;
                                                             const fileName = match?.[2] || fallbackName;
                                                             const url = URL.createObjectURL(new Blob([res.data]));

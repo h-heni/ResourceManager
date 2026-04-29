@@ -100,8 +100,8 @@ namespace ResourceManager.Controllers
                 var accessToken = GenerateAccessToken(user.Id.ToString(), user.Email!, role, user.CompanyId, userProfile?.FirstName);
 
                 // Generate & persist refresh token (7 days, HttpOnly cookie)
-                var refreshToken = await CreateRefreshTokenAsync(user.Id);
-                SetRefreshTokenCookie(refreshToken.Token);
+                var (refreshToken, rawRefreshToken) = await CreateRefreshTokenAsync(user.Id);
+                SetRefreshTokenCookie(rawRefreshToken);
 
                 _logger.LogInformation("User logged in. UserId={UserId}, Email={Email}, IP={IpAddress}", user.Id, loginDto.Email, ip);
 
@@ -577,7 +577,7 @@ namespace ResourceManager.Controllers
                 return Unauthorized(new { error = "No refresh token provided." });
 
             var oldToken = await _context.RefreshTokens
-                .FirstOrDefaultAsync(t => t.Token == oldTokenValue);
+                .FirstOrDefaultAsync(t => t.Token == ComputeTokenHash(oldTokenValue));
 
             if (oldToken == null)
             {
@@ -599,11 +599,12 @@ namespace ResourceManager.Controllers
                     var replacementToken = await _context.RefreshTokens
                         .FirstOrDefaultAsync(t => t.Token == oldToken.ReplacedByToken);
 
-                    // If replacement is still valid, use it (multi-tab race condition)
+                    // If replacement is still valid, rotate it to issue a fresh raw token (multi-tab race condition)
                     if (replacementToken != null && replacementToken.IsActive)
                     {
-                        _logger.LogInformation("Multi-tab race detected: reusing rotated token. UserId={UserId}", oldToken.UserId);
-                        return await BuildRefreshResponse(oldToken.UserId, replacementToken.Token);
+                        _logger.LogInformation("Multi-tab race detected: rotating active replacement token. UserId={UserId}", oldToken.UserId);
+                        var (_, rawRaceToken) = await RotateRefreshTokenAsync(replacementToken);
+                        return await BuildRefreshResponse(oldToken.UserId, rawRaceToken);
                     }
                 }
 
@@ -626,8 +627,8 @@ namespace ResourceManager.Controllers
             }
 
             // Rotate: revoke old token, issue new one in the same family
-            var newRefreshToken = await RotateRefreshTokenAsync(oldToken);
-            return await BuildRefreshResponse(oldToken.UserId, newRefreshToken.Token);
+            var (_, rawRotated) = await RotateRefreshTokenAsync(oldToken);
+            return await BuildRefreshResponse(oldToken.UserId, rawRotated);
         }
 
         [HttpPost("logout")]
@@ -637,7 +638,7 @@ namespace ResourceManager.Controllers
             var tokenValue = Request.Cookies["refreshToken"];
             if (!string.IsNullOrEmpty(tokenValue))
             {
-                var token = await _context.RefreshTokens.FirstOrDefaultAsync(t => t.Token == tokenValue);
+                var token = await _context.RefreshTokens.FirstOrDefaultAsync(t => t.Token == ComputeTokenHash(tokenValue));
                 if (token != null && token.IsActive)
                 {
                     token.RevokedAt = DateTime.UtcNow;
@@ -820,43 +821,49 @@ namespace ResourceManager.Controllers
             return tokenHandler.WriteToken(token);
         }
 
-        private async Task<RefreshToken> CreateRefreshTokenAsync(string userId)
+        /// <param name="userId">Owner of the new token.</param>
+        /// <returns>The persisted <see cref="RefreshToken"/> entity (Token = SHA-256 hash) and the raw token value to send in the cookie.</returns>
+        private async Task<(RefreshToken token, string rawValue)> CreateRefreshTokenAsync(string userId)
         {
+            var rawValue = GenerateSecureToken();
             var refreshToken = new RefreshToken
             {
-                Token = GenerateSecureToken(),
+                Token = ComputeTokenHash(rawValue), // Only the hash is persisted; raw never touches the DB
                 UserId = userId,
-                Family = Guid.NewGuid().ToString(), // New family for fresh login
+                Family = Guid.NewGuid().ToString(),
                 CreatedAt = DateTime.UtcNow,
                 ExpiresAt = DateTime.UtcNow.AddDays(RefreshTokenDays)
             };
 
             _context.RefreshTokens.Add(refreshToken);
             await _context.SaveChangesAsync();
-            return refreshToken;
+            return (refreshToken, rawValue);
         }
 
-        private async Task<RefreshToken> RotateRefreshTokenAsync(RefreshToken oldToken)
+        /// <returns>The new persisted <see cref="RefreshToken"/> entity (Token = SHA-256 hash) and the raw token value to send in the cookie.</returns>
+        private async Task<(RefreshToken token, string rawValue)> RotateRefreshTokenAsync(RefreshToken oldToken)
         {
             // Revoke the old token
             oldToken.RevokedAt = DateTime.UtcNow;
             oldToken.RevokedReason = "Rotated";
 
-            // Create new token in the same family
+            // Create new token in the same family — only the SHA-256 hash is persisted
+            var rawValue = GenerateSecureToken();
             var newToken = new RefreshToken
             {
-                Token = GenerateSecureToken(),
+                Token = ComputeTokenHash(rawValue), // Only the hash is persisted; raw never touches the DB
                 UserId = oldToken.UserId,
-                Family = oldToken.Family, // Same family for replay detection
+                Family = oldToken.Family,
                 CreatedAt = DateTime.UtcNow,
                 ExpiresAt = DateTime.UtcNow.AddDays(RefreshTokenDays)
             };
 
+            // Store hash of new token so the audit chain lookup (race condition path) still works
             oldToken.ReplacedByToken = newToken.Token;
 
             _context.RefreshTokens.Add(newToken);
             await _context.SaveChangesAsync();
-            return newToken;
+            return (newToken, rawValue);
         }
 
         private async Task RevokeTokenFamilyAsync(string family, string reason)
@@ -905,11 +912,12 @@ namespace ResourceManager.Controllers
 
         private void SetRefreshTokenCookie(string token)
         {
+            var (secure, sameSite) = GetCookieSecurity();
             var cookieOptions = new CookieOptions
             {
                 HttpOnly = true,
-                Secure = false, // Temporarily disabled for HTTP deployment
-                SameSite = SameSiteMode.Lax, // Lax required for HTTP cross-site
+                Secure = secure,
+                SameSite = sameSite,
                 Expires = DateTime.UtcNow.AddDays(RefreshTokenDays),
                 Path = "/api/auth"  // Only sent to auth endpoints
             };
@@ -918,13 +926,34 @@ namespace ResourceManager.Controllers
 
         private void ClearRefreshTokenCookie()
         {
+            var (secure, sameSite) = GetCookieSecurity();
             Response.Cookies.Delete("refreshToken", new CookieOptions
             {
                 HttpOnly = true,
-                Secure = false,
-                SameSite = SameSiteMode.Lax,
+                Secure = secure,
+                SameSite = sameSite,
                 Path = "/api/auth"
             });
+        }
+
+        // Resolve cookie security from configuration. Defaults are SECURE:
+        //   Secure=true, SameSite=Strict.
+        // Overrides (for HTTP-only fallback, dev, or cross-subdomain):
+        //   Security:CookieSecure   = true|false
+        //   Security:CookieSameSite = Strict|Lax|None
+        private (bool Secure, SameSiteMode SameSite) GetCookieSecurity()
+        {
+            var secure = _configuration.GetValue<bool?>("Security:CookieSecure") ?? true;
+            var sameSiteRaw = _configuration["Security:CookieSameSite"];
+            var sameSite = sameSiteRaw?.ToLowerInvariant() switch
+            {
+                "none" => SameSiteMode.None,
+                "lax" => SameSiteMode.Lax,
+                _ => SameSiteMode.Strict,
+            };
+            // SameSite=None requires Secure=true per spec
+            if (sameSite == SameSiteMode.None && !secure) secure = true;
+            return (secure, sameSite);
         }
 
         [HttpPost("change-password")]

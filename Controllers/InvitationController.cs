@@ -131,7 +131,7 @@ namespace ResourceManager.Controllers
         /// </summary>
         [HttpGet("invitations/validate")]
         [AllowAnonymous]
-        [EnableRateLimiting("Moderate")]
+        [EnableRateLimiting("TokenValidation")]
         public async Task<IActionResult> ValidateToken([FromQuery] string token)
         {
             if (string.IsNullOrWhiteSpace(token))

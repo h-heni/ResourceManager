@@ -87,7 +87,14 @@
     "companyInit": "Initialiser l'entreprise",
     "companyInitSubtitle": "Configurez votre nouvelle entreprise",
     "setupComplete": "Configuration terminée",
-    "setupCompleteMessage": "Votre entreprise est prête !"
+    "setupCompleteMessage": "Votre entreprise est prête !",
+    "biometricPrompt": "Vérifiez votre identité pour vous connecter",
+    "biometricLoginFace": "Se connecter avec Face ID",
+    "biometricLoginFingerprint": "Se connecter par empreinte",
+    "biometricEnableTitle": "Activer la connexion biométrique",
+    "biometricEnableMessage": "Voulez-vous utiliser Face ID ou l'empreinte pour vous connecter plus rapidement ?",
+    "biometricEnable": "Activer",
+    "sessionExpiredBiometric": "Votre session a expiré. Veuillez vous connecter avec votre mot de passe."
   },
   "accountLocked": {
     "title": "Compte verrouillé",

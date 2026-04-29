@@ -31,13 +31,46 @@ namespace ResourceManager.Controllers
             return ct == "image/jpg" ? "image/jpeg" : ct;
         }
 
-        /// <summary>Validates both MIME type and file extension (case-insensitive, safe on Linux).</summary>
+        /// <summary>Validates MIME type, file extension, AND magic-byte signature (defense in depth).</summary>
         private bool IsAllowedImage(IFormFile file)
         {
             var normalisedMime = NormaliseMime(file.ContentType);
             if (!_allowedImageTypes.Contains(normalisedMime)) return false;
             var ext = Path.GetExtension(file.FileName)?.ToLowerInvariant(); // normalize before HashSet lookup
-            return !string.IsNullOrEmpty(ext) && AllowedImageExtensions.Contains(ext);
+            if (string.IsNullOrEmpty(ext) || !AllowedImageExtensions.Contains(ext)) return false;
+            return HasValidImageSignature(file);
+        }
+
+        /// <summary>Verifies the first bytes of the upload match a known image format signature.
+        /// Prevents an attacker from renaming a non-image file (e.g. shell.php → shell.jpg).</summary>
+        private static bool HasValidImageSignature(IFormFile file)
+        {
+            try
+            {
+                // IFormFile.OpenReadStream returns a fresh stream each call, so downstream
+                // consumers are unaffected by us reading the header here.
+                using var stream = file.OpenReadStream();
+                Span<byte> header = stackalloc byte[12];
+                var read = stream.Read(header);
+                if (read < 4) return false;
+
+                // JPEG: FF D8 FF
+                if (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF) return true;
+                // PNG: 89 50 4E 47 0D 0A 1A 0A
+                if (read >= 8 && header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E && header[3] == 0x47
+                    && header[4] == 0x0D && header[5] == 0x0A && header[6] == 0x1A && header[7] == 0x0A) return true;
+                // GIF: 47 49 46 38 (GIF8)
+                if (read >= 6 && header[0] == 0x47 && header[1] == 0x49 && header[2] == 0x46 && header[3] == 0x38) return true;
+                // WEBP: 52 49 46 46 ?? ?? ?? ?? 57 45 42 50  (RIFF....WEBP)
+                if (read >= 12 && header[0] == 0x52 && header[1] == 0x49 && header[2] == 0x46 && header[3] == 0x46
+                    && header[8] == 0x57 && header[9] == 0x45 && header[10] == 0x42 && header[11] == 0x50) return true;
+
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         public SettingsController(

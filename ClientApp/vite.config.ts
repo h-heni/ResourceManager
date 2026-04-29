@@ -12,6 +12,8 @@ export default defineConfig({
     css: false,
   },
   build: {
+    // Disable source maps in production builds to avoid leaking original source
+    sourcemap: false,
     chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
@@ -22,7 +24,6 @@ export default defineConfig({
           'vendor-i18n': ['i18next', 'react-i18next', 'i18next-browser-languagedetector'],
           'vendor-ui': ['lucide-react'],
           'vendor-charts': ['recharts'],
-          'vendor-xlsx': ['xlsx'],
         },
       },
     },

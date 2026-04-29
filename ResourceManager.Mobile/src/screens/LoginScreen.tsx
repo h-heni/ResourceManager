@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Image,
+  Alert,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,12 +23,21 @@ export default function LoginScreen({ navigation }: any) {
   const { colors, spacing, borderRadius, typography } = useAppTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const { login } = useAuth();
+  const { login, loginWithBiometrics, enableBiometrics, biometrics, biometricEnabled } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [biometricLoading, setBiometricLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+
+  // Automatically trigger biometric prompt on mount if user has it enabled
+  useEffect(() => {
+    if (biometricEnabled && biometrics.available && biometrics.enrolled) {
+      handleBiometricLogin();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [biometricEnabled]);
 
   const validateForm = (): boolean => {
     const newErrors: { email?: string; password?: string } = {};
@@ -50,13 +60,43 @@ export default function LoginScreen({ navigation }: any) {
     setLoading(true);
     try {
       await login({ email, password });
-      // AppNavigator automatically switches to MainTabs when isAuthenticated flips to true
+      // After first successful login, offer biometric if available and not yet enabled
+      if (biometrics.available && biometrics.enrolled && !biometricEnabled) {
+        Alert.alert(
+          t('auth.biometricEnableTitle'),
+          t('auth.biometricEnableMessage'),
+          [
+            { text: t('common.cancel'), style: 'cancel' },
+            {
+              text: t('auth.biometricEnable'),
+              onPress: async () => {
+                try { await enableBiometrics(); } catch { /* ignore */ }
+              },
+            },
+          ],
+        );
+      }
     } catch (error) {
       const msg = (error as Error).message || 'Login failed. Please try again.';
-      console.error('[LOGIN] Error:', msg);
       setErrors({ ...errors, password: msg });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBiometricLogin = async () => {
+    setBiometricLoading(true);
+    try {
+      await loginWithBiometrics(t('auth.biometricPrompt'));
+    } catch (err) {
+      const code = (err as Error).message;
+      if (code === 'session_expired') {
+        // Session is gone — show a friendly hint and let the user enter password
+        setErrors({ password: t('auth.sessionExpiredBiometric') });
+      }
+      // 'biometric_cancelled' and hardware errors: silently ignore (user just sees the form)
+    } finally {
+      setBiometricLoading(false);
     }
   };
 
@@ -113,6 +153,32 @@ export default function LoginScreen({ navigation }: any) {
                   <Text style={styles.signInText}>{t('auth.signIn')}</Text>
                 )}
               </TouchableOpacity>
+
+              {/* Biometric login button — shown when the user has opted in */}
+              {biometricEnabled && biometrics.available && biometrics.enrolled && (
+                <TouchableOpacity
+                  style={[styles.biometricButton, { borderColor: colors.primary, borderRadius: borderRadius.md }]}
+                  onPress={handleBiometricLogin}
+                  disabled={biometricLoading}
+                  activeOpacity={0.8}
+                >
+                  {biometricLoading ? (
+                    <ActivityIndicator color={colors.primary} />
+                  ) : (
+                    <>
+                      <Ionicons
+                        name={biometrics.type === 'facial' ? 'scan-outline' : 'finger-print-outline'}
+                        size={22}
+                        color={colors.primary}
+                        style={{ marginRight: 8 }}
+                      />
+                      <Text style={[styles.biometricText, { color: colors.primary }]}>
+                        {t(biometrics.type === 'facial' ? 'auth.biometricLoginFace' : 'auth.biometricLoginFingerprint')}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* Footer */}
@@ -138,5 +204,7 @@ const styles = StyleSheet.create({
   formCard: { borderWidth: 1, padding: 24 },
   signInButton: { marginTop: 20, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', minHeight: 48 },
   signInText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  biometricButton: { marginTop: 12, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', minHeight: 48, borderWidth: 1.5 },
+  biometricText: { fontSize: 15, fontWeight: '600' },
   footer: { marginTop: 28, alignItems: 'center' },
 });

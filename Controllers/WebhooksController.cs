@@ -21,12 +21,14 @@ namespace ResourceManager.Controllers
         private readonly AppDbContext _context;
         private readonly ILogger<WebhooksController> _logger;
         private readonly string? _webhookSecret;
+        private readonly bool _requireWebhookSecrets;
 
         public WebhooksController(AppDbContext context, ILogger<WebhooksController> logger, IConfiguration configuration)
         {
             _context = context;
             _logger = logger;
             _webhookSecret = configuration["Brevo:WebhookSecret"];
+            _requireWebhookSecrets = configuration.GetValue<bool>("Security:RequireWebhookSecrets", true);
         }
 
         /// <summary>
@@ -38,13 +40,22 @@ namespace ResourceManager.Controllers
         [HttpPost("brevo")]
         public async Task<IActionResult> BrevoWebhook([FromBody] BrevoWebhookEvent payload)
         {
-            // Validate webhook secret if configured
-            if (!string.IsNullOrEmpty(_webhookSecret))
+            // Fail-closed: in environments that require webhook secrets, refuse if not configured.
+            if (string.IsNullOrEmpty(_webhookSecret))
+            {
+                if (_requireWebhookSecrets)
+                {
+                    _logger.LogCritical("Brevo webhook rejected: Brevo:WebhookSecret is not configured in this environment.");
+                    return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "Webhook endpoint not configured." });
+                }
+                _logger.LogWarning("Brevo webhook accepted without secret validation (Security:RequireWebhookSecrets=false). Do not use in production.");
+            }
+            else
             {
                 if (!Request.Headers.TryGetValue("X-Brevo-Secret", out var secretHeader)
-                    || !string.Equals(secretHeader, _webhookSecret, StringComparison.Ordinal))
+                    || !FixedTimeEquals(secretHeader.ToString(), _webhookSecret))
                 {
-                    _logger.LogWarning("Brevo webhook: invalid or missing secret header");
+                    _logger.LogWarning("Brevo webhook: invalid or missing secret header from {IP}", HttpContext.Connection.RemoteIpAddress);
                     return Unauthorized();
                 }
             }
@@ -144,6 +155,15 @@ namespace ResourceManager.Controllers
                 emailRecord.Id, previousStatus, status, payload.Event);
 
             return Ok(new { received = true, action = "updated", emailId = emailRecord.Id, status });
+        }
+
+        // Constant-time string comparison to avoid timing side-channel on secret check.
+        private static bool FixedTimeEquals(string a, string b)
+        {
+            if (a is null || b is null) return false;
+            var ab = System.Text.Encoding.UTF8.GetBytes(a);
+            var bb = System.Text.Encoding.UTF8.GetBytes(b);
+            return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(ab, bb);
         }
 
         private static (string? Status, string? ErrorMessage) MapBrevoEventToStatus(BrevoWebhookEvent payload)

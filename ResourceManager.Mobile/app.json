@@ -25,7 +25,13 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.resourcemanager.mobile"
+      "bundleIdentifier": "com.resourcemanager.mobile",
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSAllowsLocalNetworking": true
+        }
+      }
     },
     "android": {
       "newArchEnabled": false,
@@ -34,6 +40,8 @@
         "backgroundColor": "#7C3AED"
       },
       "package": "com.resourcemanager.mobile",
+      "allowBackup": false,
+      "usesCleartextTraffic": false,
       "permissions": [
         "CAMERA",
         "CAMERA_ROLL",
@@ -46,7 +54,9 @@
     },
     "plugins": [
       "expo-localization",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "expo-secure-store",
+      "expo-local-authentication"
     ]
   }
 }

@@ -87,7 +87,14 @@
     "companyInit": "تهيئة الشركة",
     "companyInitSubtitle": "قم بإعداد شركتك الجديدة",
     "setupComplete": "اكتمل الإعداد",
-    "setupCompleteMessage": "شركتك جاهزة للعمل!"
+    "setupCompleteMessage": "شركتك جاهزة للعمل!",
+    "biometricPrompt": "تحقق من هويتك لتسجيل الدخول",
+    "biometricLoginFace": "تسجيل الدخول بـ Face ID",
+    "biometricLoginFingerprint": "تسجيل الدخول ببصمة الإصبع",
+    "biometricEnableTitle": "تفعيل تسجيل الدخول البيومتري",
+    "biometricEnableMessage": "هل تريد استخدام بصمة الوجه أو الإصبع لتسجيل الدخول بشكل أسرع؟",
+    "biometricEnable": "تفعيل",
+    "sessionExpiredBiometric": "انتهت جلستك. يرجى تسجيل الدخول بكلمة المرور."
   },
   "accountLocked": {
     "title": "الحساب مقفل",

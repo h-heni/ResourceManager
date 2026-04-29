@@ -1,13 +1,29 @@
 // API Configuration
+//
+// Set EXPO_PUBLIC_API_URL in .env to point at your backend.
+// Examples:
+//   Local backend on host machine:        http://10.0.2.2:5249/api      (Android emulator)
+//   Local backend on physical device:     http://<your-LAN-IP>:5249/api
+//   Local backend on iOS simulator:       http://localhost:5249/api
+//   Production:                           https://rscmanager.com/api
+//
+// In production builds we *require* HTTPS. Plain HTTP is only allowed in __DEV__.
 const getApiBaseUrl = () => {
-  // Check for explicit override first (set EXPO_PUBLIC_API_URL in .env for different environments)
-  if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL;
+  const fromEnv = process.env.EXPO_PUBLIC_API_URL;
+  if (fromEnv && fromEnv.length > 0) {
+    if (!__DEV__ && !fromEnv.startsWith('https://')) {
+      // Fail loud rather than silently shipping a release build that talks plaintext.
+      throw new Error('Production API URL must use HTTPS. Got: ' + fromEnv);
+    }
+    return fromEnv;
   }
-  // Physical Android/iOS device: use machine's LAN IP
-  // Android emulator: use 10.0.2.2 (maps to host machine)
   if (__DEV__) {
-    return 'http://192.168.178.26:5249/api';
+    // No hardcoded LAN IP — require the developer to set EXPO_PUBLIC_API_URL.
+    // (Falling back here historically leaked an internal IP in committed code.)
+    if (typeof console !== 'undefined') {
+      console.warn('[CONFIG] EXPO_PUBLIC_API_URL is not set. Using http://localhost:5249/api as last resort.');
+    }
+    return 'http://localhost:5249/api';
   }
   return 'https://rscmanager.com/api';
 };
