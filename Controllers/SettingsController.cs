@@ -827,9 +827,10 @@ namespace ResourceManager.Controllers
         {
             var appId = _configuration["WhatsApp:MetaAppId"];
             if (string.IsNullOrEmpty(appId) || appId == "SET_VIA_ENVIRONMENT")
-                return Ok(new { appId = (string?)null, configured = false });
+                return Ok(new { appId = (string?)null, configId = (string?)null, configured = false });
 
-            return Ok(new { appId, configured = true });
+            var configId = _configuration["WhatsApp:EmbeddedSignupConfigId"];
+            return Ok(new { appId, configId, configured = true });
         }
 
         /// <summary>

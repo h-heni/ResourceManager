@@ -337,13 +337,14 @@ Best regards,
         setConnectingWhatsApp(true);
         setStatus(null);
         try {
-            // 1. Get the Meta App ID from our backend
+            // 1. Get the Meta App ID and Embedded Signup Config ID from our backend
             const appIdRes = await api.get('/Settings/whatsapp/app-id');
             if (!appIdRes.data.configured || !appIdRes.data.appId) {
                 setStatus({ type: 'error', message: t('whatsapp.settings.appNotConfigured', 'WhatsApp integration is not configured on the server. Contact your administrator.') });
                 return;
             }
             const metaAppId = appIdRes.data.appId;
+            const embeddedSignupConfigId: string | null = appIdRes.data.configId ?? null;
 
             // 2. Load Facebook SDK if not already loaded
             const fbWindow = window as unknown as { FB?: { init: (opts: Record<string, unknown>) => void; login: (cb: (resp: { authResponse?: { code?: string } }) => void, opts: Record<string, unknown>) => void } };
@@ -378,19 +379,19 @@ Best regards,
             }
 
             // 3. Launch Embedded Signup via FB.login
-            const response = await new Promise<{ authResponse?: { code?: string } }>((resolve) => {
-                fbWindow.FB!.login((response) => {
-                    resolve(response);
-                }, {
-                    config_id: metaAppId,  // For Embedded Signup, pass as config_id
+            const loginOptions: Record<string, unknown> = embeddedSignupConfigId
+                ? {
+                    config_id: embeddedSignupConfigId,
                     response_type: 'code',
                     override_default_response_type: true,
-                    extras: {
-                        setup: {},
-                        featureType: '',
-                        sessionInfoVersion: '3',
-                    }
-                });
+                    extras: { setup: {}, featureType: '', sessionInfoVersion: '3' },
+                }
+                : {
+                    scope: 'business_management,whatsapp_business_management,whatsapp_business_messaging',
+                    response_type: 'code',
+                };
+            const response = await new Promise<{ authResponse?: { code?: string } }>((resolve) => {
+                fbWindow.FB!.login((response) => { resolve(response); }, loginOptions);
             });
 
             if (response.authResponse?.code) {
