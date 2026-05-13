@@ -167,6 +167,15 @@ services:
       - Logging__LogLevel__Microsoft=Warning
       - Groq__ApiKey=${GROQ_API_KEY:-}
       - Groq__Model=${GROQ_MODEL:-meta-llama/llama-4-scout-17b-16e-instruct}
+      # WhatsApp Business Cloud API
+      - WhatsApp__PhoneNumberId=${WHATSAPP__PHONENUMBERID:-}
+      - WhatsApp__AccessToken=${WHATSAPP__ACCESSTOKEN:-}
+      - WhatsApp__BusinessAccountId=${WHATSAPP__BUSINESSACCOUNTID:-}
+      - WhatsApp__MetaAppId=${WHATSAPP__METAAPPID:-}
+      - WhatsApp__MetaAppSecret=${WHATSAPP__METAAPPSECRET:-}
+      - WhatsApp__WebhookVerifyToken=${WHATSAPP__WEBHOOKVERIFYTOKEN:-}
+      # Brevo webhook secret
+      - Brevo__WebhookSecret=${BREVO__WEBHOOKSECRET:-}
       - DEPLOYMENT_ENV=blue
     volumes:
       - blue-api-logs:/app/Logs
@@ -282,6 +291,15 @@ services:
       - Logging__LogLevel__Microsoft=Warning
       - Groq__ApiKey=${GROQ_API_KEY:-}
       - Groq__Model=${GROQ_MODEL:-meta-llama/llama-4-scout-17b-16e-instruct}
+      # WhatsApp Business Cloud API
+      - WhatsApp__PhoneNumberId=${WHATSAPP__PHONENUMBERID:-}
+      - WhatsApp__AccessToken=${WHATSAPP__ACCESSTOKEN:-}
+      - WhatsApp__BusinessAccountId=${WHATSAPP__BUSINESSACCOUNTID:-}
+      - WhatsApp__MetaAppId=${WHATSAPP__METAAPPID:-}
+      - WhatsApp__MetaAppSecret=${WHATSAPP__METAAPPSECRET:-}
+      - WhatsApp__WebhookVerifyToken=${WHATSAPP__WEBHOOKVERIFYTOKEN:-}
+      # Brevo webhook secret
+      - Brevo__WebhookSecret=${BREVO__WEBHOOKSECRET:-}
       - DEPLOYMENT_ENV=green
     volumes:
       - green-api-logs:/app/Logs
