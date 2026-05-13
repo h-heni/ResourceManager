@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ResourceManager.Data;
@@ -19,8 +20,9 @@ namespace ResourceManager.Controllers
         private readonly InventoryService _inventoryService;
         private readonly IEmailService _emailService;
         private readonly IWhatsAppService _whatsAppService;
+        private readonly IPdfTokenService _pdfTokenService;
 
-        public DeliveryNotesController(AppDbContext context, UserManager<ApplicationUser> userManager, ILocalPdfStorageService pdfStorageService, ILogger<DeliveryNotesController> logger, InventoryService inventoryService, IEmailService emailService, IWhatsAppService whatsAppService)
+        public DeliveryNotesController(AppDbContext context, UserManager<ApplicationUser> userManager, ILocalPdfStorageService pdfStorageService, ILogger<DeliveryNotesController> logger, InventoryService inventoryService, IEmailService emailService, IWhatsAppService whatsAppService, IPdfTokenService pdfTokenService)
         {
             _context = context;
             _userManager = userManager;
@@ -29,6 +31,7 @@ namespace ResourceManager.Controllers
             _inventoryService = inventoryService;
             _emailService = emailService;
             _whatsAppService = whatsAppService;
+            _pdfTokenService = pdfTokenService;
         }
 
         // GET: api/deliverynotes
@@ -362,41 +365,73 @@ namespace ResourceManager.Controllers
         }
 
         // GET: api/deliverynotes/{id}/pdf
+        // Anonymous access allowed when a short-lived signed token (?t=) is present (WhatsApp delivery).
+        [AllowAnonymous]
         [HttpGet("{id}/pdf")]
-        public async Task<IActionResult> GetPdf(int id)
+        public async Task<IActionResult> GetPdf(int id, [FromQuery] string? t = null)
         {
-            var note = await _context.DeliveryNotes
-                .Include(dn => dn.Client)
-                .Include(dn => dn.DeliveryNoteItems)
-                .Include(dn => dn.Quote)
-                .FirstOrDefaultAsync(dn => dn.Id == id);
+            bool isAnonymous = !(User.Identity?.IsAuthenticated ?? false);
+
+            if (isAnonymous)
+            {
+                if (string.IsNullOrEmpty(t) || !_pdfTokenService.ValidateToken(id, t))
+                    return Unauthorized(new { message = "Valid token required to access this PDF" });
+            }
+
+            DeliveryNote? note;
+            if (isAnonymous)
+            {
+                note = await _context.DeliveryNotes
+                    .IgnoreQueryFilters()
+                    .Include(dn => dn.Client)
+                    .Include(dn => dn.DeliveryNoteItems)
+                    .Include(dn => dn.Quote)
+                    .FirstOrDefaultAsync(dn => dn.Id == id && !dn.IsDeleted);
+            }
+            else
+            {
+                note = await _context.DeliveryNotes
+                    .Include(dn => dn.Client)
+                    .Include(dn => dn.DeliveryNoteItems)
+                    .Include(dn => dn.Quote)
+                    .FirstOrDefaultAsync(dn => dn.Id == id);
+            }
 
             if (note == null) return NotFound();
 
-            // Employee role cannot access archived (Treated) delivery notes
-            if (User.IsInRole("Employee") && note.Treated)
-            {
+            if (!isAnonymous && User.IsInRole("Employee") && note.Treated)
                 return NotFound(new { message = "Delivery note not found or access denied" });
+
+            CompanySettings? companySettings;
+            Company? company;
+            string creatorName;
+
+            if (isAnonymous)
+            {
+                companySettings = await _context.CompanySettings
+                    .IgnoreQueryFilters()
+                    .FirstOrDefaultAsync(s => s.CompanyId == note.CompanyId);
+                company = await _context.Companies.FindAsync(note.CompanyId);
+                creatorName = "";
+            }
+            else
+            {
+                var userId = _userManager.GetUserId(User);
+                if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+                var user = await _userManager.FindByIdAsync(userId);
+                if (user == null) return Unauthorized();
+
+                var userProfile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
+                creatorName = userProfile != null
+                    ? $"{userProfile.FirstName} {userProfile.LastName}".Trim()
+                    : user.UserName ?? "";
+
+                companySettings = await _context.CompanySettings
+                    .FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
+                company = await _context.Companies.FindAsync(user.CompanyId);
             }
 
-            // Get current user and company settings for PDF
-            var userId = _userManager.GetUserId(User);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
-            
-            var user = await _userManager.FindByIdAsync(userId);
-            if (user == null) return Unauthorized();
-            
-            // Get user profile for creator name
-            var userProfile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
-            var creatorName = userProfile != null 
-                ? $"{userProfile.FirstName} {userProfile.LastName}".Trim() 
-                : user.UserName ?? "";
-            
-            var companySettings = await _context.CompanySettings
-                .FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
-            var company = await _context.Companies.FindAsync(user.CompanyId);
-
-            // Build PDF settings from company config
             var pdfSettings = PdfSettings.FromCompanySettings(
                 companySettings, company, creatorName,
                 currencyOverride: note.Quote?.CurrencySymbol,
@@ -414,7 +449,6 @@ namespace ResourceManager.Controllers
                 return StatusCode(500, new { message = "Failed to generate PDF" });
             }
 
-            // Auto-register PDF in local storage
             try
             {
                 await _pdfStorageService.SaveClientPdfAsync(
@@ -572,9 +606,10 @@ namespace ResourceManager.Controllers
                 var userProfile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
                 var senderName = userProfile != null ? $"{userProfile.FirstName} {userProfile.LastName}".Trim() : user.UserName ?? "";
 
+                var pdfToken = _pdfTokenService.GenerateToken(id);
                 var request = HttpContext.Request;
                 var baseUrl = $"{request.Scheme}://{request.Host}";
-                var pdfUrl = $"{baseUrl}/api/DeliveryNotes/{id}/pdf";
+                var pdfUrl = $"{baseUrl}/api/DeliveryNotes/{id}/pdf?t={Uri.EscapeDataString(pdfToken)}";
 
                 var result = await _whatsAppService.SendDocumentMessageAsync(
                     note.Client.Phone, pdfUrl, $"DeliveryNote-{note.Number}.pdf", dto?.CustomMessage);

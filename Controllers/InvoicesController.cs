@@ -23,6 +23,7 @@ namespace ResourceManager.Controllers
         private readonly InventoryService _inventoryService;
         private readonly IWhatsAppService _whatsAppService;
         private readonly IConfiguration _configuration;
+        private readonly IPdfTokenService _pdfTokenService;
 
         public InvoicesController(
             AppDbContext context,
@@ -32,7 +33,8 @@ namespace ResourceManager.Controllers
             ILocalPdfStorageService pdfStorageService,
             InventoryService inventoryService,
             IWhatsAppService whatsAppService,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IPdfTokenService pdfTokenService)
         {
             _context = context;
             _userManager = userManager;
@@ -42,6 +44,7 @@ namespace ResourceManager.Controllers
             _inventoryService = inventoryService;
             _whatsAppService = whatsAppService;
             _configuration = configuration;
+            _pdfTokenService = pdfTokenService;
         }
 
         // GET: api/invoices
@@ -1113,46 +1116,84 @@ namespace ResourceManager.Controllers
             return Ok(new { message = "Invoice deleted successfully. Linked quotes and delivery notes have been unlocked.", deletedNumber });
         }
         
-        // GET: api/invoices/{id}/pdf (Keeping legacy PDF generation if needed, or remove if strictly following new spec only. Keeping as it's useful.)
+        // GET: api/invoices/{id}/pdf
+        // Anonymous access is allowed when a short-lived signed token (?t=) is provided —
+        // this is required because Meta's servers must be able to download the PDF for WhatsApp delivery.
+        [AllowAnonymous]
         [HttpGet("{id}/pdf")]
-        public async Task<IActionResult> GetPdf(int id)
+        public async Task<IActionResult> GetPdf(int id, [FromQuery] string? t = null)
         {
-            var invoice = await _context.Invoices
-                                .Include(i => i.Client)
-                                .Include(i => i.InvoiceItems)
-                                .Include(i => i.Quotes)
-                                .FirstOrDefaultAsync(i => i.Id == id);
-            if (invoice == null) return NotFound();
+            bool isAnonymous = !(User.Identity?.IsAuthenticated ?? false);
 
-            // Employee role cannot access archived (Treated) invoices
-            if (User.IsInRole("Employee") && invoice.Treated)
+            if (isAnonymous)
             {
-                return NotFound(new { message = "Invoice not found or access denied" });
+                if (string.IsNullOrEmpty(t) || !_pdfTokenService.ValidateToken(id, t))
+                    return Unauthorized(new { message = "Valid token required to access this PDF" });
             }
 
-            // Get company settings for PDF customization
-            var userId = _userManager.GetUserId(User);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
-            
-            var user = await _userManager.FindByIdAsync(userId);
-            if (user == null) return Unauthorized();
-            
-            // Get user profile for creator name
-            var userProfile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
-            var creatorName = userProfile != null 
-                ? $"{userProfile.FirstName} {userProfile.LastName}".Trim() 
-                : user.UserName ?? "";
-            
-            var companySettings = await _context.CompanySettings
-                .FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
-            var company = await _context.Companies.FindAsync(user.CompanyId);
+            Invoice? invoice;
+            if (isAnonymous)
+            {
+                // Bypass the tenant query filter — no JWT claims are present for anonymous requests
+                invoice = await _context.Invoices
+                    .IgnoreQueryFilters()
+                    .Include(i => i.Client)
+                    .Include(i => i.InvoiceItems)
+                    .Include(i => i.Quotes)
+                    .FirstOrDefaultAsync(i => i.Id == id && !i.IsDeleted);
+            }
+            else
+            {
+                invoice = await _context.Invoices
+                    .Include(i => i.Client)
+                    .Include(i => i.InvoiceItems)
+                    .Include(i => i.Quotes)
+                    .FirstOrDefaultAsync(i => i.Id == id);
+            }
+
+            if (invoice == null) return NotFound();
+
+            // Employee role check only applies to authenticated users
+            if (!isAnonymous && User.IsInRole("Employee") && invoice.Treated)
+                return NotFound(new { message = "Invoice not found or access denied" });
+
+            CompanySettings? companySettings;
+            Company? company;
+            string creatorName;
+
+            if (isAnonymous)
+            {
+                // Resolve company directly from the invoice record
+                companySettings = await _context.CompanySettings
+                    .IgnoreQueryFilters()
+                    .FirstOrDefaultAsync(s => s.CompanyId == invoice.CompanyId);
+                company = await _context.Companies.FindAsync(invoice.CompanyId);
+                creatorName = "";
+            }
+            else
+            {
+                var userId = _userManager.GetUserId(User);
+                if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+                var user = await _userManager.FindByIdAsync(userId);
+                if (user == null) return Unauthorized();
+
+                var userProfile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
+                creatorName = userProfile != null
+                    ? $"{userProfile.FirstName} {userProfile.LastName}".Trim()
+                    : user.UserName ?? "";
+
+                companySettings = await _context.CompanySettings
+                    .FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
+                company = await _context.Companies.FindAsync(user.CompanyId);
+            }
 
             // Build PDF settings from company config
             var pdfSettings = PdfSettings.FromCompanySettings(
                 companySettings, company, creatorName,
                 currencyOverride: invoice.Quotes.FirstOrDefault()?.CurrencySymbol,
                 languageOverride: invoice.Quotes.FirstOrDefault()?.PdfLanguage);
-            
+
             // Apply custom tax settings to invoice if not already set
             if (invoice.Tfiscal == null || invoice.TfiscalName == null)
             {
@@ -1160,12 +1201,11 @@ namespace ResourceManager.Controllers
                 invoice.TfiscalName = pdfSettings.CustomTaxName;
             }
 
-            // Token-based verification signature (Pro Invoice)
-            if (companySettings?.ProInvoiceUseTokenSignature == true)
+            // Token-based verification signature (Pro Invoice) — only for authenticated requests
+            if (!isAnonymous && companySettings?.ProInvoiceUseTokenSignature == true)
             {
                 if (string.IsNullOrEmpty(invoice.VerificationToken))
                 {
-                    // Generate a unique verification token
                     var rawToken = $"{invoice.Id}-{Guid.NewGuid():N}";
                     using var sha = SHA256.Create();
                     var hash = sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(rawToken));
@@ -1189,7 +1229,6 @@ namespace ResourceManager.Controllers
                 return StatusCode(500, new { message = "Failed to generate PDF" });
             }
 
-            // Auto-register PDF in local storage
             try
             {
                 await _pdfStorageService.SaveClientPdfAsync(
@@ -1498,10 +1537,18 @@ namespace ResourceManager.Controllers
                 if (string.IsNullOrEmpty(invoice.Client.Phone))
                     return BadRequest(new { message = "Client phone number is required for WhatsApp sharing. Please add a phone number to this client." });
 
-                // Generate the public PDF URL
+                // Generate a short-lived signed token so Meta's servers can download the PDF anonymously
+                var pdfToken = _pdfTokenService.GenerateToken(id);
                 var request = HttpContext.Request;
                 var baseUrl = $"{request.Scheme}://{request.Host}";
-                var pdfUrl = $"{baseUrl}/api/Invoices/{id}/pdf";
+                var pdfUrl = $"{baseUrl}/api/Invoices/{id}/pdf?t={Uri.EscapeDataString(pdfToken)}";
+
+                var userId = _userManager.GetUserId(User);
+                var user = userId != null ? await _userManager.FindByIdAsync(userId) : null;
+                var userProfile = userId != null ? await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId) : null;
+                var senderName = userProfile != null
+                    ? $"{userProfile.FirstName} {userProfile.LastName}".Trim()
+                    : user?.UserName ?? "";
 
                 // Send via WhatsApp Cloud API
                 WhatsAppSendResponse result;
@@ -1513,6 +1560,25 @@ namespace ResourceManager.Controllers
                 {
                     result = await _whatsAppService.SendInvoiceMessageAsync(invoice, invoice.Client, pdfUrl, dto?.CustomMessage);
                 }
+
+                // Persist audit record regardless of outcome
+                var audit = new DocumentSendAudit
+                {
+                    DocumentType = "Invoice",
+                    DocumentId = id,
+                    DocumentNumber = invoice.Number,
+                    Channel = "WhatsApp",
+                    RecipientPhone = invoice.Client.Phone,
+                    SentAt = DateTime.UtcNow,
+                    SentByUserId = userId,
+                    SentByName = senderName,
+                    Status = result.Success ? "Sent" : "Failed",
+                    ErrorMessage = result.Success ? null : result.Error,
+                    MessageId = result.Success ? result.MessageId : null,
+                    CompanyId = user?.CompanyId ?? invoice.CompanyId
+                };
+                _context.DocumentSendAudits.Add(audit);
+                await _context.SaveChangesAsync();
 
                 if (!result.Success)
                     return BadRequest(new { message = result.Error ?? "Failed to send WhatsApp message" });

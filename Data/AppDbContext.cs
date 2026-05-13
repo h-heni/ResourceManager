@@ -115,6 +115,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         // Document send audit
         builder.Entity<DocumentSendAudit>().HasQueryFilter(e => _isSuperAdmin || e.CompanyId == _currentCompanyId);
         builder.Entity<DocumentSendAudit>().HasIndex(e => new { e.DocumentType, e.DocumentId });
+        builder.Entity<DocumentSendAudit>().HasIndex(e => e.MessageId);
 
         // Matching query filters for dependent entities with required FK to a filtered parent
         // (prevents EF Core warning about required-end relationship with global-filtered entity)

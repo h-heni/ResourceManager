@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ResourceManager.Data;
@@ -22,7 +23,8 @@ namespace ResourceManager.Controllers
         private readonly ILogger<QuotesController> _logger;
         private readonly IEmailService _emailService;
         private readonly IWhatsAppService _whatsAppService;
-        public QuotesController(AppDbContext context, UserManager<ApplicationUser> userManager, ILocalPdfStorageService pdfStorageService, ILogger<QuotesController> logger, IEmailService emailService, IWhatsAppService whatsAppService)
+        private readonly IPdfTokenService _pdfTokenService;
+        public QuotesController(AppDbContext context, UserManager<ApplicationUser> userManager, ILocalPdfStorageService pdfStorageService, ILogger<QuotesController> logger, IEmailService emailService, IWhatsAppService whatsAppService, IPdfTokenService pdfTokenService)
         {
             _context = context;
             _userManager = userManager;
@@ -30,6 +32,7 @@ namespace ResourceManager.Controllers
             _logger = logger;
             _emailService = emailService;
             _whatsAppService = whatsAppService;
+            _pdfTokenService = pdfTokenService;
         }
 
         // GET: api/devis/last-number - Get the last quote number for suggestion
@@ -568,46 +571,76 @@ namespace ResourceManager.Controllers
             return Ok(new { InvoiceId = invoice.Id, InvoiceNumber = invoice.Number, SourceQuoteNumbers = invoice.SourceQuoteNumbers, Message = "Converted successfully" });
         }
         // GET: api/devis/{id}/pdf
+        // Anonymous access allowed when a short-lived signed token (?t=) is present (WhatsApp delivery).
+        [AllowAnonymous]
         [HttpGet("{id}/pdf")]
-        public async Task<IActionResult> GetPdf(int id)
+        public async Task<IActionResult> GetPdf(int id, [FromQuery] string? t = null)
         {
-            var devis = await _context.Quotes
-                .Include(d => d.Client)
-                .Include(d => d.QuoteItems)
-                .FirstOrDefaultAsync(d => d.Id == id);
+            bool isAnonymous = !(User.Identity?.IsAuthenticated ?? false);
+
+            if (isAnonymous)
+            {
+                if (string.IsNullOrEmpty(t) || !_pdfTokenService.ValidateToken(id, t))
+                    return Unauthorized(new { message = "Valid token required to access this PDF" });
+            }
+
+            Quote? devis;
+            if (isAnonymous)
+            {
+                devis = await _context.Quotes
+                    .IgnoreQueryFilters()
+                    .Include(d => d.Client)
+                    .Include(d => d.QuoteItems)
+                    .FirstOrDefaultAsync(d => d.Id == id && !d.IsDeleted);
+            }
+            else
+            {
+                devis = await _context.Quotes
+                    .Include(d => d.Client)
+                    .Include(d => d.QuoteItems)
+                    .FirstOrDefaultAsync(d => d.Id == id);
+            }
 
             if (devis == null) return NotFound();
 
-            // Employee role cannot access archived (Treated) quotes
-            if (User.IsInRole("Employee") && devis.Treated)
-            {
+            if (!isAnonymous && User.IsInRole("Employee") && devis.Treated)
                 return NotFound(new { message = "Quote not found or access denied" });
+
+            CompanySettings? companySettings;
+            Company? company;
+            string creatorName;
+
+            if (isAnonymous)
+            {
+                companySettings = await _context.CompanySettings
+                    .IgnoreQueryFilters()
+                    .FirstOrDefaultAsync(s => s.CompanyId == devis.CompanyId);
+                company = await _context.Companies.FindAsync(devis.CompanyId);
+                creatorName = "";
+            }
+            else
+            {
+                var userId = _userManager.GetUserId(User);
+                if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+                var user = await _userManager.FindByIdAsync(userId);
+                if (user == null) return Unauthorized();
+
+                var userProfile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
+                creatorName = userProfile != null
+                    ? $"{userProfile.FirstName} {userProfile.LastName}".Trim()
+                    : user.UserName ?? "";
+
+                companySettings = await _context.CompanySettings
+                    .FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
+                company = await _context.Companies.FindAsync(user.CompanyId);
             }
 
-            // Get current user and company settings for PDF
-            var userId = _userManager.GetUserId(User);
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
-            
-            var user = await _userManager.FindByIdAsync(userId);
-            if (user == null) return Unauthorized();
-            
-            // Get user profile for creator name
-            var userProfile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
-            var creatorName = userProfile != null 
-                ? $"{userProfile.FirstName} {userProfile.LastName}".Trim() 
-                : user.UserName ?? "";
-            
-            var companySettings = await _context.CompanySettings
-                .FirstOrDefaultAsync(s => s.CompanyId == user.CompanyId);
-            var company = await _context.Companies.FindAsync(user.CompanyId);
-
-            // Build PDF settings from company config
             var pdfSettings = PdfSettings.FromCompanySettings(
                 companySettings, company, creatorName,
                 currencyOverride: devis.CurrencySymbol,
                 languageOverride: devis.PdfLanguage);
-            
-            // Apply custom tax settings to devis if not already set
+
             if (devis.Tfiscal == null || devis.TfiscalName == null)
             {
                 devis.Tfiscal = pdfSettings.CustomTaxEnabled ? pdfSettings.CustomTaxAmount : 0;
@@ -626,7 +659,6 @@ namespace ResourceManager.Controllers
                 return StatusCode(500, new { message = "Failed to generate PDF" });
             }
 
-            // Auto-register PDF in local storage
             try
             {
                 await _pdfStorageService.SaveClientPdfAsync(
@@ -880,9 +912,10 @@ namespace ResourceManager.Controllers
                 var userProfile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
                 var senderName = userProfile != null ? $"{userProfile.FirstName} {userProfile.LastName}".Trim() : user.UserName ?? "";
 
+                var pdfToken = _pdfTokenService.GenerateToken(id);
                 var request = HttpContext.Request;
                 var baseUrl = $"{request.Scheme}://{request.Host}";
-                var pdfUrl = $"{baseUrl}/api/Quotes/{id}/pdf";
+                var pdfUrl = $"{baseUrl}/api/Quotes/{id}/pdf?t={Uri.EscapeDataString(pdfToken)}";
 
                 var result = await _whatsAppService.SendDocumentMessageAsync(
                     quote.Client.Phone, pdfUrl, $"Quote-{quote.Number}.pdf", dto?.CustomMessage);

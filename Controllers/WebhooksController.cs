@@ -22,6 +22,7 @@ namespace ResourceManager.Controllers
         private readonly ILogger<WebhooksController> _logger;
         private readonly string? _webhookSecret;
         private readonly bool _requireWebhookSecrets;
+        private readonly string? _whatsAppVerifyToken;
 
         public WebhooksController(AppDbContext context, ILogger<WebhooksController> logger, IConfiguration configuration)
         {
@@ -29,6 +30,7 @@ namespace ResourceManager.Controllers
             _logger = logger;
             _webhookSecret = configuration["Brevo:WebhookSecret"];
             _requireWebhookSecrets = configuration.GetValue<bool>("Security:RequireWebhookSecrets", true);
+            _whatsAppVerifyToken = configuration["WhatsApp:WebhookVerifyToken"];
         }
 
         /// <summary>
@@ -157,6 +159,94 @@ namespace ResourceManager.Controllers
             return Ok(new { received = true, action = "updated", emailId = emailRecord.Id, status });
         }
 
+        /// <summary>
+        /// Meta hub-challenge verification.
+        /// Meta calls this GET to confirm the webhook URL before enabling delivery.
+        /// Register this URL in the Meta App Dashboard → WhatsApp → Configuration → Webhook.
+        /// URL: https://yourdomain.com/api/webhooks/whatsapp
+        /// Subscribe to the "messages" field.
+        /// </summary>
+        [HttpGet("whatsapp")]
+        public IActionResult WhatsAppVerify(
+            [FromQuery(Name = "hub.mode")] string? mode,
+            [FromQuery(Name = "hub.verify_token")] string? token,
+            [FromQuery(Name = "hub.challenge")] string? challenge)
+        {
+            if (mode != "subscribe")
+                return BadRequest(new { error = "Unexpected hub.mode" });
+
+            if (string.IsNullOrEmpty(_whatsAppVerifyToken) || _whatsAppVerifyToken == "SET_VIA_ENVIRONMENT")
+            {
+                _logger.LogCritical("WhatsApp webhook verification failed: WhatsApp:WebhookVerifyToken is not configured.");
+                return StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "Webhook not configured." });
+            }
+
+            if (!FixedTimeEquals(token ?? "", _whatsAppVerifyToken))
+            {
+                _logger.LogWarning("WhatsApp webhook: invalid verify_token from {IP}", HttpContext.Connection.RemoteIpAddress);
+                return Unauthorized();
+            }
+
+            _logger.LogInformation("WhatsApp webhook verified successfully.");
+            return Content(challenge ?? "", "text/plain");
+        }
+
+        /// <summary>
+        /// Meta WhatsApp Cloud API delivery status webhook.
+        /// Updates DocumentSendAudit status when messages are delivered, read, or fail.
+        /// </summary>
+        [HttpPost("whatsapp")]
+        public async Task<IActionResult> WhatsAppWebhook([FromBody] WhatsAppWebhookPayload? payload)
+        {
+            if (payload?.Entry == null)
+                return Ok(new { received = true }); // Always return 200 to Meta
+
+            foreach (var entry in payload.Entry)
+            {
+                foreach (var change in entry.Changes ?? [])
+                {
+                    if (change.Field != "messages") continue;
+
+                    foreach (var status in change.Value?.Statuses ?? [])
+                    {
+                        if (string.IsNullOrEmpty(status.Id)) continue;
+
+                        var mapped = status.Status?.ToLower() switch
+                        {
+                            "sent"      => "Sent",
+                            "delivered" => "Delivered",
+                            "read"      => "Read",
+                            "failed"    => "Failed",
+                            _           => null
+                        };
+
+                        if (mapped == null) continue;
+
+                        var audit = await _context.DocumentSendAudits
+                            .IgnoreQueryFilters()
+                            .FirstOrDefaultAsync(a => a.MessageId == status.Id);
+
+                        if (audit == null)
+                        {
+                            _logger.LogDebug("WhatsApp webhook: no DocumentSendAudit found for MessageId={MessageId}", status.Id);
+                            continue;
+                        }
+
+                        audit.Status = mapped;
+                        if (mapped == "Failed" && status.Errors?.Count > 0)
+                            audit.ErrorMessage = status.Errors[0].Title ?? status.Errors[0].Message;
+
+                        _logger.LogInformation(
+                            "WhatsApp webhook: updated audit {AuditId} to {Status} for MessageId={MessageId}",
+                            audit.Id, mapped, status.Id);
+                    }
+                }
+            }
+
+            await _context.SaveChangesAsync();
+            return Ok(new { received = true });
+        }
+
         // Constant-time string comparison to avoid timing side-channel on secret check.
         private static bool FixedTimeEquals(string a, string b)
         {
@@ -180,6 +270,76 @@ namespace ResourceManager.Controllers
                 _ => (null, null) // click, open, unsubscribe, etc. — don't update status
             };
         }
+    }
+
+    // ── WhatsApp Cloud API webhook payload models ──────────────────────────────
+
+    public class WhatsAppWebhookPayload
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("object")]
+        public string? Object { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("entry")]
+        public List<WhatsAppEntry>? Entry { get; set; }
+    }
+
+    public class WhatsAppEntry
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
+        public string? Id { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("changes")]
+        public List<WhatsAppChange>? Changes { get; set; }
+    }
+
+    public class WhatsAppChange
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("field")]
+        public string? Field { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("value")]
+        public WhatsAppChangeValue? Value { get; set; }
+    }
+
+    public class WhatsAppChangeValue
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("messaging_product")]
+        public string? MessagingProduct { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("statuses")]
+        public List<WhatsAppStatusUpdate>? Statuses { get; set; }
+    }
+
+    public class WhatsAppStatusUpdate
+    {
+        /// <summary>The WhatsApp message ID returned by the send API.</summary>
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
+        public string? Id { get; set; }
+
+        /// <summary>sent | delivered | read | failed</summary>
+        [System.Text.Json.Serialization.JsonPropertyName("status")]
+        public string? Status { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("timestamp")]
+        public string? Timestamp { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("recipient_id")]
+        public string? RecipientId { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("errors")]
+        public List<WhatsAppWebhookError>? Errors { get; set; }
+    }
+
+    public class WhatsAppWebhookError
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("code")]
+        public int Code { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("title")]
+        public string? Title { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("message")]
+        public string? Message { get; set; }
     }
 
     /// <summary>
