@@ -381,7 +381,8 @@ Best regards,
                 });
             }
 
-            // 3. Launch Embedded Signup via FB.login
+            // 3. Launch Embedded Signup — listen for FB.login callback AND Meta postMessage,
+            //    whichever arrives first. Timeout after 5 min so spinner never hangs forever.
             const loginOptions: Record<string, unknown> = embeddedSignupConfigId
                 ? {
                     config_id: embeddedSignupConfigId,
@@ -393,18 +394,55 @@ Best regards,
                     scope: 'business_management,whatsapp_business_management,whatsapp_business_messaging',
                     response_type: 'code',
                 };
-            const response = await new Promise<{ authResponse?: { code?: string } }>((resolve) => {
-                fbWindow.FB!.login((response) => { resolve(response); }, loginOptions);
+
+            type SignupResult =
+                | { kind: 'code'; code: string }
+                | { kind: 'direct'; phoneNumberId: string; wabaId: string }
+                | { kind: 'cancelled' }
+                | { kind: 'timeout' };
+
+            const signupResult = await new Promise<SignupResult>((resolve) => {
+                let settled = false;
+                const settle = (result: SignupResult) => {
+                    if (settled) return;
+                    settled = true;
+                    window.removeEventListener('message', onMessage);
+                    clearTimeout(timer);
+                    resolve(result);
+                };
+
+                // Capture Meta's postMessage when popup closes after "Share my contact information"
+                const onMessage = (event: MessageEvent) => {
+                    if (!String(event.origin).includes('facebook.com')) return;
+                    try {
+                        const msg = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+                        if (msg?.type !== 'WA_EMBEDDED_SIGNUP') return;
+                        if (msg.event === 'FINISH' && msg.data?.phone_number_id) {
+                            settle({ kind: 'direct', phoneNumberId: msg.data.phone_number_id, wabaId: msg.data.waba_id || '' });
+                        } else {
+                            settle({ kind: 'cancelled' });
+                        }
+                    } catch { /* ignore parse errors */ }
+                };
+
+                // Fallback: auto-resolve after 5 minutes so spinner never hangs
+                const timer = setTimeout(() => settle({ kind: 'timeout' }), 5 * 60 * 1000);
+
+                window.addEventListener('message', onMessage);
+
+                fbWindow.FB!.login((response) => {
+                    if (response.authResponse?.code) {
+                        settle({ kind: 'code', code: response.authResponse.code });
+                    } else {
+                        settle({ kind: 'cancelled' });
+                    }
+                }, loginOptions);
             });
 
-            if (response.authResponse?.code) {
-                // 4. Send the code to our backend to exchange for credentials
-                const connectRes = await api.post('/Settings/whatsapp/connect', {
-                    code: response.authResponse.code
-                });
-
+            if (signupResult.kind === 'code') {
+                // 4a. Exchange code for credentials via backend (60 s axios timeout)
+                const connectRes = await api.post('/Settings/whatsapp/connect', { code: signupResult.code }, { timeout: 60000 });
                 if (connectRes.data.success) {
-                    // Update local state with new credentials
                     setSettings(prev => ({
                         ...prev,
                         whatsAppPhoneNumberId: connectRes.data.phoneNumberId || '',
@@ -417,6 +455,26 @@ Best regards,
                 } else {
                     setStatus({ type: 'error', message: connectRes.data.error || t('whatsapp.settings.connectFailed', 'Failed to connect WhatsApp.') });
                 }
+            } else if (signupResult.kind === 'direct') {
+                // 4b. postMessage gave us phone_number_id + waba_id directly — save via PUT /Settings
+                const saveRes = await api.put('/Settings', {
+                    whatsAppPhoneNumberId: signupResult.phoneNumberId,
+                    whatsAppBusinessAccountId: signupResult.wabaId || undefined,
+                    whatsAppEnabled: true,
+                }, { timeout: 30000 });
+                if (saveRes.status < 300) {
+                    setSettings(prev => ({
+                        ...prev,
+                        whatsAppPhoneNumberId: signupResult.phoneNumberId,
+                        whatsAppBusinessAccountId: signupResult.wabaId,
+                        whatsAppEnabled: true,
+                    }));
+                    setStatus({ type: 'success', message: t('whatsapp.settings.connectSuccess', 'WhatsApp connected successfully!') });
+                } else {
+                    setStatus({ type: 'error', message: t('whatsapp.settings.connectFailed', 'Failed to connect WhatsApp.') });
+                }
+            } else if (signupResult.kind === 'timeout') {
+                setStatus({ type: 'error', message: t('whatsapp.settings.connectTimeout', 'Connection timed out. Please try again.') });
             } else {
                 // User cancelled the dialog
                 setStatus({ type: 'warning', message: t('whatsapp.settings.connectCancelled', 'WhatsApp connection was cancelled.') });
