@@ -122,6 +122,9 @@ export default function SettingsPage() {
     // WhatsApp Embedded Signup
     const [connectingWhatsApp, setConnectingWhatsApp] = useState(false);
     const [disconnectingWhatsApp, setDisconnectingWhatsApp] = useState(false);
+    const [waConnectMode, setWaConnectMode] = useState<'embedded' | 'manual'>('embedded');
+    const [waManualCreds, setWaManualCreds] = useState({ phoneNumberId: '', accessToken: '', businessAccountId: '', displayPhone: '' });
+    const [savingManualCreds, setSavingManualCreds] = useState(false);
 
     // Password change
     const [currentPassword, setCurrentPassword] = useState('');
@@ -444,6 +447,39 @@ Best regards,
             setStatus({ type: 'error', message: t('whatsapp.settings.disconnectFailed', 'Failed to disconnect WhatsApp.') });
         } finally {
             setDisconnectingWhatsApp(false);
+        }
+    };
+
+    const handleSaveManualCredentials = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!waManualCreds.phoneNumberId.trim() || !waManualCreds.accessToken.trim()) {
+            setStatus({ type: 'error', message: 'Phone Number ID and Access Token are required.' });
+            return;
+        }
+        setSavingManualCreds(true);
+        setStatus(null);
+        try {
+            await api.put('/Settings', {
+                whatsAppPhoneNumberId: waManualCreds.phoneNumberId.trim(),
+                whatsAppAccessToken: waManualCreds.accessToken.trim(),
+                whatsAppBusinessAccountId: waManualCreds.businessAccountId.trim() || null,
+                whatsAppDisplayPhone: waManualCreds.displayPhone.trim() || null,
+                whatsAppEnabled: true,
+            });
+            setSettings(prev => ({
+                ...prev,
+                whatsAppPhoneNumberId: waManualCreds.phoneNumberId.trim(),
+                whatsAppAccessToken: '••••••••',
+                whatsAppBusinessAccountId: waManualCreds.businessAccountId.trim(),
+                whatsAppDisplayPhone: waManualCreds.displayPhone.trim(),
+                whatsAppEnabled: true,
+            }));
+            setWaManualCreds({ phoneNumberId: '', accessToken: '', businessAccountId: '', displayPhone: '' });
+            setStatus({ type: 'success', message: 'WhatsApp connected successfully!' });
+        } catch {
+            setStatus({ type: 'error', message: 'Failed to save WhatsApp credentials. Please check your values and try again.' });
+        } finally {
+            setSavingManualCreds(false);
         }
     };
 
@@ -1292,50 +1328,143 @@ Best regards,
                                                 <div className="flex items-center gap-3">
                                                     <MessageCircle size={20} className="text-amber-600" />
                                                     <p className="text-sm font-medium text-amber-700">
-                                                        {t('whatsapp.settings.notConfigured', 'WhatsApp is not configured. Click the button below to get started.')}
+                                                        {t('whatsapp.settings.notConfigured', 'WhatsApp is not configured. Choose a setup method below to get started.')}
                                                     </p>
                                                 </div>
                                             </div>
 
-                                            <div className="text-center py-8">
-                                                <div className="mx-auto w-16 h-16 bg-[#25D366]/10 rounded-2xl flex items-center justify-center mb-4">
-                                                    <MessageCircle size={32} className="text-[#25D366]" />
-                                                </div>
-                                                <h4 className="text-lg font-semibold text-gray-900 mb-2">{t('whatsapp.settings.connectTitle', 'Connect Your WhatsApp Business')}</h4>
-                                                <p className="text-sm text-gray-500 max-w-md mx-auto mb-6">
-                                                    {t('whatsapp.settings.connectDescription', 'Click the button below to link your WhatsApp Business number. You\'ll be guided through a quick setup process by Meta.')}
-                                                </p>
-
+                                            {/* ── Mode toggle ── */}
+                                            <div className="flex rounded-xl border border-gray-200 p-1 bg-gray-50">
                                                 <button
-                                                    onClick={handleConnectWhatsApp}
-                                                    disabled={connectingWhatsApp}
-                                                    className="inline-flex items-center gap-2.5 px-6 py-3 bg-[#25D366] text-white font-medium rounded-xl shadow-lg hover:bg-[#20bd5a] transition-all disabled:opacity-50 text-base">
-                                                    {connectingWhatsApp ? (
-                                                        <Loader2 size={20} className="animate-spin" />
-                                                    ) : (
-                                                        <MessageCircle size={20} />
-                                                    )}
-                                                    {connectingWhatsApp
-                                                        ? t('whatsapp.settings.connecting', 'Connecting...')
-                                                        : t('whatsapp.settings.connectButton', 'Connect WhatsApp')}
+                                                    type="button"
+                                                    onClick={() => setWaConnectMode('manual')}
+                                                    className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${waConnectMode === 'manual' ? 'bg-white shadow-sm text-green-700' : 'text-gray-500 hover:text-gray-700'}`}
+                                                >
+                                                    Manual Setup
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setWaConnectMode('embedded')}
+                                                    className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${waConnectMode === 'embedded' ? 'bg-white shadow-sm text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}
+                                                >
+                                                    Connect via Meta
                                                 </button>
                                             </div>
 
-                                            <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
-                                                <div className="flex gap-3">
-                                                    <Info size={18} className="text-blue-500 flex-shrink-0 mt-0.5" />
-                                                    <div className="text-xs text-blue-700 space-y-1">
-                                                        <p className="font-medium">{t('whatsapp.settings.howItWorks', 'How it works:')}</p>
-                                                        <ol className="list-decimal list-inside space-y-0.5">
-                                                            <li>{t('whatsapp.settings.step1', 'A Facebook dialog will open')}</li>
-                                                            <li>{t('whatsapp.settings.step2', 'Log in with your Facebook account')}</li>
-                                                            <li>{t('whatsapp.settings.step3', 'Select or create a Meta Business Portfolio')}</li>
-                                                            <li>{t('whatsapp.settings.step4', 'Enter and verify your phone number')}</li>
-                                                            <li>{t('whatsapp.settings.step5', 'Done! Your WhatsApp is connected automatically')}</li>
-                                                        </ol>
+                                            {/* ── Manual credentials form ── */}
+                                            {waConnectMode === 'manual' && (
+                                                <form onSubmit={handleSaveManualCredentials} className="space-y-4">
+                                                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                                                        <div className="flex gap-3">
+                                                            <Info size={16} className="text-blue-500 flex-shrink-0 mt-0.5" />
+                                                            <div className="text-xs text-blue-700 space-y-1">
+                                                                <p className="font-medium">Where to find your credentials:</p>
+                                                                <ol className="list-decimal list-inside space-y-0.5">
+                                                                    <li>Go to <span className="font-medium">developers.facebook.com</span> and open your WhatsApp app</li>
+                                                                    <li>Navigate to <span className="font-medium">WhatsApp → API Setup</span></li>
+                                                                    <li>Copy the <span className="font-medium">Phone Number ID</span></li>
+                                                                    <li>Generate a <span className="font-medium">Permanent Access Token</span> (System User token)</li>
+                                                                    <li>Copy the <span className="font-medium">WhatsApp Business Account ID</span></li>
+                                                                </ol>
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            </div>
+
+                                                    <div className="space-y-3">
+                                                        <div>
+                                                            <label className="text-sm font-medium text-gray-700">Phone Number ID <span className="text-red-500">*</span></label>
+                                                            <input
+                                                                type="text"
+                                                                required
+                                                                value={waManualCreds.phoneNumberId}
+                                                                onChange={e => setWaManualCreds(p => ({ ...p, phoneNumberId: e.target.value }))}
+                                                                placeholder="e.g. 123456789012345"
+                                                                className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none bg-gray-50/50 focus:bg-white font-mono"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-sm font-medium text-gray-700">Permanent Access Token <span className="text-red-500">*</span></label>
+                                                            <input
+                                                                type="password"
+                                                                required
+                                                                value={waManualCreds.accessToken}
+                                                                onChange={e => setWaManualCreds(p => ({ ...p, accessToken: e.target.value }))}
+                                                                placeholder="Paste your System User access token"
+                                                                className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none bg-gray-50/50 focus:bg-white font-mono"
+                                                            />
+                                                            <p className="text-xs text-gray-400 mt-1">Use a permanent System User token, not a temporary one.</p>
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-3">
+                                                            <div>
+                                                                <label className="text-sm font-medium text-gray-700">Business Account ID</label>
+                                                                <input
+                                                                    type="text"
+                                                                    value={waManualCreds.businessAccountId}
+                                                                    onChange={e => setWaManualCreds(p => ({ ...p, businessAccountId: e.target.value }))}
+                                                                    placeholder="Optional"
+                                                                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none bg-gray-50/50 focus:bg-white font-mono"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="text-sm font-medium text-gray-700">Display Phone</label>
+                                                                <input
+                                                                    type="text"
+                                                                    value={waManualCreds.displayPhone}
+                                                                    onChange={e => setWaManualCreds(p => ({ ...p, displayPhone: e.target.value }))}
+                                                                    placeholder="+213 6XX XXX XXX"
+                                                                    className="mt-1 w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none bg-gray-50/50 focus:bg-white"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <button
+                                                        type="submit"
+                                                        disabled={savingManualCreds}
+                                                        className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#25D366] text-white font-medium rounded-xl shadow-lg hover:bg-[#20bd5a] transition-all disabled:opacity-50">
+                                                        {savingManualCreds ? <Loader2 size={18} className="animate-spin" /> : <MessageCircle size={18} />}
+                                                        {savingManualCreds ? 'Saving...' : 'Connect WhatsApp'}
+                                                    </button>
+                                                </form>
+                                            )}
+
+                                            {/* ── Embedded Signup (Facebook) ── */}
+                                            {waConnectMode === 'embedded' && (
+                                                <>
+                                                    <div className="text-center py-6">
+                                                        <div className="mx-auto w-16 h-16 bg-[#25D366]/10 rounded-2xl flex items-center justify-center mb-4">
+                                                            <MessageCircle size={32} className="text-[#25D366]" />
+                                                        </div>
+                                                        <h4 className="text-lg font-semibold text-gray-900 mb-2">{t('whatsapp.settings.connectTitle', 'Connect Your WhatsApp Business')}</h4>
+                                                        <p className="text-sm text-gray-500 max-w-md mx-auto mb-6">
+                                                            {t('whatsapp.settings.connectDescription', 'Click the button below to link your WhatsApp Business number. You\'ll be guided through a quick setup process by Meta.')}
+                                                        </p>
+                                                        <button
+                                                            onClick={handleConnectWhatsApp}
+                                                            disabled={connectingWhatsApp}
+                                                            className="inline-flex items-center gap-2.5 px-6 py-3 bg-[#25D366] text-white font-medium rounded-xl shadow-lg hover:bg-[#20bd5a] transition-all disabled:opacity-50 text-base">
+                                                            {connectingWhatsApp ? <Loader2 size={20} className="animate-spin" /> : <MessageCircle size={20} />}
+                                                            {connectingWhatsApp ? t('whatsapp.settings.connecting', 'Connecting...') : t('whatsapp.settings.connectButton', 'Connect WhatsApp')}
+                                                        </button>
+                                                    </div>
+
+                                                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                                                        <div className="flex gap-3">
+                                                            <Info size={18} className="text-blue-500 flex-shrink-0 mt-0.5" />
+                                                            <div className="text-xs text-blue-700 space-y-1">
+                                                                <p className="font-medium">{t('whatsapp.settings.howItWorks', 'How it works:')}</p>
+                                                                <ol className="list-decimal list-inside space-y-0.5">
+                                                                    <li>{t('whatsapp.settings.step1', 'A Facebook dialog will open')}</li>
+                                                                    <li>{t('whatsapp.settings.step2', 'Log in with your Facebook account')}</li>
+                                                                    <li>{t('whatsapp.settings.step3', 'Select or create a Meta Business Portfolio')}</li>
+                                                                    <li>{t('whatsapp.settings.step4', 'Enter and verify your phone number')}</li>
+                                                                    <li>{t('whatsapp.settings.step5', 'Done! Your WhatsApp is connected automatically')}</li>
+                                                                </ol>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            )}
                                         </>
                                     )}
                                 </div>
