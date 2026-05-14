@@ -20,5 +20,9 @@ namespace ResourceManager.Dtos
         [Required(ErrorMessage = "Last name is required.")]
         [StringLength(100)]
         public string LastName { get; set; } = string.Empty;
+
+        [Phone]
+        [StringLength(20)]
+        public string? PhoneNumber { get; set; }
     }
 }

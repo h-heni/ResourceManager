@@ -1331,5 +1331,18 @@ namespace ResourceManager.Models
         [ForeignKey("CompanyId")]
         public Company? Company { get; set; }
     }
-    
+
+    public class WhatsAppOtp
+    {
+        public int Id { get; set; }
+        [MaxLength(20)]
+        public string PhoneNumber { get; set; } = string.Empty; // E.164 normalized
+        public string OtpHash { get; set; } = string.Empty;     // SHA-256 of the 6-digit code
+        public string UserId { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; }
+        public DateTime ExpiresAt { get; set; }
+        public bool IsUsed { get; set; }
+        public int AttemptCount { get; set; }
+    }
+
 }

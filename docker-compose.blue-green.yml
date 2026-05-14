@@ -175,6 +175,8 @@ services:
       - WhatsApp__MetaAppSecret=${WHATSAPP__METAAPPSECRET:-}
       - WhatsApp__WebhookVerifyToken=${WHATSAPP__WEBHOOKVERIFYTOKEN:-}
       - WhatsApp__EmbeddedSignupConfigId=${WHATSAPP__EMBEDDEDSIGNUPCONFIGID:-}
+      - WhatsApp__OtpTemplateName=${WHATSAPP__OTPTEMPLATENAME:-login_otp}
+      - WhatsApp__OtpTemplateLanguage=${WHATSAPP__OTPTEMPLATELANGUAGE:-en}
       # Brevo webhook secret
       - Brevo__WebhookSecret=${BREVO__WEBHOOKSECRET:-}
       - DEPLOYMENT_ENV=blue
@@ -300,6 +302,8 @@ services:
       - WhatsApp__MetaAppSecret=${WHATSAPP__METAAPPSECRET:-}
       - WhatsApp__WebhookVerifyToken=${WHATSAPP__WEBHOOKVERIFYTOKEN:-}
       - WhatsApp__EmbeddedSignupConfigId=${WHATSAPP__EMBEDDEDSIGNUPCONFIGID:-}
+      - WhatsApp__OtpTemplateName=${WHATSAPP__OTPTEMPLATENAME:-login_otp}
+      - WhatsApp__OtpTemplateLanguage=${WHATSAPP__OTPTEMPLATELANGUAGE:-en}
       # Brevo webhook secret
       - Brevo__WebhookSecret=${BREVO__WEBHOOKSECRET:-}
       - DEPLOYMENT_ENV=green
