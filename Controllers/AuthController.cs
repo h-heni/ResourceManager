@@ -28,14 +28,13 @@ namespace ResourceManager.Controllers
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly SecurityAlertService _securityAlerts;
         private readonly UserCountryService _countryService;
-        private readonly IWhatsAppOtpService _whatsAppOtp;
 
         // Token configuration
         private const int AccessTokenMinutes = 15;
         private const int RefreshTokenDays = 7;
 
 
-        public AuthController(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager, AppDbContext context, ILogger<AuthController> logger, IConfiguration configuration, TimeProvider time, SecurityAlertService securityAlerts, UserCountryService countryService, IWhatsAppOtpService whatsAppOtp)
+        public AuthController(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager, AppDbContext context, ILogger<AuthController> logger, IConfiguration configuration, TimeProvider time, SecurityAlertService securityAlerts, UserCountryService countryService)
         {
             _logger = logger;
             _configuration = configuration;
@@ -45,7 +44,6 @@ namespace ResourceManager.Controllers
             _userManager = userManager;
             _securityAlerts = securityAlerts;
             _countryService = countryService;
-            _whatsAppOtp = whatsAppOtp;
         }
 
         [HttpPost("login")]
@@ -983,75 +981,6 @@ namespace ResourceManager.Controllers
 
             _logger.LogInformation("Password changed. UserId={UserId}, TokensRevoked={Count}", userId, revokedCount);
             return Ok(new { Message = "Password changed successfully. Please log in again." });
-        }
-
-        // ==========================================
-        // WHATSAPP OTP LOGIN ENDPOINTS
-        // ==========================================
-
-        [HttpPost("whatsapp/send-otp")]
-        [AllowAnonymous]
-        [EnableRateLimiting("AuthStrict")]
-        public async Task<IActionResult> SendWhatsAppOtp([FromBody] SendWhatsAppOtpDto dto)
-        {
-            if (!ModelState.IsValid)
-                return BadRequest(new { error = "Invalid phone number." });
-
-            await _whatsAppOtp.SendOtpAsync(dto.PhoneNumber);
-
-            // Always return 200 to prevent phone number enumeration
-            return Ok(new { message = "If this number is registered, a verification code was sent via WhatsApp." });
-        }
-
-        [HttpPost("whatsapp/verify-otp")]
-        [AllowAnonymous]
-        [EnableRateLimiting("AuthStrict")]
-        public async Task<IActionResult> VerifyWhatsAppOtp([FromBody] VerifyWhatsAppOtpDto dto)
-        {
-            if (!ModelState.IsValid)
-                return BadRequest(new { error = "Invalid request." });
-
-            var userId = await _whatsAppOtp.VerifyOtpAsync(dto.PhoneNumber, dto.Otp);
-            if (userId == null)
-                return Unauthorized(new { error = "Invalid or expired verification code." });
-
-            var user = await _userManager.FindByIdAsync(userId);
-            if (user == null)
-                return Unauthorized(new { error = "Account not found." });
-
-            var userProfile = await _context.UserProfiles.FirstOrDefaultAsync(p => p.UserId == user.Id);
-            var roles = await _userManager.GetRolesAsync(user);
-            var role = roles.FirstOrDefault() ?? "FreeUser";
-
-            var accessToken = GenerateAccessToken(user.Id, user.Email!, role, user.CompanyId, userProfile?.FirstName);
-            var (_, rawRefreshToken) = await CreateRefreshTokenAsync(user.Id);
-            SetRefreshTokenCookie(rawRefreshToken);
-
-            var ip = GetClientIp();
-            _logger.LogInformation("WhatsApp OTP login. UserId={UserId}, IP={IP}", user.Id, ip);
-            await RecordUserLoginAsync(user.Id, ip);
-
-            var companySettings = await _context.CompanySettings
-                .IgnoreQueryFilters()
-                .Where(s => s.CompanyId == user.CompanyId)
-                .Select(s => new { s.IsProfileComplete, s.BaseStoragePath })
-                .FirstOrDefaultAsync();
-
-            return Ok(new
-            {
-                AccessToken = accessToken,
-                ExpiresInMinutes = AccessTokenMinutes,
-                User = new
-                {
-                    user.Id,
-                    user.Email,
-                    Role = role,
-                    FirstName = userProfile?.FirstName ?? "",
-                    LastName = userProfile?.LastName ?? "",
-                    IsProfileComplete = companySettings?.IsProfileComplete ?? false,
-                    BaseStoragePath = companySettings?.BaseStoragePath
-                }
-            });
         }
     }
 } 

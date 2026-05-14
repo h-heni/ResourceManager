@@ -36,17 +36,6 @@ namespace ResourceManager.Services
         /// Exchange Embedded Signup code for permanent credentials and save them
         /// </summary>
         Task<EmbeddedSignupResult> ExchangeEmbeddedSignupCodeAsync(string code, int companyId);
-
-        /// <summary>
-        /// Send an OTP authentication template message. Accepts explicit company settings
-        /// so it can be called before the user is authenticated (during login).
-        /// </summary>
-        Task<WhatsAppSendResponse> SendOtpTemplateAsync(string phoneNumber, string otpCode, CompanySettings? companySettings);
-
-        /// <summary>
-        /// Normalize a phone number to E.164 digits-only format using configured default country code.
-        /// </summary>
-        string NormalizePhone(string phone);
     }
 
     public class WhatsAppService : IWhatsAppService
@@ -380,40 +369,6 @@ namespace ResourceManager.Services
                 PhoneNumber = apiResponse?.Contacts?.FirstOrDefault()?.Input ?? ""
             };
         }
-
-        public async Task<WhatsAppSendResponse> SendOtpTemplateAsync(string phoneNumber, string otpCode, CompanySettings? cs)
-        {
-            var normalized = NormalizePhoneNumber(phoneNumber);
-            var phoneNumberId = cs?.WhatsAppPhoneNumberId ?? _configuration["WhatsApp:PhoneNumberId"];
-            var accessToken = cs?.WhatsAppAccessToken ?? _configuration["WhatsApp:AccessToken"];
-            var apiVersion = _configuration["WhatsApp:ApiVersion"] ?? "v21.0";
-            var templateName = _configuration["WhatsApp:OtpTemplateName"] ?? "login_otp";
-            var languageCode = _configuration["WhatsApp:OtpTemplateLanguage"] ?? "en";
-
-            var payload = new
-            {
-                messaging_product = "whatsapp",
-                to = normalized,
-                type = "template",
-                template = new
-                {
-                    name = templateName,
-                    language = new { code = languageCode },
-                    components = new[]
-                    {
-                        new
-                        {
-                            type = "body",
-                            parameters = new[] { new { type = "text", text = otpCode } }
-                        }
-                    }
-                }
-            };
-
-            return await CallWhatsAppApiAsync($"https://graph.facebook.com/{apiVersion}/{phoneNumberId}/messages", payload, accessToken);
-        }
-
-        public string NormalizePhone(string phone) => NormalizePhoneNumber(phone);
 
         private string NormalizePhoneNumber(string phone)
         {

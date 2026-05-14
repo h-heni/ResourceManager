@@ -74,7 +74,6 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<PurchaseOrder> PurchaseOrders { get; set; }
     public DbSet<PurchaseOrderItem> PurchaseOrderItems { get; set; }
     public DbSet<DocumentSendAudit> DocumentSendAudits { get; set; }
-    public DbSet<WhatsAppOtp> WhatsAppOtps { get; set; }
 
 
     protected override void OnModelCreating(ModelBuilder builder)

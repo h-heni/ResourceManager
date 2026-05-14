@@ -186,7 +186,6 @@ builder.Services.AddScoped<ResourceManager.Services.IDbFileStorageService, Resou
 
 // WhatsApp Cloud API Service (Meta Business Platform)
 builder.Services.AddHttpClient<ResourceManager.Services.IWhatsAppService, ResourceManager.Services.WhatsAppService>();
-builder.Services.AddScoped<ResourceManager.Services.IWhatsAppOtpService, ResourceManager.Services.WhatsAppOtpService>();
 
 // Short-lived signed tokens for anonymous PDF access (WhatsApp document delivery)
 builder.Services.AddSingleton<ResourceManager.Services.IPdfTokenService, ResourceManager.Services.PdfTokenService>();
