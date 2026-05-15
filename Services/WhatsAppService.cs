@@ -124,8 +124,14 @@ namespace ResourceManager.Services
             var appSecret = _configuration["WhatsApp:MetaAppSecret"];
             var apiVersion = _configuration["WhatsApp:ApiVersion"] ?? "v21.0";
 
+            _logger.LogInformation("[WA-DEBUG] ExchangeEmbeddedSignupCodeAsync start — companyId={CompanyId} apiVersion={ApiVersion} codeLen={CodeLen}",
+                companyId, apiVersion, code?.Length ?? 0);
+
             if (string.IsNullOrEmpty(appId) || string.IsNullOrEmpty(appSecret))
+            {
+                _logger.LogError("[WA-DEBUG] MetaAppId or MetaAppSecret is missing from configuration");
                 throw new InvalidOperationException("WhatsApp MetaAppId and MetaAppSecret must be configured on the server.");
+            }
 
             // Step 1: Exchange authorization code for a short-lived user token
             var tokenUrl = $"https://graph.facebook.com/{apiVersion}/oauth/access_token" +
@@ -133,26 +139,29 @@ namespace ResourceManager.Services
                 $"&client_secret={Uri.EscapeDataString(appSecret)}" +
                 $"&code={Uri.EscapeDataString(code)}";
 
+            _logger.LogInformation("[WA-DEBUG] Step 1: POST token exchange to {Url}", tokenUrl.Replace(appSecret, "***").Replace(code, "***"));
             var tokenRes = await _httpClient.GetAsync(tokenUrl);
             var tokenBody = await tokenRes.Content.ReadAsStringAsync();
+            _logger.LogInformation("[WA-DEBUG] Step 1 response: HTTP {Status} | Body: {Body}", (int)tokenRes.StatusCode, tokenBody);
 
             if (!tokenRes.IsSuccessStatusCode)
             {
-                _logger.LogError("Meta token exchange failed: {Body}", tokenBody);
+                _logger.LogError("[WA-DEBUG] Step 1 FAILED — Meta token exchange: {Body}", tokenBody);
                 return new EmbeddedSignupResult { Success = false, Error = "Failed to exchange authorization code. Please try again." };
             }
 
             var tokenData = JsonSerializer.Deserialize<JsonElement>(tokenBody);
             var userAccessToken = tokenData.GetProperty("access_token").GetString()!;
+            _logger.LogInformation("[WA-DEBUG] Step 1 OK — user access token obtained (length={Len})", userAccessToken.Length);
 
-            // Step 2: Get shared WABA info from the user's business integrations  
+            // Step 2: Get shared WABA info from the user's business integrations
             var sharedWabaUrl = $"https://graph.facebook.com/{apiVersion}/debug_token?input_token={Uri.EscapeDataString(userAccessToken)}";
             _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", $"{appId}|{appSecret}");
+            _logger.LogInformation("[WA-DEBUG] Step 2: debug_token call");
             var debugRes = await _httpClient.GetAsync(sharedWabaUrl);
             var debugBody = await debugRes.Content.ReadAsStringAsync();
             _httpClient.DefaultRequestHeaders.Authorization = null;
-
-            _logger.LogInformation("Debug token response: {Body}", debugBody);
+            _logger.LogInformation("[WA-DEBUG] Step 2 debug_token HTTP {Status} | Body: {Body}", (int)debugRes.StatusCode, debugBody);
 
             // Step 3: List WABAs shared with the app via Business Management API
             var wabaListUrl = $"https://graph.facebook.com/{apiVersion}/{appId}/message_template_previews".Replace("message_template_previews", "");
@@ -164,9 +173,10 @@ namespace ResourceManager.Services
 
             // Get the WhatsApp Business Account(s) associated with this user
             var businessUrl = $"https://graph.facebook.com/{apiVersion}/me/businesses?fields=id,name";
+            _logger.LogInformation("[WA-DEBUG] Step 3a: GET {Url}", businessUrl);
             var bizRes = await _httpClient.GetAsync(businessUrl);
             var bizBody = await bizRes.Content.ReadAsStringAsync();
-            _logger.LogInformation("User businesses: {Body}", bizBody);
+            _logger.LogInformation("[WA-DEBUG] Step 3a businesses HTTP {Status} | Body: {Body}", (int)bizRes.StatusCode, bizBody);
 
             // Find WABAs via the Business Management API - list all WABAs the user has access to
             string? wabaId = null;
@@ -175,9 +185,10 @@ namespace ResourceManager.Services
 
             // Try direct approach: list WhatsApp Business Accounts accessible by the user
             var wabasUrl = $"https://graph.facebook.com/{apiVersion}/me/whatsapp_business_accounts?fields=id,name,phone_numbers{{id,display_phone_number,verified_name}}";
+            _logger.LogInformation("[WA-DEBUG] Step 3b: GET {Url}", wabasUrl);
             var wabasRes = await _httpClient.GetAsync(wabasUrl);
             var wabasBody = await wabasRes.Content.ReadAsStringAsync();
-            _logger.LogInformation("User WABAs: {Body}", wabasBody);
+            _logger.LogInformation("[WA-DEBUG] Step 3b WABAs HTTP {Status} | Body: {Body}", (int)wabasRes.StatusCode, wabasBody);
 
             if (wabasRes.IsSuccessStatusCode)
             {
@@ -200,21 +211,23 @@ namespace ResourceManager.Services
                 }
             }
 
+            _logger.LogInformation("[WA-DEBUG] Step 3b result — wabaId={WabaId} phoneNumberId={PhoneId} displayPhone={Phone}", wabaId, phoneNumberId, displayPhone);
+
             if (string.IsNullOrEmpty(wabaId))
             {
-                _logger.LogError("No WABA found for the user after Embedded Signup");
+                _logger.LogError("[WA-DEBUG] Step 3b FAILED — no WABA found in response. Full body was: {Body}", wabasBody);
                 _httpClient.DefaultRequestHeaders.Authorization = null;
                 return new EmbeddedSignupResult { Success = false, Error = "No WhatsApp Business Account found. Please complete the signup process." };
             }
 
             // Step 4: Subscribe the app to the WABA for webhooks
             var subscribeUrl = $"https://graph.facebook.com/{apiVersion}/{wabaId}/subscribed_apps";
+            _logger.LogInformation("[WA-DEBUG] Step 4: subscribing app to WABA {WabaId}", wabaId);
             var subscribeRes = await _httpClient.PostAsync(subscribeUrl, null);
+            var subBody2 = await subscribeRes.Content.ReadAsStringAsync();
+            _logger.LogInformation("[WA-DEBUG] Step 4 subscribe HTTP {Status} | Body: {Body}", (int)subscribeRes.StatusCode, subBody2);
             if (!subscribeRes.IsSuccessStatusCode)
-            {
-                var subBody = await subscribeRes.Content.ReadAsStringAsync();
-                _logger.LogWarning("Failed to subscribe app to WABA: {Body}", subBody);
-            }
+                _logger.LogWarning("[WA-DEBUG] Step 4 FAILED to subscribe app to WABA: {Body}", subBody2);
 
             // Step 5: Generate a System User Access Token (long-lived) for the WABA
             // For embedded signup, the user token can be exchanged for a long-lived token
@@ -225,28 +238,33 @@ namespace ResourceManager.Services
                 $"&fb_exchange_token={Uri.EscapeDataString(userAccessToken)}";
 
             _httpClient.DefaultRequestHeaders.Authorization = null;
+            _logger.LogInformation("[WA-DEBUG] Step 5: long-lived token exchange");
             var llRes = await _httpClient.GetAsync(longLivedUrl);
             var llBody = await llRes.Content.ReadAsStringAsync();
+            _logger.LogInformation("[WA-DEBUG] Step 5 HTTP {Status} | Body: {Body}", (int)llRes.StatusCode, llBody);
 
             string permanentToken;
             if (llRes.IsSuccessStatusCode)
             {
                 var llData = JsonSerializer.Deserialize<JsonElement>(llBody);
                 permanentToken = llData.GetProperty("access_token").GetString()!;
+                _logger.LogInformation("[WA-DEBUG] Step 5 OK — long-lived token obtained (length={Len})", permanentToken.Length);
             }
             else
             {
-                _logger.LogWarning("Long-lived token exchange failed, using short-lived token: {Body}", llBody);
+                _logger.LogWarning("[WA-DEBUG] Step 5 FAILED — using short-lived token. Body: {Body}", llBody);
                 permanentToken = userAccessToken;
             }
 
             // If we still don't have a phone number ID, fetch it from the WABA
             if (string.IsNullOrEmpty(phoneNumberId))
             {
+                _logger.LogInformation("[WA-DEBUG] Step 5b: no phoneNumberId yet, fetching from WABA {WabaId}", wabaId);
                 _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", permanentToken);
                 var phonesUrl = $"https://graph.facebook.com/{apiVersion}/{wabaId}/phone_numbers?fields=id,display_phone_number,verified_name";
                 var phonesRes = await _httpClient.GetAsync(phonesUrl);
                 var phonesBody = await phonesRes.Content.ReadAsStringAsync();
+                _logger.LogInformation("[WA-DEBUG] Step 5b phone_numbers HTTP {Status} | Body: {Body}", (int)phonesRes.StatusCode, phonesBody);
 
                 if (phonesRes.IsSuccessStatusCode)
                 {
@@ -262,9 +280,11 @@ namespace ResourceManager.Services
 
             if (string.IsNullOrEmpty(phoneNumberId))
             {
+                _logger.LogError("[WA-DEBUG] Step 5b FAILED — still no phoneNumberId after WABA phone_numbers call");
                 return new EmbeddedSignupResult { Success = false, Error = "WhatsApp Business Account was linked but no phone number was registered. Please add a phone number in Meta Business Suite." };
             }
 
+            _logger.LogInformation("[WA-DEBUG] Step 6: saving credentials — wabaId={WabaId} phoneNumberId={PhoneId} displayPhone={Phone}", wabaId, phoneNumberId, displayPhone);
             // Step 6: Save credentials to company settings
             var settings = await _context.CompanySettings
                 .FirstOrDefaultAsync(s => s.CompanyId == companyId);

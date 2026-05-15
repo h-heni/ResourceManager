@@ -339,25 +339,40 @@ Best regards,
     const handleConnectWhatsApp = async () => {
         setConnectingWhatsApp(true);
         setStatus(null);
+        console.log('[WA-DEBUG] ── handleConnectWhatsApp started ──');
         try {
             // 1. Get the Meta App ID and Embedded Signup Config ID from our backend
+            console.log('[WA-DEBUG] 1. Fetching /Settings/whatsapp/app-id...');
             const appIdRes = await api.get('/Settings/whatsapp/app-id');
+            console.log('[WA-DEBUG] 1. app-id response:', appIdRes.data);
             if (!appIdRes.data.configured || !appIdRes.data.appId) {
                 setStatus({ type: 'error', message: t('whatsapp.settings.appNotConfigured', 'WhatsApp integration is not configured on the server. Contact your administrator.') });
                 return;
             }
             const metaAppId = appIdRes.data.appId;
             const embeddedSignupConfigId: string | null = appIdRes.data.configId ?? null;
+            console.log('[WA-DEBUG] 1. metaAppId:', metaAppId, '| embeddedSignupConfigId:', embeddedSignupConfigId);
 
             // 2. Load Facebook SDK if not already loaded
             const fbWindow = window as unknown as { FB?: { init: (opts: Record<string, unknown>) => void; login: (cb: (resp: { authResponse?: { code?: string } }) => void, opts: Record<string, unknown>) => void } };
+            console.log('[WA-DEBUG] 2. FB SDK already on window?', !!fbWindow.FB);
             if (!fbWindow.FB) {
+                console.log('[WA-DEBUG] 2. Loading FB SDK script...');
                 await new Promise<void>((resolve, reject) => {
+                    // 15-second safety timeout — in Chrome, CSP violations silently drop
+                    // the script without firing onerror, so we'd hang forever without this.
+                    const sdkLoadTimer = setTimeout(() => {
+                        console.error('[WA-DEBUG] 2. FB SDK load timeout (15s) — possible CSP or network block');
+                        reject(new Error('Facebook SDK failed to load (timeout). Check your Content-Security-Policy or network connectivity.'));
+                    }, 15000);
+
                     const script = document.createElement('script');
                     script.src = 'https://connect.facebook.net/en_US/sdk.js';
                     script.async = true;
                     script.defer = true;
                     script.onload = () => {
+                        clearTimeout(sdkLoadTimer);
+                        console.log('[WA-DEBUG] 2. FB SDK script loaded, calling init...');
                         const fb = (window as unknown as typeof fbWindow).FB!;
                         fb.init({
                             appId: metaAppId,
@@ -366,19 +381,26 @@ Best regards,
                             version: 'v21.0',
                         });
                         fbWindow.FB = fb;
+                        console.log('[WA-DEBUG] 2. FB.init() done');
                         resolve();
                     };
-                    script.onerror = () => reject(new Error('Failed to load Facebook SDK'));
+                    script.onerror = (e) => {
+                        clearTimeout(sdkLoadTimer);
+                        console.error('[WA-DEBUG] 2. FB SDK script failed to load:', e);
+                        reject(new Error('Failed to load Facebook SDK'));
+                    };
                     document.body.appendChild(script);
                 });
             } else {
                 // Re-init with potentially different app ID
+                console.log('[WA-DEBUG] 2. Re-init existing FB SDK');
                 fbWindow.FB.init({
                     appId: metaAppId,
                     cookie: true,
                     xfbml: false,
                     version: 'v21.0',
                 });
+                console.log('[WA-DEBUG] 2. FB.init() done (re-init)');
             }
 
             // 3. Launch Embedded Signup — listen for FB.login callback AND Meta postMessage,
@@ -394,6 +416,7 @@ Best regards,
                     scope: 'business_management,whatsapp_business_management,whatsapp_business_messaging',
                     response_type: 'code',
                 };
+            console.log('[WA-DEBUG] 3. FB.login options:', JSON.stringify(loginOptions));
 
             type SignupResult =
                 | { kind: 'code'; code: string }
@@ -404,6 +427,7 @@ Best regards,
             const signupResult = await new Promise<SignupResult>((resolve) => {
                 let settled = false;
                 const settle = (result: SignupResult) => {
+                    console.log('[WA-DEBUG] settle() called → kind:', result.kind, '| already settled?', settled);
                     if (settled) return;
                     settled = true;
                     window.removeEventListener('message', onMessage);
@@ -411,37 +435,67 @@ Best regards,
                     resolve(result);
                 };
 
-                // Capture Meta's postMessage when popup closes after "Share my contact information"
+                // Capture Meta's postMessage when popup closes.
+                // With config_id flow, Meta ONLY delivers results here (not via FB.login callback).
+                // Events: FINISH (success), CANCEL / CLOSE (user quit), ERROR
                 const onMessage = (event: MessageEvent) => {
+                    console.log('[WA-DEBUG] window.message → origin:', event.origin, '| data:', event.data);
                     if (!String(event.origin).includes('facebook.com')) return;
                     try {
                         const msg = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+                        console.log('[WA-DEBUG] FB postMessage parsed → type:', msg?.type, '| event:', msg?.event, '| data:', JSON.stringify(msg?.data));
                         if (msg?.type !== 'WA_EMBEDDED_SIGNUP') return;
                         if (msg.event === 'FINISH' && msg.data?.phone_number_id) {
                             settle({ kind: 'direct', phoneNumberId: msg.data.phone_number_id, wabaId: msg.data.waba_id || '' });
-                        } else {
+                        } else if (msg.event === 'FINISH' && msg.data?.code) {
+                            // Some Meta flows send the OAuth code via postMessage instead of FB.login callback
+                            console.log('[WA-DEBUG] WA_EMBEDDED_SIGNUP FINISH with code in postMessage');
+                            settle({ kind: 'code', code: msg.data.code });
+                        } else if (msg.event === 'CANCEL' || msg.event === 'CLOSE' || msg.event === 'ERROR') {
+                            console.log('[WA-DEBUG] WA_EMBEDDED_SIGNUP user cancelled/closed → event:', msg.event);
                             settle({ kind: 'cancelled' });
+                        } else {
+                            // FINISH without phone_number_id and no code — unexpected; let timeout handle
+                            console.log('[WA-DEBUG] WA_EMBEDDED_SIGNUP unhandled event:', msg.event, '| data:', JSON.stringify(msg?.data));
                         }
-                    } catch { /* ignore parse errors */ }
+                    } catch (parseErr) {
+                        console.warn('[WA-DEBUG] postMessage parse error:', parseErr);
+                    }
                 };
 
                 // Fallback: auto-resolve after 5 minutes so spinner never hangs
-                const timer = setTimeout(() => settle({ kind: 'timeout' }), 5 * 60 * 1000);
+                const timer = setTimeout(() => {
+                    console.warn('[WA-DEBUG] 5-minute timeout fired → settling as timeout');
+                    settle({ kind: 'timeout' });
+                }, 5 * 60 * 1000);
 
                 window.addEventListener('message', onMessage);
 
+                console.log('[WA-DEBUG] 3. Calling FB.login()...');
                 fbWindow.FB!.login((response) => {
+                    console.log('[WA-DEBUG] FB.login callback → authResponse:', JSON.stringify(response?.authResponse), '| status:', (response as unknown as Record<string, unknown>)?.status);
                     if (response.authResponse?.code) {
+                        // Got a code via the standard OAuth callback
                         settle({ kind: 'code', code: response.authResponse.code });
+                    } else if (embeddedSignupConfigId) {
+                        // config_id flow: null authResponse is NORMAL — Meta delivers results via
+                        // postMessage (WA_EMBEDDED_SIGNUP FINISH/CANCEL) instead of the callback.
+                        // Do NOT settle here; wait for the postMessage or the 5-min timeout.
+                        console.log('[WA-DEBUG] FB.login null callback in config_id mode — waiting for postMessage...');
                     } else {
+                        // Scope-based flow: null authResponse means user cancelled the popup
                         settle({ kind: 'cancelled' });
                     }
                 }, loginOptions);
+                console.log('[WA-DEBUG] 3. FB.login() called — waiting for callback or postMessage...');
             });
+            console.log('[WA-DEBUG] Promise resolved → kind:', signupResult.kind);
 
             if (signupResult.kind === 'code') {
                 // 4a. Exchange code for credentials via backend (60 s axios timeout)
+                console.log('[WA-DEBUG] 4a. Sending code to /Settings/whatsapp/connect...');
                 const connectRes = await api.post('/Settings/whatsapp/connect', { code: signupResult.code }, { timeout: 60000 });
+                console.log('[WA-DEBUG] 4a. /connect response → status:', connectRes.status, '| data:', JSON.stringify(connectRes.data));
                 if (connectRes.data.success) {
                     setSettings(prev => ({
                         ...prev,
@@ -457,11 +511,13 @@ Best regards,
                 }
             } else if (signupResult.kind === 'direct') {
                 // 4b. postMessage gave us phone_number_id + waba_id directly — save via PUT /Settings
+                console.log('[WA-DEBUG] 4b. Saving direct credentials → phoneNumberId:', signupResult.phoneNumberId, '| wabaId:', signupResult.wabaId);
                 const saveRes = await api.put('/Settings', {
                     whatsAppPhoneNumberId: signupResult.phoneNumberId,
                     whatsAppBusinessAccountId: signupResult.wabaId || undefined,
                     whatsAppEnabled: true,
                 }, { timeout: 30000 });
+                console.log('[WA-DEBUG] 4b. PUT /Settings response → status:', saveRes.status);
                 if (saveRes.status < 300) {
                     setSettings(prev => ({
                         ...prev,
@@ -480,9 +536,12 @@ Best regards,
                 setStatus({ type: 'warning', message: t('whatsapp.settings.connectCancelled', 'WhatsApp connection was cancelled.') });
             }
         } catch (err: unknown) {
-            const axiosErr = err as { response?: { data?: { error?: string } } };
+            console.error('[WA-DEBUG] CATCH block:', err);
+            const axiosErr = err as { response?: { data?: { error?: string } }; message?: string };
+            console.error('[WA-DEBUG] axios error detail → status:', (axiosErr as { response?: { status?: number } })?.response?.status, '| data:', JSON.stringify(axiosErr?.response?.data), '| message:', axiosErr?.message);
             setStatus({ type: 'error', message: axiosErr?.response?.data?.error || t('whatsapp.settings.connectFailed', 'Failed to connect WhatsApp.') });
         } finally {
+            console.log('[WA-DEBUG] finally → setConnectingWhatsApp(false)');
             setConnectingWhatsApp(false);
         }
     };
