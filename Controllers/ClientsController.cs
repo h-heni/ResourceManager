@@ -80,6 +80,8 @@ namespace ResourceManager.Controllers
     [HttpPost]
     public async Task<ActionResult<Client>> CreateClient(ClientDto clientDto)
     {
+        if (!ModelState.IsValid) return BadRequest(ModelState);
+
         var client = new Client
         {
             Name = clientDto.CompanyName,
@@ -89,9 +91,17 @@ namespace ResourceManager.Controllers
             Email = clientDto.Email
         };
         _context.Clients.Add(client);
-        await _context.SaveChangesAsync();
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating client");
+            return StatusCode(500, new { message = "Failed to create client. Please try again." });
+        }
 
-        return Accepted(client);
+        return CreatedAtAction(nameof(GetClientById), new { id = client.Id }, client);
     }
 
     // PUT: api/clients/5

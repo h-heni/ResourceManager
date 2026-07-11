@@ -364,12 +364,15 @@ namespace ResourceManager.Controllers
                         if (resizedBitmap != null)
                         {
                             using var image = SkiaSharp.SKImage.FromBitmap(resizedBitmap);
-                            // Encode as JPEG with 80% quality for smaller size
-                            using var encoded = image.Encode(SkiaSharp.SKEncodedImageFormat.Jpeg, 80);
+                            // Preserve PNG format to keep transparency; use JPEG only for non-PNG sources
+                            bool isPng = normalisedMime == "image/png";
+                            using var encoded = isPng
+                                ? image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100)
+                                : image.Encode(SkiaSharp.SKEncodedImageFormat.Jpeg, 85);
                             finalBytes = encoded.ToArray();
-                            contentType = "image/jpeg";
-                            
-                            _logger.LogInformation("Logo compressed from {Original} to {Compressed} bytes", 
+                            contentType = isPng ? "image/png" : "image/jpeg";
+
+                            _logger.LogInformation("Logo compressed from {Original} to {Compressed} bytes",
                                 originalBytes.Length, finalBytes.Length);
                         }
                     }

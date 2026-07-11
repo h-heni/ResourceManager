@@ -417,8 +417,19 @@ namespace ResourceManager.Controllers
 
             devis.IsDeleted = true;
             devis.DeletedAt = DateTime.UtcNow;
-            
-            await _context.SaveChangesAsync();
+            // Clear the number so its slot in the unique (CompanyId, Number) index is freed for reuse
+            devis.Number = $"DELETED-{id}";
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting quote {QuoteId}", id);
+                return StatusCode(500, new { message = "Failed to delete quote. Please try again." });
+            }
+
             return NoContent();
         }
 

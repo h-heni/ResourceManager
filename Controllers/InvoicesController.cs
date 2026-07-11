@@ -1061,22 +1061,23 @@ namespace ResourceManager.Controllers
                 .ToListAsync();
             _context.InvoiceItems.RemoveRange(invoiceItems);
 
-            // Cascade: unlink delivery notes (don't delete them, just remove the FK)
+            // Cascade: soft-delete linked quotes and free their numbers
             var quoteIds = invoice.Quotes.Select(q => q.Id).ToList();
+            foreach (var q in invoice.Quotes)
+            {
+                q.IsDeleted = true;
+                q.DeletedAt = DateTime.UtcNow;
+                q.Number = $"DELETED-{q.Id}";
+            }
+
+            // Cascade: soft-delete linked delivery notes
             var linkedDeliveryNotes = await _context.DeliveryNotes
                 .Where(dn => dn.InvoiceId == id || (dn.QuoteId != null && quoteIds.Contains(dn.QuoteId.Value)))
                 .ToListAsync();
             foreach (var dn in linkedDeliveryNotes)
             {
-                dn.InvoiceId = null;
-            }
-
-            // Cascade: unlock linked quotes (set them free for reuse in new invoice)
-            foreach (var q in invoice.Quotes)
-            {
-                q.InvoiceId = null;
-                q.Status = "Accepted";
-                q.Treated = false;
+                dn.IsDeleted = true;
+                dn.DeletedAt = DateTime.UtcNow;
             }
 
             // Cascade: remove payments
