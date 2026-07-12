@@ -618,7 +618,7 @@ Best regards,
         try {
             const formData = new FormData();
             formData.append('file', file);
-            await api.post('/Settings/logo', formData, { headers: { 'Content-Type': undefined } });
+            await api.post('/Settings/logo', formData, { headers: { 'Content-Type': null } });
             const blobUrl = URL.createObjectURL(file);
             setLogoPreview(blobUrl);
             setSettings(prev => ({ ...prev, hasLogoData: true }));
@@ -626,7 +626,7 @@ Best regards,
             sessionStorage.removeItem('company_branding');
             window.dispatchEvent(new CustomEvent('branding-logo-updated', { detail: { hasLogo: true, blobUrl } }));
             setStatus({ type: 'success', message: 'Logo uploaded!' });
-        } catch { setStatus({ type: 'error', message: 'Failed to upload logo' }); }
+        } catch (err) { setStatus({ type: 'error', message: getErrorMessage(err, 'Failed to upload logo') }); }
         finally { setUploadingLogo(false); }
     };
 
@@ -652,11 +652,11 @@ Best regards,
         try {
             const formData = new FormData();
             formData.append('file', file);
-            await api.post('/Settings/signature', formData, { headers: { 'Content-Type': undefined } });
+            await api.post('/Settings/signature', formData, { headers: { 'Content-Type': null } });
             setSignaturePreview(URL.createObjectURL(file));
             setSettings(prev => ({ ...prev, hasSignatureImage: true, showSignatureOnPdf: true }));
             setStatus({ type: 'success', message: 'Signature uploaded!' });
-        } catch { setStatus({ type: 'error', message: 'Failed to upload signature' }); }
+        } catch (err) { setStatus({ type: 'error', message: getErrorMessage(err, 'Failed to upload signature') }); }
         finally { setUploadingSignature(false); }
     };
 

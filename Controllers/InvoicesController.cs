@@ -880,9 +880,9 @@ namespace ResourceManager.Controllers
             };
             _context.Payments.Add(payment);
 
-            if (totalPaidCompleted >= totalAmount)
+            if (totalPaidCompleted >= totalAmount || (totalPaidCompleted > 0 && totalPaidCompleted + totalPending >= totalAmount))
             {
-                // Fully paid - update statuses
+                // Fully paid or all remaining amount covered by scheduled payments - update statuses
                 invoice.Status = "Paid";
                 invoice.Treated = true;
                 invoice.TreatedByUserId = _userManager.GetUserId(User);
@@ -949,7 +949,7 @@ namespace ResourceManager.Controllers
             var totalPendingAmount = remainingPayments.Where(p => p.Status == "Pending").Sum(p => p.Amount);
             var totalAmount = invoice.TotalAmount ?? 0;
 
-            if (totalPaidCompleted >= totalAmount && totalAmount > 0)
+            if (totalAmount > 0 && (totalPaidCompleted >= totalAmount || (totalPaidCompleted > 0 && totalPaidCompleted + totalPendingAmount >= totalAmount)))
             {
                 invoice.Status = "Paid";
             }
