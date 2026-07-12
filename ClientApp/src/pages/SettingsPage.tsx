@@ -266,15 +266,23 @@ Best regards,
     const fetchLogoPreview = async () => {
         try {
             const res = await api.get('/Settings/logo', { responseType: 'blob' });
-            if (res.data.size > 0) setLogoPreview(URL.createObjectURL(res.data));
-        } catch { /* no logo */ }
+            if (res.data && res.data.size > 0) {
+                setLogoPreview(URL.createObjectURL(res.data));
+            }
+        } catch {
+            // Logo fetch failed silently — placeholder shown instead
+        }
     };
 
     const fetchSignaturePreview = async () => {
         try {
             const res = await api.get('/Settings/signature', { responseType: 'blob' });
-            if (res.data.size > 0) setSignaturePreview(URL.createObjectURL(res.data));
-        } catch { /* no signature */ }
+            if (res.data && res.data.size > 0) {
+                setSignaturePreview(URL.createObjectURL(res.data));
+            }
+        } catch {
+            // Signature fetch failed silently — placeholder shown instead
+        }
     };
 
     // ═══════════════════════════════════════════════════════════════
@@ -611,8 +619,12 @@ Best regards,
             const formData = new FormData();
             formData.append('file', file);
             await api.post('/Settings/logo', formData, { headers: { 'Content-Type': undefined } });
-            setLogoPreview(URL.createObjectURL(file));
+            const blobUrl = URL.createObjectURL(file);
+            setLogoPreview(blobUrl);
             setSettings(prev => ({ ...prev, hasLogoData: true }));
+            // Invalidate sessionStorage branding cache so DashboardLayout re-fetches logo
+            sessionStorage.removeItem('company_branding');
+            window.dispatchEvent(new CustomEvent('branding-logo-updated', { detail: { hasLogo: true, blobUrl } }));
             setStatus({ type: 'success', message: 'Logo uploaded!' });
         } catch { setStatus({ type: 'error', message: 'Failed to upload logo' }); }
         finally { setUploadingLogo(false); }
@@ -624,6 +636,8 @@ Best regards,
             await api.delete('/Settings/logo');
             setLogoPreview(null);
             setSettings(prev => ({ ...prev, hasLogoData: false }));
+            sessionStorage.removeItem('company_branding');
+            window.dispatchEvent(new CustomEvent('branding-logo-updated', { detail: { hasLogo: false, blobUrl: null } }));
             setStatus({ type: 'success', message: 'Logo deleted' });
         } catch { setStatus({ type: 'error', message: 'Failed to delete logo' }); }
     };

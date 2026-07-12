@@ -89,6 +89,8 @@ export default function InvoicesPage() {
     const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
     const [linkedDocuments, setLinkedDocuments] = useState<{
         invoiceNumber?: string;
+        status?: string;
+        isLocked?: boolean;
         linkedQuotes?: { id: number; number: string; status: string }[];
         linkedDeliveryNotes?: { id: number; number: string }[];
         payments?: { id: number; amount: number; status: string }[];
@@ -1121,6 +1123,14 @@ export default function InvoicesPage() {
                                     </div>
                                 )}
 
+                                {linkedDocuments?.status && linkedDocuments.status !== 'Pending' && (
+                                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                                        <p className="text-sm text-red-800 font-medium">
+                                            {t('invoice.cascadeDelete.notPending', { status: linkedDocuments.status })}
+                                        </p>
+                                    </div>
+                                )}
+
                                 <p className="text-sm text-red-600 font-medium mb-4">
                                     {t('invoice.cascadeDelete.confirmation')}
                                 </p>
@@ -1135,9 +1145,9 @@ export default function InvoicesPage() {
                                 {t('common.cancel')}
                             </button>
                             <button
-                                onClick={() => executeDelete(deleteTargetId)}
-                                disabled={loadingLinkedDocs}
-                                className="px-4 py-2 text-sm text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
+                                onClick={() => executeDelete(deleteTargetId!)}
+                                disabled={loadingLinkedDocs || (!!linkedDocuments?.status && linkedDocuments.status !== 'Pending')}
+                                className="px-4 py-2 text-sm text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {t('invoice.cascadeDelete.confirmButton')}
                             </button>

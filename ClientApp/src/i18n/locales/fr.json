@@ -362,6 +362,7 @@
       "linkedPayments": "{{count}} paiement(s) enregistré(s)",
       "linkedPdfs": "{{count}} fichier(s) PDF stocké(s)",
       "unlockWarning": "Les devis et bons de livraison liés seront déverrouillés et disponibles pour réutilisation dans une nouvelle facture. Le numéro de facture supprimé peut être réutilisé.",
+      "notPending": "Cette facture a le statut \"{{status}}\" et ne peut pas être supprimée. Seules les factures en attente (Pending) peuvent être supprimées.",
       "confirmation": "Êtes-vous sûr de vouloir continuer ? Tous les enregistrements liés seront affectés.",
       "confirmButton": "Supprimer la facture"
     }

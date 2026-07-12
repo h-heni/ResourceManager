@@ -166,6 +166,20 @@ export default function DashboardLayout() {
         };
     }, [isAuthenticated]);
 
+    // Listen for logo upload/delete events from SettingsPage
+    useEffect(() => {
+        const handleLogoUpdate = (e: Event) => {
+            const detail = (e as CustomEvent<{ hasLogo: boolean; blobUrl: string | null }>).detail;
+            if (detail.hasLogo && detail.blobUrl) {
+                setCompanyLogo(detail.blobUrl);
+            } else {
+                setCompanyLogo(null);
+            }
+        };
+        window.addEventListener('branding-logo-updated', handleLogoUpdate);
+        return () => window.removeEventListener('branding-logo-updated', handleLogoUpdate);
+    }, []);
+
     // userName is derived directly from displayName (no sync effect needed)
 
     // Handle window resize for responsive sidebar

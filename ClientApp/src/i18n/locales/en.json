@@ -362,6 +362,7 @@
       "linkedPayments": "{{count}} recorded payment(s)",
       "linkedPdfs": "{{count}} stored PDF file(s)",
       "unlockWarning": "Linked quotes and delivery notes will be unlocked and available for reuse in a new invoice. The deleted invoice number can be reused.",
+      "notPending": "This invoice has status \"{{status}}\" and cannot be deleted. Only Pending invoices can be deleted.",
       "confirmation": "Are you sure you want to proceed? All linked records will be affected.",
       "confirmButton": "Delete Invoice"
     }

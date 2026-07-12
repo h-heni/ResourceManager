@@ -535,10 +535,17 @@ namespace ResourceManager.Controllers
             };
             sampleInvoice.CalculTotalAmount();
 
-            var document = new ResourceManager.Services.Document<Invoice>(sampleInvoice, pdfSettings);
-            var pdfData = document.GeneratePdf();
-
-            return File(pdfData, "application/pdf", "preview.pdf");
+            try
+            {
+                var document = new ResourceManager.Services.Document<Invoice>(sampleInvoice, pdfSettings);
+                var pdfData = document.GeneratePdf();
+                return File(pdfData, "application/pdf", "preview.pdf");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating PDF preview for company {CompanyId}", user.CompanyId);
+                return StatusCode(500, new { message = "Failed to generate PDF preview. Please check your settings and try again." });
+            }
         }
 
         // PUT: api/settings
