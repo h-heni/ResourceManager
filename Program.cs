@@ -404,8 +404,8 @@ app.Use(async (context, next) =>
     headers["X-XSS-Protection"] = "1; mode=block";
     headers["Cross-Origin-Opener-Policy"] = "same-origin";
     headers["Cross-Origin-Resource-Policy"] = "same-site";
-    // CSP: allow self + inline styles for Tailwind, block everything else
-    headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none';";
+    // CSP: allow self + inline styles for Tailwind + blob: for uploaded logo/signature previews
+    headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none';";
     await next();
 });
 
