@@ -264,6 +264,15 @@ export default function SupplierInvoicesPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const archivedInvoices = useMemo(() => (archivedQuery.data?.data as any[] || []).map(transformInvoice), [archivedQuery.data]);
 
+    // Unselect rows that are no longer in the visible list (e.g. invoice archived after full payment, or deleted)
+    useEffect(() => {
+        const visible = viewMode === 'archived' ? archivedInvoices : invoices;
+        setSelectedRows(prev => {
+            const next = prev.filter(id => visible.some(i => i.id === id));
+            return next.length === prev.length ? prev : next;
+        });
+    }, [invoices, archivedInvoices, viewMode]);
+
     // Auto-select latest year when years data loads
     useEffect(() => {
         if (availableYears.length > 0 && !selectedYear) {
@@ -630,7 +639,7 @@ export default function SupplierInvoicesPage() {
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                     <div className="flex p-1 bg-slate-100 rounded-full">
                         <button
-                            onClick={() => { setViewMode('active'); setActivePage(1); }}
+                            onClick={() => { setViewMode('active'); setActivePage(1); setSelectedRows([]); }}
                             className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
                                 viewMode === 'active'
                                     ? 'bg-white shadow-sm text-purple-600'
@@ -642,7 +651,7 @@ export default function SupplierInvoicesPage() {
                         </button>
                         {isManager && (
                             <button
-                                onClick={() => { setViewMode('archived'); setArchivedPage(1); }}
+                                onClick={() => { setViewMode('archived'); setArchivedPage(1); setSelectedRows([]); }}
                                 className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
                                     viewMode === 'archived'
                                         ? 'bg-white shadow-sm text-emerald-600'

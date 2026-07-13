@@ -126,6 +126,16 @@ export default function InvoicesPage() {
     const archivedInvoices = (archivedData?.items ?? []) as Invoice[];
     const archivedTotalCount = archivedData?.totalCount ?? 0;
 
+    // Unselect rows that are no longer in the visible list (e.g. invoice archived after full payment, or deleted)
+    useEffect(() => {
+        const visible = viewMode === 'archived' ? archivedInvoices : invoices;
+        setSelectedRows(prev => {
+            const next = prev.filter(id => visible.some(i => i.id === id));
+            return next.length === prev.length ? prev : next;
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeData, archivedData, viewMode]);
+
     const activeTotalPages = Math.max(1, Math.ceil(activeTotalCount / pageSize));
     const archivedTotalPages = Math.max(1, Math.ceil(archivedTotalCount / pageSize));
     const currentPage = viewMode === 'archived' ? archivedPage : activePage;
@@ -574,6 +584,7 @@ export default function InvoicesPage() {
                         onClick={() => {
                             setViewMode('active');
                             setActivePage(1);
+                            setSelectedRows([]);
                         }}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                             viewMode === 'active'
@@ -589,6 +600,7 @@ export default function InvoicesPage() {
                             onClick={() => {
                                 setViewMode('archived');
                                 setArchivedPage(1);
+                                setSelectedRows([]);
                             }}
                             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                                 viewMode === 'archived'
