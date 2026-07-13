@@ -146,6 +146,23 @@ namespace ResourceManager.Services
                     {
                         inv.Status = "Paid";
                         inv.IsLocked = true;
+                        // Archive: Treated is the criterion for the archived list
+                        inv.Treated = true;
+                        inv.TreatedByUserId ??= payment.CreatedByUserId;
+                        inv.TreatedAt ??= DateTime.UtcNow;
+
+                        foreach (var q in inv.Quotes)
+                        {
+                            q.Status = "Completed";
+                            q.Treated = true;
+                        }
+                        var deliveryNotes = await _context.DeliveryNotes
+                            .Where(dn => dn.InvoiceId == inv.Id)
+                            .ToListAsync(ct);
+                        foreach (var dn in deliveryNotes)
+                        {
+                            dn.Treated = true;
+                        }
                     }
                     else if (totalPaidCompleted > 0)
                     {
@@ -160,6 +177,8 @@ namespace ResourceManager.Services
             var supplierPaymentQuery = _context.SupplierPayments
                 .Include(p => p.SupplierInvoice)
                     .ThenInclude(fi => fi!.Supplier)
+                .Include(p => p.SupplierInvoice)
+                    .ThenInclude(fi => fi!.Payments)
                 .Where(p => p.Status == "Pending" && p.PaymentDate <= now);
 
             if (userId != null)
@@ -212,6 +231,18 @@ namespace ResourceManager.Services
                         "DuePaymentProcessor: Created notification for supplier payment {PaymentId}, " +
                         "Invoice #{InvoiceNumber}, Supplier={SupplierName}",
                         payment.Id, invoiceNumber, supplierName);
+                }
+
+                // Recalculate stored PaymentStatus so a fully-covered invoice moves to Paid/archived
+                if (payment.SupplierInvoice != null)
+                {
+                    var fi = payment.SupplierInvoice;
+                    var totalTTC = fi.TotalTTC ?? 0;
+                    var covered = fi.Payments?.Where(p => p.Status == "Completed" || p.Status == "Pending").Sum(p => p.Amount) ?? 0;
+                    if (totalTTC > 0 && covered >= totalTTC)
+                        fi.PaymentStatus = "Paid";
+                    else if (covered > 0)
+                        fi.PaymentStatus = "PartiallyPaid";
                 }
             }
 

@@ -97,7 +97,8 @@ export default function DashboardLayout() {
     useEffect(() => {
         if (!isAuthenticated) return;
         
-        // Check sessionStorage cache first
+        // Seed instantly from sessionStorage cache, but ALWAYS revalidate from the server below —
+        // a cache written before a logo upload has hasLogoData:false and would hide the logo forever.
         const cachedBranding = sessionStorage.getItem('company_branding');
         if (cachedBranding) {
             try {
@@ -107,13 +108,6 @@ export default function DashboardLayout() {
                 // Seed currency settings from cached branding
                 if (cached.currency) seedSettingsCache(cached.currency, cached.currencySymbol);
                 if (cached.invoiceLanguage) setAppLanguage(cached.invoiceLanguage);
-                // Still fetch logo if needed
-                if (cached.hasLogoData) {
-                    api.get('/Settings/logo', { responseType: 'blob' }).then(logoRes => {
-                        if (logoRes.data?.size > 0) setCompanyLogo(URL.createObjectURL(logoRes.data));
-                    }).catch(() => {});
-                }
-                return;
             } catch { /* fall through to fetch */ }
         }
 

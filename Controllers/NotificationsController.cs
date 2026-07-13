@@ -182,7 +182,10 @@ namespace ResourceManager.Controllers
                 if (totalPaid >= totalAmount)
                 {
                     payment.Invoice.Status = "Paid";
-                    
+                    payment.Invoice.Treated = true;
+                    payment.Invoice.TreatedByUserId = userId;
+                    payment.Invoice.TreatedAt = DateTime.UtcNow;
+
                     // Mark related quotes as treated
                     foreach (var q in payment.Invoice.Quotes)
                     {
@@ -462,6 +465,18 @@ namespace ResourceManager.Controllers
             // Mark payment as Completed
             payment.Status = "Completed";
             payment.PaymentDate = DateTime.UtcNow;
+
+            // Recalculate stored PaymentStatus so a fully-covered invoice moves to Paid/archived
+            if (payment.SupplierInvoice != null)
+            {
+                var inv = payment.SupplierInvoice;
+                var totalAmount = inv.TotalTTC ?? 0;
+                var covered = inv.Payments?.Where(p => p.Status == "Completed" || p.Status == "Pending").Sum(p => p.Amount) ?? 0;
+                if (totalAmount > 0 && covered >= totalAmount)
+                    inv.PaymentStatus = "Paid";
+                else if (covered > 0)
+                    inv.PaymentStatus = "PartiallyPaid";
+            }
 
             // Mark any related notification as read
             var notification = await _context.PaymentNotifications

@@ -362,6 +362,72 @@ using (var scope = app.Services.CreateScope())
 
         // Seed admin user if missing
         await SeedDatabase.SeedDatabaseSuperAdmin(app);
+
+        // Idempotent data repair: invoices whose payments fully cover the total but were left
+        // PartiallyPaid / un-archived by older payment-confirmation code paths.
+        try
+        {
+            var staleInvoices = await db.Invoices
+                .IgnoreQueryFilters()
+                .Include(i => i.Payments)
+                .Include(i => i.Quotes)
+                .Where(i => !i.IsDeleted && i.TotalAmount > 0 && (i.Status != "Paid" || !i.Treated) && i.Payments.Any())
+                .ToListAsync();
+
+            var repairedInvoiceIds = new List<int>();
+            foreach (var inv in staleInvoices)
+            {
+                var completed = inv.Payments.Where(p => p.Status == "Completed").Sum(p => p.Amount);
+                var pending = inv.Payments.Where(p => p.Status == "Pending").Sum(p => p.Amount);
+                if (completed > 0 && completed + pending >= (inv.TotalAmount ?? 0))
+                {
+                    inv.Status = "Paid";
+                    inv.Treated = true;
+                    inv.TreatedAt ??= DateTime.UtcNow;
+                    foreach (var q in inv.Quotes)
+                    {
+                        q.Status = "Completed";
+                        q.Treated = true;
+                    }
+                    repairedInvoiceIds.Add(inv.Id);
+                }
+            }
+            if (repairedInvoiceIds.Count > 0)
+            {
+                var linkedDeliveryNotes = await db.DeliveryNotes
+                    .IgnoreQueryFilters()
+                    .Where(dn => dn.InvoiceId.HasValue && repairedInvoiceIds.Contains(dn.InvoiceId.Value))
+                    .ToListAsync();
+                foreach (var dn in linkedDeliveryNotes) dn.Treated = true;
+            }
+
+            var staleSupplierInvoices = await db.SupplierInvoices
+                .IgnoreQueryFilters()
+                .Include(f => f.Payments)
+                .Where(f => !f.IsDeleted && f.TotalTTC > 0 && f.PaymentStatus != "Paid" && f.Payments.Any())
+                .ToListAsync();
+            var supplierRepaired = 0;
+            foreach (var fi in staleSupplierInvoices)
+            {
+                var covered = fi.Payments.Where(p => p.Status == "Completed" || p.Status == "Pending").Sum(p => p.Amount);
+                if (covered >= (fi.TotalTTC ?? 0))
+                {
+                    fi.PaymentStatus = "Paid";
+                    supplierRepaired++;
+                }
+            }
+
+            if (repairedInvoiceIds.Count > 0 || supplierRepaired > 0)
+            {
+                await db.SaveChangesAsync();
+                Log.Information("Data repair: archived {InvoiceCount} invoice(s) and {SupplierCount} supplier invoice(s) whose remaining amount was already 0.",
+                    repairedInvoiceIds.Count, supplierRepaired);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Error during invoice status data repair.");
+        }
     }
     catch (Exception ex)
     {
